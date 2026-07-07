@@ -1,0 +1,6 @@
+* rc low-pass ac golden corpus case
+V1 in 0 dc 0 ac 1
+R1 in out 1k
+C1 out 0 159.1549n
+.ac dec 4 10 100k
+.end

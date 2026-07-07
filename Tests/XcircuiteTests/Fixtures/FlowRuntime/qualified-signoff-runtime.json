@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "executors": [
+    {
+      "kind": "nativeDRC",
+      "value": {
+        "stageID": "007-drc",
+        "layoutPath": "layout.json",
+        "topCell": "TOP",
+        "tool": {
+          "qualificationLevel": "corpusChecked",
+          "healthStatus": "passed",
+          "evidence": []
+        }
+      }
+    },
+    {
+      "kind": "nativeLVS",
+      "value": {
+        "stageID": "008-lvs",
+        "layoutNetlistPath": "layout.spice",
+        "schematicNetlistPath": "schematic.spice",
+        "topCell": "TOP",
+        "tool": {
+          "qualificationLevel": "corpusChecked",
+          "healthStatus": "passed",
+          "evidence": []
+        }
+      }
+    },
+    {
+      "kind": "mockPEX",
+      "value": {
+        "stageID": "009-pex",
+        "layoutPath": "layout.gds",
+        "layoutFormat": "gds",
+        "sourceNetlistPath": "source.cir",
+        "sourceNetlistFormat": "spice",
+        "topCell": "TOP",
+        "corners": [
+          {
+            "id": {
+              "value": "tt"
+            },
+            "name": "tt",
+            "parameters": {}
+          }
+        ],
+        "technology": {
+          "type": "inline",
+          "value": {
+            "processName": "fixture_process",
+            "stack": [
+              {
+                "name": "M1",
+                "order": 0,
+                "thickness": 0.1,
+                "material": "copper",
+                "resistivity": 1.7e-8
+              }
+            ],
+            "logicalToPhysicalLayerMap": {},
+            "vias": [],
+            "defaultExtractionRules": {
+              "reductionPolicy": "none"
+            },
+            "backendHints": {}
+          }
+        },
+        "tool": {
+          "qualificationLevel": "unknown",
+          "healthStatus": "passed",
+          "evidence": []
+        }
+      }
+    }
+  ]
+}

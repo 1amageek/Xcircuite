@@ -1,0 +1,47 @@
+import Foundation
+
+public struct XcircuiteSymbolicPlannerCalibrationTrace: Codable, Sendable, Hashable {
+    public var schemaVersion: Int
+    public var strategy: String
+    public var metricThresholdProfilePath: String?
+    public var costCalibrationPath: String?
+    public var paretoCandidatesPath: String?
+    public var thresholdCount: Int
+    public var calibratedTermCount: Int
+    public var observationCount: Int
+    public var paretoCandidateCount: Int
+    public var appliedActionCount: Int
+    public var matchedActionIDs: [String]
+    public var matchedGateIDs: [String]
+    public var diagnostics: [String]
+
+    public init(
+        schemaVersion: Int = 1,
+        strategy: String,
+        metricThresholdProfilePath: String? = nil,
+        costCalibrationPath: String? = nil,
+        paretoCandidatesPath: String? = nil,
+        thresholdCount: Int,
+        calibratedTermCount: Int,
+        observationCount: Int,
+        paretoCandidateCount: Int,
+        appliedActionCount: Int,
+        matchedActionIDs: [String] = [],
+        matchedGateIDs: [String] = [],
+        diagnostics: [String] = []
+    ) {
+        self.schemaVersion = schemaVersion
+        self.strategy = strategy
+        self.metricThresholdProfilePath = metricThresholdProfilePath
+        self.costCalibrationPath = costCalibrationPath
+        self.paretoCandidatesPath = paretoCandidatesPath
+        self.thresholdCount = thresholdCount
+        self.calibratedTermCount = calibratedTermCount
+        self.observationCount = observationCount
+        self.paretoCandidateCount = paretoCandidateCount
+        self.appliedActionCount = appliedActionCount
+        self.matchedActionIDs = matchedActionIDs
+        self.matchedGateIDs = matchedGateIDs
+        self.diagnostics = diagnostics
+    }
+}

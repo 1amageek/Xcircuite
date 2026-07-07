@@ -1,0 +1,5 @@
+* dc resistor sweep golden corpus case
+V1 in 0 0
+R1 in 0 1k
+.dc V1 0 1 0.5
+.end

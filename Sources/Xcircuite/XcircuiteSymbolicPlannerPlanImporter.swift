@@ -1,0 +1,636 @@
+import Foundation
+import XcircuitePackage
+
+public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
+    private let packageStore: XcircuitePackageStore
+    private let artifactStore: XcircuitePlanningArtifactStore
+    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+
+    public init(
+        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
+        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+    ) {
+        self.packageStore = packageStore
+        self.artifactStore = artifactStore
+        self.fileReferenceVerifier = fileReferenceVerifier
+    }
+
+    public func importSolverPlan(
+        request: XcircuiteSymbolicPlannerPlanImportRequest,
+        projectRoot: URL
+    ) throws -> XcircuiteSymbolicPlannerPlanImportResult {
+        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
+        let problemPath = try requiredProblemPath(
+            explicitPath: request.problemPath,
+            artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
+            manifest: manifest,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
+        let problem = try packageStore.readJSON(
+            XcircuiteCircuitPlanningProblem.self,
+            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+        )
+        guard problem.runID == request.runID else {
+            throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
+                expected: request.runID,
+                actual: problem.runID
+            )
+        }
+
+        let pddlExportRef = try pddlExportReference(
+            explicitPath: request.pddlExportPath,
+            artifactID: request.pddlExportArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
+            manifest: manifest,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
+        let pddlExport = try packageStore.readJSON(
+            XcircuiteSymbolicPlannerPDDLExport.self,
+            from: packageStore.url(forProjectRelativePath: pddlExportRef.path, inProjectAt: projectRoot)
+        )
+        guard pddlExport.runID == request.runID else {
+            throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
+                expected: request.runID,
+                actual: pddlExport.runID
+            )
+        }
+        guard pddlExport.problemID == problem.problemID else {
+            throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
+                expected: problem.problemID,
+                actual: pddlExport.problemID
+            )
+        }
+
+        let solverPlanText = try loadSolverPlanText(
+            request: request,
+            manifest: manifest,
+            projectRoot: projectRoot
+        )
+        let solverPlanArtifact = try artifactStore.persistSymbolicPlannerSolverPlan(
+            solverPlanText,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
+        let draft = makeCandidatePlan(
+            problem: problem,
+            problemPath: problemPath,
+            pddlExport: pddlExport,
+            solverPlanText: solverPlanText
+        )
+        let candidatePlanArtifact = try artifactStore.persistCandidatePlan(
+            draft.plan,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
+        return XcircuiteSymbolicPlannerPlanImportResult(
+            status: draft.diagnostics.contains(where: { $0.severity == "error" }) ? "imported-with-errors" : "imported",
+            runID: request.runID,
+            problemID: problem.problemID,
+            planID: draft.plan.planID,
+            importedActionCount: draft.plan.steps.count,
+            solverPlanArtifact: solverPlanArtifact,
+            pddlExportArtifact: pddlExportRef,
+            candidatePlanArtifact: candidatePlanArtifact,
+            candidatePlan: draft.plan,
+            diagnostics: draft.diagnostics
+        )
+    }
+
+    public func makeCandidatePlan(
+        problem: XcircuiteCircuitPlanningProblem,
+        problemPath: String,
+        pddlExport: XcircuiteSymbolicPlannerPDDLExport,
+        solverPlanText: String
+    ) -> CandidatePlanDraft {
+        let pddlActions = parsePDDLActions(from: solverPlanText)
+        let actionByID = Dictionary(uniqueKeysWithValues: problem.candidateActions.map { ($0.actionID, $0) })
+        let mappingByPDDLAction = Dictionary(uniqueKeysWithValues: pddlExport.actionMappings.map {
+            ($0.pddlAction.lowercased(), $0)
+        })
+        let planID = identifier("\(problem.problemID)-external-symbolic-plan-1")
+        let availableRefs = Set((problem.sourceRefs + problem.initialStateRefs).map(\.refID))
+        var diagnostics: [XcircuiteSymbolicPlannerPlanImportDiagnostic] = []
+        var steps: [XcircuiteCandidatePlanStep] = []
+        var finalSymbolicState = initialSymbolicState(for: problem)
+
+        for pddlAction in pddlActions {
+            guard let mapping = mappingByPDDLAction[pddlAction.lowercased()] else {
+                diagnostics.append(
+                    XcircuiteSymbolicPlannerPlanImportDiagnostic(
+                        severity: "error",
+                        code: "unknown-pddl-action",
+                        message: "Solver plan references action \(pddlAction), but the PDDL export mapping does not contain it.",
+                        pddlAction: pddlAction
+                    )
+                )
+                continue
+            }
+            guard mapping.included else {
+                diagnostics.append(
+                    XcircuiteSymbolicPlannerPlanImportDiagnostic(
+                        severity: "error",
+                        code: "excluded-pddl-action",
+                        message: "Solver plan references action \(pddlAction), but that action was excluded from the PDDL export.",
+                        pddlAction: pddlAction
+                    )
+                )
+                continue
+            }
+            guard let action = actionByID[mapping.actionID] else {
+                diagnostics.append(
+                    XcircuiteSymbolicPlannerPlanImportDiagnostic(
+                        severity: "error",
+                        code: "candidate-action-not-found",
+                        message: "PDDL action \(pddlAction) maps to candidate action \(mapping.actionID), but the planning problem no longer contains it.",
+                        pddlAction: pddlAction
+                    )
+                )
+                continue
+            }
+
+            let missingInputRefs = action.requiredInputRefs.filter { !availableRefs.contains($0) }
+            let blockers = missingInputRefs.isEmpty
+                ? []
+                : ["missing-input-refs:\(missingInputRefs.joined(separator: ","))"]
+            let order = steps.count + 1
+            steps.append(
+                XcircuiteCandidatePlanStep(
+                    stepID: identifier("\(planID)-step-\(order)"),
+                    order: order,
+                    actionID: action.actionID,
+                    domainID: action.domainID,
+                    operationID: action.operationID,
+                    maturity: action.maturity,
+                    readiness: blockers.isEmpty ? "ready" : "blocked",
+                    sourceObjectiveIDs: action.sourceObjectiveIDs,
+                    requiredInputRefs: action.requiredInputRefs,
+                    missingInputRefs: missingInputRefs,
+                    verificationGates: action.verificationGates,
+                    reason: "Imported from external symbolic planner action \(pddlAction). \(action.reason)",
+                    parameterHints: action.parameterHints,
+                    blockers: blockers
+                )
+            )
+            if blockers.isEmpty {
+                finalSymbolicState = unique(finalSymbolicState + mapping.effectAtoms)
+            }
+        }
+
+        if pddlActions.isEmpty {
+            diagnostics.append(
+                XcircuiteSymbolicPlannerPlanImportDiagnostic(
+                    severity: "error",
+                    code: "empty-solver-plan",
+                    message: "Solver plan did not contain any PDDL action entries."
+                )
+            )
+        }
+
+        let missingGoalBlockers = missingGoalAtomBlockers(
+            objectives: problem.objectives,
+            finalSymbolicState: finalSymbolicState
+        )
+        let stepBlockers = steps.flatMap(\.blockers)
+        let planBlockers = unique(stepBlockers + missingGoalBlockers)
+        let unresolvedObjectives = unresolvedObjectiveIDs(
+            objectives: problem.objectives,
+            finalSymbolicState: finalSymbolicState
+        )
+        let executionReadiness = diagnostics.contains(where: { $0.severity == "error" }) || !planBlockers.isEmpty
+            ? "blocked"
+            : "ready"
+        let reviewProjection = XcircuiteCandidatePlanReviewProjection()
+
+        let plan = XcircuiteCandidatePlan(
+            planID: planID,
+            problemID: problem.problemID,
+            runID: problem.runID,
+            strategy: "external-symbolic-planner-pddl-import",
+            executionReadiness: executionReadiness,
+            sourceProblemRef: XcircuitePlanningReference(
+                refID: "planning-problem",
+                kind: "planning-problem",
+                path: problemPath,
+                artifactID: XcircuitePlanningArtifactStore.problemArtifactID
+            ),
+            assumptions: reviewProjection.assumptions(from: problem),
+            riskClassifications: reviewProjection.riskClassifications(
+                from: problem,
+                steps: steps
+            ),
+            steps: steps,
+            verificationGates: problem.verificationGates,
+            constraints: problem.constraints,
+            unresolvedObjectives: unresolvedObjectives,
+            blockers: planBlockers
+        )
+        return CandidatePlanDraft(plan: plan, diagnostics: diagnostics)
+    }
+
+    private func parsePDDLActions(from text: String) -> [String] {
+        var actions: [String] = []
+        for rawLine in text.components(separatedBy: .newlines) {
+            let uncommented: Substring
+            if let commentStart = rawLine.firstIndex(of: ";") {
+                uncommented = rawLine[..<commentStart]
+            } else {
+                uncommented = rawLine[rawLine.startIndex...]
+            }
+            let line = String(uncommented).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            guard !isSolverMetadataLine(line) else { continue }
+            var remaining = line
+            var foundParenthesizedAction = false
+            while let start = remaining.firstIndex(of: "("),
+                  let end = remaining[start...].firstIndex(of: ")") {
+                let content = remaining[remaining.index(after: start)..<end]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let actionName = content.split(whereSeparator: { $0 == " " || $0 == "\t" }).first {
+                    actions.append(String(actionName).lowercased())
+                    foundParenthesizedAction = true
+                }
+                remaining = String(remaining[remaining.index(after: end)...])
+            }
+            if !foundParenthesizedAction,
+               let actionName = bareActionName(from: line) {
+                actions.append(actionName.lowercased())
+            }
+        }
+        return actions
+    }
+
+    private func isSolverMetadataLine(_ line: String) -> Bool {
+        let lowered = line.lowercased()
+        let metadataPrefixes = [
+            "cost",
+            "metric",
+            "makespan",
+            "plan length",
+            "plan cost",
+            "solution found",
+            "optimal",
+            "satisficing",
+            "suboptimal",
+            "search time",
+            "total time",
+        ]
+        return metadataPrefixes.contains { lowered.hasPrefix($0) }
+    }
+
+    private func bareActionName(from line: String) -> String? {
+        var candidate = line
+        if let colonIndex = line.firstIndex(of: ":") {
+            let prefix = line[..<colonIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            if prefix.allSatisfy({ character in
+                character.isNumber || character == "." || character == "+"
+            }) {
+                candidate = String(line[line.index(after: colonIndex)...])
+            }
+        }
+        guard let firstToken = candidate.split(whereSeparator: { $0 == " " || $0 == "\t" }).first else {
+            return nil
+        }
+        let actionName = String(firstToken).trimmingCharacters(in: CharacterSet(charactersIn: "()"))
+        guard !actionName.isEmpty else { return nil }
+        guard actionName.allSatisfy({ character in
+            character.isLetter || character.isNumber || character == "-" || character == "_" || character == "."
+        }) else {
+            return nil
+        }
+        return actionName
+    }
+
+    private func loadSolverPlanText(
+        request: XcircuiteSymbolicPlannerPlanImportRequest,
+        manifest: XcircuiteRunManifest,
+        projectRoot: URL
+    ) throws -> String {
+        if let solverPlanText = request.solverPlanText {
+            return solverPlanText
+        }
+        if let solverPlanPath = request.solverPlanPath {
+            let reference = try verifiedProjectFileReference(
+                path: solverPlanPath,
+                artifactID: request.solverPlanArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID,
+                field: "solver-plan",
+                format: .text,
+                runID: request.runID,
+                projectRoot: projectRoot
+            )
+            let url = try packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            return try String(contentsOf: url, encoding: .utf8)
+        }
+        let artifactID = request.solverPlanArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID
+        guard let reference = manifest.artifacts.first(where: { $0.artifactID == artifactID }) else {
+            if request.solverPlanArtifactID == nil {
+                throw XcircuiteSymbolicPlannerPlanImportError.missingSolverPlanReference
+            }
+            throw XcircuiteSymbolicPlannerPlanImportError.artifactNotFound(
+                runID: request.runID,
+                artifactID: artifactID
+            )
+        }
+        let verifiedReference = try verifiedArtifactReference(
+            reference,
+            field: "solver-plan",
+            projectRoot: projectRoot
+        )
+        let url = try packageStore.url(forProjectRelativePath: verifiedReference.path, inProjectAt: projectRoot)
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    private func pddlExportReference(
+        explicitPath: String?,
+        artifactID: String?,
+        manifest: XcircuiteRunManifest,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        if let explicitPath {
+            return try verifiedManifestProjectFileReference(
+                path: explicitPath,
+                artifactID: artifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
+                field: "pddl-export",
+                format: .json,
+                manifest: manifest,
+                runID: runID,
+                projectRoot: projectRoot
+            )
+        }
+        guard let artifactID else {
+            throw XcircuiteSymbolicPlannerPlanImportError.missingPDDLExportReference
+        }
+        guard let reference = manifest.artifacts.first(where: { $0.artifactID == artifactID }) else {
+            throw XcircuiteSymbolicPlannerPlanImportError.artifactNotFound(
+                runID: runID,
+                artifactID: artifactID
+            )
+        }
+        return try verifiedArtifactReference(reference, field: "pddl-export", projectRoot: projectRoot)
+    }
+
+    private func requiredProblemPath(
+        explicitPath: String?,
+        artifactID: String?,
+        manifest: XcircuiteRunManifest,
+        runID: String,
+        projectRoot: URL
+    ) throws -> String {
+        if let explicitPath {
+            return try verifiedManifestProjectFileReference(
+                path: explicitPath,
+                artifactID: artifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
+                field: "planning-problem",
+                format: .json,
+                manifest: manifest,
+                runID: runID,
+                projectRoot: projectRoot
+            ).path
+        }
+        guard let artifactID else {
+            throw XcircuiteSymbolicPlannerPlanImportError.missingProblemReference
+        }
+        guard let reference = manifest.artifacts.first(where: { $0.artifactID == artifactID }) else {
+            throw XcircuiteSymbolicPlannerPlanImportError.artifactNotFound(
+                runID: runID,
+                artifactID: artifactID
+            )
+        }
+        return try verifiedArtifactReference(reference, field: "planning-problem", projectRoot: projectRoot).path
+    }
+
+    private func verifiedProjectFileReference(
+        path: String,
+        artifactID: String,
+        field: String,
+        format: XcircuiteFileFormat,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        let reference = try packageStore.fileReference(
+            forProjectRelativePath: path,
+            artifactID: artifactID,
+            kind: .other,
+            format: format,
+            inProjectAt: projectRoot,
+            producedByRunID: runID
+        )
+        return try verifiedArtifactReference(reference, field: field, projectRoot: projectRoot)
+    }
+
+    private func verifiedManifestProjectFileReference(
+        path: String,
+        artifactID: String,
+        field: String,
+        format: XcircuiteFileFormat,
+        manifest: XcircuiteRunManifest,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        let explicitReference = try packageStore.fileReference(
+            forProjectRelativePath: path,
+            artifactID: artifactID,
+            kind: .other,
+            format: format,
+            inProjectAt: projectRoot,
+            producedByRunID: runID
+        )
+        guard let manifestReference = manifest.artifacts.first(where: { $0.artifactID == artifactID }) else {
+            throw XcircuiteSymbolicPlannerPlanImportError.artifactNotFound(
+                runID: runID,
+                artifactID: artifactID
+            )
+        }
+        try validateExplicitReference(
+            explicitReference,
+            matches: manifestReference,
+            field: field,
+            artifactID: artifactID,
+            runID: runID
+        )
+        return try verifiedArtifactReference(manifestReference, field: field, projectRoot: projectRoot)
+    }
+
+    private func validateExplicitReference(
+        _ explicitReference: XcircuiteFileReference,
+        matches manifestReference: XcircuiteFileReference,
+        field: String,
+        artifactID: String,
+        runID: String
+    ) throws {
+        if explicitReference.path != manifestReference.path {
+            throw manifestReferenceMismatch(
+                field: field,
+                artifactID: artifactID,
+                path: explicitReference.path,
+                manifestPath: manifestReference.path,
+                reason: "Explicit path does not match the run manifest artifact path."
+            )
+        }
+        if explicitReference.sha256 != manifestReference.sha256 {
+            throw manifestReferenceMismatch(
+                field: field,
+                artifactID: artifactID,
+                path: explicitReference.path,
+                manifestPath: manifestReference.path,
+                reason: "Explicit file digest does not match the run manifest artifact digest."
+            )
+        }
+        if explicitReference.byteCount != manifestReference.byteCount {
+            throw manifestReferenceMismatch(
+                field: field,
+                artifactID: artifactID,
+                path: explicitReference.path,
+                manifestPath: manifestReference.path,
+                reason: "Explicit file byte count does not match the run manifest artifact byte count."
+            )
+        }
+        guard manifestReference.producedByRunID == runID else {
+            throw manifestReferenceMismatch(
+                field: field,
+                artifactID: artifactID,
+                path: explicitReference.path,
+                manifestPath: manifestReference.path,
+                reason: "Run manifest artifact provenance does not match the requested run."
+            )
+        }
+    }
+
+    private func manifestReferenceMismatch(
+        field: String,
+        artifactID: String,
+        path: String,
+        manifestPath: String,
+        reason: String
+    ) -> XcircuiteSymbolicPlannerPlanImportError {
+        .manifestReferenceMismatch(
+            field: field,
+            artifactID: artifactID,
+            path: path,
+            manifestPath: manifestPath,
+            reason: reason
+        )
+    }
+
+    private func verifiedArtifactReference(
+        _ reference: XcircuiteFileReference,
+        field: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
+        guard integrity.status == .verified else {
+            throw XcircuiteSymbolicPlannerPlanImportError.artifactIntegrityFailed(
+                field: field,
+                artifactID: reference.artifactID,
+                path: reference.path,
+                status: integrity.status,
+                message: integrity.message
+            )
+        }
+        return reference
+    }
+
+    private func initialSymbolicState(for problem: XcircuiteCircuitPlanningProblem) -> [String] {
+        unique(
+            (problem.sourceRefs + problem.initialStateRefs).flatMap { reference in
+                var atoms = ["ref:\(reference.refID)"]
+                if let artifactID = reference.artifactID {
+                    atoms.append("artifact:\(artifactID)")
+                }
+                atoms.append(contentsOf: stringArrayValue(for: "symbolicStateAtoms", in: reference.metadata))
+                atoms.append(contentsOf: stringArrayValue(for: "satisfiedPreconditions", in: reference.metadata))
+                return atoms
+            }
+        )
+    }
+
+    private func unresolvedObjectiveIDs(
+        objectives: [XcircuitePlanningObjective],
+        finalSymbolicState: [String]
+    ) -> [String] {
+        objectives.compactMap { objective in
+            let atoms = symbolicGoalAtoms(for: objective)
+            guard !atoms.isEmpty else { return nil }
+            return atoms.allSatisfy { finalSymbolicState.contains($0) } ? nil : objective.objectiveID
+        }
+    }
+
+    private func missingGoalAtomBlockers(
+        objectives: [XcircuitePlanningObjective],
+        finalSymbolicState: [String]
+    ) -> [String] {
+        objectives.compactMap { objective in
+            let missingAtoms = symbolicGoalAtoms(for: objective).filter { !finalSymbolicState.contains($0) }
+            guard !missingAtoms.isEmpty else { return nil }
+            return "missing-goal-atoms:\(objective.objectiveID):\(missingAtoms.joined(separator: ","))"
+        }
+    }
+
+    private func symbolicGoalAtoms(for objective: XcircuitePlanningObjective) -> [String] {
+        unique(
+            stringArrayValue(for: "symbolicGoalAtoms", in: objective.evidence)
+                + stringArrayValue(for: "goalAtoms", in: objective.evidence)
+                + stringArrayValue(for: "requiredEffects", in: objective.evidence)
+        )
+    }
+
+    private func stringArrayValue(
+        for key: String,
+        in values: [String: XcircuiteJSONValue]
+    ) -> [String] {
+        guard case .array(let items)? = values[key] else {
+            return []
+        }
+        return items.compactMap { item in
+            guard case .string(let value) = item else {
+                return nil
+            }
+            return value
+        }
+    }
+
+    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
+        let manifestURL = try XcircuitePackage(projectRoot: projectRoot)
+            .runDirectoryURL(for: runID)
+            .appending(path: "manifest.json")
+        return try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
+    }
+
+    private func identifier(_ rawValue: String) -> String {
+        let allowedScalars = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+        let sanitizedScalars = rawValue.unicodeScalars.map { scalar in
+            allowedScalars.contains(scalar) ? String(scalar) : "-"
+        }
+        let collapsed = sanitizedScalars.joined()
+            .split(separator: "-")
+            .joined(separator: "-")
+        let trimmed = String(collapsed.prefix(120)).trimmingCharacters(in: CharacterSet(charactersIn: ".-_"))
+        return trimmed.isEmpty ? "external-symbolic-plan" : trimmed
+    }
+
+    private func unique(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+        for value in values where !seen.contains(value) {
+            seen.insert(value)
+            result.append(value)
+        }
+        return result
+    }
+
+    public struct CandidatePlanDraft: Sendable, Hashable {
+        public var plan: XcircuiteCandidatePlan
+        public var diagnostics: [XcircuiteSymbolicPlannerPlanImportDiagnostic]
+
+        public init(
+            plan: XcircuiteCandidatePlan,
+            diagnostics: [XcircuiteSymbolicPlannerPlanImportDiagnostic]
+        ) {
+            self.plan = plan
+            self.diagnostics = diagnostics
+        }
+    }
+}

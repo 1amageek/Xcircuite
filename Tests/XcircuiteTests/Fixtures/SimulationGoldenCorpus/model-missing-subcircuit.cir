@@ -1,0 +1,5 @@
+* missing subcircuit model golden corpus case
+V1 in 0 1
+X1 in 0 missing_model
+.op
+.end

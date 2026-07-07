@@ -3,24 +3,37 @@ import XcircuitePackage
 
 struct StageArtifactReferenceBuilder: Sendable {
     private let hasher: XcircuiteHasher
+    private let pathBoundary: ProjectPathBoundary
 
-    init(hasher: XcircuiteHasher = XcircuiteHasher()) {
+    init(
+        hasher: XcircuiteHasher = XcircuiteHasher(),
+        pathBoundary: ProjectPathBoundary = ProjectPathBoundary()
+    ) {
         self.hasher = hasher
+        self.pathBoundary = pathBoundary
     }
 
     func reference(
         for url: URL,
         projectRoot: URL,
+        artifactID: String? = nil,
         kind: XcircuiteFileKind,
         format: XcircuiteFileFormat,
         producedByRunID: String
     ) throws -> XcircuiteFileReference {
+        if let artifactID {
+            try XcircuiteIdentifierValidator().validate(artifactID, kind: .artifactID)
+        }
+        let relativePath = try pathBoundary.relativePath(for: url, projectRoot: projectRoot)
         let digest = try hasher.sha256(fileAt: url)
+        let byteCount = try hasher.byteCount(fileAt: url)
         return XcircuiteFileReference(
-            path: try projectRelativePath(for: url, projectRoot: projectRoot),
+            artifactID: artifactID,
+            path: relativePath,
             kind: kind,
             format: format,
             sha256: digest,
+            byteCount: byteCount,
             producedByRunID: producedByRunID
         )
     }
@@ -28,6 +41,7 @@ struct StageArtifactReferenceBuilder: Sendable {
     func optionalReference(
         for path: String,
         projectRoot: URL,
+        artifactID: String? = nil,
         kind: XcircuiteFileKind,
         format: XcircuiteFileFormat,
         producedByRunID: String
@@ -42,22 +56,10 @@ struct StageArtifactReferenceBuilder: Sendable {
         return try reference(
             for: url,
             projectRoot: projectRoot,
+            artifactID: artifactID,
             kind: kind,
             format: format,
             producedByRunID: producedByRunID
         )
-    }
-
-    private func projectRelativePath(for url: URL, projectRoot: URL) throws -> String {
-        let rootPath = projectRoot.standardizedFileURL.path(percentEncoded: false)
-        let filePath = url.standardizedFileURL.path(percentEncoded: false)
-        let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
-        guard filePath.hasPrefix(prefix) else {
-            throw XcircuiteRuntimeError.artifactOutsideProject(
-                path: filePath,
-                projectRoot: rootPath
-            )
-        }
-        return String(filePath.dropFirst(prefix.count))
     }
 }

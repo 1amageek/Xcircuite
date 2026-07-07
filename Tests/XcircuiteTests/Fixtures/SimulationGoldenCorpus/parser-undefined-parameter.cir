@@ -1,0 +1,5 @@
+* parser/lowering failure golden corpus case
+V1 in 0 not_a_number
+R1 in 0 1k
+.dc V1 0 1 0.5
+.end

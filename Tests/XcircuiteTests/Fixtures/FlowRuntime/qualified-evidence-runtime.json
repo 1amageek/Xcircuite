@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "executors": [
+    {
+      "kind": "nativeDRC",
+      "value": {
+        "stageID": "007-drc",
+        "layoutPath": "layout.json",
+        "topCell": "TOP",
+        "tool": {
+          "qualificationLevel": "corpusChecked",
+          "healthStatus": "passed",
+          "evidence": [
+            {
+              "evidenceID": "drc-corpus-2026-06-18",
+              "kind": "corpus",
+              "checkedAt": "2026-06-18T00:00:00Z",
+              "qualification": {
+                "qualified": true,
+                "policyID": "strict",
+                "observedMetrics": {
+                  "durationBudgetPassRate": 1,
+                  "passRate": 1
+                },
+                "observedCounts": {
+                  "caseCount": 5
+                },
+                "failureCodes": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

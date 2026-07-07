@@ -3,17 +3,21 @@ import ToolQualification
 import XcircuitePackage
 
 public enum SignoffToolDescriptors {
-    public static func pureSwiftDRC(level: ToolQualificationLevel = .smokeChecked) -> ToolDescriptor {
+    public static func pexToolID(backendID: String) -> String {
+        "pex-\(backendID.trimmingCharacters(in: .whitespacesAndNewlines))"
+    }
+
+    public static func nativeDRC(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         ToolDescriptor(
-            toolID: "pure-swift-drc",
-            displayName: "Pure Swift DRC",
+            toolID: "native-drc",
+            displayName: "Native DRC",
             kind: .drc,
             version: "1.0.0",
             capabilities: [
                 ToolCapability(
                     operationID: "run-drc",
-                    inputFormats: [.json],
-                    outputFormats: [.json]
+                    inputFormats: [.json, .gdsii, .oasis, .raw],
+                    outputFormats: [.json, .text]
                 ),
             ],
             trustProfile: ToolTrustProfile(level: level),
@@ -24,17 +28,17 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func pureSwiftLVS(level: ToolQualificationLevel = .smokeChecked) -> ToolDescriptor {
+    public static func nativeLVS(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         ToolDescriptor(
-            toolID: "pure-swift-lvs",
-            displayName: "Pure Swift LVS",
+            toolID: "native-lvs",
+            displayName: "Native LVS",
             kind: .lvs,
             version: "1.0.0",
             capabilities: [
                 ToolCapability(
                     operationID: "run-lvs",
-                    inputFormats: [.spice],
-                    outputFormats: [.json]
+                    inputFormats: [.spice, .gdsii, .oasis, .raw],
+                    outputFormats: [.json, .text]
                 ),
             ],
             trustProfile: ToolTrustProfile(level: level),
@@ -45,7 +49,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func mockPEX(level: ToolQualificationLevel = .smokeChecked) -> ToolDescriptor {
+    public static func mockPEX(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         ToolDescriptor(
             toolID: "mock-pex",
             displayName: "Mock PEX",
@@ -54,7 +58,7 @@ public enum SignoffToolDescriptors {
             capabilities: [
                 ToolCapability(
                     operationID: "run-pex",
-                    inputFormats: [.gdsii, .spice, .json],
+                    inputFormats: [.gdsii, .oasis, .spice, .json],
                     outputFormats: [.spef, .json, .text],
                     limitations: [
                         "Generates deterministic synthetic parasitics for runtime contract validation.",
@@ -74,7 +78,32 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func coreSpiceSimulation(level: ToolQualificationLevel = .smokeChecked) -> ToolDescriptor {
+    public static func pexBackend(
+        backendID: String,
+        level: ToolQualificationLevel = .unknown
+    ) -> ToolDescriptor {
+        let normalizedBackendID = backendID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ToolDescriptor(
+            toolID: pexToolID(backendID: normalizedBackendID),
+            displayName: "PEX Backend \(normalizedBackendID)",
+            kind: .pex,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "run-pex",
+                    inputFormats: [.gdsii, .oasis, .spice, .json],
+                    outputFormats: [.spef, .json, .text]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: normalizedBackendID,
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func coreSpiceSimulation(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         ToolDescriptor(
             toolID: "corespice",
             displayName: "CoreSpice Simulation",
@@ -85,6 +114,53 @@ public enum SignoffToolDescriptors {
                     operationID: "run-simulation",
                     inputFormats: [.spice],
                     outputFormats: [.csv, .json]
+                ),
+                ToolCapability(
+                    operationID: "compare-waveforms",
+                    inputFormats: [.csv],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func postLayoutComparison(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "post-layout-comparison",
+            displayName: "Post-layout Waveform Comparison",
+            kind: .simulation,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "compare-waveforms",
+                    inputFormats: [.csv],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func layoutCommand(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "layout-command",
+            displayName: "Layout Command Runner",
+            kind: .layout,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "edit-layout",
+                    inputFormats: [.json],
+                    outputFormats: [.json, .gdsii, .oasis, .raw]
                 ),
             ],
             trustProfile: ToolTrustProfile(level: level),

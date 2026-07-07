@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "runID": "run-1",
+  "intent": "Run DRC with qualified corpus evidence",
+  "stages": [
+    {
+      "stageID": "007-drc",
+      "displayName": "DRC",
+      "requiredTool": {
+        "kind": "drc",
+        "operationID": "run-drc",
+        "minimumLevel": "corpusChecked",
+        "requiredInputFormats": [
+          "JSON"
+        ],
+        "requiredOutputFormats": [
+          "JSON"
+        ],
+        "requiredEvidenceKinds": [],
+        "requiredQualifiedEvidenceKinds": [
+          "corpus"
+        ],
+        "maximumEvidenceAgeSeconds": 4102444800,
+        "requirePassingHealthCheck": true
+      },
+      "requiresApproval": false
+    }
+  ]
+}

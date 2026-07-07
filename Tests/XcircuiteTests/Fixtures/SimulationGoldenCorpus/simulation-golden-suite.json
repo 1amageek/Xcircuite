@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "suiteID": "simulation-golden-breadth-v1",
+  "description": "Representative CoreSpice golden waveform corpus for Agent-facing multi-analysis simulation qualification.",
+  "cases": [
+    {
+      "caseID": "dc-resistor-sweep",
+      "description": "DC sweep should preserve the swept source axis and node voltage.",
+      "netlistPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/dc-resistor.cir",
+      "goldenWaveformPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/dc-resistor-golden.csv",
+      "options": {
+        "maxAbsoluteDelta": 1e-09,
+        "maxRelativeDelta": 1e-09,
+        "requiredVariables": ["V(in)", "I(v1)"],
+        "comparedVariables": ["V(in)", "I(v1)"],
+        "allowInterpolation": false
+      },
+      "coverageTags": [
+        "simulation.analysis.dc",
+        "simulation.device.resistor",
+        "simulation.golden.waveform",
+        "simulation.waveform.branch-current",
+        "simulation.waveform.semantic-node"
+      ],
+      "expectedGateStatus": "passed"
+    },
+    {
+      "caseID": "ac-rc-low-pass",
+      "description": "AC sweep should preserve complex frequency-domain node voltages for a first-order RC filter.",
+      "netlistPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/ac-rc-low-pass.cir",
+      "goldenWaveformPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/ac-rc-low-pass-golden.csv",
+      "options": {
+        "maxAbsoluteDelta": 1e-09,
+        "maxRelativeDelta": 1e-09,
+        "requiredVariables": [
+          "V(1)_real",
+          "V(1)_imag",
+          "V(2)_real",
+          "V(2)_imag",
+          "I(0)_real",
+          "I(0)_imag"
+        ],
+        "comparedVariables": [
+          "V(1)_real",
+          "V(1)_imag",
+          "V(2)_real",
+          "V(2)_imag",
+          "I(0)_real",
+          "I(0)_imag"
+        ],
+        "allowInterpolation": false
+      },
+      "coverageTags": [
+        "simulation.analysis.ac",
+        "simulation.device.capacitor",
+        "simulation.device.resistor",
+        "simulation.golden.waveform",
+        "simulation.waveform.branch-current",
+        "simulation.waveform.complex-frequency"
+      ],
+      "expectedGateStatus": "passed"
+    },
+    {
+      "caseID": "tran-rc-step",
+      "description": "Transient analysis should preserve the time-domain RC step response and source current.",
+      "netlistPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/tran-rc-step.cir",
+      "goldenWaveformPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/tran-rc-step-golden.csv",
+      "options": {
+        "maxAbsoluteDelta": 1e-09,
+        "maxRelativeDelta": 1e-09,
+        "requiredVariables": ["V(in)", "V(out)", "I(v1)"],
+        "comparedVariables": ["V(in)", "V(out)", "I(v1)"],
+        "allowInterpolation": false
+      },
+      "coverageTags": [
+        "simulation.analysis.tran",
+        "simulation.device.capacitor",
+        "simulation.device.resistor",
+        "simulation.golden.waveform",
+        "simulation.waveform.time-domain"
+      ],
+      "expectedGateStatus": "passed"
+    },
+    {
+      "caseID": "parser-undefined-parameter",
+      "description": "Invalid parameter references should be retained as expected parser/lowering diagnostics.",
+      "netlistPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/parser-undefined-parameter.cir",
+      "goldenWaveformPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/failure-dummy-golden.csv",
+      "options": {
+        "requiredVariables": [],
+        "comparedVariables": [],
+        "allowInterpolation": false
+      },
+      "coverageTags": [
+        "simulation.diagnostic.parser",
+        "simulation.failure.expected",
+        "simulation.golden.negative"
+      ],
+      "expectedGateStatus": "failed",
+      "expectedDiagnosticSubstrings": ["Undefined parameter"]
+    },
+    {
+      "caseID": "model-missing-subcircuit",
+      "description": "Missing subcircuit models should be retained as expected model diagnostics.",
+      "netlistPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/model-missing-subcircuit.cir",
+      "goldenWaveformPath": "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus/failure-dummy-golden.csv",
+      "options": {
+        "requiredVariables": [],
+        "comparedVariables": [],
+        "allowInterpolation": false
+      },
+      "coverageTags": [
+        "simulation.diagnostic.model",
+        "simulation.failure.expected",
+        "simulation.golden.negative"
+      ],
+      "expectedGateStatus": "failed",
+      "expectedDiagnosticSubstrings": ["Undefined subcircuit"]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "runID": "signoff-run-1",
+  "intent": "Run DRC, LVS, and PEX with qualified corpus evidence",
+  "stages": [
+    {
+      "stageID": "007-drc",
+      "displayName": "DRC",
+      "requiredTool": {
+        "kind": "drc",
+        "operationID": "run-drc",
+        "minimumLevel": "corpusChecked",
+        "requiredInputFormats": [
+          "JSON"
+        ],
+        "requiredOutputFormats": [
+          "JSON"
+        ],
+        "requiredEvidenceKinds": [],
+        "requiredQualifiedEvidenceKinds": [
+          "corpus"
+        ],
+        "maximumEvidenceAgeSeconds": 4102444800,
+        "requirePassingHealthCheck": true
+      },
+      "requiresApproval": false
+    },
+    {
+      "stageID": "008-lvs",
+      "displayName": "LVS",
+      "requiredTool": {
+        "kind": "lvs",
+        "operationID": "run-lvs",
+        "minimumLevel": "corpusChecked",
+        "requiredInputFormats": [
+          "SPICE"
+        ],
+        "requiredOutputFormats": [
+          "JSON"
+        ],
+        "requiredEvidenceKinds": [],
+        "requiredQualifiedEvidenceKinds": [
+          "corpus"
+        ],
+        "maximumEvidenceAgeSeconds": 4102444800,
+        "requirePassingHealthCheck": true
+      },
+      "requiresApproval": false
+    },
+    {
+      "stageID": "009-pex",
+      "displayName": "PEX",
+      "requiredTool": {
+        "kind": "pex",
+        "operationID": "run-pex",
+        "minimumLevel": "corpusChecked",
+        "requiredInputFormats": [
+          "GDSII",
+          "SPICE"
+        ],
+        "requiredOutputFormats": [
+          "SPEF",
+          "JSON"
+        ],
+        "requiredEvidenceKinds": [],
+        "requiredQualifiedEvidenceKinds": [
+          "corpus"
+        ],
+        "maximumEvidenceAgeSeconds": 4102444800,
+        "requirePassingHealthCheck": true
+      },
+      "requiresApproval": false
+    }
+  ]
+}

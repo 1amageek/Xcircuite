@@ -10,8 +10,9 @@ import XcircuitePackage
 public struct SimulationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
-    private let netlistURL: URL
+    private let netlistInput: XcircuiteFlowInputReference
     private let expectations: [SimulationMeasurementExpectation]
+    private let allowObservationOnly: Bool
     private let engine: any SimulationExecuting
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -20,12 +21,31 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         toolID: String = "corespice",
         netlistURL: URL,
         expectations: [SimulationMeasurementExpectation] = [],
+        allowObservationOnly: Bool = false,
         engine: any SimulationExecuting = CoreSpiceSimulationEngine()
     ) {
         self.stageID = stageID
         self.toolID = toolID
-        self.netlistURL = netlistURL
+        self.netlistInput = .path(netlistURL.path(percentEncoded: false))
         self.expectations = expectations
+        self.allowObservationOnly = allowObservationOnly
+        self.engine = engine
+        self.artifactBuilder = StageArtifactReferenceBuilder()
+    }
+
+    public init(
+        stageID: String,
+        toolID: String = "corespice",
+        netlistInput: XcircuiteFlowInputReference,
+        expectations: [SimulationMeasurementExpectation] = [],
+        allowObservationOnly: Bool = false,
+        engine: any SimulationExecuting = CoreSpiceSimulationEngine()
+    ) {
+        self.stageID = stageID
+        self.toolID = toolID
+        self.netlistInput = netlistInput
+        self.expectations = expectations
+        self.allowObservationOnly = allowObservationOnly
         self.engine = engine
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
@@ -35,23 +55,31 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
+            try context.checkCancellation()
             try validate(stage: stage)
             let rawDirectory = context.runDirectory
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
             try context.packageStore.ensureDirectory(at: rawDirectory)
+            try context.checkCancellation()
 
             // The run captures its own input: the netlist is copied in
             // so the stage stays reviewable after the source moves.
-            let source = try String(contentsOf: netlistURL, encoding: .utf8)
-            let netlistCopy = rawDirectory.appending(path: netlistURL.lastPathComponent)
+            let resolvedNetlistURL = try netlistInput.resolveExisting(
+                projectRoot: context.projectRoot,
+                runDirectory: context.runDirectory
+            )
+            let source = try String(contentsOf: resolvedNetlistURL, encoding: .utf8)
+            let netlistCopy = rawDirectory.appending(path: "input-netlist.cir")
             try context.packageStore.writeText(source, to: netlistCopy)
+            try context.checkCancellation()
 
             let outcome = try await engine.run(
                 netlistSource: source,
-                fileName: netlistURL.lastPathComponent
+                fileName: resolvedNetlistURL.lastPathComponent
             )
+            try context.checkCancellation()
 
             let waveformURL = rawDirectory.appending(path: "waveform.csv")
             try context.packageStore.writeText(outcome.waveformCSV, to: waveformURL)
@@ -64,49 +92,111 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
 
             let verdicts = expectationVerdicts(outcome: outcome)
             let diagnostics = verdicts.diagnostics
-            let gateStatus: FlowGateStatus = verdicts.failures == 0 ? .passed : .failed
+            let gateStatus = verdicts.gateStatus
+            let summaryURL = rawDirectory.appending(path: "simulation-summary.json")
+            let summary = SimulationRunSummaryReport.make(
+                stageID: stage.stageID,
+                toolID: toolID,
+                outcome: outcome,
+                expectationResults: verdicts.expectationResults,
+                gateStatus: gateStatus,
+                diagnostics: diagnostics
+            )
+            try context.packageStore.writeJSON(
+                summary,
+                to: summaryURL,
+                forProjectAt: context.projectRoot
+            )
+
+            var artifacts = [
+                try artifactBuilder.reference(
+                    for: netlistCopy,
+                    projectRoot: context.projectRoot,
+                    kind: .netlist,
+                    format: .spice,
+                    producedByRunID: context.runID
+                ),
+                try artifactBuilder.reference(
+                    for: waveformURL,
+                    projectRoot: context.projectRoot,
+                    kind: .waveform,
+                    format: .csv,
+                    producedByRunID: context.runID
+                ),
+                try artifactBuilder.reference(
+                    for: measurementsURL,
+                    projectRoot: context.projectRoot,
+                    kind: .measurement,
+                    format: .json,
+                    producedByRunID: context.runID
+                ),
+                try artifactBuilder.reference(
+                    for: summaryURL,
+                    projectRoot: context.projectRoot,
+                    artifactID: "simulation-summary",
+                    kind: .report,
+                    format: .json,
+                    producedByRunID: context.runID
+                ),
+            ]
+            let preEnvelopeArtifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
+                for: artifacts,
+                projectRoot: context.projectRoot
+            )
+            if preEnvelopeArtifactIntegrityGate.status != .passed {
+                return FlowStageResult(
+                    stageID: stage.stageID,
+                    status: .failed,
+                    diagnostics: diagnostics + preEnvelopeArtifactIntegrityGate.diagnostics,
+                    gates: [
+                        FlowGateResult(
+                            gateID: "simulation",
+                            status: gateStatus,
+                            diagnostics: diagnostics
+                        ),
+                        preEnvelopeArtifactIntegrityGate,
+                    ],
+                    artifacts: artifacts
+                )
+            }
+            let envelopeArtifact = try SimulationSummaryEnvelopeBuilder().envelopeReference(
+                summary: summary,
+                summaryArtifactID: "simulation-summary",
+                stageArtifacts: artifacts,
+                gateStatus: gateStatus,
+                diagnostics: diagnostics,
+                stageID: stage.stageID,
+                toolID: toolID,
+                context: context
+            )
+            artifacts.append(envelopeArtifact)
+            let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
+                for: artifacts,
+                projectRoot: context.projectRoot
+            )
+            let stageStatus: FlowStageStatus = gateStatus == .passed
+                && artifactIntegrityGate.status == .passed
+                ? .succeeded
+                : .failed
 
             return FlowStageResult(
                 stageID: stage.stageID,
-                status: gateStatus == .passed ? .succeeded : .failed,
-                diagnostics: diagnostics,
+                status: stageStatus,
+                diagnostics: diagnostics + artifactIntegrityGate.diagnostics,
                 gates: [
                     FlowGateResult(
                         gateID: "simulation",
                         status: gateStatus,
                         diagnostics: diagnostics
                     ),
+                    artifactIntegrityGate,
                 ],
-                artifacts: [
-                    try artifactBuilder.reference(
-                        for: netlistCopy,
-                        projectRoot: context.projectRoot,
-                        kind: .netlist,
-                        format: .spice,
-                        producedByRunID: context.runID
-                    ),
-                    try artifactBuilder.reference(
-                        for: waveformURL,
-                        projectRoot: context.projectRoot,
-                        kind: .waveform,
-                        format: .csv,
-                        producedByRunID: context.runID
-                    ),
-                    try artifactBuilder.reference(
-                        for: measurementsURL,
-                        projectRoot: context.projectRoot,
-                        kind: .measurement,
-                        format: .json,
-                        producedByRunID: context.runID
-                    ),
-                ]
+                artifacts: artifacts
             )
+        } catch let cancellationError as FlowRunCancellationError {
+            throw cancellationError
         } catch {
-            let diagnostic = FlowDiagnostic(
-                severity: .error,
-                code: "SIMULATION_EXECUTION_ERROR",
-                message: error.localizedDescription
-            )
+            let diagnostic = diagnostic(for: error)
             return FlowStageResult(
                 stageID: stage.stageID,
                 status: .failed,
@@ -126,7 +216,12 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
 
     private func expectationVerdicts(
         outcome: SimulationStageOutcome
-    ) -> (diagnostics: [FlowDiagnostic], failures: Int) {
+    ) -> (
+        diagnostics: [FlowDiagnostic],
+        failures: Int,
+        gateStatus: FlowGateStatus,
+        expectationResults: [SimulationRunSummaryReport.ExpectationResult]
+    ) {
         var diagnostics: [FlowDiagnostic] = [
             FlowDiagnostic(
                 severity: .info,
@@ -135,6 +230,23 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             ),
         ]
         var failures = 0
+        var expectationResults: [SimulationRunSummaryReport.ExpectationResult] = []
+        guard !expectations.isEmpty else {
+            if allowObservationOnly {
+                diagnostics.append(FlowDiagnostic(
+                    severity: .info,
+                    code: "SIMULATION_OBSERVATION_ONLY",
+                    message: "simulation ran without measurement expectations by explicit observation-only policy"
+                ))
+                return (diagnostics, failures, .passed, expectationResults)
+            }
+            diagnostics.append(FlowDiagnostic(
+                severity: .error,
+                code: "SIMULATION_EXPECTATIONS_EMPTY",
+                message: "simulation gate requires at least one measurement expectation"
+            ))
+            return (diagnostics, 1, .incomplete, expectationResults)
+        }
         let measured = Dictionary(
             outcome.measurements.map { ($0.name.lowercased(), $0.value) },
             uniquingKeysWith: { first, _ in first }
@@ -142,6 +254,14 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         for expectation in expectations {
             guard let value = measured[expectation.name.lowercased()] else {
                 failures += 1
+                expectationResults.append(SimulationRunSummaryReport.ExpectationResult(
+                    name: expectation.name,
+                    target: expectation.target,
+                    tolerance: expectation.tolerance,
+                    measuredValue: nil,
+                    status: "missing",
+                    residual: nil
+                ))
                 diagnostics.append(FlowDiagnostic(
                     severity: .error,
                     code: "SIMULATION_MEASUREMENT_MISSING",
@@ -151,12 +271,28 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             }
             if abs(value - expectation.target) > expectation.tolerance {
                 failures += 1
+                expectationResults.append(SimulationRunSummaryReport.ExpectationResult(
+                    name: expectation.name,
+                    target: expectation.target,
+                    tolerance: expectation.tolerance,
+                    measuredValue: value,
+                    status: "failed",
+                    residual: abs(value - expectation.target)
+                ))
                 diagnostics.append(FlowDiagnostic(
                     severity: .error,
                     code: "SIMULATION_MEASUREMENT_OUT_OF_TOLERANCE",
                     message: "'\(expectation.name)' = \(value), expected \(expectation.target) ± \(expectation.tolerance)"
                 ))
             } else {
+                expectationResults.append(SimulationRunSummaryReport.ExpectationResult(
+                    name: expectation.name,
+                    target: expectation.target,
+                    tolerance: expectation.tolerance,
+                    measuredValue: value,
+                    status: "passed",
+                    residual: abs(value - expectation.target)
+                ))
                 diagnostics.append(FlowDiagnostic(
                     severity: .info,
                     code: "SIMULATION_MEASUREMENT_OK",
@@ -164,7 +300,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 ))
             }
         }
-        return (diagnostics, failures)
+        return (diagnostics, failures, failures == 0 ? .passed : .failed, expectationResults)
     }
 
     private func validate(stage: FlowStageDefinition) throws {
@@ -174,5 +310,67 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         let validator = XcircuiteIdentifierValidator()
         try validator.validate(stage.stageID, kind: .stageID)
         try validator.validate(toolID, kind: .toolID)
+    }
+
+    private func diagnostic(for error: any Error) -> FlowDiagnostic {
+        FlowDiagnostic(
+            severity: .error,
+            code: diagnosticCode(for: error),
+            message: diagnosticMessage(for: error)
+        )
+    }
+
+    private func diagnosticCode(for error: any Error) -> String {
+        if let runtimeError = error as? XcircuiteRuntimeError {
+            switch runtimeError {
+            case .artifactReferenceAmbiguous:
+                return "SIMULATION_INPUT_ARTIFACT_AMBIGUOUS"
+            case .artifactReferenceByteCountMismatch:
+                return "SIMULATION_INPUT_ARTIFACT_BYTE_COUNT_MISMATCH"
+            case .artifactReferenceDigestMismatch:
+                return "SIMULATION_INPUT_ARTIFACT_DIGEST_MISMATCH"
+            case .artifactReferenceMissingByteCount:
+                return "SIMULATION_INPUT_ARTIFACT_MISSING_BYTE_COUNT"
+            case .artifactReferenceMissingDigest:
+                return "SIMULATION_INPUT_ARTIFACT_MISSING_DIGEST"
+            case .artifactReferenceNotFound:
+                return "SIMULATION_INPUT_ARTIFACT_NOT_FOUND"
+            case .artifactOutsideProject:
+                return "SIMULATION_ARTIFACT_OUTSIDE_PROJECT"
+            case .inputReferenceMissing:
+                return "SIMULATION_INPUT_REFERENCE_MISSING"
+            case .invalidInputReference:
+                return "SIMULATION_INPUT_REFERENCE_INVALID"
+            case .stageMismatch:
+                return "SIMULATION_STAGE_MISMATCH"
+            }
+        }
+        if let specError = error as? XcircuiteFlowRuntimeSpecError {
+            switch specError {
+            case .invalidPath:
+                return "SIMULATION_INPUT_REFERENCE_INVALID"
+            default:
+                break
+            }
+        }
+        if let engineError = error as? CoreSpiceSimulationEngine.EngineError {
+            switch engineError {
+            case .missingAnalysisDirective:
+                return "SIMULATION_ANALYSIS_MISSING"
+            case .unsupportedAnalysis:
+                return "SIMULATION_ANALYSIS_UNSUPPORTED"
+            case .missingDeviceDescriptor:
+                return "SIMULATION_DEVICE_DESCRIPTOR_MISSING"
+            }
+        }
+        return "SIMULATION_EXECUTION_ERROR"
+    }
+
+    private func diagnosticMessage(for error: any Error) -> String {
+        if let localizedError = error as? any LocalizedError,
+           let description = localizedError.errorDescription {
+            return description
+        }
+        return String(describing: error)
     }
 }
