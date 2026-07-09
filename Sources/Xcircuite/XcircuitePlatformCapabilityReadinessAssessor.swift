@@ -17,9 +17,12 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
             readiness(
                 for: spec,
                 snapshot: actionDomainSnapshot,
-                validTestEvidenceIDs: evidenceAudit.validEvidenceIDsByMilestone[spec.milestoneID, default: []]
+                validTestEvidenceIDs: evidenceAudit.validEvidenceIDsByMilestone[spec.milestoneID, default: []],
+                testEvidenceDiagnostics: evidenceAudit.milestoneDiagnosticsByMilestone[spec.milestoneID, default: []]
             )
         }
+        let executionStatusCounts = Dictionary(grouping: effectiveTestEvidence.map(\.executionStatus), by: { $0 })
+            .mapValues(\.count)
         let diagnostics = evidenceAudit.diagnostics + milestones.flatMap(\.diagnostics)
         let status = reportStatus(from: milestones, diagnostics: diagnostics)
         let operations = actionDomainSnapshot.domains.flatMap(\.operations)
@@ -38,7 +41,10 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 testEvidenceCount: effectiveTestEvidence.count,
                 validTestEvidenceCount: evidenceAudit.validEvidenceCount,
                 invalidTestEvidenceCount: effectiveTestEvidence.count - evidenceAudit.validEvidenceCount,
-                testEvidenceDiagnosticCount: evidenceAudit.diagnostics.count
+                passedTestEvidenceCount: executionStatusCounts[.passed, default: 0],
+                unverifiedTestEvidenceCount: executionStatusCounts[.unverified, default: 0],
+                failedTestEvidenceCount: executionStatusCounts[.failed, default: 0],
+                testEvidenceDiagnosticCount: evidenceAudit.diagnosticCount
             ),
             milestones: milestones,
             testEvidence: effectiveTestEvidence,
@@ -55,7 +61,8 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
     private func readiness(
         for spec: MilestoneSpec,
         snapshot: XcircuitePlanningActionDomainSnapshot,
-        validTestEvidenceIDs: Set<String>
+        validTestEvidenceIDs: Set<String>,
+        testEvidenceDiagnostics: [XcircuitePlatformCapabilityDiagnostic]
     ) -> XcircuitePlatformCapabilityMilestoneReadiness {
         let domainIDs = Set(snapshot.domains.map(\.domainID))
         let operationPairs = operationIndex(snapshot)
@@ -85,6 +92,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
             artifactCoverage: artifactCoverage,
             gateCoverage: gateCoverage,
             testEvidenceCoverage: testEvidenceCoverage,
+            testEvidenceDiagnostics: testEvidenceDiagnostics,
             plannedOperations: plannedOperations,
             partialOperations: partialOperations
         )
@@ -120,10 +128,11 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         artifactCoverage: XcircuitePlatformCapabilityRequirementCoverage,
         gateCoverage: XcircuitePlatformCapabilityRequirementCoverage,
         testEvidenceCoverage: XcircuitePlatformCapabilityRequirementCoverage,
+        testEvidenceDiagnostics: [XcircuitePlatformCapabilityDiagnostic],
         plannedOperations: [String],
         partialOperations: [String]
     ) -> [XcircuitePlatformCapabilityDiagnostic] {
-        var values: [XcircuitePlatformCapabilityDiagnostic] = []
+        var values = testEvidenceDiagnostics
         appendMissingDiagnostics(
             &values,
             milestoneID: spec.milestoneID,
@@ -247,8 +256,10 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         let evidenceIDCounts = Dictionary(grouping: testEvidence.map(\.evidenceID), by: { $0 })
             .mapValues(\.count)
         var diagnostics: [XcircuitePlatformCapabilityDiagnostic] = []
+        var milestoneDiagnosticsByMilestone: [String: [XcircuitePlatformCapabilityDiagnostic]] = [:]
         var validEvidenceIDsByMilestone: [String: Set<String>] = [:]
         var validEvidenceCount = 0
+        var diagnosticCount = 0
 
         for evidence in testEvidence {
             var isValid = true
@@ -257,6 +268,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
 
             func appendDiagnostic(code: String, message: String) {
                 isValid = false
+                diagnosticCount += 1
                 diagnostics.append(XcircuitePlatformCapabilityDiagnostic(
                     severity: "error",
                     code: code,
@@ -339,6 +351,33 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                     message: "Test evidence artifact coverage is missing: \(subject)."
                 )
             }
+            switch evidence.executionStatus {
+            case .passed:
+                break
+            case .unverified:
+                appendExecutionDiagnostics(
+                    severity: "warning",
+                    code: "test-evidence-execution-unverified",
+                    message: "Test evidence execution is unverified: \(subject).",
+                    nextActions: ["run-test-evidence:\(subject)"],
+                    evidence: evidence,
+                    milestoneIDs: milestoneIDs,
+                    diagnosticsByMilestone: &milestoneDiagnosticsByMilestone,
+                    diagnosticCount: &diagnosticCount
+                )
+            case .failed:
+                isValid = false
+                appendExecutionDiagnostics(
+                    severity: "error",
+                    code: "test-evidence-execution-failed",
+                    message: "Test evidence execution failed: \(subject).",
+                    nextActions: ["rerun-test-evidence:\(subject)", "fix-regression:\(subject)"],
+                    evidence: evidence,
+                    milestoneIDs: milestoneIDs,
+                    diagnosticsByMilestone: &milestoneDiagnosticsByMilestone,
+                    diagnosticCount: &diagnosticCount
+                )
+            }
 
             guard isValid else { continue }
             validEvidenceCount += 1
@@ -350,8 +389,33 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         return TestEvidenceAudit(
             validEvidenceIDsByMilestone: validEvidenceIDsByMilestone,
             validEvidenceCount: validEvidenceCount,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            milestoneDiagnosticsByMilestone: milestoneDiagnosticsByMilestone,
+            diagnosticCount: diagnosticCount
         )
+    }
+
+    private func appendExecutionDiagnostics(
+        severity: String,
+        code: String,
+        message: String,
+        nextActions: [String],
+        evidence: XcircuitePlatformCapabilityTestEvidence,
+        milestoneIDs: Set<String>,
+        diagnosticsByMilestone: inout [String: [XcircuitePlatformCapabilityDiagnostic]],
+        diagnosticCount: inout Int
+    ) {
+        let coveredKnownMilestoneIDs = evidence.coveredMilestoneIDs.filter { milestoneIDs.contains($0) }
+        for milestoneID in coveredKnownMilestoneIDs {
+            diagnosticCount += 1
+            diagnosticsByMilestone[milestoneID, default: []].append(XcircuitePlatformCapabilityDiagnostic(
+                severity: severity,
+                code: code,
+                message: message,
+                milestoneID: milestoneID,
+                nextActions: nextActions
+            ))
+        }
     }
 
     private func usesTimeoutWrapper(_ command: [String]) -> Bool {
@@ -688,5 +752,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         var validEvidenceIDsByMilestone: [String: Set<String>]
         var validEvidenceCount: Int
         var diagnostics: [XcircuitePlatformCapabilityDiagnostic]
+        var milestoneDiagnosticsByMilestone: [String: [XcircuitePlatformCapabilityDiagnostic]]
+        var diagnosticCount: Int
     }
 }

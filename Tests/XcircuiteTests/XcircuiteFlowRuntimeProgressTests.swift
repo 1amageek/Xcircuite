@@ -116,7 +116,6 @@ extension XcircuiteFlowRuntimeTests {
             await sink.append(event)
         }
 
-        try await Task.sleep(nanoseconds: 50_000_000)
         let result = try await runtime.run(
             request: FlowOperationRequest(
                 projectRoot: root,
@@ -240,7 +239,6 @@ extension XcircuiteFlowRuntimeTests {
             await sink.append(event)
         }
 
-        try await Task.sleep(nanoseconds: 50_000_000)
         let result = try await runtime.run(
             request: FlowOperationRequest(
                 projectRoot: root,
@@ -466,7 +464,6 @@ extension XcircuiteFlowRuntimeTests {
             await sink.append(event)
         }
 
-        try await Task.sleep(nanoseconds: 50_000_000)
         let result = try await runtime.run(
             request: FlowOperationRequest(
                 projectRoot: root,

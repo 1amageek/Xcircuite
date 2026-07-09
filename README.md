@@ -214,7 +214,8 @@ xcircuite-flow validate \
 
 xcircuite-flow inspect-platform-capabilities \
   --run-id <run-id> \
-  --generated-at <timestamp>
+  --generated-at <timestamp> \
+  --test-evidence <readiness-or-test-evidence.json>
 ```
 
 Planning commands operate directly on `.xcircuite/runs/<run-id>/planning/`
@@ -223,7 +224,7 @@ introducing an Agent wrapper.
 
 | Command | Writes |
 |---|---|
-| `inspect-platform-capabilities` | JSON readiness report for platform milestones: standalone local signoff, Agent-operable design loop, human review/audit, standard-format grounding, and post-layout improvement planning; each milestone lists required domains, operations, artifacts, verification gates, regression test evidence, missing items, planned/partial operations, and next actions |
+| `inspect-platform-capabilities` | JSON readiness report for platform milestones: standalone local signoff, Agent-operable design loop, human review/audit, standard-format grounding, and post-layout improvement planning; each milestone lists required domains, operations, artifacts, verification gates, regression test evidence, missing items, planned/partial operations, and next actions. Test evidence without `executionStatus: "passed"` keeps readiness partial; `--test-evidence` accepts either a test evidence array or a previous readiness report. |
 | `generate-planning-problem` | `planning/problem.json` from DRC/LVS/PEX summary inputs with generated assumptions, risk classifications, objectives, constraints, candidate actions, verification gates, and resume contract |
 | `audit-problem-translation` | `planning/problem-translation-audit.json` with source-to-objective/action/constraint/goal/gate coverage, uncovered source refs, orphan problem elements, blocking diagnostics, and next actions before planner execution |
 | `validate-planning-problem` | `planning/problem-validation.json` with schema/reference, assumption/risk, objective/action-domain, verification-gate, and freshly refreshed translation-audit diagnostics before planner execution |

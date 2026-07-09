@@ -29,6 +29,7 @@ struct SimulationGoldenCorpusTests {
         #expect(report.coverageTags.contains("simulation.failure.expected"))
         #expect(report.coverageTags.contains("simulation.waveform.branch-current"))
         #expect(report.coverageTags.contains("simulation.waveform.complex-frequency"))
+        #expect(report.coverageTags.contains("simulation.waveform.semantic-node"))
         #expect(report.coverageTags.contains("simulation.waveform.time-domain"))
 
         let caseByID = Dictionary(uniqueKeysWithValues: report.cases.map { ($0.caseID, $0) })
@@ -47,12 +48,12 @@ struct SimulationGoldenCorpusTests {
         #expect(modelFailureCase.diagnostics.contains { $0.contains("Undefined subcircuit") })
         #expect(dcCase.comparison?.comparedVariables.map(\.variableName) == ["V(in)", "I(v1)"])
         #expect(acCase.comparison?.comparedVariables.map(\.variableName) == [
-            "V(1)_real",
-            "V(1)_imag",
-            "V(2)_real",
-            "V(2)_imag",
-            "I(0)_real",
-            "I(0)_imag",
+            "V(in)_real",
+            "V(in)_imag",
+            "V(out)_real",
+            "V(out)_imag",
+            "I(v1)_real",
+            "I(v1)_imag",
         ])
         #expect(transientCase.comparison?.comparedVariables.map(\.variableName) == ["V(in)", "V(out)", "I(v1)"])
 
@@ -290,6 +291,7 @@ struct SimulationGoldenCorpusTests {
         #expect(stdoutReport.coverageTags.contains("simulation.analysis.ac"))
         #expect(stdoutReport.coverageTags.contains("simulation.analysis.tran"))
         #expect(stdoutReport.coverageTags.contains("simulation.failure.expected"))
+        #expect(stdoutReport.coverageTags.contains("simulation.waveform.semantic-node"))
         #expect(stdoutReport.cases.allSatisfy { $0.status == "passed" })
         #expect(stdoutReport.cases.filter { $0.expectedGateStatus == "passed" }.allSatisfy {
             $0.comparison?.gateStatus == "passed" && $0.candidateWaveformArtifact?.sha256.count == 64

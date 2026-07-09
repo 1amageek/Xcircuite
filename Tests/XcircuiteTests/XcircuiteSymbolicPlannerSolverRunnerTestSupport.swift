@@ -303,6 +303,21 @@ func isProcessAlive(_ pid: pid_t) -> Bool {
     #endif
 }
 
+func waitForProcessExit(_ pid: pid_t, timeoutSeconds: Double) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeoutSeconds)
+    while Date() < deadline {
+        if !isProcessAlive(pid) {
+            return true
+        }
+        do {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        } catch {
+            return !isProcessAlive(pid)
+        }
+    }
+    return !isProcessAlive(pid)
+}
+
 func writeMockPlanner(to solverURL: URL, planText: String) throws {
     try XcircuitePackageStore().writeText(
         """

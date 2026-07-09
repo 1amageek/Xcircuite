@@ -16,15 +16,19 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.actionDomainRunID == "capability-run")
         #expect(report.summary.domainCount >= 5)
         #expect(report.summary.operationCount > 0)
-        #expect(report.summary.testEvidenceCount >= 8)
+        #expect(report.summary.testEvidenceCount == Self.expectedDefaultTestEvidenceIDs.count)
+        #expect(Set(report.testEvidence.map(\.evidenceID)) == Self.expectedDefaultTestEvidenceIDs)
         #expect(report.summary.validTestEvidenceCount == report.summary.testEvidenceCount)
         #expect(report.summary.invalidTestEvidenceCount == 0)
-        #expect(report.summary.testEvidenceDiagnosticCount == 0)
+        #expect(report.summary.unverifiedTestEvidenceCount == report.summary.testEvidenceCount)
+        #expect(report.summary.passedTestEvidenceCount == 0)
+        #expect(report.summary.failedTestEvidenceCount == 0)
+        #expect(report.summary.testEvidenceDiagnosticCount == Self.expectedDefaultUnverifiedDiagnosticCount)
         #expect(report.summary.milestoneCount == 5)
-        #expect(report.status == .passed)
+        #expect(report.status == .partial)
         #expect(report.summary.failedCount == 0)
-        #expect(report.summary.passedCount == 5)
-        #expect(report.summary.partialCount == 0)
+        #expect(report.summary.passedCount == 0)
+        #expect(report.summary.partialCount == 5)
         #expect(report.milestones.map(\.milestoneID) == [
             "standalone-local-signoff",
             "agent-operable-design-loop",
@@ -34,7 +38,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         ])
 
         let standalone = try #require(report.milestones.first { $0.milestoneID == "standalone-local-signoff" })
-        #expect(standalone.status == .passed)
+        #expect(standalone.status == .partial)
         #expect(standalone.requiredDomains.missing.isEmpty)
         #expect(standalone.requiredOperations.missing.isEmpty)
         #expect(standalone.requiredArtifacts.missing.isEmpty)
@@ -43,14 +47,18 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(standalone.requiredOperations.present.contains("simulation.run-analysis"))
         #expect(standalone.requiredArtifacts.present.contains("simulation-summary"))
         #expect(standalone.requiredVerificationGates.present.contains("simulation-summary"))
+        #expect(standalone.diagnostics.contains {
+            $0.code == "test-evidence-execution-unverified"
+                && $0.nextActions.contains("run-test-evidence:xci-runtime-local-signoff-flow")
+        })
 
         let agentLoop = try #require(report.milestones.first { $0.milestoneID == "agent-operable-design-loop" })
-        #expect(agentLoop.status == .passed)
+        #expect(agentLoop.status == .partial)
         #expect(agentLoop.requiredOperations.present.contains("simulation.export-metric-report"))
         #expect(agentLoop.requiredArtifacts.present.contains("simulation-metric-report"))
 
         let humanReview = try #require(report.milestones.first { $0.milestoneID == "human-review-audit" })
-        #expect(humanReview.status == .passed)
+        #expect(humanReview.status == .partial)
         #expect(humanReview.requiredOperations.missing.isEmpty)
         #expect(humanReview.requiredArtifacts.missing.isEmpty)
         #expect(humanReview.requiredVerificationGates.missing.isEmpty)
@@ -58,7 +66,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(!humanReview.nextActions.contains("implement-operation:lvs.waiver-review"))
 
         let standardFormats = try #require(report.milestones.first { $0.milestoneID == "standard-format-grounding" })
-        #expect(standardFormats.status == .passed)
+        #expect(standardFormats.status == .partial)
         #expect(standardFormats.requiredOperations.present.contains("simulation.import-spice"))
         #expect(standardFormats.requiredArtifacts.present.contains("simulation-netlist"))
         #expect(standardFormats.requiredOperations.present.contains("drc.import-foundry-rule-seed"))
@@ -66,10 +74,10 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(standardFormats.requiredTestEvidence.present.contains("drc-foundry-rule-import-agent-envelope"))
         #expect(standardFormats.requiredTestEvidence.present.contains("xci-platform-readiness-contract"))
         #expect(standardFormats.partialOperations.isEmpty)
-        #expect(standardFormats.nextActions.isEmpty)
+        #expect(standardFormats.nextActions.contains("run-test-evidence:drc-foundry-rule-import-agent-envelope"))
 
         let postLayout = try #require(report.milestones.first { $0.milestoneID == "post-layout-improvement-loop" })
-        #expect(postLayout.status == .passed)
+        #expect(postLayout.status == .partial)
         #expect(postLayout.requiredOperations.missing.isEmpty)
         #expect(postLayout.requiredArtifacts.missing.isEmpty)
         #expect(postLayout.requiredVerificationGates.missing.isEmpty)
@@ -81,6 +89,33 @@ struct XcircuitePlatformCapabilityReadinessTests {
         let data = try JSONEncoder().encode(report)
         let decoded = try JSONDecoder().decode(XcircuitePlatformCapabilityReadinessReport.self, from: data)
         #expect(decoded == report)
+    }
+
+    @Test func assessorPassesMilestonesWhenTestEvidenceExecutionPassed() throws {
+        let baseline = try XcircuitePlatformCapabilityReadinessAssessor().assess(
+            runID: "capability-run",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+        let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
+            runID: "verified-capability-run",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+
+        let report = XcircuitePlatformCapabilityReadinessAssessor().assess(
+            actionDomainSnapshot: snapshot,
+            testEvidence: syntheticallyPassedExecutionEvidence(from: baseline)
+        )
+
+        #expect(report.status == .passed)
+        #expect(report.summary.failedCount == 0)
+        #expect(report.summary.passedCount == 5)
+        #expect(report.summary.partialCount == 0)
+        #expect(report.summary.passedTestEvidenceCount == report.summary.testEvidenceCount)
+        #expect(report.summary.unverifiedTestEvidenceCount == 0)
+        #expect(report.summary.failedTestEvidenceCount == 0)
+        #expect(report.summary.testEvidenceDiagnosticCount == 0)
+        #expect(report.nextActions.isEmpty)
+        #expect(report.milestones.allSatisfy { $0.status == .passed })
     }
 
     @Test func platformCapabilityCLIEmitsDecodableReadinessReport() async throws {
@@ -99,24 +134,71 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.actionDomainRunID == "cli-capabilities")
         #expect(report.actionDomainGeneratedAt == "2026-06-28T01:02:03Z")
         #expect(report.summary.milestoneCount == 5)
-        #expect(report.status == .passed)
+        #expect(report.status == .partial)
         #expect(report.summary.failedCount == 0)
-        #expect(report.summary.passedCount == 5)
-        #expect(report.summary.partialCount == 0)
-        #expect(report.summary.testEvidenceCount >= 8)
+        #expect(report.summary.passedCount == 0)
+        #expect(report.summary.partialCount == 5)
+        #expect(report.summary.testEvidenceCount == Self.expectedDefaultTestEvidenceIDs.count)
+        #expect(Set(report.testEvidence.map(\.evidenceID)) == Self.expectedDefaultTestEvidenceIDs)
         #expect(report.summary.validTestEvidenceCount == report.summary.testEvidenceCount)
         #expect(report.summary.invalidTestEvidenceCount == 0)
-        #expect(report.summary.testEvidenceDiagnosticCount == 0)
+        #expect(report.summary.unverifiedTestEvidenceCount == report.summary.testEvidenceCount)
+        #expect(report.summary.passedTestEvidenceCount == 0)
+        #expect(report.summary.failedTestEvidenceCount == 0)
+        #expect(report.summary.testEvidenceDiagnosticCount == Self.expectedDefaultUnverifiedDiagnosticCount)
         #expect(json.contains(#""validTestEvidenceCount""#))
         #expect(json.contains(#""invalidTestEvidenceCount""#))
+        #expect(json.contains(#""executionStatus":"unverified""#))
         #expect(report.testEvidence.contains {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
                 && $0.packagePath == "DRCEngine"
                 && $0.testFilter == "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope"
         })
-        #expect(report.nextActions.isEmpty)
+        #expect(report.nextActions.contains("run-test-evidence:drc-foundry-rule-import-agent-envelope"))
         #expect(report.milestones.allSatisfy { !$0.requiredOperations.required.isEmpty })
         #expect(report.milestones.allSatisfy { !$0.requiredTestEvidence.required.isEmpty })
+    }
+
+    @Test func platformCapabilityCLIAcceptsVerifiedTestEvidenceReport() async throws {
+        let baselineJSON = try await XcircuiteFlowCLICommand.run(arguments: [
+            "inspect-platform-capabilities",
+            "--run-id",
+            "cli-capabilities-baseline",
+            "--generated-at",
+            "2026-06-28T01:02:03Z",
+        ])
+        var baseline = try JSONDecoder().decode(
+            XcircuitePlatformCapabilityReadinessReport.self,
+            from: Data(baselineJSON.utf8)
+        )
+        baseline.testEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
+        let evidenceURL = FileManager.default.temporaryDirectory
+            .appending(path: "platform-capability-verified-evidence-\(UUID().uuidString).json")
+        let evidenceData = try JSONEncoder().encode(baseline)
+        try evidenceData.write(to: evidenceURL, options: [.atomic])
+        defer {
+            removeTemporaryEvidence(at: evidenceURL)
+        }
+
+        let json = try await XcircuiteFlowCLICommand.run(arguments: [
+            "inspect-platform-capabilities",
+            "--run-id",
+            "cli-capabilities-verified",
+            "--generated-at",
+            "2026-06-28T01:02:03Z",
+            "--test-evidence",
+            evidenceURL.path(percentEncoded: false),
+        ])
+        let report = try JSONDecoder().decode(
+            XcircuitePlatformCapabilityReadinessReport.self,
+            from: Data(json.utf8)
+        )
+
+        #expect(report.status == .passed)
+        #expect(report.summary.passedTestEvidenceCount == report.summary.testEvidenceCount)
+        #expect(report.summary.unverifiedTestEvidenceCount == 0)
+        #expect(report.summary.testEvidenceDiagnosticCount == 0)
+        #expect(report.nextActions.isEmpty)
     }
 
     @Test func assessorKeepsMilestonePartialWhenRequiredOperationIsPartial() throws {
@@ -125,7 +207,10 @@ struct XcircuitePlatformCapabilityReadinessTests {
             maturity: "partial"
         )
 
-        let report = XcircuitePlatformCapabilityReadinessAssessor().assess(actionDomainSnapshot: snapshot)
+        let report = try XcircuitePlatformCapabilityReadinessAssessor().assess(
+            actionDomainSnapshot: snapshot,
+            testEvidence: syntheticallyPassedDefaultTestEvidence()
+        )
         let standardFormats = try #require(report.milestones.first {
             $0.milestoneID == "standard-format-grounding"
         })
@@ -155,7 +240,10 @@ struct XcircuitePlatformCapabilityReadinessTests {
             maturity: "planned"
         )
 
-        let report = XcircuitePlatformCapabilityReadinessAssessor().assess(actionDomainSnapshot: snapshot)
+        let report = try XcircuitePlatformCapabilityReadinessAssessor().assess(
+            actionDomainSnapshot: snapshot,
+            testEvidence: syntheticallyPassedDefaultTestEvidence()
+        )
         let postLayout = try #require(report.milestones.first {
             $0.milestoneID == "post-layout-improvement-loop"
         })
@@ -185,7 +273,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        let reducedEvidence = baseline.testEvidence.filter {
+        let reducedEvidence = syntheticallyPassedExecutionEvidence(from: baseline).filter {
             $0.evidenceID != "drc-foundry-rule-import-agent-envelope"
         }
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
@@ -228,7 +316,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        var mismatchedEvidence = baseline.testEvidence
+        var mismatchedEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
         let evidenceIndex = try #require(mismatchedEvidence.firstIndex {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
@@ -259,13 +347,52 @@ struct XcircuitePlatformCapabilityReadinessTests {
         })
     }
 
+    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceExecutionFailed() throws {
+        let assessor = XcircuitePlatformCapabilityReadinessAssessor()
+        let baseline = try assessor.assess(
+            runID: "test-evidence-baseline",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+        var failedEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
+        let evidenceIndex = try #require(failedEvidence.firstIndex {
+            $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
+        })
+        failedEvidence[evidenceIndex].executionStatus = .failed
+        let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
+            runID: "test-evidence-failed",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+
+        let report = assessor.assess(
+            actionDomainSnapshot: snapshot,
+            testEvidence: failedEvidence
+        )
+        let standardFormats = try #require(report.milestones.first {
+            $0.milestoneID == "standard-format-grounding"
+        })
+
+        #expect(report.status == .failed)
+        #expect(report.summary.failedTestEvidenceCount == 1)
+        #expect(report.summary.invalidTestEvidenceCount == 1)
+        #expect(standardFormats.status == .failed)
+        #expect(standardFormats.requiredTestEvidence.missing == [
+            "drc-foundry-rule-import-agent-envelope",
+        ])
+        #expect(standardFormats.diagnostics.contains {
+            $0.severity == "error"
+                && $0.code == "test-evidence-execution-failed"
+                && $0.nextActions.contains("rerun-test-evidence:drc-foundry-rule-import-agent-envelope")
+                && $0.nextActions.contains("fix-regression:drc-foundry-rule-import-agent-envelope")
+        })
+    }
+
     @Test func assessorRejectsRequiredTestEvidenceWithoutExecutableCommand() throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        var invalidEvidence = baseline.testEvidence
+        var invalidEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
         let evidenceIndex = try #require(invalidEvidence.firstIndex {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
@@ -303,7 +430,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        var invalidEvidence = baseline.testEvidence
+        var invalidEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
         let evidenceIndex = try #require(invalidEvidence.firstIndex {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
@@ -347,7 +474,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        var invalidEvidence = baseline.testEvidence
+        var invalidEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
         let evidenceIndex = try #require(invalidEvidence.firstIndex {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
@@ -381,7 +508,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        var invalidEvidence = baseline.testEvidence
+        var invalidEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
         let evidenceIndex = try #require(invalidEvidence.firstIndex {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
@@ -414,7 +541,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
             runID: "test-evidence-baseline",
             generatedAt: "2026-06-28T00:00:00Z"
         )
-        var invalidEvidence = baseline.testEvidence
+        var invalidEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
         let evidenceIndex = try #require(invalidEvidence.firstIndex {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
@@ -444,7 +571,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("fix-test-evidence:drc-foundry-rule-import-agent-envelope"))
     }
 
-    @Test func legacyPlatformCapabilitySummaryDecodesWithoutEvidenceAuditCounts() throws {
+    @Test func legacyPlatformCapabilitySummaryDecodesMissingExecutionCountsAsUnverified() throws {
         let json = """
         {
           "schemaVersion": 2,
@@ -477,7 +604,31 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.summary.testEvidenceCount == 3)
         #expect(report.summary.validTestEvidenceCount == 3)
         #expect(report.summary.invalidTestEvidenceCount == 0)
+        #expect(report.summary.passedTestEvidenceCount == 0)
+        #expect(report.summary.unverifiedTestEvidenceCount == 3)
+        #expect(report.summary.failedTestEvidenceCount == 0)
         #expect(report.summary.testEvidenceDiagnosticCount == 0)
+    }
+
+    @Test func legacyPlatformCapabilityTestEvidenceDecodesMissingExecutionStatusAsUnverified() throws {
+        let json = """
+        {
+          "evidenceID": "legacy-evidence",
+          "packagePath": "Xcircuite",
+          "command": ["perl", "-e", "alarm shift; exec @ARGV", "30", "xcodebuild", "test", "-only-testing", "XcircuiteTests/Legacy"],
+          "testFilter": "XcircuiteTests/Legacy",
+          "coveredMilestoneIDs": ["standalone-local-signoff"],
+          "coveredRequirementKinds": ["operation"],
+          "evidenceArtifacts": ["legacy-artifact"]
+        }
+        """
+
+        let evidence = try JSONDecoder().decode(
+            XcircuitePlatformCapabilityTestEvidence.self,
+            from: Data(json.utf8)
+        )
+
+        #expect(evidence.executionStatus == .unverified)
     }
 
     @Test func platformCapabilityCLIPrettyOutputPreservesContract() async throws {
@@ -498,10 +649,11 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(json.contains(#""testEvidence""#))
         #expect(report.actionDomainRunID == "pretty-capabilities")
         #expect(report.summary.failedCount == 0)
+        #expect(report.status == .partial)
         #expect(!report.nextActions.contains("implement-operation:lvs.waiver-review"))
         #expect(!report.nextActions.contains("implement-operation:pex.metric-recovery-objective"))
         #expect(!report.nextActions.contains("complete-operation:drc.import-foundry-rule-seed"))
-        #expect(report.nextActions.isEmpty)
+        #expect(report.nextActions.contains("run-test-evidence:xci-runtime-local-signoff-flow"))
     }
 
     @Test func platformCapabilityCLIRejectsUnknownOption() async throws {
@@ -521,6 +673,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         let globalHelp = try await XcircuiteFlowCLICommand.run(arguments: ["--help"])
 
         #expect(commandHelp.contains("inspect-platform-capabilities"))
+        #expect(commandHelp.contains("--test-evidence"))
         #expect(commandHelp.contains("standalone signoff"))
         #expect(globalHelp.contains("inspect-platform-capabilities"))
     }
@@ -641,5 +794,44 @@ struct XcircuitePlatformCapabilityReadinessTests {
         })
         snapshot.domains[domainIndex].operations[operationIndex].maturity = maturity
         return snapshot
+    }
+
+    private static let expectedDefaultTestEvidenceIDs: Set<String> = [
+        "xci-runtime-local-signoff-flow",
+        "xci-signoff-stage-artifact-gates",
+        "xci-candidate-plan-verification-contract",
+        "xci-risk-approval-review-contract",
+        "drc-foundry-rule-import-agent-envelope",
+        "xci-platform-readiness-contract",
+        "xci-post-layout-comparison-gate",
+        "xci-numeric-repair-loop-feedback",
+    ]
+
+    private static let expectedDefaultUnverifiedDiagnosticCount = 10
+
+    private func syntheticallyPassedDefaultTestEvidence() throws -> [XcircuitePlatformCapabilityTestEvidence] {
+        let baseline = try XcircuitePlatformCapabilityReadinessAssessor().assess(
+            runID: "passed-default-evidence",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+        return syntheticallyPassedExecutionEvidence(from: baseline)
+    }
+
+    private func syntheticallyPassedExecutionEvidence(
+        from report: XcircuitePlatformCapabilityReadinessReport
+    ) -> [XcircuitePlatformCapabilityTestEvidence] {
+        report.testEvidence.map { evidence in
+            var value = evidence
+            value.executionStatus = .passed
+            return value
+        }
+    }
+
+    private func removeTemporaryEvidence(at url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            Issue.record("Failed to remove temporary evidence file: \(error.localizedDescription)")
+        }
     }
 }

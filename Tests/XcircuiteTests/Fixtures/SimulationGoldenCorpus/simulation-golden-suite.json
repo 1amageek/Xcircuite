@@ -33,20 +33,20 @@
         "maxAbsoluteDelta": 1e-09,
         "maxRelativeDelta": 1e-09,
         "requiredVariables": [
-          "V(1)_real",
-          "V(1)_imag",
-          "V(2)_real",
-          "V(2)_imag",
-          "I(0)_real",
-          "I(0)_imag"
+          "V(in)_real",
+          "V(in)_imag",
+          "V(out)_real",
+          "V(out)_imag",
+          "I(v1)_real",
+          "I(v1)_imag"
         ],
         "comparedVariables": [
-          "V(1)_real",
-          "V(1)_imag",
-          "V(2)_real",
-          "V(2)_imag",
-          "I(0)_real",
-          "I(0)_imag"
+          "V(in)_real",
+          "V(in)_imag",
+          "V(out)_real",
+          "V(out)_imag",
+          "I(v1)_real",
+          "I(v1)_imag"
         ],
         "allowInterpolation": false
       },
@@ -56,7 +56,8 @@
         "simulation.device.resistor",
         "simulation.golden.waveform",
         "simulation.waveform.branch-current",
-        "simulation.waveform.complex-frequency"
+        "simulation.waveform.complex-frequency",
+        "simulation.waveform.semantic-node"
       ],
       "expectedGateStatus": "passed"
     },

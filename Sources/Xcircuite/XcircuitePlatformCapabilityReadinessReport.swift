@@ -10,6 +10,9 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
         public var testEvidenceCount: Int
         public var validTestEvidenceCount: Int
         public var invalidTestEvidenceCount: Int
+        public var passedTestEvidenceCount: Int
+        public var unverifiedTestEvidenceCount: Int
+        public var failedTestEvidenceCount: Int
         public var testEvidenceDiagnosticCount: Int
 
         public init(
@@ -23,6 +26,9 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
             testEvidenceCount: Int,
             validTestEvidenceCount: Int? = nil,
             invalidTestEvidenceCount: Int = 0,
+            passedTestEvidenceCount: Int? = nil,
+            unverifiedTestEvidenceCount: Int? = nil,
+            failedTestEvidenceCount: Int = 0,
             testEvidenceDiagnosticCount: Int = 0
         ) {
             self.milestoneCount = milestoneCount
@@ -35,6 +41,10 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
             self.testEvidenceCount = testEvidenceCount
             self.validTestEvidenceCount = validTestEvidenceCount ?? testEvidenceCount
             self.invalidTestEvidenceCount = invalidTestEvidenceCount
+            self.passedTestEvidenceCount = passedTestEvidenceCount ?? 0
+            self.unverifiedTestEvidenceCount = unverifiedTestEvidenceCount
+                ?? max(0, testEvidenceCount - self.passedTestEvidenceCount - failedTestEvidenceCount)
+            self.failedTestEvidenceCount = failedTestEvidenceCount
             self.testEvidenceDiagnosticCount = testEvidenceDiagnosticCount
         }
 
@@ -49,6 +59,9 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
             case testEvidenceCount
             case validTestEvidenceCount
             case invalidTestEvidenceCount
+            case passedTestEvidenceCount
+            case unverifiedTestEvidenceCount
+            case failedTestEvidenceCount
             case testEvidenceDiagnosticCount
         }
 
@@ -70,6 +83,18 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
                 Int.self,
                 forKey: .invalidTestEvidenceCount
             ) ?? 0
+            self.passedTestEvidenceCount = try container.decodeIfPresent(
+                Int.self,
+                forKey: .passedTestEvidenceCount
+            ) ?? 0
+            self.unverifiedTestEvidenceCount = try container.decodeIfPresent(
+                Int.self,
+                forKey: .unverifiedTestEvidenceCount
+            ) ?? testEvidenceCount
+            self.failedTestEvidenceCount = try container.decodeIfPresent(
+                Int.self,
+                forKey: .failedTestEvidenceCount
+            ) ?? 0
             self.testEvidenceDiagnosticCount = try container.decodeIfPresent(
                 Int.self,
                 forKey: .testEvidenceDiagnosticCount
@@ -88,6 +113,9 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
             try container.encode(testEvidenceCount, forKey: .testEvidenceCount)
             try container.encode(validTestEvidenceCount, forKey: .validTestEvidenceCount)
             try container.encode(invalidTestEvidenceCount, forKey: .invalidTestEvidenceCount)
+            try container.encode(passedTestEvidenceCount, forKey: .passedTestEvidenceCount)
+            try container.encode(unverifiedTestEvidenceCount, forKey: .unverifiedTestEvidenceCount)
+            try container.encode(failedTestEvidenceCount, forKey: .failedTestEvidenceCount)
             try container.encode(testEvidenceDiagnosticCount, forKey: .testEvidenceDiagnosticCount)
         }
     }

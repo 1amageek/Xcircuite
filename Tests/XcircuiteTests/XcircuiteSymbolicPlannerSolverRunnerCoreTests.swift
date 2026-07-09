@@ -615,8 +615,7 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
     )
     let childPID = try #require(parseChildPID(from: standardOutput))
     #expect(childPID == observedChildPID)
-    try await Task.sleep(nanoseconds: 100_000_000)
-    #expect(!isProcessAlive(childPID))
+    #expect(await waitForProcessExit(childPID, timeoutSeconds: 2.0))
 
     let solverRun = try XcircuitePackageStore().readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
