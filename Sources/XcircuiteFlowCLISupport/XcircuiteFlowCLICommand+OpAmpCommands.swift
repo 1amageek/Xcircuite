@@ -152,6 +152,77 @@ extension XcircuiteFlowCLICommand {
         return try encode(OpAmpSizingCLIResult(result: result, artifactReferences: artifacts), pretty: pretty)
     }
 
+    static func validateOpAmpSimulationDecks(arguments: [String]) async throws -> String {
+        if arguments.contains("--help") || arguments.contains("-h") {
+            return validateOpAmpSimulationDecksHelpText
+        }
+        var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
+        var deckSetURL: URL?
+        var mode = OpAmpSimulationDeckValidationMode.parseOnly
+        var outURL: URL?
+        var projectRoot: URL?
+        var runID: String?
+        var persist = false
+        var pretty = false
+
+        while let argument = parser.next() {
+            switch argument {
+            case "--deck-set":
+                deckSetURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--mode":
+                mode = try parseOpAmpSimulationDeckValidationMode(
+                    try parser.requiredValue(after: argument),
+                    option: argument
+                )
+            case "--execute":
+                mode = .executeCoreSpice
+            case "--out":
+                outURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--project-root":
+                projectRoot = URL(filePath: try parser.requiredValue(after: argument))
+            case "--run-id":
+                runID = try parser.requiredValue(after: argument)
+            case "--persist":
+                persist = true
+            case "--pretty":
+                pretty = true
+            default:
+                throw XcircuiteFlowCLIError.unknownOption(argument)
+            }
+        }
+
+        guard let deckSetURL else {
+            throw XcircuiteFlowCLIError.missingOption("--deck-set")
+        }
+        let deckSet = try decodeJSONFile(
+            OpAmpSimulationDeckSet.self,
+            from: deckSetURL,
+            option: "--deck-set"
+        )
+        let report = await OpAmpSimulationDeckValidator().validate(deckSet, mode: mode)
+        if let outURL {
+            try write(report, to: outURL, pretty: pretty)
+        }
+        var artifact: XcircuiteFileReference?
+        if persist {
+            guard let projectRoot else {
+                throw XcircuiteFlowCLIError.missingOption("--project-root")
+            }
+            guard let runID else {
+                throw XcircuiteFlowCLIError.missingOption("--run-id")
+            }
+            artifact = try OpAmpDesignArtifactStore().persistSimulationDeckValidationReport(
+                report,
+                runID: runID,
+                projectRoot: projectRoot
+            )
+        }
+        return try encode(
+            OpAmpSimulationDeckValidationCLIResult(report: report, artifactReference: artifact),
+            pretty: pretty
+        )
+    }
+
     static func evaluateOpAmp(arguments: [String]) throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return evaluateOpAmpHelpText
@@ -381,6 +452,16 @@ extension XcircuiteFlowCLICommand {
         return kind
     }
 
+    private static func parseOpAmpSimulationDeckValidationMode(
+        _ value: String,
+        option: String
+    ) throws -> OpAmpSimulationDeckValidationMode {
+        guard let mode = OpAmpSimulationDeckValidationMode(rawValue: value) else {
+            throw XcircuiteFlowCLIError.invalidValue(option: option, value: value)
+        }
+        return mode
+    }
+
     private static func evaluationReport(
         spec: OpAmpSpec,
         extraction: OpAmpSimulationMetricExtraction,
@@ -413,6 +494,11 @@ private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpEvaluationReport
     var artifactReference: XcircuiteFileReference?
     var metricExtraction: OpAmpSimulationMetricExtraction?
+}
+
+private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Codable {
+    var report: OpAmpSimulationDeckValidationReport
+    var artifactReference: XcircuiteFileReference?
 }
 
 private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Codable {

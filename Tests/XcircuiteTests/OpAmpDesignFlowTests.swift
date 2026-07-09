@@ -57,6 +57,14 @@ struct OpAmpDesignFlowTests {
         let deckValidation = await OpAmpSimulationDeckValidator().validate(deckSet)
         #expect(deckValidation.status == "passed")
         #expect(deckValidation.deckResults.count == deckSet.decks.count)
+        let executionValidation = await OpAmpSimulationDeckValidator().validate(deckSet, mode: .executeCoreSpice)
+        #expect(executionValidation.status == "passed")
+        #expect(executionValidation.deckResults.allSatisfy { $0.executionStatus == "passed" })
+        #expect(executionValidation.deckResults.contains {
+            $0.deckID == "noise-input-referred" &&
+                $0.executionContract?.coreSpiceBatchCLIRunnable == false &&
+                $0.postProcessingMetricIDs.contains(.inputReferredNoiseVPerRootHz)
+        })
 
         let report = OpAmpMetricEvaluator().evaluate(spec: spec, sizingResult: sizing)
         #expect(report.specID == spec.specID)
@@ -139,6 +147,28 @@ struct OpAmpDesignFlowTests {
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation-decks.json", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation/ac-open-loop.cir", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation/tran-positive-step.cir", in: root))
+
+        let deckValidationURL = root.appending(path: "output/opamp-simulation-deck-validation.json")
+        let deckValidationOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "validate-opamp-simulation-decks",
+            "--project-root",
+            root.path(percentEncoded: false),
+            "--run-id",
+            runID,
+            "--deck-set",
+            root.appending(path: ".xcircuite/runs/\(runID)/opamp/simulation-decks.json").path(percentEncoded: false),
+            "--execute",
+            "--out",
+            deckValidationURL.path(percentEncoded: false),
+            "--persist",
+            "--pretty",
+        ])
+        let deckValidationResult = try decode(OpAmpSimulationDeckValidationCLIResult.self, from: deckValidationOutput)
+        #expect(deckValidationResult.report.status == "passed")
+        #expect(deckValidationResult.report.validationMode == .executeCoreSpice)
+        #expect(deckValidationResult.artifactReference?.artifactID == "opamp-simulation-deck-validation")
+        #expect(fileExists("output/opamp-simulation-deck-validation.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation-deck-validation.json", in: root))
 
         let evaluationURL = root.appending(path: "output/opamp-evaluation.json")
         let evaluationOutput = try await XcircuiteFlowCLICommand.run(arguments: [
@@ -450,6 +480,11 @@ private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpEvaluationReport
     var artifactReference: XcircuiteFileReference?
     var metricExtraction: OpAmpSimulationMetricExtraction?
+}
+
+private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Decodable {
+    var report: OpAmpSimulationDeckValidationReport
+    var artifactReference: XcircuiteFileReference?
 }
 
 private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Decodable {

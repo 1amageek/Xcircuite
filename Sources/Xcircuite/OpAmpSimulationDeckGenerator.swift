@@ -46,7 +46,11 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
                 ]
             ),
             measurementNames: measurements,
-            notes: ["Bias deck measures operating voltages for human review and downstream offset post-processing."]
+            notes: ["Bias deck measures operating voltages for human review and downstream offset post-processing."],
+            executionContract: .init(
+                directMeasurementsRequired: true,
+                waveformPostProcessingRequired: false
+            )
         )
     }
 
@@ -56,7 +60,6 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
         fixture: TopologyFixture
     ) -> OpAmpSimulationDeckSet.Deck {
         let stop = max(requirementValue(spec, .unityGainFrequencyHz, defaultValue: 10.0e6) * 100.0, 1.0e9)
-        let measurements = ["openLoopGainMagnitude", "unityGainCrossing"]
         return .init(
             deckID: "ac-open-loop",
             analysisKind: "ac",
@@ -69,15 +72,16 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
                 input: .acDifferential,
                 analysisLines: [
                     ".ac dec 40 1 \(format(stop))",
-                    ".meas ac openLoopGainMagnitude FIND V(\(fixture.primaryOutputNode)) AT=1",
-                    ".meas ac unityGainCrossing WHEN V(\(fixture.primaryOutputNode))=1",
                 ]
             ),
             postProcessingMetricIDs: [.dcGainDB, .unityGainFrequencyHz, .phaseMarginDegrees],
-            measurementNames: measurements,
             notes: [
-                "CoreSpice direct .measure captures AC waveform evidence; dB gain and phase margin require waveform post-processing.",
-            ]
+                "AC deck intentionally emits waveform evidence only. Gain, unity-gain frequency, and phase margin must be derived by waveform post-processing.",
+            ],
+            executionContract: .init(
+                directMeasurementsRequired: false,
+                waveformPostProcessingRequired: true
+            )
         )
     }
 
@@ -88,7 +92,7 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
     ) -> OpAmpSimulationDeckSet.Deck {
         let stop = transientStop(spec)
         let start = stop * 0.2
-        let measurements = ["outputSwingHigh", "settlingTimePositive"]
+        let measurements = ["outputSwingHigh"]
         return .init(
             deckID: "tran-positive-step",
             analysisKind: "tran",
@@ -102,13 +106,16 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
                 analysisLines: [
                     ".tran \(format(stop / 500.0)) \(format(stop))",
                     ".meas tran outputSwingHigh MAX V(\(fixture.primaryOutputNode)) FROM=\(format(start)) TO=\(format(stop))",
-                    ".meas tran settlingTimePositive WHEN V(\(fixture.primaryOutputNode))=\(format(spec.operatingPoint.outputCommonModeVoltage))",
                 ]
             ),
             directMetricIDs: [.outputSwingHighV],
             postProcessingMetricIDs: [.positiveSlewRateVPerS, .settlingTimeSeconds],
             measurementNames: measurements,
-            notes: ["Slew rate should be computed from the transient waveform slope, not from a scalar .measure alone."]
+            notes: ["Slew rate and settling time should be computed from the transient waveform, not from a brittle threshold-only .measure."],
+            executionContract: .init(
+                directMeasurementsRequired: true,
+                waveformPostProcessingRequired: true
+            )
         )
     }
 
@@ -119,7 +126,7 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
     ) -> OpAmpSimulationDeckSet.Deck {
         let stop = transientStop(spec)
         let start = stop * 0.2
-        let measurements = ["outputSwingLow", "settlingTimeNegative"]
+        let measurements = ["outputSwingLow"]
         return .init(
             deckID: "tran-negative-step",
             analysisKind: "tran",
@@ -133,13 +140,16 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
                 analysisLines: [
                     ".tran \(format(stop / 500.0)) \(format(stop))",
                     ".meas tran outputSwingLow MIN V(\(fixture.primaryOutputNode)) FROM=\(format(start)) TO=\(format(stop))",
-                    ".meas tran settlingTimeNegative WHEN V(\(fixture.primaryOutputNode))=\(format(spec.operatingPoint.outputCommonModeVoltage))",
                 ]
             ),
             directMetricIDs: [.outputSwingLowV],
             postProcessingMetricIDs: [.negativeSlewRateVPerS, .settlingTimeSeconds],
             measurementNames: measurements,
-            notes: ["Negative slew rate should be computed from the transient waveform slope."]
+            notes: ["Negative slew rate and settling time should be computed from the transient waveform."],
+            executionContract: .init(
+                directMeasurementsRequired: true,
+                waveformPostProcessingRequired: true
+            )
         )
     }
 
@@ -163,7 +173,14 @@ public struct OpAmpSimulationDeckGenerator: Sendable {
                 ]
             ),
             postProcessingMetricIDs: [.inputReferredNoiseVPerRootHz],
-            notes: ["Noise waveform output must be reduced to the requested input-referred-noise metric by the evaluation layer."]
+            notes: ["Noise waveform output must be reduced to the requested input-referred-noise metric by the evaluation layer."],
+            executionContract: .init(
+                coreSpiceEngineRunnable: true,
+                coreSpiceBatchCLIRunnable: false,
+                directMeasurementsRequired: false,
+                waveformPostProcessingRequired: true,
+                limitations: ["CoreSpice batch CLI auto-run does not accept .noise; use CoreSpiceSimulationEngine through Xcircuite flow execution."]
+            )
         )
     }
 

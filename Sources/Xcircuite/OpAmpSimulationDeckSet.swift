@@ -10,6 +10,7 @@ public struct OpAmpSimulationDeckSet: Sendable, Hashable, Codable {
         public var postProcessingMetricIDs: [OpAmpMetricID]
         public var measurementNames: [String]
         public var notes: [String]
+        public var executionContract: OpAmpSimulationDeckExecutionContract
 
         public init(
             deckID: String,
@@ -19,7 +20,8 @@ public struct OpAmpSimulationDeckSet: Sendable, Hashable, Codable {
             directMetricIDs: [OpAmpMetricID] = [],
             postProcessingMetricIDs: [OpAmpMetricID] = [],
             measurementNames: [String] = [],
-            notes: [String] = []
+            notes: [String] = [],
+            executionContract: OpAmpSimulationDeckExecutionContract = OpAmpSimulationDeckExecutionContract()
         ) {
             self.deckID = deckID
             self.analysisKind = analysisKind
@@ -29,6 +31,7 @@ public struct OpAmpSimulationDeckSet: Sendable, Hashable, Codable {
             self.postProcessingMetricIDs = postProcessingMetricIDs
             self.measurementNames = measurementNames
             self.notes = notes
+            self.executionContract = executionContract
         }
     }
 

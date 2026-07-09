@@ -110,6 +110,8 @@ public enum XcircuiteFlowCLICommand {
             return try listOpAmpTopologies(arguments: Array(arguments.dropFirst()))
         case "size-opamp":
             return try sizeOpAmp(arguments: Array(arguments.dropFirst()))
+        case "validate-opamp-simulation-decks":
+            return try await validateOpAmpSimulationDecks(arguments: Array(arguments.dropFirst()))
         case "evaluate-opamp":
             return try evaluateOpAmp(arguments: Array(arguments.dropFirst()))
         case "compare-opamp-post-layout":

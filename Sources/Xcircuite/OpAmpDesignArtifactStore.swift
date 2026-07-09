@@ -113,6 +113,22 @@ public struct OpAmpDesignArtifactStore: Sendable {
     }
 
     @discardableResult
+    public func persistSimulationDeckValidationReport(
+        _ report: OpAmpSimulationDeckValidationReport,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        try writeJSONArtifact(
+            report,
+            runID: runID,
+            projectRoot: projectRoot,
+            relativePath: "opamp/simulation-deck-validation.json",
+            artifactID: "opamp-simulation-deck-validation",
+            kind: .report
+        )
+    }
+
+    @discardableResult
     public func persistPostLayoutComparison(
         _ report: OpAmpPostLayoutComparisonReport,
         runID: String,
