@@ -4,7 +4,7 @@ import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
 
-/// `scaffold-run` is the 作る (author) entry point for flow specs: it
+/// `scaffold-run` is the authoring entry point for flow specs: it
 /// writes a run-spec + runtime-config pair that decodes through the real
 /// spec types, passes `validate` unchanged, keeps the mock PEX stage at
 /// the runtime's mock contract (`unknown`, no qualified evidence), and
@@ -38,7 +38,11 @@ struct XcircuiteFlowScaffoldRunCLITests {
     }
 
     private func removeTemporaryRoot(_ root: URL) {
-        try? FileManager.default.removeItem(at: root)
+        do {
+            try FileManager.default.removeItem(at: root)
+        } catch {
+            Issue.record("Failed to remove temporary root: \(error)")
+        }
     }
 
     @Test

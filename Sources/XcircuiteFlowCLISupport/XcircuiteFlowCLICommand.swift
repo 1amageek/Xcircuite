@@ -96,6 +96,24 @@ public enum XcircuiteFlowCLICommand {
             return try qualifyVerifiedImprovementCorpus(arguments: Array(arguments.dropFirst()))
         case "run-selected-suggested-command":
             return try await runSelectedSuggestedCommand(arguments: Array(arguments.dropFirst()))
+        case "summarize-loop":
+            return try summarizeLoop(arguments: Array(arguments.dropFirst()))
+        case "evaluate-run-guard":
+            return try evaluateRunGuard(arguments: Array(arguments.dropFirst()))
+        case "compare-artifacts":
+            return try compareArtifacts(arguments: Array(arguments.dropFirst()))
+        case "write-opamp-evaluation-profile":
+            return try writeOpAmpEvaluationProfile(arguments: Array(arguments.dropFirst()))
+        case "write-opamp-spec":
+            return try writeOpAmpSpec(arguments: Array(arguments.dropFirst()))
+        case "list-opamp-topologies":
+            return try listOpAmpTopologies(arguments: Array(arguments.dropFirst()))
+        case "size-opamp":
+            return try sizeOpAmp(arguments: Array(arguments.dropFirst()))
+        case "evaluate-opamp":
+            return try evaluateOpAmp(arguments: Array(arguments.dropFirst()))
+        case "compare-opamp-post-layout":
+            return try compareOpAmpPostLayout(arguments: Array(arguments.dropFirst()))
         case "--help", "-h", "help":
             return helpText
         default:

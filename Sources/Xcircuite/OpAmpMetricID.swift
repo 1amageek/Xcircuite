@@ -1,0 +1,25 @@
+import Foundation
+
+public enum OpAmpMetricID: String, Sendable, Hashable, Codable, CaseIterable {
+    case dcGainDB = "ac.dcGain"
+    case unityGainFrequencyHz = "ac.unityGainFrequency"
+    case phaseMarginDegrees = "ac.phaseMargin"
+    case positiveSlewRateVPerS = "tran.slewRatePositive"
+    case negativeSlewRateVPerS = "tran.slewRateNegative"
+    case settlingTimeSeconds = "tran.settlingTime"
+    case cmrrDB = "ac.cmrr"
+    case psrrPositiveDB = "ac.psrrPositive"
+    case psrrNegativeDB = "ac.psrrNegative"
+    case inputReferredNoiseVPerRootHz = "noise.inputReferredNoise"
+    case inputOffsetVoltage = "input.offsetVoltage"
+    case staticPowerW = "power.staticPower"
+    case quiescentCurrentA = "power.quiescentCurrent"
+    case outputSwingHighV = "tran.outputSwingHigh"
+    case outputSwingLowV = "tran.outputSwingLow"
+    case inputCommonModeMinV = "input.commonModeMin"
+    case inputCommonModeMaxV = "input.commonModeMax"
+    case drcViolationCount = "drc.violationCount"
+    case lvsStatus = "lvs.status"
+    case pexDeltaGainDB = "pex.deltaGain"
+    case pexDeltaPhaseMarginDegrees = "pex.deltaPhaseMargin"
+}
