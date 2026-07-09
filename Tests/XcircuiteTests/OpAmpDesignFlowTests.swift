@@ -299,6 +299,13 @@ struct OpAmpDesignFlowTests {
         100,0,-1
         1000,0,-0.1
         """
+        let acVoutpCSV = """
+        frequency,V(vinp)_real,V(vinp)_imag,V(voutp)_real,V(voutp)_imag,V(vdd)_real,V(vdd)_imag
+        1,1,0,100,0,0,0
+        10,1,0,10,0,0,0
+        100,1,0,0,-1,0,0
+        1000,1,0,0,-0.1,0,0
+        """
         let positiveTransientCSV = """
         time,V(vout)
         0,0
@@ -328,6 +335,12 @@ struct OpAmpDesignFlowTests {
         #expect(metricValue(.dcGainDB, in: acExtraction) == 40)
         #expect(metricValue(.unityGainFrequencyHz, in: acExtraction) == 100)
         #expect(metricValue(.phaseMarginDegrees, in: acExtraction) == 90)
+        let autoACExtraction = try extractor.extract(
+            analysisKind: .acOpenLoop,
+            waveformCSV: acVoutpCSV
+        )
+        #expect(metricValue(.dcGainDB, in: autoACExtraction) == 40)
+        #expect(metricValue(.unityGainFrequencyHz, in: autoACExtraction) == 100)
 
         let positiveExtraction = try extractor.extract(
             analysisKind: .transientPositiveStep,
@@ -368,9 +381,12 @@ struct OpAmpDesignFlowTests {
 
         let specURL = root.appending(path: "input/spec.json")
         let acWaveformURL = root.appending(path: "input/ac-waveform.csv")
+        let acVoutpWaveformURL = root.appending(path: "input/ac-voutp-waveform.csv")
         let extractionURL = root.appending(path: "output/ac-extraction.json")
+        let autoExtractionURL = root.appending(path: "output/ac-auto-extraction.json")
         try writeJSON(spec, to: specURL)
         try writeText(acCSV, to: acWaveformURL)
+        try writeText(acVoutpCSV, to: acVoutpWaveformURL)
 
         let extractionOutput = try await XcircuiteFlowCLICommand.run(arguments: [
             "extract-opamp-waveform-metrics",
@@ -394,6 +410,20 @@ struct OpAmpDesignFlowTests {
         #expect(extractionResult.artifactReference?.artifactID == "opamp-waveform-metric-extraction-ac-open-loop")
         #expect(fileExists("output/ac-extraction.json", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/waveform-metric-extraction-ac-open-loop.json", in: root))
+
+        let autoExtractionOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "extract-opamp-waveform-metrics",
+            "--analysis",
+            "ac-open-loop",
+            "--waveform",
+            acVoutpWaveformURL.path(percentEncoded: false),
+            "--out",
+            autoExtractionURL.path(percentEncoded: false),
+            "--pretty",
+        ])
+        let autoExtractionResult = try decode(OpAmpWaveformMetricExtractionCLIResult.self, from: autoExtractionOutput)
+        #expect(metricValue(.dcGainDB, in: autoExtractionResult.extraction) == 40)
+        #expect(fileExists("output/ac-auto-extraction.json", in: root))
 
         let evaluationOutput = try await XcircuiteFlowCLICommand.run(arguments: [
             "evaluate-opamp",
@@ -594,8 +624,6 @@ struct OpAmpDesignFlowTests {
             runID,
             "--deck-set",
             deckSetURL.path(percentEncoded: false),
-            "--output-variable",
-            "V(vout)",
             "--out",
             reportURL.path(percentEncoded: false),
             "--persist",

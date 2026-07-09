@@ -59,8 +59,8 @@ extension XcircuiteFlowCLICommand {
           xcircuite-flow list-opamp-topologies --spec <path> [--pretty]
           xcircuite-flow size-opamp --spec <path> [--technology <path>] [--topology <twoStageMiller|foldedCascode|telescopicCascode>] [--project-root <path> --run-id <id>] [--no-persist] [--pretty]
           xcircuite-flow validate-opamp-simulation-decks --deck-set <path> [--mode <parseOnly|executeCoreSpice>|--execute] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
-          xcircuite-flow run-opamp-simulation-decks --deck-set <path> [--output-variable <name>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
-          xcircuite-flow extract-opamp-waveform-metrics --analysis <ac-open-loop|tran-positive-step|tran-negative-step|noise-input-referred> --waveform <path> [--output-variable <name>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
+          xcircuite-flow run-opamp-simulation-decks --deck-set <path> [--output-variable <name|auto>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
+          xcircuite-flow extract-opamp-waveform-metrics --analysis <ac-open-loop|tran-positive-step|tran-negative-step|noise-input-referred> --waveform <path> [--output-variable <name|auto>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
           xcircuite-flow merge-opamp-metric-extractions --extraction <path> [--extraction <path> ...] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
           xcircuite-flow evaluate-opamp --spec <path> (--cross-artifact-evaluation <path> | --sizing-result <path> | --simulation-metric-report <path> | --simulation-run-summary <path> | --simulation-measurements <path> | --opamp-metric-extraction <path>) [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
           xcircuite-flow compare-opamp-post-layout --spec <path> --pre-report <path> --post-report <path> [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
@@ -156,18 +156,18 @@ extension XcircuiteFlowCLICommand {
     public static var runOpAmpSimulationDecksHelpText: String {
         """
         Usage:
-          xcircuite-flow run-opamp-simulation-decks --deck-set <path> [--output-variable <name>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
+          xcircuite-flow run-opamp-simulation-decks --deck-set <path> [--output-variable <name|auto>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
 
-        Executes every runnable deck in an OpAmpSimulationDeckSet through CoreSpiceSimulationEngine, writes waveform evidence when persisted, extracts direct and waveform-derived metrics, and emits a merged op-amp metric extraction for evaluation.
+        Executes every runnable deck in an OpAmpSimulationDeckSet through CoreSpiceSimulationEngine, writes waveform evidence when persisted, extracts direct and waveform-derived metrics, and emits a merged op-amp metric extraction for evaluation. The output variable defaults to auto-detection from waveform voltage names.
         """
     }
 
     public static var extractOpAmpWaveformMetricsHelpText: String {
         """
         Usage:
-          xcircuite-flow extract-opamp-waveform-metrics --analysis <ac-open-loop|tran-positive-step|tran-negative-step|noise-input-referred> --waveform <path> [--output-variable <name>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
+          xcircuite-flow extract-opamp-waveform-metrics --analysis <ac-open-loop|tran-positive-step|tran-negative-step|noise-input-referred> --waveform <path> [--output-variable <name|auto>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty]
 
-        Extracts op-amp metrics from CoreSpice waveform CSV artifacts. AC waveforms produce gain, unity-gain frequency, and phase-margin material when available; transient waveforms produce slew and settling metrics; noise waveforms produce input-referred-noise metrics.
+        Extracts op-amp metrics from CoreSpice waveform CSV artifacts. AC waveforms produce gain, unity-gain frequency, and phase-margin material when available; transient waveforms produce slew and settling metrics; noise waveforms produce input-referred-noise metrics. The output variable defaults to auto-detection from waveform voltage names.
         """
     }
 

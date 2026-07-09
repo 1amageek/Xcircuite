@@ -229,7 +229,7 @@ extension XcircuiteFlowCLICommand {
         }
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var deckSetURL: URL?
-        var outputVariable = "V(vout)"
+        var outputVariable = "auto"
         var outURL: URL?
         var projectRoot: URL?
         var runID: String?
@@ -318,7 +318,7 @@ extension XcircuiteFlowCLICommand {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var analysisKind: OpAmpWaveformAnalysisKind?
         var waveformURL: URL?
-        var outputVariable = "V(vout)"
+        var outputVariable = "auto"
         var outURL: URL?
         var projectRoot: URL?
         var runID: String?

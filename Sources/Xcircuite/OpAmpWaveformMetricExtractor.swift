@@ -6,7 +6,7 @@ public struct OpAmpWaveformMetricExtractor: Sendable {
     public func extract(
         analysisKind: OpAmpWaveformAnalysisKind,
         waveformCSV: String,
-        outputVariable: String = "V(vout)",
+        outputVariable: String = "auto",
         sourceKind: String = "xcircuite-waveform-csv"
     ) throws -> OpAmpSimulationMetricExtraction {
         let waveform: WaveformCSV
@@ -53,7 +53,7 @@ public struct OpAmpWaveformMetricExtractor: Sendable {
         guard waveform.pointCount >= 2 else {
             throw OpAmpWaveformMetricExtractionError.insufficientPoints("ac-open-loop")
         }
-        let baseName = canonicalVoltageVariable(outputVariable)
+        let baseName = try resolvedVoltageVariable(outputVariable, waveform: waveform, requiresComplexPair: true)
         let realName = "\(baseName)_real"
         let imagName = "\(baseName)_imag"
         guard let real = waveform.series(named: realName) else {
@@ -118,7 +118,7 @@ public struct OpAmpWaveformMetricExtractor: Sendable {
         guard waveform.pointCount >= 2 else {
             throw OpAmpWaveformMetricExtractionError.insufficientPoints("tran")
         }
-        let variableName = canonicalVoltageVariable(outputVariable)
+        let variableName = try resolvedVoltageVariable(outputVariable, waveform: waveform, requiresComplexPair: false)
         guard let output = waveform.series(named: variableName) else {
             throw OpAmpWaveformMetricExtractionError.missingVariable(variableName)
         }
@@ -188,6 +188,97 @@ public struct OpAmpWaveformMetricExtractor: Sendable {
             return trimmed
         }
         return "V(\(trimmed))"
+    }
+
+    private func resolvedVoltageVariable(
+        _ rawValue: String,
+        waveform: WaveformCSV,
+        requiresComplexPair: Bool
+    ) throws -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.lowercased() == "auto" || trimmed.isEmpty else {
+            return canonicalVoltageVariable(trimmed)
+        }
+        guard let variable = automaticOutputVariable(
+            in: waveform,
+            requiresComplexPair: requiresComplexPair
+        ) else {
+            throw OpAmpWaveformMetricExtractionError.missingVariable("auto output voltage variable")
+        }
+        return variable
+    }
+
+    private func automaticOutputVariable(
+        in waveform: WaveformCSV,
+        requiresComplexPair: Bool
+    ) -> String? {
+        let candidates = outputVariableCandidates(
+            in: waveform,
+            requiresComplexPair: requiresComplexPair
+        )
+        let preferredNames = ["V(vout)", "V(out)", "V(voutp)", "V(outp)", "V(vo)"]
+        for preferredName in preferredNames where candidates.contains(preferredName) {
+            return preferredName
+        }
+        if let outputLike = candidates.first(where: { outputScore($0) > 0 }) {
+            return outputLike
+        }
+        return candidates.first
+    }
+
+    private func outputVariableCandidates(
+        in waveform: WaveformCSV,
+        requiresComplexPair: Bool
+    ) -> [String] {
+        let names = waveform.variableNames
+        let candidates: [String]
+        if requiresComplexPair {
+            let realBases = Set(names.filter { $0.hasSuffix("_real") }.map {
+                String($0.dropLast("_real".count))
+            })
+            let imagBases = Set(names.filter { $0.hasSuffix("_imag") }.map {
+                String($0.dropLast("_imag".count))
+            })
+            candidates = Array(realBases.intersection(imagBases))
+        } else {
+            candidates = names
+        }
+        return candidates
+            .filter { $0.lowercased().hasPrefix("v(") }
+            .filter { !isExcludedAutomaticOutputCandidate($0) }
+            .sorted {
+                let lhsScore = outputScore($0)
+                let rhsScore = outputScore($1)
+                if lhsScore == rhsScore {
+                    return $0 < $1
+                }
+                return lhsScore > rhsScore
+            }
+    }
+
+    private func outputScore(_ variableName: String) -> Int {
+        let normalized = variableName.lowercased()
+        if normalized.contains("vout") {
+            return 3
+        }
+        if normalized.contains("out") {
+            return 2
+        }
+        if normalized.contains("vo") {
+            return 1
+        }
+        return 0
+    }
+
+    private func isExcludedAutomaticOutputCandidate(_ variableName: String) -> Bool {
+        let normalized = variableName.lowercased()
+        return normalized.contains("vin") ||
+            normalized.contains("input") ||
+            normalized.contains("vdd") ||
+            normalized.contains("vss") ||
+            normalized.contains("vbias") ||
+            normalized == "v(0)" ||
+            normalized == "v(gnd)"
     }
 
     private func slopes(x: [Double], y: [Double]) -> [Double] {
