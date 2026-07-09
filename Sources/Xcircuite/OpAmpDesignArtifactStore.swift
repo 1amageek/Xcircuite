@@ -129,6 +129,23 @@ public struct OpAmpDesignArtifactStore: Sendable {
     }
 
     @discardableResult
+    public func persistWaveformMetricExtraction(
+        _ extraction: OpAmpSimulationMetricExtraction,
+        analysisKind: OpAmpWaveformAnalysisKind,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        try writeJSONArtifact(
+            extraction,
+            runID: runID,
+            projectRoot: projectRoot,
+            relativePath: "opamp/waveform-metric-extraction-\(analysisKind.rawValue).json",
+            artifactID: "opamp-waveform-metric-extraction-\(analysisKind.rawValue)",
+            kind: .measurement
+        )
+    }
+
+    @discardableResult
     public func persistPostLayoutComparison(
         _ report: OpAmpPostLayoutComparisonReport,
         runID: String,

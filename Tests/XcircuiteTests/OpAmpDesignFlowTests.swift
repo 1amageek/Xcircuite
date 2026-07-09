@@ -284,6 +284,130 @@ struct OpAmpDesignFlowTests {
         #expect(verdictOnlyExtraction.observedMetrics.contains { $0.metricID == .dcGainDB && $0.unit == "dB" })
     }
 
+    @Test func opAmpWaveformMetricExtractionFeedsEvaluationThroughCLI() async throws {
+        let root = try makeTemporaryRoot("opamp-waveform-metrics")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-opamp-waveform-metrics"
+        let packageStore = XcircuitePackageStore()
+        try packageStore.createPackage(at: root)
+        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+
+        let acCSV = """
+        frequency,V(vout)_real,V(vout)_imag
+        1,100,0
+        10,10,0
+        100,0,-1
+        1000,0,-0.1
+        """
+        let positiveTransientCSV = """
+        time,V(vout)
+        0,0
+        0.000001,0.5
+        0.000002,1
+        0.000003,1
+        """
+        let negativeTransientCSV = """
+        time,V(vout)
+        0,1
+        0.000001,0.5
+        0.000002,0
+        0.000003,0
+        """
+        let noiseCSV = """
+        frequency,input_referred_noise_density,output_noise_density,integrated_output_noise
+        1,1e-9,2e-9,0
+        10,3e-9,4e-9,0
+        """
+
+        let extractor = OpAmpWaveformMetricExtractor()
+        let acExtraction = try extractor.extract(
+            analysisKind: .acOpenLoop,
+            waveformCSV: acCSV,
+            outputVariable: "V(vout)"
+        )
+        #expect(metricValue(.dcGainDB, in: acExtraction) == 40)
+        #expect(metricValue(.unityGainFrequencyHz, in: acExtraction) == 100)
+        #expect(metricValue(.phaseMarginDegrees, in: acExtraction) == 90)
+
+        let positiveExtraction = try extractor.extract(
+            analysisKind: .transientPositiveStep,
+            waveformCSV: positiveTransientCSV,
+            outputVariable: "vout"
+        )
+        #expect(abs((metricValue(.positiveSlewRateVPerS, in: positiveExtraction) ?? 0) - 500_000) < 1)
+        #expect(abs((metricValue(.settlingTimeSeconds, in: positiveExtraction) ?? 0) - 0.000002) < 1.0e-12)
+
+        let negativeExtraction = try extractor.extract(
+            analysisKind: .transientNegativeStep,
+            waveformCSV: negativeTransientCSV,
+            outputVariable: "vout"
+        )
+        #expect(abs((metricValue(.negativeSlewRateVPerS, in: negativeExtraction) ?? 0) - 500_000) < 1)
+
+        let noiseExtraction = try extractor.extract(
+            analysisKind: .noiseInputReferred,
+            waveformCSV: noiseCSV
+        )
+        #expect(metricValue(.inputReferredNoiseVPerRootHz, in: noiseExtraction) == 3.0e-9)
+
+        let spec = OpAmpSpec(
+            specID: "waveform-opamp",
+            title: "Waveform extraction op-amp spec",
+            operatingPoint: .init(
+                supplyVoltage: 1.8,
+                inputCommonModeVoltage: 0.9,
+                outputCommonModeVoltage: 0.9,
+                loadCapacitance: 1.0e-12
+            ),
+            requirements: [
+                .init(metricID: .dcGainDB, relation: .atLeast, value: 39, unit: "dB"),
+                .init(metricID: .unityGainFrequencyHz, relation: .atLeast, value: 90, unit: "Hz"),
+                .init(metricID: .phaseMarginDegrees, relation: .atLeast, value: 80, unit: "deg"),
+            ]
+        )
+
+        let specURL = root.appending(path: "input/spec.json")
+        let acWaveformURL = root.appending(path: "input/ac-waveform.csv")
+        let extractionURL = root.appending(path: "output/ac-extraction.json")
+        try writeJSON(spec, to: specURL)
+        try writeText(acCSV, to: acWaveformURL)
+
+        let extractionOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "extract-opamp-waveform-metrics",
+            "--project-root",
+            root.path(percentEncoded: false),
+            "--run-id",
+            runID,
+            "--analysis",
+            "ac-open-loop",
+            "--waveform",
+            acWaveformURL.path(percentEncoded: false),
+            "--output-variable",
+            "V(vout)",
+            "--out",
+            extractionURL.path(percentEncoded: false),
+            "--persist",
+            "--pretty",
+        ])
+        let extractionResult = try decode(OpAmpWaveformMetricExtractionCLIResult.self, from: extractionOutput)
+        #expect(extractionResult.extraction.sourceAnalysisLabel == "ac-open-loop")
+        #expect(extractionResult.artifactReference?.artifactID == "opamp-waveform-metric-extraction-ac-open-loop")
+        #expect(fileExists("output/ac-extraction.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/waveform-metric-extraction-ac-open-loop.json", in: root))
+
+        let evaluationOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "evaluate-opamp",
+            "--spec",
+            specURL.path(percentEncoded: false),
+            "--opamp-metric-extraction",
+            extractionURL.path(percentEncoded: false),
+            "--pretty",
+        ])
+        let evaluationResult = try decode(OpAmpEvaluationCLIResult.self, from: evaluationOutput)
+        #expect(evaluationResult.report.status == "passed")
+        #expect(evaluationResult.metricExtraction?.sourceKind == "xcircuite-waveform-csv")
+    }
+
     @Test func postLayoutComparisonClassifiesPEXDrivenRegressionsAndPersistsThroughCLI() async throws {
         let root = try makeTemporaryRoot("opamp-post-layout")
         defer { removeTemporaryRoot(root) }
@@ -438,6 +562,18 @@ struct OpAmpDesignFlowTests {
         try data.write(to: url, options: .atomic)
     }
 
+    private func writeText(_ value: String, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try value.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func metricValue(
+        _ metricID: OpAmpMetricID,
+        in extraction: OpAmpSimulationMetricExtraction
+    ) -> Double? {
+        extraction.observedMetrics.first { $0.metricID == metricID }?.value
+    }
+
     private func makeTemporaryRoot(_ name: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "OpAmpDesignFlowTests-\(name)-\(UUID().uuidString)")
@@ -484,6 +620,11 @@ private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Decodable {
 
 private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpSimulationDeckValidationReport
+    var artifactReference: XcircuiteFileReference?
+}
+
+private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Decodable {
+    var extraction: OpAmpSimulationMetricExtraction
     var artifactReference: XcircuiteFileReference?
 }
 

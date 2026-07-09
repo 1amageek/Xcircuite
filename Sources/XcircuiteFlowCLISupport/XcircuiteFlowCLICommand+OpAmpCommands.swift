@@ -223,6 +223,86 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
+    static func extractOpAmpWaveformMetrics(arguments: [String]) throws -> String {
+        if arguments.contains("--help") || arguments.contains("-h") {
+            return extractOpAmpWaveformMetricsHelpText
+        }
+        var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
+        var analysisKind: OpAmpWaveformAnalysisKind?
+        var waveformURL: URL?
+        var outputVariable = "V(vout)"
+        var outURL: URL?
+        var projectRoot: URL?
+        var runID: String?
+        var persist = false
+        var pretty = false
+
+        while let argument = parser.next() {
+            switch argument {
+            case "--analysis":
+                analysisKind = try parseOpAmpWaveformAnalysisKind(
+                    try parser.requiredValue(after: argument),
+                    option: argument
+                )
+            case "--waveform":
+                waveformURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--output-variable":
+                outputVariable = try parser.requiredValue(after: argument)
+            case "--out":
+                outURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--project-root":
+                projectRoot = URL(filePath: try parser.requiredValue(after: argument))
+            case "--run-id":
+                runID = try parser.requiredValue(after: argument)
+            case "--persist":
+                persist = true
+            case "--pretty":
+                pretty = true
+            default:
+                throw XcircuiteFlowCLIError.unknownOption(argument)
+            }
+        }
+
+        guard let analysisKind else {
+            throw XcircuiteFlowCLIError.missingOption("--analysis")
+        }
+        guard let waveformURL else {
+            throw XcircuiteFlowCLIError.missingOption("--waveform")
+        }
+        let waveformCSV = try String(contentsOf: waveformURL, encoding: .utf8)
+        let extraction = try OpAmpWaveformMetricExtractor().extract(
+            analysisKind: analysisKind,
+            waveformCSV: waveformCSV,
+            outputVariable: outputVariable,
+            sourceKind: "xcircuite-waveform-csv"
+        )
+        if let outURL {
+            try write(extraction, to: outURL, pretty: pretty)
+        }
+        var artifact: XcircuiteFileReference?
+        if persist {
+            guard let projectRoot else {
+                throw XcircuiteFlowCLIError.missingOption("--project-root")
+            }
+            guard let runID else {
+                throw XcircuiteFlowCLIError.missingOption("--run-id")
+            }
+            artifact = try OpAmpDesignArtifactStore().persistWaveformMetricExtraction(
+                extraction,
+                analysisKind: analysisKind,
+                runID: runID,
+                projectRoot: projectRoot
+            )
+        }
+        return try encode(
+            OpAmpWaveformMetricExtractionCLIResult(
+                extraction: extraction,
+                artifactReference: artifact
+            ),
+            pretty: pretty
+        )
+    }
+
     static func evaluateOpAmp(arguments: [String]) throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return evaluateOpAmpHelpText
@@ -234,6 +314,7 @@ extension XcircuiteFlowCLICommand {
         var simulationMetricReportURL: URL?
         var simulationRunSummaryURL: URL?
         var simulationMeasurementsURL: URL?
+        var opAmpMetricExtractionURL: URL?
         var outURL: URL?
         var projectRoot: URL?
         var runID: String?
@@ -254,6 +335,8 @@ extension XcircuiteFlowCLICommand {
                 simulationRunSummaryURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--simulation-measurements":
                 simulationMeasurementsURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--opamp-metric-extraction":
+                opAmpMetricExtractionURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--out":
                 outURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--project-root":
@@ -278,10 +361,11 @@ extension XcircuiteFlowCLICommand {
             simulationMetricReportURL,
             simulationRunSummaryURL,
             simulationMeasurementsURL,
+            opAmpMetricExtractionURL,
         ].compactMap { $0 }.count
         guard inputCount > 0 else {
             throw XcircuiteFlowCLIError.missingOption(
-                "--cross-artifact-evaluation, --sizing-result, --simulation-metric-report, --simulation-run-summary, or --simulation-measurements"
+                "--cross-artifact-evaluation, --sizing-result, --simulation-metric-report, --simulation-run-summary, --simulation-measurements, or --opamp-metric-extraction"
             )
         }
         guard inputCount == 1 else {
@@ -342,9 +426,21 @@ extension XcircuiteFlowCLICommand {
                 extraction: extraction,
                 reportID: "\(spec.specID)-simulation-measurement-evaluation"
             )
+        } else if let opAmpMetricExtractionURL {
+            let extraction = try decodeJSONFile(
+                OpAmpSimulationMetricExtraction.self,
+                from: opAmpMetricExtractionURL,
+                option: "--opamp-metric-extraction"
+            )
+            metricExtraction = extraction
+            report = evaluationReport(
+                spec: spec,
+                extraction: extraction,
+                reportID: "\(spec.specID)-opamp-waveform-evaluation"
+            )
         } else {
             throw XcircuiteFlowCLIError.missingOption(
-                "--cross-artifact-evaluation, --sizing-result, --simulation-metric-report, --simulation-run-summary, or --simulation-measurements"
+                "--cross-artifact-evaluation, --sizing-result, --simulation-metric-report, --simulation-run-summary, --simulation-measurements, or --opamp-metric-extraction"
             )
         }
 
@@ -462,6 +558,16 @@ extension XcircuiteFlowCLICommand {
         return mode
     }
 
+    private static func parseOpAmpWaveformAnalysisKind(
+        _ value: String,
+        option: String
+    ) throws -> OpAmpWaveformAnalysisKind {
+        guard let kind = OpAmpWaveformAnalysisKind(rawValue: value) else {
+            throw XcircuiteFlowCLIError.invalidValue(option: option, value: value)
+        }
+        return kind
+    }
+
     private static func evaluationReport(
         spec: OpAmpSpec,
         extraction: OpAmpSimulationMetricExtraction,
@@ -498,6 +604,11 @@ private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Codable {
 
 private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpSimulationDeckValidationReport
+    var artifactReference: XcircuiteFileReference?
+}
+
+private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Codable {
+    var extraction: OpAmpSimulationMetricExtraction
     var artifactReference: XcircuiteFileReference?
 }
 
