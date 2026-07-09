@@ -112,6 +112,8 @@ public enum XcircuiteFlowCLICommand {
             return try sizeOpAmp(arguments: Array(arguments.dropFirst()))
         case "validate-opamp-simulation-decks":
             return try await validateOpAmpSimulationDecks(arguments: Array(arguments.dropFirst()))
+        case "run-opamp-simulation-decks":
+            return try await runOpAmpSimulationDecks(arguments: Array(arguments.dropFirst()))
         case "extract-opamp-waveform-metrics":
             return try extractOpAmpWaveformMetrics(arguments: Array(arguments.dropFirst()))
         case "merge-opamp-metric-extractions":

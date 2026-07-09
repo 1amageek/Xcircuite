@@ -543,6 +543,88 @@ struct OpAmpDesignFlowTests {
         #expect(evaluationResult.metricExtraction?.observedMetrics.count == 6)
     }
 
+    @Test func opAmpSimulationDeckRunProducesWaveformAndMergedMetricArtifactsThroughCLI() async throws {
+        let root = try makeTemporaryRoot("opamp-deck-run")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-opamp-deck-run"
+        let packageStore = XcircuitePackageStore()
+        try packageStore.createPackage(at: root)
+        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+
+        let deckSet = makeExecutableOpAmpDeckSet()
+        let spec = OpAmpSpec(
+            specID: "deck-run-opamp",
+            title: "Deck run op-amp metric spec",
+            operatingPoint: .init(
+                supplyVoltage: 1.8,
+                inputCommonModeVoltage: 0.9,
+                outputCommonModeVoltage: 0.9,
+                loadCapacitance: 1.0e-9
+            ),
+            requirements: [
+                .init(metricID: .dcGainDB, relation: .atLeast, value: 30, unit: "dB"),
+                .init(metricID: .unityGainFrequencyHz, relation: .atLeast, value: 1_000, unit: "Hz"),
+                .init(metricID: .phaseMarginDegrees, relation: .atLeast, value: 10, unit: "deg"),
+                .init(metricID: .positiveSlewRateVPerS, relation: .atLeast, value: 1_000, unit: "V/s"),
+                .init(metricID: .negativeSlewRateVPerS, relation: .atLeast, value: 1_000, unit: "V/s"),
+                .init(metricID: .outputSwingHighV, relation: .atLeast, value: 0.5, unit: "V"),
+                .init(metricID: .outputSwingLowV, relation: .atMost, value: 0.5, unit: "V"),
+                .init(metricID: .inputReferredNoiseVPerRootHz, relation: .atMost, value: 1.0e-3, unit: "V/sqrt(Hz)"),
+            ]
+        )
+
+        let directRun = await OpAmpSimulationDeckRunner().run(deckSet, outputVariable: "V(vout)")
+        #expect(directRun.report.status == "passed")
+        #expect(directRun.waveforms.count == deckSet.decks.count)
+        #expect(directRun.report.mergedMetricExtraction?.observedMetrics.contains {
+            $0.metricID == .dcGainDB
+        } == true)
+
+        let deckSetURL = root.appending(path: "input/deck-set.json")
+        let specURL = root.appending(path: "input/spec.json")
+        let reportURL = root.appending(path: "output/deck-run-report.json")
+        try writeJSON(deckSet, to: deckSetURL)
+        try writeJSON(spec, to: specURL)
+
+        let runOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "run-opamp-simulation-decks",
+            "--project-root",
+            root.path(percentEncoded: false),
+            "--run-id",
+            runID,
+            "--deck-set",
+            deckSetURL.path(percentEncoded: false),
+            "--output-variable",
+            "V(vout)",
+            "--out",
+            reportURL.path(percentEncoded: false),
+            "--persist",
+            "--pretty",
+        ])
+        let runResult = try decode(OpAmpSimulationDeckRunCLIResult.self, from: runOutput)
+        let artifactIDs = Set(runResult.artifactReferences.compactMap(\.artifactID))
+        #expect(runResult.report.status == "passed")
+        #expect(runResult.report.mergedMetricExtraction?.observedMetrics.count == 9)
+        #expect(artifactIDs.contains("opamp-simulation-execution-report"))
+        #expect(artifactIDs.contains("opamp-metric-extraction"))
+        #expect(artifactIDs.contains("opamp-simulation-ac-open-loop-waveform"))
+        #expect(fileExists("output/deck-run-report.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation-execution-report.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/metric-extraction.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation/ac-open-loop-waveform.csv", in: root))
+
+        let evaluationOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "evaluate-opamp",
+            "--spec",
+            specURL.path(percentEncoded: false),
+            "--opamp-metric-extraction",
+            root.appending(path: ".xcircuite/runs/\(runID)/opamp/metric-extraction.json").path(percentEncoded: false),
+            "--pretty",
+        ])
+        let evaluationResult = try decode(OpAmpEvaluationCLIResult.self, from: evaluationOutput)
+        #expect(evaluationResult.report.status == "passed")
+    }
+
     @Test func postLayoutComparisonClassifiesPEXDrivenRegressionsAndPersistsThroughCLI() async throws {
         let root = try makeTemporaryRoot("opamp-post-layout")
         defer { removeTemporaryRoot(root) }
@@ -668,6 +750,81 @@ struct OpAmpDesignFlowTests {
         ]
     }
 
+    private func makeExecutableOpAmpDeckSet() -> OpAmpSimulationDeckSet {
+        OpAmpSimulationDeckSet(
+            specID: "deck-run-opamp",
+            topologyKind: .twoStageMiller,
+            decks: [
+                .init(
+                    deckID: "ac-open-loop",
+                    analysisKind: "ac",
+                    title: "Fixture AC deck",
+                    netlist: """
+                    * Fixture AC deck
+                    V1 vin 0 AC 100
+                    R1 vin vout 1k
+                    C1 vout 0 1u
+                    .ac dec 20 1 1e6
+                    .end
+                    """,
+                    postProcessingMetricIDs: [.dcGainDB, .unityGainFrequencyHz, .phaseMarginDegrees],
+                    executionContract: .init(directMeasurementsRequired: false, waveformPostProcessingRequired: true)
+                ),
+                .init(
+                    deckID: "tran-positive-step",
+                    analysisKind: "tran",
+                    title: "Fixture positive transient deck",
+                    netlist: """
+                    * Fixture positive transient deck
+                    V1 vin 0 PULSE(0 1 0 1n 1n 10u 20u)
+                    R1 vin vout 1k
+                    C1 vout 0 1n
+                    .tran 100n 50u
+                    .meas tran outputSwingHigh MAX V(vout) FROM=10u TO=50u
+                    .end
+                    """,
+                    directMetricIDs: [.outputSwingHighV],
+                    postProcessingMetricIDs: [.positiveSlewRateVPerS, .settlingTimeSeconds],
+                    measurementNames: ["outputSwingHigh"],
+                    executionContract: .init(directMeasurementsRequired: true, waveformPostProcessingRequired: true)
+                ),
+                .init(
+                    deckID: "tran-negative-step",
+                    analysisKind: "tran",
+                    title: "Fixture negative transient deck",
+                    netlist: """
+                    * Fixture negative transient deck
+                    V1 vin 0 PULSE(1 0 0 1n 1n 10u 20u)
+                    R1 vin vout 1k
+                    C1 vout 0 1n
+                    .tran 100n 50u
+                    .meas tran outputSwingLow MIN V(vout) FROM=10u TO=50u
+                    .end
+                    """,
+                    directMetricIDs: [.outputSwingLowV],
+                    postProcessingMetricIDs: [.negativeSlewRateVPerS, .settlingTimeSeconds],
+                    measurementNames: ["outputSwingLow"],
+                    executionContract: .init(directMeasurementsRequired: true, waveformPostProcessingRequired: true)
+                ),
+                .init(
+                    deckID: "noise-input-referred",
+                    analysisKind: "noise",
+                    title: "Fixture noise deck",
+                    netlist: """
+                    * Fixture noise deck
+                    V1 vin 0 DC 0
+                    R1 vin vout 1k
+                    R2 vout 0 1k
+                    .noise V(vout) V1 dec 5 1 1000
+                    .end
+                    """,
+                    postProcessingMetricIDs: [.inputReferredNoiseVPerRootHz],
+                    executionContract: .init(directMeasurementsRequired: false, waveformPostProcessingRequired: true)
+                ),
+            ]
+        )
+    }
+
     private func evaluateOpAmpWithSimulationInput(
         specURL: URL,
         option: String,
@@ -756,6 +913,11 @@ private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Decodable {
 private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpSimulationDeckValidationReport
     var artifactReference: XcircuiteFileReference?
+}
+
+private struct OpAmpSimulationDeckRunCLIResult: Sendable, Hashable, Decodable {
+    var report: OpAmpSimulationDeckExecutionReport
+    var artifactReferences: [XcircuiteFileReference]
 }
 
 private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Decodable {

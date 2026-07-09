@@ -223,6 +223,94 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
+    static func runOpAmpSimulationDecks(arguments: [String]) async throws -> String {
+        if arguments.contains("--help") || arguments.contains("-h") {
+            return runOpAmpSimulationDecksHelpText
+        }
+        var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
+        var deckSetURL: URL?
+        var outputVariable = "V(vout)"
+        var outURL: URL?
+        var projectRoot: URL?
+        var runID: String?
+        var persist = false
+        var pretty = false
+
+        while let argument = parser.next() {
+            switch argument {
+            case "--deck-set":
+                deckSetURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--output-variable":
+                outputVariable = try parser.requiredValue(after: argument)
+            case "--out":
+                outURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--project-root":
+                projectRoot = URL(filePath: try parser.requiredValue(after: argument))
+            case "--run-id":
+                runID = try parser.requiredValue(after: argument)
+            case "--persist":
+                persist = true
+            case "--pretty":
+                pretty = true
+            default:
+                throw XcircuiteFlowCLIError.unknownOption(argument)
+            }
+        }
+
+        guard let deckSetURL else {
+            throw XcircuiteFlowCLIError.missingOption("--deck-set")
+        }
+        let deckSet = try decodeJSONFile(
+            OpAmpSimulationDeckSet.self,
+            from: deckSetURL,
+            option: "--deck-set"
+        )
+        let runResult = await OpAmpSimulationDeckRunner().run(
+            deckSet,
+            outputVariable: outputVariable
+        )
+        if let outURL {
+            try write(runResult.report, to: outURL, pretty: pretty)
+        }
+        var artifacts: [XcircuiteFileReference] = []
+        if persist {
+            guard let projectRoot else {
+                throw XcircuiteFlowCLIError.missingOption("--project-root")
+            }
+            guard let runID else {
+                throw XcircuiteFlowCLIError.missingOption("--run-id")
+            }
+            let store = OpAmpDesignArtifactStore()
+            for waveform in runResult.waveforms {
+                artifacts.append(try store.persistSimulationDeckWaveform(
+                    waveform.waveformCSV,
+                    deckID: waveform.deckID,
+                    runID: runID,
+                    projectRoot: projectRoot
+                ))
+            }
+            if let merged = runResult.report.mergedMetricExtraction {
+                artifacts.append(try store.persistMergedMetricExtraction(
+                    merged,
+                    runID: runID,
+                    projectRoot: projectRoot
+                ))
+            }
+            artifacts.append(try store.persistSimulationDeckExecutionReport(
+                runResult.report,
+                runID: runID,
+                projectRoot: projectRoot
+            ))
+        }
+        return try encode(
+            OpAmpSimulationDeckRunCLIResult(
+                report: runResult.report,
+                artifactReferences: artifacts
+            ),
+            pretty: pretty
+        )
+    }
+
     static func extractOpAmpWaveformMetrics(arguments: [String]) throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return extractOpAmpWaveformMetricsHelpText
@@ -673,6 +761,11 @@ private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Codable {
 private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpSimulationDeckValidationReport
     var artifactReference: XcircuiteFileReference?
+}
+
+private struct OpAmpSimulationDeckRunCLIResult: Sendable, Hashable, Codable {
+    var report: OpAmpSimulationDeckExecutionReport
+    var artifactReferences: [XcircuiteFileReference]
 }
 
 private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Codable {

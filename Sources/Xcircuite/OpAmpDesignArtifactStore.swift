@@ -129,6 +129,41 @@ public struct OpAmpDesignArtifactStore: Sendable {
     }
 
     @discardableResult
+    public func persistSimulationDeckExecutionReport(
+        _ report: OpAmpSimulationDeckExecutionReport,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        try writeJSONArtifact(
+            report,
+            runID: runID,
+            projectRoot: projectRoot,
+            relativePath: "opamp/simulation-execution-report.json",
+            artifactID: "opamp-simulation-execution-report",
+            kind: .report
+        )
+    }
+
+    @discardableResult
+    public func persistSimulationDeckWaveform(
+        _ waveformCSV: String,
+        deckID: String,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        let safeDeckID = deckID.replacingOccurrences(of: "/", with: "_")
+        return try writeTextArtifact(
+            waveformCSV,
+            runID: runID,
+            projectRoot: projectRoot,
+            relativePath: "opamp/simulation/\(safeDeckID)-waveform.csv",
+            artifactID: "opamp-simulation-\(safeDeckID)-waveform",
+            kind: .waveform,
+            format: .csv
+        )
+    }
+
+    @discardableResult
     public func persistWaveformMetricExtraction(
         _ extraction: OpAmpSimulationMetricExtraction,
         analysisKind: OpAmpWaveformAnalysisKind,
