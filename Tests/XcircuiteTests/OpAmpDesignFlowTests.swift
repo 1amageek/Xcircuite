@@ -136,6 +136,96 @@ struct OpAmpDesignFlowTests {
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/evaluation-report.json", in: root))
     }
 
+    @Test func opAmpEvaluationConsumesSimulationMeasurementArtifacts() async throws {
+        let root = try makeTemporaryRoot("opamp-simulation-metrics")
+        defer { removeTemporaryRoot(root) }
+
+        let spec = OpAmpSpec.makeDefault(
+            specID: "simulation-opamp",
+            supplyVoltage: 1.8,
+            loadCapacitance: 1.0e-12,
+            dcGainDB: 45,
+            unityGainFrequencyHz: 5.0e6,
+            phaseMarginDegrees: 55,
+            slewRateVPerS: 1.0e6
+        )
+        let measurements = makeSimulationMeasurements()
+        let metricReport = XcircuiteSimulationMetricReport(
+            status: "passed",
+            source: "corespice",
+            analysisLabel: "ac-tran-noise",
+            expectations: [],
+            measurements: measurements,
+            verdicts: [],
+            diagnostics: []
+        )
+        let runSummary = SimulationRunSummaryReport(
+            stageID: "003-simulation",
+            toolID: "corespice",
+            summary: .init(
+                status: "passed",
+                analysis: "ac-tran-noise",
+                measurementCount: measurements.count,
+                waveformVariableCount: 2,
+                expectationCount: 0,
+                failedExpectationCount: 0
+            ),
+            measurements: measurements,
+            waveformVariables: ["V(out)", "V(in)"],
+            expectations: [],
+            diagnostics: []
+        )
+
+        let specURL = root.appending(path: "input/spec.json")
+        let metricReportURL = root.appending(path: "input/simulation-summary.json")
+        let runSummaryURL = root.appending(path: "input/run-summary.json")
+        let measurementsURL = root.appending(path: "input/measurements.json")
+        try writeJSON(spec, to: specURL)
+        try writeJSON(metricReport, to: metricReportURL)
+        try writeJSON(runSummary, to: runSummaryURL)
+        try writeJSON(measurements, to: measurementsURL)
+
+        let reportResult = try await evaluateOpAmpWithSimulationInput(
+            specURL: specURL,
+            option: "--simulation-metric-report",
+            inputURL: metricReportURL
+        )
+        #expect(reportResult.report.status == "passed")
+        #expect(reportResult.metricExtraction?.sourceKind == "xcircuite-simulation-metric-report")
+        #expect(reportResult.metricExtraction?.observedMetrics.contains { $0.metricID == .dcGainDB } == true)
+        #expect(reportResult.metricExtraction?.unmappedMeasurements.count == 1)
+
+        let summaryResult = try await evaluateOpAmpWithSimulationInput(
+            specURL: specURL,
+            option: "--simulation-run-summary",
+            inputURL: runSummaryURL
+        )
+        #expect(summaryResult.report.status == "passed")
+        #expect(summaryResult.report.reportID == "003-simulation-opamp-evaluation")
+        #expect(summaryResult.metricExtraction?.sourceKind == "xcircuite-simulation-run-summary")
+
+        let measurementsResult = try await evaluateOpAmpWithSimulationInput(
+            specURL: specURL,
+            option: "--simulation-measurements",
+            inputURL: measurementsURL
+        )
+        #expect(measurementsResult.report.status == "passed")
+        #expect(measurementsResult.metricExtraction?.sourceKind == "xcircuite-simulation-measurements")
+
+        let verdictOnlyExtraction = OpAmpSimulationMetricExtractor().extract(from: XcircuiteSimulationMetricReport(
+            status: "passed",
+            source: "corespice",
+            analysisLabel: "ac",
+            expectations: [],
+            measurements: [],
+            verdicts: [
+                .init(name: "gain_db", status: "passed", value: 68, target: 45, tolerance: 1),
+            ],
+            diagnostics: []
+        ))
+        #expect(verdictOnlyExtraction.observedMetrics.contains { $0.metricID == .dcGainDB && $0.unit == "dB" })
+    }
+
     @Test func postLayoutComparisonClassifiesPEXDrivenRegressionsAndPersistsThroughCLI() async throws {
         let root = try makeTemporaryRoot("opamp-post-layout")
         defer { removeTemporaryRoot(root) }
@@ -245,6 +335,38 @@ struct OpAmpDesignFlowTests {
         ]
     }
 
+    private func makeSimulationMeasurements() -> [SimulationMeasurementValue] {
+        [
+            SimulationMeasurementValue(name: "gain_db", value: 68, unit: "dB"),
+            SimulationMeasurementValue(name: "ugf", value: 8.0e6, unit: "Hz"),
+            SimulationMeasurementValue(name: "pm", value: 63, unit: "deg"),
+            SimulationMeasurementValue(name: "sr_pos", value: 3.0e6, unit: "V/s"),
+            SimulationMeasurementValue(name: "sr_neg", value: 2.8e6, unit: "V/s"),
+            SimulationMeasurementValue(name: "cmrr", value: 78, unit: "dB"),
+            SimulationMeasurementValue(name: "psrrp", value: 66, unit: "dB"),
+            SimulationMeasurementValue(name: "psrrn", value: 64, unit: "dB"),
+            SimulationMeasurementValue(name: "input_noise", value: 22.0e-9, unit: "V/sqrt(Hz)"),
+            SimulationMeasurementValue(name: "vos", value: 1.0e-3, unit: "V"),
+            SimulationMeasurementValue(name: "unrelated_probe", value: 0.5, unit: "V"),
+        ]
+    }
+
+    private func evaluateOpAmpWithSimulationInput(
+        specURL: URL,
+        option: String,
+        inputURL: URL
+    ) async throws -> OpAmpEvaluationCLIResult {
+        let output = try await XcircuiteFlowCLICommand.run(arguments: [
+            "evaluate-opamp",
+            "--spec",
+            specURL.path(percentEncoded: false),
+            option,
+            inputURL.path(percentEncoded: false),
+            "--pretty",
+        ])
+        return try decode(OpAmpEvaluationCLIResult.self, from: output)
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, from output: String) throws -> T {
         let data = try #require(output.data(using: .utf8))
         return try JSONDecoder().decode(type, from: data)
@@ -299,6 +421,7 @@ private struct OpAmpSizingCLIResult: Sendable, Hashable, Decodable {
 private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpEvaluationReport
     var artifactReference: XcircuiteFileReference?
+    var metricExtraction: OpAmpSimulationMetricExtraction?
 }
 
 private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Decodable {

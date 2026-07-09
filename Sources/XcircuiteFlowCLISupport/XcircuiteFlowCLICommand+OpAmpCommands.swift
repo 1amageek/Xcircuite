@@ -160,6 +160,9 @@ extension XcircuiteFlowCLICommand {
         var specURL: URL?
         var crossArtifactURL: URL?
         var sizingResultURL: URL?
+        var simulationMetricReportURL: URL?
+        var simulationRunSummaryURL: URL?
+        var simulationMeasurementsURL: URL?
         var outURL: URL?
         var projectRoot: URL?
         var runID: String?
@@ -174,6 +177,12 @@ extension XcircuiteFlowCLICommand {
                 crossArtifactURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--sizing-result":
                 sizingResultURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--simulation-metric-report":
+                simulationMetricReportURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--simulation-run-summary":
+                simulationRunSummaryURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--simulation-measurements":
+                simulationMeasurementsURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--out":
                 outURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--project-root":
@@ -192,20 +201,80 @@ extension XcircuiteFlowCLICommand {
         guard let specURL else {
             throw XcircuiteFlowCLIError.missingOption("--spec")
         }
+        let inputCount = [
+            crossArtifactURL,
+            sizingResultURL,
+            simulationMetricReportURL,
+            simulationRunSummaryURL,
+            simulationMeasurementsURL,
+        ].compactMap { $0 }.count
+        guard inputCount > 0 else {
+            throw XcircuiteFlowCLIError.missingOption(
+                "--cross-artifact-evaluation, --sizing-result, --simulation-metric-report, --simulation-run-summary, or --simulation-measurements"
+            )
+        }
+        guard inputCount == 1 else {
+            throw XcircuiteFlowCLIError.invalidValue(option: "--evaluation-input", value: "multiple")
+        }
         let spec = try decodeJSONFile(OpAmpSpec.self, from: specURL, option: "--spec")
+        let evaluator = OpAmpMetricEvaluator()
         let report: OpAmpEvaluationReport
+        let metricExtraction: OpAmpSimulationMetricExtraction?
         if let crossArtifactURL {
             let evaluation = try decodeJSONFile(
                 XcircuiteCrossArtifactEvaluation.self,
                 from: crossArtifactURL,
                 option: "--cross-artifact-evaluation"
             )
-            report = OpAmpMetricEvaluator().evaluate(spec: spec, crossArtifactEvaluation: evaluation)
+            report = evaluator.evaluate(spec: spec, crossArtifactEvaluation: evaluation)
+            metricExtraction = nil
         } else if let sizingResultURL {
             let sizing = try decodeJSONFile(OpAmpSizingResult.self, from: sizingResultURL, option: "--sizing-result")
-            report = OpAmpMetricEvaluator().evaluate(spec: spec, sizingResult: sizing)
+            report = evaluator.evaluate(spec: spec, sizingResult: sizing)
+            metricExtraction = nil
+        } else if let simulationMetricReportURL {
+            let source = try decodeJSONFile(
+                XcircuiteSimulationMetricReport.self,
+                from: simulationMetricReportURL,
+                option: "--simulation-metric-report"
+            )
+            let extraction = OpAmpSimulationMetricExtractor().extract(from: source)
+            metricExtraction = extraction
+            report = evaluationReport(
+                spec: spec,
+                extraction: extraction,
+                reportID: "\(spec.specID)-simulation-metric-evaluation"
+            )
+        } else if let simulationRunSummaryURL {
+            let source = try decodeJSONFile(
+                SimulationRunSummaryReport.self,
+                from: simulationRunSummaryURL,
+                option: "--simulation-run-summary"
+            )
+            let extraction = OpAmpSimulationMetricExtractor().extract(from: source)
+            metricExtraction = extraction
+            report = evaluationReport(
+                spec: spec,
+                extraction: extraction,
+                reportID: "\(source.stageID)-opamp-evaluation"
+            )
+        } else if let simulationMeasurementsURL {
+            let measurements = try decodeJSONFile(
+                [SimulationMeasurementValue].self,
+                from: simulationMeasurementsURL,
+                option: "--simulation-measurements"
+            )
+            let extraction = OpAmpSimulationMetricExtractor().extract(measurements: measurements)
+            metricExtraction = extraction
+            report = evaluationReport(
+                spec: spec,
+                extraction: extraction,
+                reportID: "\(spec.specID)-simulation-measurement-evaluation"
+            )
         } else {
-            throw XcircuiteFlowCLIError.missingOption("--cross-artifact-evaluation or --sizing-result")
+            throw XcircuiteFlowCLIError.missingOption(
+                "--cross-artifact-evaluation, --sizing-result, --simulation-metric-report, --simulation-run-summary, or --simulation-measurements"
+            )
         }
 
         if let outURL {
@@ -225,7 +294,14 @@ extension XcircuiteFlowCLICommand {
                 projectRoot: projectRoot
             )
         }
-        return try encode(OpAmpEvaluationCLIResult(report: report, artifactReference: artifact), pretty: pretty)
+        return try encode(
+            OpAmpEvaluationCLIResult(
+                report: report,
+                artifactReference: artifact,
+                metricExtraction: metricExtraction
+            ),
+            pretty: pretty
+        )
     }
 
     static func compareOpAmpPostLayout(arguments: [String]) throws -> String {
@@ -304,6 +380,23 @@ extension XcircuiteFlowCLICommand {
         }
         return kind
     }
+
+    private static func evaluationReport(
+        spec: OpAmpSpec,
+        extraction: OpAmpSimulationMetricExtraction,
+        reportID: String
+    ) -> OpAmpEvaluationReport {
+        var report = OpAmpMetricEvaluator().evaluate(
+            spec: spec,
+            observedMetrics: extraction.observedMetrics,
+            sourceChannelIDs: Dictionary(uniqueKeysWithValues: extraction.observedMetrics.map {
+                ($0.metricID, [extraction.sourceKind])
+            }),
+            reportID: reportID
+        )
+        report.diagnostics.append(contentsOf: extraction.diagnostics)
+        return report
+    }
 }
 
 private struct OpAmpTopologyListCLIResult: Sendable, Hashable, Codable {
@@ -319,6 +412,7 @@ private struct OpAmpSizingCLIResult: Sendable, Hashable, Codable {
 private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpEvaluationReport
     var artifactReference: XcircuiteFileReference?
+    var metricExtraction: OpAmpSimulationMetricExtraction?
 }
 
 private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Codable {
