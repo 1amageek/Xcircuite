@@ -408,6 +408,141 @@ struct OpAmpDesignFlowTests {
         #expect(evaluationResult.metricExtraction?.sourceKind == "xcircuite-waveform-csv")
     }
 
+    @Test func opAmpMetricExtractionMergeCombinesArtifactsForEvaluationThroughCLI() async throws {
+        let root = try makeTemporaryRoot("opamp-merged-metrics")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-opamp-merged-metrics"
+        let packageStore = XcircuitePackageStore()
+        try packageStore.createPackage(at: root)
+        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+
+        let spec = OpAmpSpec(
+            specID: "merged-opamp",
+            title: "Merged op-amp metric spec",
+            operatingPoint: .init(
+                supplyVoltage: 1.8,
+                inputCommonModeVoltage: 0.9,
+                outputCommonModeVoltage: 0.9,
+                loadCapacitance: 1.0e-12
+            ),
+            requirements: [
+                .init(metricID: .dcGainDB, relation: .atLeast, value: 40, unit: "dB"),
+                .init(metricID: .unityGainFrequencyHz, relation: .atLeast, value: 90, unit: "Hz"),
+                .init(metricID: .phaseMarginDegrees, relation: .atLeast, value: 80, unit: "deg"),
+                .init(metricID: .positiveSlewRateVPerS, relation: .atLeast, value: 400_000, unit: "V/s"),
+                .init(metricID: .negativeSlewRateVPerS, relation: .atLeast, value: 400_000, unit: "V/s"),
+                .init(metricID: .inputReferredNoiseVPerRootHz, relation: .atMost, value: 5.0e-9, unit: "V/sqrt(Hz)"),
+            ]
+        )
+        let acExtraction = OpAmpSimulationMetricExtraction(
+            sourceKind: "xcircuite-waveform-csv",
+            sourceStatus: "passed",
+            sourceAnalysisLabel: "ac-open-loop",
+            observedMetrics: [
+                .init(metricID: .dcGainDB, value: 40, unit: "dB", method: "fixture ac gain"),
+                .init(metricID: .unityGainFrequencyHz, value: 100, unit: "Hz", method: "fixture ac ugf"),
+                .init(metricID: .phaseMarginDegrees, value: 90, unit: "deg", method: "fixture ac pm"),
+            ],
+            unmappedMeasurements: []
+        )
+        let transientExtraction = OpAmpSimulationMetricExtraction(
+            sourceKind: "xcircuite-waveform-csv",
+            sourceStatus: "passed",
+            sourceAnalysisLabel: "tran-step",
+            observedMetrics: [
+                .init(metricID: .positiveSlewRateVPerS, value: 500_000, unit: "V/s", method: "fixture positive slew"),
+                .init(metricID: .negativeSlewRateVPerS, value: 480_000, unit: "V/s", method: "fixture negative slew"),
+            ],
+            unmappedMeasurements: []
+        )
+        let noiseExtraction = OpAmpSimulationMetricExtraction(
+            sourceKind: "xcircuite-waveform-csv",
+            sourceStatus: "passed",
+            sourceAnalysisLabel: "noise-input-referred",
+            observedMetrics: [
+                .init(metricID: .inputReferredNoiseVPerRootHz, value: 3.0e-9, unit: "V/sqrt(Hz)", method: "fixture noise"),
+            ],
+            unmappedMeasurements: []
+        )
+        let conflictingGainExtraction = OpAmpSimulationMetricExtraction(
+            sourceKind: "xcircuite-simulation-measurements",
+            sourceStatus: "passed",
+            sourceAnalysisLabel: "direct-measurements",
+            observedMetrics: [
+                .init(metricID: .dcGainDB, value: 42, unit: "dB", method: "fixture direct gain"),
+            ],
+            unmappedMeasurements: [
+                .init(name: "debug_probe", value: 0.1, unit: "V"),
+            ]
+        )
+
+        let specURL = root.appending(path: "input/spec.json")
+        let acURL = root.appending(path: "input/ac-extraction.json")
+        let transientURL = root.appending(path: "input/transient-extraction.json")
+        let noiseURL = root.appending(path: "input/noise-extraction.json")
+        let conflictURL = root.appending(path: "input/conflict-extraction.json")
+        let mergedURL = root.appending(path: "output/merged-extraction.json")
+        try writeJSON(spec, to: specURL)
+        try writeJSON(acExtraction, to: acURL)
+        try writeJSON(transientExtraction, to: transientURL)
+        try writeJSON(noiseExtraction, to: noiseURL)
+        try writeJSON(conflictingGainExtraction, to: conflictURL)
+
+        let directMerge = try OpAmpSimulationMetricExtractionMerger().merge([
+            acExtraction,
+            transientExtraction,
+            noiseExtraction,
+            conflictingGainExtraction,
+        ])
+        #expect(metricValue(.dcGainDB, in: directMerge) == 42)
+        #expect(directMerge.diagnostics.contains {
+            $0.code == "opamp.metric-extraction-merge.conflicting-metric" &&
+                $0.relatedMetricIDs == [.dcGainDB]
+        })
+        #expect(directMerge.unmappedMeasurements.contains {
+            $0.name == "xcircuite-simulation-measurements:direct-measurements:debug_probe"
+        })
+
+        let mergeOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "merge-opamp-metric-extractions",
+            "--project-root",
+            root.path(percentEncoded: false),
+            "--run-id",
+            runID,
+            "--extraction",
+            acURL.path(percentEncoded: false),
+            "--extraction",
+            transientURL.path(percentEncoded: false),
+            "--extraction",
+            noiseURL.path(percentEncoded: false),
+            "--extraction",
+            conflictURL.path(percentEncoded: false),
+            "--out",
+            mergedURL.path(percentEncoded: false),
+            "--persist",
+            "--pretty",
+        ])
+        let mergeResult = try decode(OpAmpMetricExtractionMergeCLIResult.self, from: mergeOutput)
+        #expect(mergeResult.extraction.sourceKind == "xcircuite-opamp-metric-extraction-merge")
+        #expect(mergeResult.extraction.sourceStatus == "warning")
+        #expect(mergeResult.extraction.observedMetrics.count == 6)
+        #expect(mergeResult.artifactReference?.artifactID == "opamp-metric-extraction")
+        #expect(fileExists("output/merged-extraction.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/metric-extraction.json", in: root))
+
+        let evaluationOutput = try await XcircuiteFlowCLICommand.run(arguments: [
+            "evaluate-opamp",
+            "--spec",
+            specURL.path(percentEncoded: false),
+            "--opamp-metric-extraction",
+            mergedURL.path(percentEncoded: false),
+            "--pretty",
+        ])
+        let evaluationResult = try decode(OpAmpEvaluationCLIResult.self, from: evaluationOutput)
+        #expect(evaluationResult.report.status == "passed")
+        #expect(evaluationResult.metricExtraction?.observedMetrics.count == 6)
+    }
+
     @Test func postLayoutComparisonClassifiesPEXDrivenRegressionsAndPersistsThroughCLI() async throws {
         let root = try makeTemporaryRoot("opamp-post-layout")
         defer { removeTemporaryRoot(root) }
@@ -624,6 +759,11 @@ private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Decod
 }
 
 private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Decodable {
+    var extraction: OpAmpSimulationMetricExtraction
+    var artifactReference: XcircuiteFileReference?
+}
+
+private struct OpAmpMetricExtractionMergeCLIResult: Sendable, Hashable, Decodable {
     var extraction: OpAmpSimulationMetricExtraction
     var artifactReference: XcircuiteFileReference?
 }

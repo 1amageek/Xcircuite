@@ -146,6 +146,22 @@ public struct OpAmpDesignArtifactStore: Sendable {
     }
 
     @discardableResult
+    public func persistMergedMetricExtraction(
+        _ extraction: OpAmpSimulationMetricExtraction,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuiteFileReference {
+        try writeJSONArtifact(
+            extraction,
+            runID: runID,
+            projectRoot: projectRoot,
+            relativePath: "opamp/metric-extraction.json",
+            artifactID: "opamp-metric-extraction",
+            kind: .measurement
+        )
+    }
+
+    @discardableResult
     public func persistPostLayoutComparison(
         _ report: OpAmpPostLayoutComparisonReport,
         runID: String,

@@ -303,6 +303,74 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
+    static func mergeOpAmpMetricExtractions(arguments: [String]) throws -> String {
+        if arguments.contains("--help") || arguments.contains("-h") {
+            return mergeOpAmpMetricExtractionsHelpText
+        }
+        var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
+        var extractionURLs: [URL] = []
+        var outURL: URL?
+        var projectRoot: URL?
+        var runID: String?
+        var persist = false
+        var pretty = false
+
+        while let argument = parser.next() {
+            switch argument {
+            case "--extraction":
+                extractionURLs.append(URL(filePath: try parser.requiredValue(after: argument)))
+            case "--out":
+                outURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--project-root":
+                projectRoot = URL(filePath: try parser.requiredValue(after: argument))
+            case "--run-id":
+                runID = try parser.requiredValue(after: argument)
+            case "--persist":
+                persist = true
+            case "--pretty":
+                pretty = true
+            default:
+                throw XcircuiteFlowCLIError.unknownOption(argument)
+            }
+        }
+
+        guard !extractionURLs.isEmpty else {
+            throw XcircuiteFlowCLIError.missingOption("--extraction")
+        }
+        let extractions = try extractionURLs.map {
+            try decodeJSONFile(
+                OpAmpSimulationMetricExtraction.self,
+                from: $0,
+                option: "--extraction"
+            )
+        }
+        let merged = try OpAmpSimulationMetricExtractionMerger().merge(extractions)
+        if let outURL {
+            try write(merged, to: outURL, pretty: pretty)
+        }
+        var artifact: XcircuiteFileReference?
+        if persist {
+            guard let projectRoot else {
+                throw XcircuiteFlowCLIError.missingOption("--project-root")
+            }
+            guard let runID else {
+                throw XcircuiteFlowCLIError.missingOption("--run-id")
+            }
+            artifact = try OpAmpDesignArtifactStore().persistMergedMetricExtraction(
+                merged,
+                runID: runID,
+                projectRoot: projectRoot
+            )
+        }
+        return try encode(
+            OpAmpMetricExtractionMergeCLIResult(
+                extraction: merged,
+                artifactReference: artifact
+            ),
+            pretty: pretty
+        )
+    }
+
     static func evaluateOpAmp(arguments: [String]) throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return evaluateOpAmpHelpText
@@ -608,6 +676,11 @@ private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Codab
 }
 
 private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Codable {
+    var extraction: OpAmpSimulationMetricExtraction
+    var artifactReference: XcircuiteFileReference?
+}
+
+private struct OpAmpMetricExtractionMergeCLIResult: Sendable, Hashable, Codable {
     var extraction: OpAmpSimulationMetricExtraction
     var artifactReference: XcircuiteFileReference?
 }
