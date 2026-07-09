@@ -71,7 +71,29 @@ public struct OpAmpDesignArtifactStore: Sendable {
             artifactID: "opamp-layout-constraints",
             kind: .report
         )
-        return [sizingReference, netlistReference, layoutReference]
+        var references = [sizingReference, netlistReference, layoutReference]
+        if let simulationDeckSet = result.simulationDeckSet {
+            references.append(try writeJSONArtifact(
+                simulationDeckSet,
+                runID: runID,
+                projectRoot: projectRoot,
+                relativePath: "opamp/simulation-decks.json",
+                artifactID: "opamp-simulation-deck-set",
+                kind: .report
+            ))
+            for deck in simulationDeckSet.decks {
+                references.append(try writeTextArtifact(
+                    deck.netlist,
+                    runID: runID,
+                    projectRoot: projectRoot,
+                    relativePath: "opamp/simulation/\(deck.deckID).cir",
+                    artifactID: "opamp-simulation-\(deck.deckID)-netlist",
+                    kind: .netlist,
+                    format: .spice
+                ))
+            }
+        }
+        return references
     }
 
     @discardableResult

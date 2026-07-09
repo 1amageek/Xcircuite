@@ -17,6 +17,7 @@ public struct OpAmpSizingResult: Sendable, Hashable, Codable {
     public var estimatedMetrics: [OpAmpEstimatedMetric]
     public var layoutConstraintPlan: OpAmpLayoutConstraintPlan
     public var netlist: String
+    public var simulationDeckSet: OpAmpSimulationDeckSet?
     public var diagnostics: [OpAmpDesignDiagnostic]
     public var metadata: [String: String]
 
@@ -31,6 +32,7 @@ public struct OpAmpSizingResult: Sendable, Hashable, Codable {
         estimatedMetrics: [OpAmpEstimatedMetric],
         layoutConstraintPlan: OpAmpLayoutConstraintPlan,
         netlist: String,
+        simulationDeckSet: OpAmpSimulationDeckSet? = nil,
         diagnostics: [OpAmpDesignDiagnostic] = [],
         metadata: [String: String] = [:]
     ) {
@@ -44,6 +46,7 @@ public struct OpAmpSizingResult: Sendable, Hashable, Codable {
         self.estimatedMetrics = estimatedMetrics
         self.layoutConstraintPlan = layoutConstraintPlan
         self.netlist = netlist
+        self.simulationDeckSet = simulationDeckSet
         self.diagnostics = diagnostics
         self.metadata = metadata
     }

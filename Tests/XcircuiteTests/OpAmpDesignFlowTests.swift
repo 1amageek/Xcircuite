@@ -6,7 +6,7 @@ import XcircuitePackage
 
 @Suite("op-amp design capabilities", .timeLimit(.minutes(2)))
 struct OpAmpDesignFlowTests {
-    @Test func topologySizingAndEvaluationAreDeveloperUsableThroughAPI() throws {
+    @Test func topologySizingAndEvaluationAreDeveloperUsableThroughAPI() async throws {
         let spec = OpAmpSpec.makeDefault(
             specID: "api-opamp",
             supplyVoltage: 1.8,
@@ -38,6 +38,25 @@ struct OpAmpDesignFlowTests {
         #expect(sizing.layoutConstraintPlan.constraints.contains { $0.kind == .guardRing })
         #expect(sizing.layoutConstraintPlan.constraints.contains { $0.kind == .shielding })
         #expect(sizing.netlist.contains(".subckt opamp_two_stage_miller"))
+        let deckSet = try #require(sizing.simulationDeckSet)
+        let deckIDs = Set(deckSet.decks.map(\.deckID))
+        #expect(deckIDs == [
+            "op-bias",
+            "ac-open-loop",
+            "tran-positive-step",
+            "tran-negative-step",
+            "noise-input-referred",
+        ])
+        let acDeck = try #require(deckSet.decks.first { $0.deckID == "ac-open-loop" })
+        #expect(acDeck.netlist.contains(".ac dec"))
+        #expect(acDeck.postProcessingMetricIDs.contains(.dcGainDB))
+        #expect(acDeck.postProcessingMetricIDs.contains(.phaseMarginDegrees))
+        let transientDeck = try #require(deckSet.decks.first { $0.deckID == "tran-positive-step" })
+        #expect(transientDeck.netlist.contains(".tran"))
+        #expect(transientDeck.directMetricIDs.contains(.outputSwingHighV))
+        let deckValidation = await OpAmpSimulationDeckValidator().validate(deckSet)
+        #expect(deckValidation.status == "passed")
+        #expect(deckValidation.deckResults.count == deckSet.decks.count)
 
         let report = OpAmpMetricEvaluator().evaluate(spec: spec, sizingResult: sizing)
         #expect(report.specID == spec.specID)
@@ -105,12 +124,21 @@ struct OpAmpDesignFlowTests {
             "opamp-sizing-result",
             "opamp-netlist",
             "opamp-layout-constraints",
+            "opamp-simulation-deck-set",
+            "opamp-simulation-op-bias-netlist",
+            "opamp-simulation-ac-open-loop-netlist",
+            "opamp-simulation-tran-positive-step-netlist",
+            "opamp-simulation-tran-negative-step-netlist",
+            "opamp-simulation-noise-input-referred-netlist",
         ]))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/spec.json", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/topology-candidates.json", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/sizing-result.json", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/opamp.cir", in: root))
         #expect(fileExists(".xcircuite/runs/\(runID)/opamp/layout-constraints.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation-decks.json", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation/ac-open-loop.cir", in: root))
+        #expect(fileExists(".xcircuite/runs/\(runID)/opamp/simulation/tran-positive-step.cir", in: root))
 
         let evaluationURL = root.appending(path: "output/opamp-evaluation.json")
         let evaluationOutput = try await XcircuiteFlowCLICommand.run(arguments: [

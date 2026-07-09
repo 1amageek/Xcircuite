@@ -139,7 +139,7 @@ public struct OpAmpInitialSizingEngine: Sendable {
         )
         let diagnostics = diagnosticsFor(spec: spec, metrics: metrics, technology: technology, totalCurrent: tailCurrent + outputCurrent)
         let layout = OpAmpLayoutConstraintPlanner().makePlan(topology: topology, devices: devices)
-        return OpAmpSizingResult(
+        var result = OpAmpSizingResult(
             resultID: "\(spec.specID)-two-stage-miller-sizing",
             specID: spec.specID,
             topology: topology,
@@ -156,6 +156,8 @@ public struct OpAmpInitialSizingEngine: Sendable {
                 "outputStageCurrentA": "\(outputCurrent)",
             ]
         )
+        result.simulationDeckSet = OpAmpSimulationDeckGenerator().makeDeckSet(spec: spec, sizingResult: result)
+        return result
     }
 
     private func sizeFoldedCascode(
@@ -216,7 +218,7 @@ public struct OpAmpInitialSizingEngine: Sendable {
         )
         let diagnostics = diagnosticsFor(spec: spec, metrics: metrics, technology: technology, totalCurrent: branchCurrent * 4)
         let layout = OpAmpLayoutConstraintPlanner().makePlan(topology: topology, devices: devices)
-        return OpAmpSizingResult(
+        var result = OpAmpSizingResult(
             resultID: "\(spec.specID)-folded-cascode-sizing",
             specID: spec.specID,
             topology: topology,
@@ -228,6 +230,8 @@ public struct OpAmpInitialSizingEngine: Sendable {
             netlist: OpAmpNetlistGenerator().makeNetlist(spec: spec, sizing: devices, topology: topology, technology: technology),
             diagnostics: diagnostics
         )
+        result.simulationDeckSet = OpAmpSimulationDeckGenerator().makeDeckSet(spec: spec, sizingResult: result)
+        return result
     }
 
     private func sizeTelescopicCascode(
@@ -300,7 +304,7 @@ public struct OpAmpInitialSizingEngine: Sendable {
         )
         let diagnostics = diagnosticsFor(spec: spec, metrics: metrics, technology: technology, totalCurrent: branchCurrent * 2)
         let layout = OpAmpLayoutConstraintPlanner().makePlan(topology: topology, devices: devices)
-        return OpAmpSizingResult(
+        var result = OpAmpSizingResult(
             resultID: "\(spec.specID)-telescopic-cascode-sizing",
             specID: spec.specID,
             topology: topology,
@@ -312,6 +316,8 @@ public struct OpAmpInitialSizingEngine: Sendable {
             netlist: OpAmpNetlistGenerator().makeNetlist(spec: spec, sizing: devices, topology: topology, technology: technology),
             diagnostics: diagnostics
         )
+        result.simulationDeckSet = OpAmpSimulationDeckGenerator().makeDeckSet(spec: spec, sizingResult: result)
+        return result
     }
 
     private func estimatedTwoStageMetrics(
