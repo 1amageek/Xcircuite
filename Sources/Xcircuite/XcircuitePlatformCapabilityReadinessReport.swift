@@ -48,79 +48,11 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
             self.testEvidenceDiagnosticCount = testEvidenceDiagnosticCount
         }
 
-        private enum CodingKeys: String, CodingKey {
-            case milestoneCount
-            case passedCount
-            case partialCount
-            case failedCount
-            case domainCount
-            case operationCount
-            case implementedOperationCount
-            case testEvidenceCount
-            case validTestEvidenceCount
-            case invalidTestEvidenceCount
-            case passedTestEvidenceCount
-            case unverifiedTestEvidenceCount
-            case failedTestEvidenceCount
-            case testEvidenceDiagnosticCount
-        }
-
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.milestoneCount = try container.decode(Int.self, forKey: .milestoneCount)
-            self.passedCount = try container.decode(Int.self, forKey: .passedCount)
-            self.partialCount = try container.decode(Int.self, forKey: .partialCount)
-            self.failedCount = try container.decode(Int.self, forKey: .failedCount)
-            self.domainCount = try container.decode(Int.self, forKey: .domainCount)
-            self.operationCount = try container.decode(Int.self, forKey: .operationCount)
-            self.implementedOperationCount = try container.decode(Int.self, forKey: .implementedOperationCount)
-            self.testEvidenceCount = try container.decode(Int.self, forKey: .testEvidenceCount)
-            self.validTestEvidenceCount = try container.decodeIfPresent(
-                Int.self,
-                forKey: .validTestEvidenceCount
-            ) ?? testEvidenceCount
-            self.invalidTestEvidenceCount = try container.decodeIfPresent(
-                Int.self,
-                forKey: .invalidTestEvidenceCount
-            ) ?? 0
-            self.passedTestEvidenceCount = try container.decodeIfPresent(
-                Int.self,
-                forKey: .passedTestEvidenceCount
-            ) ?? 0
-            self.unverifiedTestEvidenceCount = try container.decodeIfPresent(
-                Int.self,
-                forKey: .unverifiedTestEvidenceCount
-            ) ?? testEvidenceCount
-            self.failedTestEvidenceCount = try container.decodeIfPresent(
-                Int.self,
-                forKey: .failedTestEvidenceCount
-            ) ?? 0
-            self.testEvidenceDiagnosticCount = try container.decodeIfPresent(
-                Int.self,
-                forKey: .testEvidenceDiagnosticCount
-            ) ?? 0
-        }
-
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(milestoneCount, forKey: .milestoneCount)
-            try container.encode(passedCount, forKey: .passedCount)
-            try container.encode(partialCount, forKey: .partialCount)
-            try container.encode(failedCount, forKey: .failedCount)
-            try container.encode(domainCount, forKey: .domainCount)
-            try container.encode(operationCount, forKey: .operationCount)
-            try container.encode(implementedOperationCount, forKey: .implementedOperationCount)
-            try container.encode(testEvidenceCount, forKey: .testEvidenceCount)
-            try container.encode(validTestEvidenceCount, forKey: .validTestEvidenceCount)
-            try container.encode(invalidTestEvidenceCount, forKey: .invalidTestEvidenceCount)
-            try container.encode(passedTestEvidenceCount, forKey: .passedTestEvidenceCount)
-            try container.encode(unverifiedTestEvidenceCount, forKey: .unverifiedTestEvidenceCount)
-            try container.encode(failedTestEvidenceCount, forKey: .failedTestEvidenceCount)
-            try container.encode(testEvidenceDiagnosticCount, forKey: .testEvidenceDiagnosticCount)
-        }
     }
 
-    public var schemaVersion: Int
+    public static let currentSchemaVersion = 2
+
+    public let schemaVersion: Int
     public var reportID: String
     public var status: XcircuitePlatformCapabilityReadinessStatus
     public var actionDomainRunID: String
@@ -132,7 +64,6 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
     public var nextActions: [String]
 
     public init(
-        schemaVersion: Int = 2,
         reportID: String = "xcircuite-platform-capability-readiness",
         status: XcircuitePlatformCapabilityReadinessStatus,
         actionDomainRunID: String,
@@ -143,7 +74,7 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
         diagnostics: [XcircuitePlatformCapabilityDiagnostic],
         nextActions: [String]
     ) {
-        self.schemaVersion = schemaVersion
+        self.schemaVersion = Self.currentSchemaVersion
         self.reportID = reportID
         self.status = status
         self.actionDomainRunID = actionDomainRunID
@@ -153,5 +84,56 @@ public struct XcircuitePlatformCapabilityReadinessReport: Codable, Sendable, Has
         self.testEvidence = testEvidence
         self.diagnostics = diagnostics
         self.nextActions = nextActions
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case reportID
+        case status
+        case actionDomainRunID
+        case actionDomainGeneratedAt
+        case summary
+        case milestones
+        case testEvidence
+        case diagnostics
+        case nextActions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == Self.currentSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Expected platform capability readiness schema version \(Self.currentSchemaVersion)."
+            )
+        }
+        reportID = try container.decode(String.self, forKey: .reportID)
+        status = try container.decode(XcircuitePlatformCapabilityReadinessStatus.self, forKey: .status)
+        actionDomainRunID = try container.decode(String.self, forKey: .actionDomainRunID)
+        actionDomainGeneratedAt = try container.decode(String.self, forKey: .actionDomainGeneratedAt)
+        summary = try container.decode(Summary.self, forKey: .summary)
+        milestones = try container.decode(
+            [XcircuitePlatformCapabilityMilestoneReadiness].self,
+            forKey: .milestones
+        )
+        testEvidence = try container.decode([XcircuitePlatformCapabilityTestEvidence].self, forKey: .testEvidence)
+        diagnostics = try container.decode([XcircuitePlatformCapabilityDiagnostic].self, forKey: .diagnostics)
+        nextActions = try container.decode([String].self, forKey: .nextActions)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(reportID, forKey: .reportID)
+        try container.encode(status, forKey: .status)
+        try container.encode(actionDomainRunID, forKey: .actionDomainRunID)
+        try container.encode(actionDomainGeneratedAt, forKey: .actionDomainGeneratedAt)
+        try container.encode(summary, forKey: .summary)
+        try container.encode(milestones, forKey: .milestones)
+        try container.encode(testEvidence, forKey: .testEvidence)
+        try container.encode(diagnostics, forKey: .diagnostics)
+        try container.encode(nextActions, forKey: .nextActions)
     }
 }

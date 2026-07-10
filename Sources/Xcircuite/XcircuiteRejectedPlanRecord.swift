@@ -2,7 +2,9 @@ import Foundation
 import XcircuitePackage
 
 public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
-    public var schemaVersion: Int
+    public static let currentSchemaVersion = 1
+
+    public let schemaVersion: Int
     public var rejectionID: String
     public var runID: String
     public var problemID: String
@@ -20,7 +22,6 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
     public var nextActions: [String]
 
     public init(
-        schemaVersion: Int = 1,
         rejectionID: String,
         runID: String,
         problemID: String,
@@ -37,7 +38,7 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
         diagnosticClassifications: [XcircuiteRejectedPlanDiagnosticClassification] = [],
         nextActions: [String]
     ) {
-        self.schemaVersion = schemaVersion
+        self.schemaVersion = Self.currentSchemaVersion
         self.rejectionID = rejectionID
         self.runID = runID
         self.problemID = problemID
@@ -77,6 +78,13 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == Self.currentSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Expected rejected plan record schema version \(Self.currentSchemaVersion)."
+            )
+        }
         rejectionID = try container.decode(String.self, forKey: .rejectionID)
         runID = try container.decode(String.self, forKey: .runID)
         problemID = try container.decode(String.self, forKey: .problemID)
@@ -90,10 +98,10 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
         planVerificationRef = try container.decode(XcircuiteFileReference.self, forKey: .planVerificationRef)
         artifactRefs = try container.decode([XcircuiteFileReference].self, forKey: .artifactRefs)
         diagnostics = try container.decode([XcircuitePlanVerificationDiagnostic].self, forKey: .diagnostics)
-        diagnosticClassifications = try container.decodeIfPresent(
+        diagnosticClassifications = try container.decode(
             [XcircuiteRejectedPlanDiagnosticClassification].self,
             forKey: .diagnosticClassifications
-        ) ?? []
+        )
         nextActions = try container.decode([String].self, forKey: .nextActions)
     }
 

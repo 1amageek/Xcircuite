@@ -971,7 +971,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         }
     }
 
-    @Test func generatePlanningProblemRejectsDuplicateManifestArtifactID() throws {
+    @Test func generatePlanningProblemRejectsAmbiguousCanonicalManifest() throws {
         let root = try makeTemporaryRoot("drc-planning-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
         let store = XcircuitePackageStore()
@@ -1006,14 +1006,10 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         let manifestURL = try XcircuitePackage(projectRoot: root)
             .runDirectoryURL(for: "run-duplicate")
             .appending(path: "manifest.json")
-        var manifest = try store.readJSON(XcircuiteRunManifest.self, from: manifestURL)
-        manifest.artifacts.append(duplicateReference)
-        try store.writeJSON(manifest, to: manifestURL, forProjectAt: root)
+        try XcircuiteRunManifestTamper.append([duplicateReference], to: manifestURL)
 
-        #expect(throws: XcircuitePlanningProblemGenerationError.duplicateArtifactReference(
-            runID: "run-duplicate",
-            artifactID: "drc-summary",
-            count: 2
+        #expect(throws: XcircuitePackageError.decodeFailed(
+            "manifest.json: Invalid run manifest for run-duplicate: artifactID 'drc-summary' must be unique."
         )) {
             _ = try XcircuitePlanningProblemGenerator().generateRepairProblem(
                 request: XcircuitePlanningProblemGenerationRequest(

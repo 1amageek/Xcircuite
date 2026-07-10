@@ -39,19 +39,17 @@ public struct PostLayoutComparisonOptions: Sendable, Hashable, Codable {
             Double.self,
             forKey: .relativeDeltaDenominatorFloor
         )
-        requiredPostVariables = try container.decodeIfPresent(
+        requiredPostVariables = try container.decode(
             [String].self,
             forKey: .requiredPostVariables
-        ) ?? []
-        oscillationLimits = try container.decodeIfPresent(
+        )
+        oscillationLimits = try container.decode(
             [PostLayoutOscillationLimit].self,
             forKey: .oscillationLimits
-        ) ?? []
-        // Backward-compatible decode: runtime.json files written before
-        // variable-specific limits existed do not carry this key.
-        variableLimits = try container.decodeIfPresent(
+        )
+        variableLimits = try container.decode(
             [PostLayoutVariableComparisonLimit].self,
             forKey: .variableLimits
-        ) ?? []
+        )
     }
 }

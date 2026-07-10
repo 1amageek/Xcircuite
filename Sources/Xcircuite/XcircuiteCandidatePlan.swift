@@ -67,18 +67,25 @@ public struct XcircuiteCandidatePlan: Codable, Sendable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported candidate plan schema version: \(schemaVersion)."
+            )
+        }
         planID = try container.decode(String.self, forKey: .planID)
         problemID = try container.decode(String.self, forKey: .problemID)
         runID = try container.decode(String.self, forKey: .runID)
         strategy = try container.decode(String.self, forKey: .strategy)
         executionReadiness = try container.decode(String.self, forKey: .executionReadiness)
         sourceProblemRef = try container.decode(XcircuitePlanningReference.self, forKey: .sourceProblemRef)
-        assumptions = try container.decodeIfPresent([XcircuitePlanningAssumption].self, forKey: .assumptions) ?? []
-        riskClassifications = try container.decodeIfPresent(
+        assumptions = try container.decode([XcircuitePlanningAssumption].self, forKey: .assumptions)
+        riskClassifications = try container.decode(
             [XcircuitePlanningRiskClassification].self,
             forKey: .riskClassifications
-        ) ?? []
+        )
         steps = try container.decode([XcircuiteCandidatePlanStep].self, forKey: .steps)
         verificationGates = try container.decode([XcircuitePlanningVerificationGate].self, forKey: .verificationGates)
         constraints = try container.decode([XcircuitePlanningConstraint].self, forKey: .constraints)

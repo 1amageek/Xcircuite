@@ -104,8 +104,8 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAudit: Codable, Senda
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let reportCount = try container.decode(Int.self, forKey: .reportCount)
             self.reportCount = reportCount
-            self.uniqueReportCount = try container.decodeIfPresent(Int.self, forKey: .uniqueReportCount) ?? reportCount
-            self.duplicateReportCount = try container.decodeIfPresent(Int.self, forKey: .duplicateReportCount) ?? 0
+            self.uniqueReportCount = try container.decode(Int.self, forKey: .uniqueReportCount)
+            self.duplicateReportCount = try container.decode(Int.self, forKey: .duplicateReportCount)
             self.minimumReportCount = try container.decode(Int.self, forKey: .minimumReportCount)
             self.observedFirstFailingFamilies = try container.decode(
                 [XcircuiteGeneratedLayoutSignoffStageFamily].self,

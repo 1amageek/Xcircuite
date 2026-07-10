@@ -613,17 +613,7 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        let manifestURL = try XcircuitePackage(projectRoot: projectRoot)
-            .runDirectoryURL(for: runID)
-            .appending(path: "manifest.json")
-        let manifest = try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
-        guard manifest.runID == runID else {
-            throw XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(
-                expected: runID,
-                actual: manifest.runID
-            )
-        }
-        return manifest
+        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadProblem(

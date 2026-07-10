@@ -130,8 +130,12 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-spec or --runtime-config")
         }
 
-        let runSpec = try runSpecURL.map { try XcircuiteFlowRunSpec.load(from: $0) }
-        let runtimeSpec = try runtimeConfigURL.map { try XcircuiteFlowRuntimeSpec.load(from: $0) }
+        let runSpec = try runSpecURL.map {
+            try decodeJSONFile(XcircuiteFlowRunSpec.self, from: $0, option: "--run-spec")
+        }
+        let runtimeSpec = try runtimeConfigURL.map {
+            try decodeJSONFile(XcircuiteFlowRuntimeSpec.self, from: $0, option: "--runtime-config")
+        }
 
         if let runSpec, let runtimeSpec {
             try runtimeSpec.validateCoverage(for: runSpec, projectRoot: projectRoot)
@@ -190,7 +194,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--runtime-config")
         }
 
-        let runtimeSpec = try XcircuiteFlowRuntimeSpec.load(from: runtimeConfigURL)
+        let runtimeSpec = try decodeJSONFile(
+            XcircuiteFlowRuntimeSpec.self,
+            from: runtimeConfigURL,
+            option: "--runtime-config"
+        )
         let inspection = try XcircuiteFlowToolchainProfileInspector().inspect(
             request: XcircuiteFlowToolchainProfileInspectionRequest(
                 runtimeSpec: runtimeSpec,
@@ -229,7 +237,11 @@ extension XcircuiteFlowCLICommand {
         }
 
         if let runtimeConfigURL {
-            let runtimeSpec = try XcircuiteFlowRuntimeSpec.load(from: runtimeConfigURL)
+            let runtimeSpec = try decodeJSONFile(
+                XcircuiteFlowRuntimeSpec.self,
+                from: runtimeConfigURL,
+                option: "--runtime-config"
+            )
             if let catalogPath = runtimeSpec.toolchainProfile?.technologyCatalogPath {
                 catalogPaths.append(catalogPath)
             }
@@ -287,9 +299,17 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--stage-id")
         }
 
-        let evidenceExport = try XcircuiteFlowEvidenceExport.load(from: evidenceURL)
-        let updatedRuntimeSpec = try XcircuiteFlowRuntimeSpec
-            .load(from: runtimeConfig)
+        let evidenceExport = try loadValidatedJSONFile(
+            from: evidenceURL,
+            option: "--evidence",
+            loader: XcircuiteFlowEvidenceExport.load(from:)
+        )
+        let runtimeSpec = try decodeJSONFile(
+            XcircuiteFlowRuntimeSpec.self,
+            from: runtimeConfig,
+            option: "--runtime-config"
+        )
+        let updatedRuntimeSpec = try runtimeSpec
             .attachingEvidence(from: evidenceExport, toStageID: stageID)
 
         if let outputURL {
@@ -343,8 +363,12 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--runtime-config")
         }
 
-        let runtime = try XcircuiteFlowRuntimeSpec
-            .load(from: runtimeConfig)
+        let runtimeSpec = try decodeJSONFile(
+            XcircuiteFlowRuntimeSpec.self,
+            from: runtimeConfig,
+            option: "--runtime-config"
+        )
+        let runtime = try runtimeSpec
             .makeRuntime(projectRoot: projectRoot)
         let result = try await runtime.resume(
             request: FlowRunResumeRequest(projectRoot: projectRoot, runID: runID)
@@ -386,8 +410,16 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--runtime-config")
         }
 
-        let runtimeSpec = try XcircuiteFlowRuntimeSpec.load(from: runtimeConfig)
-        let loadedRunSpec = try XcircuiteFlowRunSpec.load(from: runSpec)
+        let runtimeSpec = try decodeJSONFile(
+            XcircuiteFlowRuntimeSpec.self,
+            from: runtimeConfig,
+            option: "--runtime-config"
+        )
+        let loadedRunSpec = try decodeJSONFile(
+            XcircuiteFlowRunSpec.self,
+            from: runSpec,
+            option: "--run-spec"
+        )
         try runtimeSpec.validateCoverage(
             for: loadedRunSpec,
             projectRoot: projectRoot,

@@ -90,7 +90,7 @@ public struct XcircuiteRejectedFeedbackLearningReport: Codable, Sendable, Hashab
         let retainedFailedGateIDs = try container.decode([String].self, forKey: .retainedFailedGateIDs)
         let retainedDiagnosticCodes = try container.decode([String].self, forKey: .retainedDiagnosticCodes)
         let feedbackImpacts = try container.decode([FeedbackImpact].self, forKey: .feedbackImpacts)
-        let diagnostics = try container.decodeIfPresent([String].self, forKey: .diagnostics) ?? []
+        let diagnostics = try container.decode([String].self, forKey: .diagnostics)
         try self.init(
             schemaVersion: schemaVersion,
             runID: runID,

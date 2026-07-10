@@ -40,11 +40,11 @@ public struct XcircuitePlanningConstraint: Codable, Sendable, Hashable {
         self.kind = try container.decode(String.self, forKey: .kind)
         self.severity = try container.decode(String.self, forKey: .severity)
         self.description = try container.decode(String.self, forKey: .description)
-        self.sourceRefIDs = try container.decodeIfPresent([String].self, forKey: .sourceRefIDs) ?? []
-        self.evidence = try container.decodeIfPresent(
+        self.sourceRefIDs = try container.decode([String].self, forKey: .sourceRefIDs)
+        self.evidence = try container.decode(
             [String: XcircuiteJSONValue].self,
             forKey: .evidence
-        ) ?? [:]
+        )
     }
 
     public func encode(to encoder: Encoder) throws {

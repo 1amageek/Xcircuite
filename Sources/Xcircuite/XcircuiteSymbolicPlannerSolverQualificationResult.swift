@@ -152,21 +152,29 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported symbolic planner solver qualification schema version: \(schemaVersion)."
+            )
+        }
         self.init(
-            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1,
+            schemaVersion: schemaVersion,
             status: try container.decode(String.self, forKey: .status),
             runID: try container.decode(String.self, forKey: .runID),
             toolID: try container.decode(String.self, forKey: .toolID),
             policyID: try container.decode(String.self, forKey: .policyID),
-            expectedActionIDs: try container.decodeIfPresent([String].self, forKey: .expectedActionIDs) ?? [],
-            observedActionIDs: try container.decodeIfPresent([String].self, forKey: .observedActionIDs) ?? [],
-            requireGoalCoverage: try container.decodeIfPresent(Bool.self, forKey: .requireGoalCoverage) ?? true,
-            requireOptimality: try container.decodeIfPresent(Bool.self, forKey: .requireOptimality) ?? false,
+            expectedActionIDs: try container.decode([String].self, forKey: .expectedActionIDs),
+            observedActionIDs: try container.decode([String].self, forKey: .observedActionIDs),
+            requireGoalCoverage: try container.decode(Bool.self, forKey: .requireGoalCoverage),
+            requireOptimality: try container.decode(Bool.self, forKey: .requireOptimality),
             maximumSolverCost: try container.decodeIfPresent(Double.self, forKey: .maximumSolverCost),
-            requireNativeCertificate: try container.decodeIfPresent(Bool.self, forKey: .requireNativeCertificate) ?? false,
-            requireProofValidation: try container.decodeIfPresent(Bool.self, forKey: .requireProofValidation) ?? false,
+            requireNativeCertificate: try container.decode(Bool.self, forKey: .requireNativeCertificate),
+            requireProofValidation: try container.decode(Bool.self, forKey: .requireProofValidation),
             goalCoverageStatus: try container.decodeIfPresent(String.self, forKey: .goalCoverageStatus),
-            missingGoalAtoms: try container.decodeIfPresent([String].self, forKey: .missingGoalAtoms) ?? [],
+            missingGoalAtoms: try container.decode([String].self, forKey: .missingGoalAtoms),
             nativeCertificate: try container.decodeIfPresent(
                 XcircuiteSymbolicPlannerSolverCertificateParseResult.self,
                 forKey: .nativeCertificate
@@ -209,10 +217,10 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
                 forKey: .qualificationArtifact
             ),
             toolHealth: try container.decode(ToolHealthCheckResult.self, forKey: .toolHealth),
-            diagnostics: try container.decodeIfPresent(
+            diagnostics: try container.decode(
                 [XcircuiteSymbolicPlannerSolverDiagnostic].self,
                 forKey: .diagnostics
-            ) ?? []
+            )
         )
     }
 }

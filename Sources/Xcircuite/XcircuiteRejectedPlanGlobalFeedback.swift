@@ -58,7 +58,7 @@ public struct XcircuiteRejectedPlanGlobalFeedback: Codable, Sendable, Hashable {
         failedStepIDs = try container.decode([String].self, forKey: .failedStepIDs)
         failedGateIDs = try container.decode([String].self, forKey: .failedGateIDs)
         diagnosticCodes = try container.decode([String].self, forKey: .diagnosticCodes)
-        diagnosticClasses = try container.decodeIfPresent([String].self, forKey: .diagnosticClasses) ?? []
+        diagnosticClasses = try container.decode([String].self, forKey: .diagnosticClasses)
         diagnosticGateIDs = try container.decode([String].self, forKey: .diagnosticGateIDs)
         nextActions = try container.decode([String].self, forKey: .nextActions)
     }

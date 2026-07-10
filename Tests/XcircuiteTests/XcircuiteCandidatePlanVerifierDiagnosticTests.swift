@@ -369,38 +369,38 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(staleArtifact.nextActions == ["refresh-artifact:planning-problem"])
     }
 
-    @Test func rejectedPlanRecordDecodesLegacyJSONWithoutDiagnosticClassifications() throws {
+    @Test func rejectedPlanRecordRejectsMissingDiagnosticClassifications() throws {
         let record = XcircuiteRejectedPlanRecord(
-            rejectionID: "legacy-rejection",
-            runID: "run-legacy",
-            problemID: "problem-legacy",
-            planID: "plan-legacy",
+            rejectionID: "incomplete-rejection",
+            runID: "run-incomplete",
+            problemID: "problem-incomplete",
+            planID: "plan-incomplete",
             verificationMode: "post-execution",
             status: "rejected",
-            sourceParameterCandidateIDs: ["candidate-legacy"],
-            failedStepIDs: ["step-legacy"],
+            sourceParameterCandidateIDs: ["candidate-incomplete"],
+            failedStepIDs: ["step-incomplete"],
             failedGateIDs: ["native-drc"],
-            candidatePlanRef: candidatePlanRef(runID: "run-legacy"),
-            planVerificationRef: candidatePlanRef(runID: "run-legacy"),
+            candidatePlanRef: candidatePlanRef(runID: "run-incomplete"),
+            planVerificationRef: candidatePlanRef(runID: "run-incomplete"),
             artifactRefs: [],
             diagnostics: [
                 XcircuitePlanVerificationDiagnostic(
                     severity: "error",
                     code: "NATIVE_DRC_FAILED",
                     message: "Native DRC failed.",
-                    stepID: "step-legacy",
+                    stepID: "step-incomplete",
                     gateID: "native-drc"
                 ),
             ],
             diagnosticClassifications: [
                 XcircuiteRejectedPlanDiagnosticClassification(
-                    classificationID: "plan-legacy:failed_verification_gate",
+                    classificationID: "plan-incomplete:failed_verification_gate",
                     diagnosticClass: .failedVerificationGate,
                     severity: "error",
                     reasonCodes: ["NATIVE_DRC_FAILED"],
                     status: "rejected",
-                    planID: "plan-legacy",
-                    failedStepIDs: ["step-legacy"],
+                    planID: "plan-incomplete",
+                    failedStepIDs: ["step-incomplete"],
                     failedGateIDs: ["native-drc"],
                     diagnosticCodes: ["NATIVE_DRC_FAILED"],
                     nextActions: ["repair-verification-gate:native-drc"]
@@ -411,20 +411,11 @@ extension XcircuiteCandidatePlanVerifierTests {
         let encoded = try JSONEncoder().encode(record)
         var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         object.removeValue(forKey: "diagnosticClassifications")
-        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let incompleteData = try JSONSerialization.data(withJSONObject: object)
 
-        let decoded = try JSONDecoder().decode(XcircuiteRejectedPlanRecord.self, from: legacyData)
-
-        #expect(decoded.rejectionID == "legacy-rejection")
-        #expect(decoded.diagnosticClassifications.isEmpty)
-        let summary = XcircuiteRejectedPlanFeedbackBuilder().makeFeedbackSummary(
-            runID: "run-legacy",
-            path: ".xcircuite/runs/run-legacy/planning/rejected-plans.jsonl",
-            records: [decoded]
-        )
-        #expect(summary.diagnosticClassCounts["failed_verification_gate"] == 1)
-        #expect(summary.globalFeedback.first?.diagnosticClasses == nil)
-        #expect(summary.candidateFeedback.first?.diagnosticClasses.contains("failed_verification_gate") == true)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(XcircuiteRejectedPlanRecord.self, from: incompleteData)
+        }
     }
 
     @Test func maturityMismatchBlocksPlanVerification() throws {

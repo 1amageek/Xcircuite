@@ -923,7 +923,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     }
 }
 
-@Test func promoteSymbolicPlannerSolverFamilyRejectsDuplicateComparisonArtifactID() async throws {
+@Test func promoteSymbolicPlannerSolverFamilyRejectsAmbiguousCanonicalManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-promotion-duplicate-comparison")
     defer { removeTemporaryRoot(root) }
     let fixture = try preparePromotionFixture(
@@ -931,13 +931,12 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         runID: "run-pddl",
         comparisonID: "duplicate-comparison"
     )
-    let store = XcircuitePackageStore()
     let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    var manifest = try store.readJSON(XcircuiteRunManifest.self, from: manifestURL)
-    manifest.artifacts.append(fixture.comparisonArtifact)
-    try store.writeJSON(manifest, to: manifestURL, forProjectAt: root)
+    try XcircuiteRunManifestTamper.append([fixture.comparisonArtifact], to: manifestURL)
 
-    do {
+    await #expect(throws: XcircuitePackageError.decodeFailed(
+        "manifest.json: Invalid run manifest for run-pddl: artifact path '\(fixture.comparisonArtifact.path)' must be unique."
+    )) {
         _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter().promote(
             request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest(
                 runID: "run-pddl",
@@ -946,18 +945,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             ),
             projectRoot: root
         )
-        Issue.record("Expected duplicateArtifactReference.")
-    } catch let error as XcircuiteSymbolicPlannerSolverError {
-        let artifactID = try #require(fixture.comparisonArtifact.artifactID)
-        #expect(error == .duplicateArtifactReference(
-            runID: "run-pddl",
-            artifactID: artifactID,
-            count: 2
-        ))
     }
 }
 
-@Test func compareSymbolicPlannerSolverFamilyRejectsDuplicateQualificationArtifactID() async throws {
+@Test func compareSymbolicPlannerSolverFamilyRejectsAmbiguousCanonicalManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-duplicate-qualification")
     defer { removeTemporaryRoot(root) }
     let fixture = try preparePromotionFixture(
@@ -965,13 +956,12 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         runID: "run-pddl",
         comparisonID: "duplicate-qualification"
     )
-    let store = XcircuitePackageStore()
     let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    var manifest = try store.readJSON(XcircuiteRunManifest.self, from: manifestURL)
-    manifest.artifacts.append(fixture.qualificationArtifact)
-    try store.writeJSON(manifest, to: manifestURL, forProjectAt: root)
+    try XcircuiteRunManifestTamper.append([fixture.qualificationArtifact], to: manifestURL)
 
-    do {
+    #expect(throws: XcircuitePackageError.decodeFailed(
+        "manifest.json: Invalid run manifest for run-pddl: artifact path '\(fixture.qualificationArtifact.path)' must be unique."
+    )) {
         _ = try XcircuiteSymbolicPlannerSolverFamilyComparator().compare(
             request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest(
                 runID: "run-pddl",
@@ -980,14 +970,6 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             ),
             projectRoot: root
         )
-        Issue.record("Expected duplicateArtifactReference.")
-    } catch let error as XcircuiteSymbolicPlannerSolverError {
-        let artifactID = try #require(fixture.qualificationArtifact.artifactID)
-        #expect(error == .duplicateArtifactReference(
-            runID: "run-pddl",
-            artifactID: artifactID,
-            count: 2
-        ))
     }
 }
 

@@ -48,6 +48,20 @@ extension XcircuiteFlowCLICommand {
         }
     }
 
+    static func loadValidatedJSONFile<T>(
+        from url: URL,
+        option: String,
+        loader: (URL) throws -> T
+    ) throws -> T {
+        do {
+            return try loader(url)
+        } catch let error as DecodingError {
+            throw XcircuiteFlowCLIError.readFailed(
+                "Invalid JSON for \(option) at \(url.path(percentEncoded: false)): \(decodingErrorDescription(error))"
+            )
+        }
+    }
+
     static func readInputFileData(from url: URL, option: String) throws -> Data {
         let path = url.path(percentEncoded: false)
         var isDirectory = ObjCBool(false)

@@ -225,6 +225,51 @@ struct XcircuiteFlowScaffoldRunCLITests {
     }
 
     @Test
+    func validateReportsMissingRunSpecKeyWithJSONPath() async throws {
+        let root = try makeTemporaryRoot("missing-run-spec-key")
+        defer { removeTemporaryRoot(root) }
+        let runSpecURL = root.appending(path: "run.json")
+        let runtimeConfigURL = root.appending(path: "runtime.json")
+
+        _ = try await XcircuiteFlowCLICommand.run(arguments: [
+            "scaffold-run",
+            "--run-id", "scaffold-run-invalid",
+            "--out-run-spec", runSpecURL.path(percentEncoded: false),
+            "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),
+        ])
+
+        let data = try Data(contentsOf: runSpecURL)
+        var document = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        var stages = try #require(document["stages"] as? [[String: Any]])
+        stages[0].removeValue(forKey: "retryPolicy")
+        document["stages"] = stages
+        let malformedData = try JSONSerialization.data(
+            withJSONObject: document,
+            options: [.sortedKeys]
+        )
+        try malformedData.write(to: runSpecURL, options: .atomic)
+
+        do {
+            _ = try await XcircuiteFlowCLICommand.run(arguments: [
+                "validate",
+                "--run-spec", runSpecURL.path(percentEncoded: false),
+                "--runtime-config", runtimeConfigURL.path(percentEncoded: false),
+            ])
+            Issue.record("Expected validate to reject a run spec without retryPolicy.")
+        } catch let error as XcircuiteFlowCLIError {
+            guard case .readFailed(let reason) = error else {
+                Issue.record("Expected readFailed, got \(error).")
+                return
+            }
+            #expect(reason.contains("Invalid JSON for --run-spec"))
+            #expect(reason.contains("Missing key 'retryPolicy'"))
+            #expect(reason.contains("stages.Index 0"))
+        }
+    }
+
+    @Test
     func scaffoldRunRequiresOutputPaths() async throws {
         await #expect(throws: XcircuiteFlowCLIError.self) {
             _ = try await XcircuiteFlowCLICommand.run(arguments: [

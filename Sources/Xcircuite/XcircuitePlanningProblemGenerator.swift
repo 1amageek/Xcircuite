@@ -152,10 +152,7 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        let manifestURL = try XcircuitePackage(projectRoot: projectRoot)
-            .runDirectoryURL(for: runID)
-            .appending(path: "manifest.json")
-        return try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
+        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadPostLayoutMetricReportIfPresent(

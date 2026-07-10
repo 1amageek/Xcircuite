@@ -65,14 +65,14 @@ public struct XcircuitePlanRiskReview: Codable, Sendable, Hashable {
         scope = try container.decode(String.self, forKey: .scope)
         status = try container.decode(String.self, forKey: .status)
         description = try container.decode(String.self, forKey: .description)
-        affectedObjectiveIDs = try container.decodeIfPresent([String].self, forKey: .affectedObjectiveIDs) ?? []
-        affectedActionIDs = try container.decodeIfPresent([String].self, forKey: .affectedActionIDs) ?? []
-        affectedStepIDs = try container.decodeIfPresent([String].self, forKey: .affectedStepIDs) ?? []
-        requiredApprovals = try container.decodeIfPresent([String].self, forKey: .requiredApprovals) ?? []
-        approvalReviews = try container.decodeIfPresent(
+        affectedObjectiveIDs = try container.decode([String].self, forKey: .affectedObjectiveIDs)
+        affectedActionIDs = try container.decode([String].self, forKey: .affectedActionIDs)
+        affectedStepIDs = try container.decode([String].self, forKey: .affectedStepIDs)
+        requiredApprovals = try container.decode([String].self, forKey: .requiredApprovals)
+        approvalReviews = try container.decode(
             [XcircuitePlanApprovalReview].self,
             forKey: .approvalReviews
-        ) ?? []
-        mitigationActions = try container.decodeIfPresent([String].self, forKey: .mitigationActions) ?? []
+        )
+        mitigationActions = try container.decode([String].self, forKey: .mitigationActions)
     }
 }

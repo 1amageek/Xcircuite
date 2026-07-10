@@ -185,11 +185,9 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
                 forKey: .reportStatus
             )
             self.caseCount = try container.decode(Int.self, forKey: .caseCount)
-            self.reportedCaseCount = try container.decodeIfPresent(Int.self, forKey: .reportedCaseCount)
-                ?? self.caseCount
-            self.uniqueCaseCount = try container.decodeIfPresent(Int.self, forKey: .uniqueCaseCount)
-                ?? self.caseCount
-            self.duplicateCaseCount = try container.decodeIfPresent(Int.self, forKey: .duplicateCaseCount) ?? 0
+            self.reportedCaseCount = try container.decode(Int.self, forKey: .reportedCaseCount)
+            self.uniqueCaseCount = try container.decode(Int.self, forKey: .uniqueCaseCount)
+            self.duplicateCaseCount = try container.decode(Int.self, forKey: .duplicateCaseCount)
             self.minimumCaseCount = try container.decode(Int.self, forKey: .minimumCaseCount)
             self.passedCaseCount = try container.decode(Int.self, forKey: .passedCaseCount)
             self.failedCaseCount = try container.decode(Int.self, forKey: .failedCaseCount)
@@ -220,40 +218,40 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
                 Int.self,
                 forKey: .acceptedOracleReadinessCaseCount
             )
-            self.readyOracleEvidenceRefCount = try container.decodeIfPresent(
+            self.readyOracleEvidenceRefCount = try container.decode(
                 Int.self,
                 forKey: .readyOracleEvidenceRefCount
-            ) ?? 0
-            self.readyOracleReadinessWithoutEvidenceCount = try container.decodeIfPresent(
+            )
+            self.readyOracleReadinessWithoutEvidenceCount = try container.decode(
                 Int.self,
                 forKey: .readyOracleReadinessWithoutEvidenceCount
-            ) ?? 0
-            self.readyOracleEvidenceWithoutHashCount = try container.decodeIfPresent(
+            )
+            self.readyOracleEvidenceWithoutHashCount = try container.decode(
                 Int.self,
                 forKey: .readyOracleEvidenceWithoutHashCount
-            ) ?? 0
-            self.readyOracleEvidenceWithoutByteCount = try container.decodeIfPresent(
+            )
+            self.readyOracleEvidenceWithoutByteCount = try container.decode(
                 Int.self,
                 forKey: .readyOracleEvidenceWithoutByteCount
-            ) ?? 0
+            )
             self.expectedVerdictMismatchCount = try container.decode(
                 Int.self,
                 forKey: .expectedVerdictMismatchCount
             )
             self.sourceArtifactCount = try container.decode(Int.self, forKey: .sourceArtifactCount)
-            self.reportedSourceArtifactCount = try container.decodeIfPresent(
+            self.reportedSourceArtifactCount = try container.decode(
                 Int.self,
                 forKey: .reportedSourceArtifactCount
-            ) ?? self.sourceArtifactCount
+            )
             self.minimumSourceArtifactCount = try container.decode(
                 Int.self,
                 forKey: .minimumSourceArtifactCount
             )
             self.signoffArtifactCount = try container.decode(Int.self, forKey: .signoffArtifactCount)
-            self.reportedSignoffArtifactCount = try container.decodeIfPresent(
+            self.reportedSignoffArtifactCount = try container.decode(
                 Int.self,
                 forKey: .reportedSignoffArtifactCount
-            ) ?? self.signoffArtifactCount
+            )
             self.minimumSignoffArtifactCount = try container.decode(
                 Int.self,
                 forKey: .minimumSignoffArtifactCount

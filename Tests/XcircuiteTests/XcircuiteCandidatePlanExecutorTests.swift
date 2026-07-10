@@ -451,17 +451,17 @@ struct XcircuiteCandidatePlanExecutorTests {
         }
     }
 
-    @Test func legacyCandidatePlanExecutionDecodesWithoutExecutionCoverage() throws {
+    @Test func candidatePlanExecutionRejectsMissingExecutionCoverage() throws {
         let payload = Data("""
         {
           "schemaVersion": 1,
-          "runID": "run-legacy",
-          "problemID": "problem-legacy",
-          "planID": "plan-legacy",
+          "runID": "run-incomplete",
+          "problemID": "problem-incomplete",
+          "planID": "plan-incomplete",
           "status": "executed",
           "candidatePlanRef": {
             "artifactID": "planning-candidate-plan",
-            "path": ".xcircuite/runs/run-legacy/planning/candidate-plan.json",
+            "path": ".xcircuite/runs/run-incomplete/planning/candidate-plan.json",
             "kind": "other",
             "format": "JSON"
           },
@@ -472,11 +472,9 @@ struct XcircuiteCandidatePlanExecutorTests {
         }
         """.utf8)
 
-        let execution = try JSONDecoder().decode(XcircuiteCandidatePlanExecution.self, from: payload)
-
-        #expect(execution.executionCoverage.status == "not-evaluated")
-        #expect(execution.executionCoverage.requiredFamilyIDs.isEmpty)
-        #expect(execution.executionCoverage.producedArtifactIDs.isEmpty)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(XcircuiteCandidatePlanExecution.self, from: payload)
+        }
     }
 
     @Test func executorPersistsLayoutCommandFailureAsPlanExecutionDiagnostic() async throws {

@@ -112,9 +112,9 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit: Codable, Senda
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let caseCount = try container.decode(Int.self, forKey: .caseCount)
             self.caseCount = caseCount
-            self.reportedCaseCount = try container.decodeIfPresent(Int.self, forKey: .reportedCaseCount) ?? caseCount
-            self.uniqueCaseCount = try container.decodeIfPresent(Int.self, forKey: .uniqueCaseCount) ?? caseCount
-            self.duplicateCaseCount = try container.decodeIfPresent(Int.self, forKey: .duplicateCaseCount) ?? 0
+            self.reportedCaseCount = try container.decode(Int.self, forKey: .reportedCaseCount)
+            self.uniqueCaseCount = try container.decode(Int.self, forKey: .uniqueCaseCount)
+            self.duplicateCaseCount = try container.decode(Int.self, forKey: .duplicateCaseCount)
             self.minimumCaseCount = try container.decode(Int.self, forKey: .minimumCaseCount)
             self.coveredCoverageTags = try container.decode([String].self, forKey: .coveredCoverageTags)
             self.missingCoverageTags = try container.decode([String].self, forKey: .missingCoverageTags)

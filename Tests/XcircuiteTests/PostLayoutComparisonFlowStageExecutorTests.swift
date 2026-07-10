@@ -419,17 +419,16 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         })
     }
 
-    @Test func optionsWithoutVariableLimitsKeyDecodeToEmptyLimits() throws {
+    @Test func optionsRejectMissingRequiredLimitCollections() throws {
         let json = """
         {"maxAbsoluteDelta":0.05,"requiredPostVariables":["V(out)"]}
         """
-        let options = try JSONDecoder().decode(
-            PostLayoutComparisonOptions.self,
-            from: Data(json.utf8)
-        )
-        #expect(options.maxAbsoluteDelta == 0.05)
-        #expect(options.requiredPostVariables == ["V(out)"])
-        #expect(options.variableLimits.isEmpty)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(
+                PostLayoutComparisonOptions.self,
+                from: Data(json.utf8)
+            )
+        }
     }
 
     @Test func optionsWithVariableLimitsRoundTripThroughCodable() throws {

@@ -419,8 +419,8 @@ extension XcircuiteFlowRuntimeTests {
         #expect(artifact.pathSuffix == nil)
     }
 
-    @Test func runtimeSpecDecodesDeprecatedSignoffKindsAndReencodesNativeKinds() throws {
-        let legacyJSON = """
+    @Test func runtimeSpecRejectsRemovedSignoffKinds() throws {
+        let removedKindJSON = """
         {
           "schemaVersion" : 1,
           "executors" : [
@@ -455,26 +455,9 @@ extension XcircuiteFlowRuntimeTests {
         }
         """
 
-        let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: Data(legacyJSON.utf8))
-
-        guard case .nativeDRC(let drc) = decoded.executors[0] else {
-            Issue.record("Expected native DRC executor")
-            return
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: Data(removedKindJSON.utf8))
         }
-        guard case .nativeLVS(let lvs) = decoded.executors[1] else {
-            Issue.record("Expected native LVS executor")
-            return
-        }
-        #expect(drc.stageID == "007-drc")
-        #expect(drc.layoutPath == "layout.json")
-        #expect(lvs.stageID == "008-lvs")
-        #expect(lvs.layoutGDSPath == "layout.gds")
-
-        let encodedData = try JSONEncoder().encode(decoded)
-        let encodedJSON = try #require(String(data: encodedData, encoding: .utf8))
-        #expect(encodedJSON.contains("\"kind\":\"nativeDRC\""))
-        #expect(encodedJSON.contains("\"kind\":\"nativeLVS\""))
-        #expect(!encodedJSON.contains("pureSwift"))
     }
 
     @Test func stageArtifactInputReferenceRejectsDigestMismatch() async throws {

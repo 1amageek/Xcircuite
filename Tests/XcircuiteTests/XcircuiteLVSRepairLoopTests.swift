@@ -1031,6 +1031,7 @@ struct XcircuiteLVSRepairLoopTests {
               "name" : "top",
               "nets" : [],
               "pins" : [],
+              "properties" : {},
               "shapes" : [],
               "vias" : []
             }

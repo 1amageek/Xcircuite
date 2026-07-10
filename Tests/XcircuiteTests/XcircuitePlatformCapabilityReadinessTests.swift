@@ -571,13 +571,13 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("fix-test-evidence:drc-foundry-rule-import-agent-envelope"))
     }
 
-    @Test func legacyPlatformCapabilitySummaryDecodesMissingExecutionCountsAsUnverified() throws {
+    @Test func platformCapabilitySummaryRejectsMissingExecutionCounts() throws {
         let json = """
         {
           "schemaVersion": 2,
           "reportID": "xcircuite-platform-capability-readiness",
           "status": "passed",
-          "actionDomainRunID": "legacy-readiness",
+          "actionDomainRunID": "incomplete-readiness",
           "actionDomainGeneratedAt": "2026-06-28T00:00:00Z",
           "summary": {
             "milestoneCount": 0,
@@ -596,39 +596,33 @@ struct XcircuitePlatformCapabilityReadinessTests {
         }
         """
 
-        let report = try JSONDecoder().decode(
-            XcircuitePlatformCapabilityReadinessReport.self,
-            from: Data(json.utf8)
-        )
-
-        #expect(report.summary.testEvidenceCount == 3)
-        #expect(report.summary.validTestEvidenceCount == 3)
-        #expect(report.summary.invalidTestEvidenceCount == 0)
-        #expect(report.summary.passedTestEvidenceCount == 0)
-        #expect(report.summary.unverifiedTestEvidenceCount == 3)
-        #expect(report.summary.failedTestEvidenceCount == 0)
-        #expect(report.summary.testEvidenceDiagnosticCount == 0)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(
+                XcircuitePlatformCapabilityReadinessReport.self,
+                from: Data(json.utf8)
+            )
+        }
     }
 
-    @Test func legacyPlatformCapabilityTestEvidenceDecodesMissingExecutionStatusAsUnverified() throws {
+    @Test func platformCapabilityTestEvidenceRejectsMissingExecutionStatus() throws {
         let json = """
         {
-          "evidenceID": "legacy-evidence",
+          "evidenceID": "incomplete-evidence",
           "packagePath": "Xcircuite",
-          "command": ["perl", "-e", "alarm shift; exec @ARGV", "30", "xcodebuild", "test", "-only-testing", "XcircuiteTests/Legacy"],
-          "testFilter": "XcircuiteTests/Legacy",
+          "command": ["perl", "-e", "alarm shift; exec @ARGV", "30", "xcodebuild", "test", "-only-testing", "XcircuiteTests/Incomplete"],
+          "testFilter": "XcircuiteTests/Incomplete",
           "coveredMilestoneIDs": ["standalone-local-signoff"],
           "coveredRequirementKinds": ["operation"],
-          "evidenceArtifacts": ["legacy-artifact"]
+          "evidenceArtifacts": ["incomplete-artifact"]
         }
         """
 
-        let evidence = try JSONDecoder().decode(
-            XcircuitePlatformCapabilityTestEvidence.self,
-            from: Data(json.utf8)
-        )
-
-        #expect(evidence.executionStatus == .unverified)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(
+                XcircuitePlatformCapabilityTestEvidence.self,
+                from: Data(json.utf8)
+            )
+        }
     }
 
     @Test func platformCapabilityCLIPrettyOutputPreservesContract() async throws {

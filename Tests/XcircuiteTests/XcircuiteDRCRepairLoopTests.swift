@@ -524,6 +524,7 @@ struct XcircuiteDRCRepairLoopTests {
               "name" : "top",
               "nets" : [],
               "pins" : [],
+              "properties" : {},
               "shapes" : [
                 {
                   "geometry" : {

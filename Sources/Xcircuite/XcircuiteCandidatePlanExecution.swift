@@ -2,7 +2,9 @@ import Foundation
 import XcircuitePackage
 
 public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
-    public var schemaVersion: Int
+    public static let currentSchemaVersion = 1
+
+    public let schemaVersion: Int
     public var runID: String
     public var problemID: String
     public var planID: String
@@ -16,7 +18,6 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
     public var nextActions: [String]
 
     public init(
-        schemaVersion: Int = 1,
         runID: String,
         problemID: String,
         planID: String,
@@ -36,7 +37,7 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
         diagnostics: [XcircuitePlanVerificationDiagnostic],
         nextActions: [String]
     ) {
-        self.schemaVersion = schemaVersion
+        self.schemaVersion = Self.currentSchemaVersion
         self.runID = runID
         self.problemID = problemID
         self.planID = planID
@@ -67,7 +68,14 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == Self.currentSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Expected candidate plan execution schema version \(Self.currentSchemaVersion)."
+            )
+        }
         self.runID = try container.decode(String.self, forKey: .runID)
         self.problemID = try container.decode(String.self, forKey: .problemID)
         self.planID = try container.decode(String.self, forKey: .planID)
@@ -78,16 +86,9 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
             forKey: .stepResults
         )
         self.artifactRefs = try container.decode([XcircuiteFileReference].self, forKey: .artifactRefs)
-        self.executionCoverage = try container.decodeIfPresent(
+        self.executionCoverage = try container.decode(
             XcircuiteCandidatePlanExecutionCoverage.self,
             forKey: .executionCoverage
-        ) ?? XcircuiteCandidatePlanExecutionCoverage(
-            status: "not-evaluated",
-            requiredFamilyIDs: [],
-            coveredFamilyIDs: [],
-            missingFamilyIDs: [],
-            familyCoverage: [],
-            producedArtifactIDs: []
         )
         self.designDiffRef = try container.decodeIfPresent(XcircuiteFileReference.self, forKey: .designDiffRef)
         self.diagnostics = try container.decode([XcircuitePlanVerificationDiagnostic].self, forKey: .diagnostics)

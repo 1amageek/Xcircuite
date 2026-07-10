@@ -302,10 +302,8 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         projectRoot: URL,
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
     ) -> XcircuiteRunManifest? {
-        let manifestPath = "\(XcircuitePackage.directoryName)/runs/\(runID)/manifest.json"
         do {
-            let manifestURL = try packageStore.url(forProjectRelativePath: manifestPath, inProjectAt: projectRoot)
-            return try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
+            return try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
         } catch {
             diagnostics.append(
                 diagnostic(

@@ -149,22 +149,10 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
         self.operationID = try container.decode(String.self, forKey: .operationID)
         self.maturity = try container.decode(String.self, forKey: .maturity)
         self.score = try container.decode(Int.self, forKey: .score)
-        self.scoreBeforeRejectedFeedback = try container.decodeIfPresent(
-            Int.self,
-            forKey: .scoreBeforeRejectedFeedback
-        ) ?? self.score
-        self.rejectedFeedbackScoreDelta = try container.decodeIfPresent(
-            Int.self,
-            forKey: .rejectedFeedbackScoreDelta
-        ) ?? 0
-        self.rankBeforeRejectedFeedback = try container.decodeIfPresent(
-            Int.self,
-            forKey: .rankBeforeRejectedFeedback
-        ) ?? self.rank
-        self.rejectedFeedbackRankDelta = try container.decodeIfPresent(
-            Int.self,
-            forKey: .rejectedFeedbackRankDelta
-        ) ?? 0
+        self.scoreBeforeRejectedFeedback = try container.decode(Int.self, forKey: .scoreBeforeRejectedFeedback)
+        self.rejectedFeedbackScoreDelta = try container.decode(Int.self, forKey: .rejectedFeedbackScoreDelta)
+        self.rankBeforeRejectedFeedback = try container.decode(Int.self, forKey: .rankBeforeRejectedFeedback)
+        self.rejectedFeedbackRankDelta = try container.decode(Int.self, forKey: .rejectedFeedbackRankDelta)
         self.scoreComponents = try container.decode([XcircuiteSymbolicPlannerScoreComponent].self, forKey: .scoreComponents)
         self.requiredInputRefs = try container.decode([String].self, forKey: .requiredInputRefs)
         self.missingInputRefs = try container.decode([String].self, forKey: .missingInputRefs)
@@ -173,18 +161,18 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
         self.operationSupported = try container.decode(Bool.self, forKey: .operationSupported)
         self.operationMaturity = try container.decodeIfPresent(String.self, forKey: .operationMaturity)
         self.operationReversible = try container.decodeIfPresent(Bool.self, forKey: .operationReversible)
-        self.operationPreconditions = try container.decodeIfPresent([String].self, forKey: .operationPreconditions) ?? []
-        self.operationEffects = try container.decodeIfPresent([String].self, forKey: .operationEffects) ?? []
-        self.operationProducedArtifacts = try container.decodeIfPresent([String].self, forKey: .operationProducedArtifacts) ?? []
-        self.operationVerificationGates = try container.decodeIfPresent([String].self, forKey: .operationVerificationGates) ?? []
-        self.objectiveGoalAtoms = try container.decodeIfPresent([String].self, forKey: .objectiveGoalAtoms) ?? []
-        self.candidateEffectAtoms = try container.decodeIfPresent([String].self, forKey: .candidateEffectAtoms) ?? []
-        self.matchedObjectiveGoalAtoms = try container.decodeIfPresent([String].self, forKey: .matchedObjectiveGoalAtoms) ?? []
-        self.missingObjectiveGoalAtoms = try container.decodeIfPresent([String].self, forKey: .missingObjectiveGoalAtoms) ?? []
-        self.symbolicStateBefore = try container.decodeIfPresent([String].self, forKey: .symbolicStateBefore) ?? []
-        self.symbolicStateAfter = try container.decodeIfPresent([String].self, forKey: .symbolicStateAfter) ?? []
-        self.satisfiedPreconditionAtoms = try container.decodeIfPresent([String].self, forKey: .satisfiedPreconditionAtoms) ?? []
-        self.unsatisfiedPreconditionAtoms = try container.decodeIfPresent([String].self, forKey: .unsatisfiedPreconditionAtoms) ?? []
+        self.operationPreconditions = try container.decode([String].self, forKey: .operationPreconditions)
+        self.operationEffects = try container.decode([String].self, forKey: .operationEffects)
+        self.operationProducedArtifacts = try container.decode([String].self, forKey: .operationProducedArtifacts)
+        self.operationVerificationGates = try container.decode([String].self, forKey: .operationVerificationGates)
+        self.objectiveGoalAtoms = try container.decode([String].self, forKey: .objectiveGoalAtoms)
+        self.candidateEffectAtoms = try container.decode([String].self, forKey: .candidateEffectAtoms)
+        self.matchedObjectiveGoalAtoms = try container.decode([String].self, forKey: .matchedObjectiveGoalAtoms)
+        self.missingObjectiveGoalAtoms = try container.decode([String].self, forKey: .missingObjectiveGoalAtoms)
+        self.symbolicStateBefore = try container.decode([String].self, forKey: .symbolicStateBefore)
+        self.symbolicStateAfter = try container.decode([String].self, forKey: .symbolicStateAfter)
+        self.satisfiedPreconditionAtoms = try container.decode([String].self, forKey: .satisfiedPreconditionAtoms)
+        self.unsatisfiedPreconditionAtoms = try container.decode([String].self, forKey: .unsatisfiedPreconditionAtoms)
         self.selected = try container.decode(Bool.self, forKey: .selected)
         self.blockedReasons = try container.decode([String].self, forKey: .blockedReasons)
         self.reason = try container.decode(String.self, forKey: .reason)

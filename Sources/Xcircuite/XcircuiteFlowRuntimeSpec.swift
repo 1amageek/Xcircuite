@@ -3,6 +3,8 @@ import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
+    public static let currentSchemaVersion = 1
+
     public var schemaVersion: Int
     public var toolchainProfile: XcircuiteFlowToolchainProfile?
     public var executors: [XcircuiteFlowStageExecutorSpec]
@@ -15,6 +17,29 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
         self.schemaVersion = schemaVersion
         self.toolchainProfile = toolchainProfile
         self.executors = executors
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case toolchainProfile
+        case executors
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == Self.currentSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Expected flow runtime schema version \(Self.currentSchemaVersion)."
+            )
+        }
+        toolchainProfile = try container.decodeIfPresent(
+            XcircuiteFlowToolchainProfile.self,
+            forKey: .toolchainProfile
+        )
+        executors = try container.decode([XcircuiteFlowStageExecutorSpec].self, forKey: .executors)
     }
 
     public static func load(from url: URL) throws -> XcircuiteFlowRuntimeSpec {

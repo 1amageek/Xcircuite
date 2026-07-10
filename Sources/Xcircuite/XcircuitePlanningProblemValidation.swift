@@ -80,7 +80,14 @@ public struct XcircuitePlanningProblemValidation: Codable, Sendable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported planning problem validation schema version: \(schemaVersion)."
+            )
+        }
         status = try container.decode(String.self, forKey: .status)
         runID = try container.decode(String.self, forKey: .runID)
         problemID = try container.decode(String.self, forKey: .problemID)
@@ -100,8 +107,8 @@ public struct XcircuitePlanningProblemValidation: Codable, Sendable, Hashable {
         actionDomainSnapshotPath = try container.decodeIfPresent(String.self, forKey: .actionDomainSnapshotPath)
         sourceRefCount = try container.decode(Int.self, forKey: .sourceRefCount)
         initialStateRefCount = try container.decode(Int.self, forKey: .initialStateRefCount)
-        assumptionCount = try container.decodeIfPresent(Int.self, forKey: .assumptionCount) ?? 0
-        riskClassificationCount = try container.decodeIfPresent(Int.self, forKey: .riskClassificationCount) ?? 0
+        assumptionCount = try container.decode(Int.self, forKey: .assumptionCount)
+        riskClassificationCount = try container.decode(Int.self, forKey: .riskClassificationCount)
         objectiveCount = try container.decode(Int.self, forKey: .objectiveCount)
         candidateActionCount = try container.decode(Int.self, forKey: .candidateActionCount)
         verificationGateCount = try container.decode(Int.self, forKey: .verificationGateCount)

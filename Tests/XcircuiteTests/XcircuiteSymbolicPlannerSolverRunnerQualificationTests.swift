@@ -396,7 +396,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.nativeCertificate?.certificate?.planLength == 1)
 }
 
-@Test func qualifySymbolicPlannerSolverRejectsDuplicateCertificateArtifactID() async throws {
+@Test func qualifySymbolicPlannerSolverRejectsAmbiguousCanonicalManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-duplicate-certificate-artifact")
     defer { removeTemporaryRoot(root) }
     try prepareRun(root: root, runID: "run-pddl")
@@ -435,12 +435,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         producedByRunID: "run-pddl"
     )
     let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    var manifest = try store.readJSON(XcircuiteRunManifest.self, from: manifestURL)
-    manifest.artifacts.append(certificateReference)
-    manifest.artifacts.append(certificateReference)
-    try store.writeJSON(manifest, to: manifestURL, forProjectAt: root)
+    try XcircuiteRunManifestTamper.append(
+        [certificateReference, certificateReference],
+        to: manifestURL
+    )
 
-    do {
+    await #expect(throws: XcircuitePackageError.decodeFailed(
+        "manifest.json: Invalid run manifest for run-pddl: artifact path '.xcircuite/runs/run-pddl/planning/symbolic-planner/native-certificate.json' must be unique."
+    )) {
         _ = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
             request: XcircuiteSymbolicPlannerSolverQualificationRequest(
                 runID: "run-pddl",
@@ -453,13 +455,6 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             ),
             projectRoot: root
         )
-        Issue.record("Expected duplicateArtifactReference.")
-    } catch let error as XcircuiteSymbolicPlannerSolverError {
-        #expect(error == .duplicateArtifactReference(
-            runID: "run-pddl",
-            artifactID: "custom-native-certificate",
-            count: 2
-        ))
     }
 }
 

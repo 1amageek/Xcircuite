@@ -89,6 +89,13 @@ public struct XcircuitePlanVerification: Codable, Sendable, Hashable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported plan verification schema version: \(schemaVersion)."
+            )
+        }
         self.problemID = try container.decode(String.self, forKey: .problemID)
         self.planID = try container.decode(String.self, forKey: .planID)
         self.runID = try container.decode(String.self, forKey: .runID)
@@ -96,23 +103,23 @@ public struct XcircuitePlanVerification: Codable, Sendable, Hashable {
         self.candidatePlanRef = try container.decode(XcircuiteFileReference.self, forKey: .candidatePlanRef)
         self.stepResults = try container.decode([XcircuitePlanVerificationStepResult].self, forKey: .stepResults)
         self.gateResults = try container.decode([XcircuitePlanVerificationGateResult].self, forKey: .gateResults)
-        self.correctnessGateResults = try container.decodeIfPresent(
+        self.correctnessGateResults = try container.decode(
             [XcircuitePlanningCorrectnessGateResult].self,
             forKey: .correctnessGateResults
-        ) ?? []
-        self.riskReviews = try container.decodeIfPresent(
+        )
+        self.riskReviews = try container.decode(
             [XcircuitePlanRiskReview].self,
             forKey: .riskReviews
-        ) ?? []
+        )
         self.artifactRefs = try container.decode([XcircuiteFileReference].self, forKey: .artifactRefs)
-        self.initialSymbolicState = try container.decodeIfPresent([String].self, forKey: .initialSymbolicState) ?? []
-        self.finalSymbolicState = try container.decodeIfPresent([String].self, forKey: .finalSymbolicState) ?? []
-        self.goalCoverageStatus = try container.decodeIfPresent(String.self, forKey: .goalCoverageStatus) ?? "not-evaluated"
-        self.goalCoverage = try container.decodeIfPresent(
+        self.initialSymbolicState = try container.decode([String].self, forKey: .initialSymbolicState)
+        self.finalSymbolicState = try container.decode([String].self, forKey: .finalSymbolicState)
+        self.goalCoverageStatus = try container.decode(String.self, forKey: .goalCoverageStatus)
+        self.goalCoverage = try container.decode(
             [XcircuiteSymbolicPlannerGoalCoverage].self,
             forKey: .goalCoverage
-        ) ?? []
-        self.missingGoalAtoms = try container.decodeIfPresent([String].self, forKey: .missingGoalAtoms) ?? []
+        )
+        self.missingGoalAtoms = try container.decode([String].self, forKey: .missingGoalAtoms)
         self.diagnostics = try container.decode([XcircuitePlanVerificationDiagnostic].self, forKey: .diagnostics)
         self.accepted = try container.decode(Bool.self, forKey: .accepted)
         self.nextActions = try container.decode([String].self, forKey: .nextActions)

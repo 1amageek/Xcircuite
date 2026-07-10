@@ -96,6 +96,13 @@ public struct XcircuiteSymbolicPlannerTrace: Codable, Sendable, Hashable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported symbolic planner trace schema version: \(schemaVersion)."
+            )
+        }
         self.runID = try container.decode(String.self, forKey: .runID)
         self.problemID = try container.decode(String.self, forKey: .problemID)
         self.strategy = try container.decode(String.self, forKey: .strategy)
@@ -103,14 +110,8 @@ public struct XcircuiteSymbolicPlannerTrace: Codable, Sendable, Hashable {
         self.actionDomainSnapshotPath = try container.decodeIfPresent(String.self, forKey: .actionDomainSnapshotPath)
         self.actionDomainSnapshotArtifactID = try container.decodeIfPresent(String.self, forKey: .actionDomainSnapshotArtifactID)
         self.rejectedPlansPath = try container.decodeIfPresent(String.self, forKey: .rejectedPlansPath)
-        self.rejectedPlanFeedbackRecordCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .rejectedPlanFeedbackRecordCount
-        ) ?? 0
-        self.globalRejectedPlanFeedbackCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .globalRejectedPlanFeedbackCount
-        ) ?? 0
+        self.rejectedPlanFeedbackRecordCount = try container.decode(Int.self, forKey: .rejectedPlanFeedbackRecordCount)
+        self.globalRejectedPlanFeedbackCount = try container.decode(Int.self, forKey: .globalRejectedPlanFeedbackCount)
         self.policyTrace = try container.decodeIfPresent(
             XcircuiteSymbolicPlannerPolicyTrace.self,
             forKey: .policyTrace
@@ -122,14 +123,14 @@ public struct XcircuiteSymbolicPlannerTrace: Codable, Sendable, Hashable {
         self.generatedPlanID = try container.decode(String.self, forKey: .generatedPlanID)
         self.selectedActionIDs = try container.decode([String].self, forKey: .selectedActionIDs)
         self.unresolvedObjectiveIDs = try container.decode([String].self, forKey: .unresolvedObjectiveIDs)
-        self.initialSymbolicState = try container.decodeIfPresent([String].self, forKey: .initialSymbolicState) ?? []
-        self.finalSymbolicState = try container.decodeIfPresent([String].self, forKey: .finalSymbolicState) ?? []
-        self.goalCoverageStatus = try container.decodeIfPresent(String.self, forKey: .goalCoverageStatus) ?? "not-evaluated"
-        self.goalCoverage = try container.decodeIfPresent(
+        self.initialSymbolicState = try container.decode([String].self, forKey: .initialSymbolicState)
+        self.finalSymbolicState = try container.decode([String].self, forKey: .finalSymbolicState)
+        self.goalCoverageStatus = try container.decode(String.self, forKey: .goalCoverageStatus)
+        self.goalCoverage = try container.decode(
             [XcircuiteSymbolicPlannerGoalCoverage].self,
             forKey: .goalCoverage
-        ) ?? []
-        self.missingGoalAtoms = try container.decodeIfPresent([String].self, forKey: .missingGoalAtoms) ?? []
+        )
+        self.missingGoalAtoms = try container.decode([String].self, forKey: .missingGoalAtoms)
         self.objectiveTraces = try container.decode([XcircuiteSymbolicPlannerObjectiveTrace].self, forKey: .objectiveTraces)
     }
 }

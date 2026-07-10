@@ -188,7 +188,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         #expect(result.missingArtifactIDs == ["planning-design-diff"])
     }
 
-    @Test func qualifyVerifiedImprovementCorpusRejectsDuplicateManifestArtifactIDs() throws {
+    @Test func qualifyVerifiedImprovementCorpusRejectsAmbiguousCanonicalManifest() throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
         let packageStore = XcircuitePackageStore()
@@ -204,14 +204,13 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             gateID: "native-drc"
         )
         let manifestURL = runManifestURL(root: root, runID: caseSpec.runID)
-        var manifest = try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
+        let manifest = try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
         let numericLoopReference = try #require(
             manifest.artifacts.first {
                 $0.artifactID == XcircuitePlanningArtifactStore.numericRepairLoopArtifactID
             }
         )
-        manifest.artifacts.append(numericLoopReference)
-        try packageStore.writeJSON(manifest, to: manifestURL, forProjectAt: root)
+        try XcircuiteRunManifestTamper.append([numericLoopReference], to: manifestURL)
 
         let suiteSpec = XcircuiteVerifiedImprovementCorpusSuiteSpec(
             suiteID: "verified-improvement-duplicate-artifact-suite",
@@ -225,7 +224,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         #expect(report.status == .failed)
         let result = try #require(report.caseResults.first)
         #expect(result.status == .failed)
-        #expect(result.diagnostics.contains { $0.code == "artifact-reference-duplicate" })
+        #expect(result.diagnostics.contains { $0.code == "run-manifest-unavailable" })
         #expect(!result.artifactRefs.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.numericRepairLoopArtifactID
         })

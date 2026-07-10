@@ -153,12 +153,12 @@ public struct XcircuiteParetoCandidateSet: Codable, Sendable, Hashable {
             let candidateID = try container.decode(String.self, forKey: .candidateID)
             let sourceCandidateID = try container.decodeIfPresent(String.self, forKey: .sourceCandidateID)
             let frontierRank = try container.decode(Int.self, forKey: .frontierRank)
-            let dominatedByCandidateIDs = try container.decodeIfPresent(
+            let dominatedByCandidateIDs = try container.decode(
                 [String].self,
                 forKey: .dominatedByCandidateIDs
-            ) ?? []
+            )
             let metrics = try container.decode([Metric].self, forKey: .metrics)
-            let gateStatuses = try container.decodeIfPresent([String: String].self, forKey: .gateStatuses) ?? [:]
+            let gateStatuses = try container.decode([String: String].self, forKey: .gateStatuses)
             let rationale = try container.decode(String.self, forKey: .rationale)
             try self.init(
                 runID: runID,
@@ -345,10 +345,10 @@ public struct XcircuiteParetoCandidateSet: Codable, Sendable, Hashable {
             String.self,
             forKey: .costCalibrationArtifactID
         )
-        let sourceCandidateArtifactIDs = try container.decodeIfPresent(
+        let sourceCandidateArtifactIDs = try container.decode(
             [String].self,
             forKey: .sourceCandidateArtifactIDs
-        ) ?? []
+        )
         let candidates = try container.decode([Candidate].self, forKey: .candidates)
         let selectedCandidateID = try container.decodeIfPresent(String.self, forKey: .selectedCandidateID)
         try self.init(

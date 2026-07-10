@@ -84,11 +84,8 @@ public struct XcircuiteProblemTranslationAuditCoverageSummary: Codable, Sendable
         self.sourceRefCount = try container.decode(Int.self, forKey: .sourceRefCount)
         self.coveredSourceRefCount = try container.decode(Int.self, forKey: .coveredSourceRefCount)
         self.uncoveredSourceRefCount = try container.decode(Int.self, forKey: .uncoveredSourceRefCount)
-        self.intentClauseCount = try container.decodeIfPresent(Int.self, forKey: .intentClauseCount) ?? 0
-        self.uncoveredIntentClauseCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .uncoveredIntentClauseCount
-        ) ?? 0
+        self.intentClauseCount = try container.decode(Int.self, forKey: .intentClauseCount)
+        self.uncoveredIntentClauseCount = try container.decode(Int.self, forKey: .uncoveredIntentClauseCount)
         self.objectiveCount = try container.decode(Int.self, forKey: .objectiveCount)
         self.orphanObjectiveCount = try container.decode(Int.self, forKey: .orphanObjectiveCount)
         self.constraintCount = try container.decode(Int.self, forKey: .constraintCount)
@@ -97,23 +94,11 @@ public struct XcircuiteProblemTranslationAuditCoverageSummary: Codable, Sendable
         self.orphanCandidateActionCount = try container.decode(Int.self, forKey: .orphanCandidateActionCount)
         self.goalAtomCount = try container.decode(Int.self, forKey: .goalAtomCount)
         self.orphanGoalAtomCount = try container.decode(Int.self, forKey: .orphanGoalAtomCount)
-        self.unsupportedGoalAtomCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .unsupportedGoalAtomCount
-        ) ?? 0
+        self.unsupportedGoalAtomCount = try container.decode(Int.self, forKey: .unsupportedGoalAtomCount)
         self.translationEdgeCount = try container.decode(Int.self, forKey: .translationEdgeCount)
-        self.sourceDiagnosticRefCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .sourceDiagnosticRefCount
-        ) ?? 0
-        self.fullyCoveredSourceDiagnosticCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .fullyCoveredSourceDiagnosticCount
-        ) ?? 0
-        self.undercoveredSourceDiagnosticCount = try container.decodeIfPresent(
-            Int.self,
-            forKey: .undercoveredSourceDiagnosticCount
-        ) ?? 0
+        self.sourceDiagnosticRefCount = try container.decode(Int.self, forKey: .sourceDiagnosticRefCount)
+        self.fullyCoveredSourceDiagnosticCount = try container.decode(Int.self, forKey: .fullyCoveredSourceDiagnosticCount)
+        self.undercoveredSourceDiagnosticCount = try container.decode(Int.self, forKey: .undercoveredSourceDiagnosticCount)
     }
 
     public func encode(to encoder: Encoder) throws {

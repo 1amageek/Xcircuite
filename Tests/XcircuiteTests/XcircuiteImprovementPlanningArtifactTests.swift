@@ -535,7 +535,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
         }
     }
 
-    @Test func generationRejectsDuplicateManifestArtifactReference() throws {
+    @Test func generationRejectsAmbiguousCanonicalManifest() throws {
         let root = try makeTemporaryRoot("duplicate-manifest-artifact")
         defer { removeTemporaryRoot(root) }
         let packageStore = XcircuitePackageStore()
@@ -561,22 +561,17 @@ struct XcircuiteImprovementPlanningArtifactTests {
 
         let stalePath = ".xcircuite/runs/run-1/planning/stale-numeric-repair-loop.json"
         let manifestURL = root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        var manifest = try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
-        manifest.artifacts.append(XcircuiteFileReference(
+        let staleReference = XcircuiteFileReference(
             artifactID: XcircuitePlanningArtifactStore.numericRepairLoopArtifactID,
             path: stalePath,
             kind: .other,
             format: .json,
             producedByRunID: "run-1"
-        ))
-        try packageStore.writeJSON(manifest, to: manifestURL, forProjectAt: root)
+        )
+        try XcircuiteRunManifestTamper.append([staleReference], to: manifestURL)
 
-        #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.duplicateManifestArtifact(
-            artifactID: XcircuitePlanningArtifactStore.numericRepairLoopArtifactID,
-            paths: [
-                ".xcircuite/runs/run-1/planning/numeric-repair-loop.json",
-                stalePath,
-            ]
+        #expect(throws: XcircuitePackageError.decodeFailed(
+            "manifest.json: Invalid run manifest for run-1: artifactID 'planning-numeric-repair-loop' must be unique."
         )) {
             try XcircuiteImprovementPlanningArtifactGenerator().generateImprovementPlanningArtifacts(
                 request: XcircuiteImprovementPlanningArtifactGenerationRequest(

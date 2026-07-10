@@ -49,11 +49,11 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             stageID = try container.decode(String.self, forKey: .stageID)
             requestPath = try container.decode(String.self, forKey: .requestPath)
             drcExport = try container.decodeIfPresent(LayoutCommandDRCExportSpec.self, forKey: .drcExport)
-            standardLayoutExports = try container.decodeIfPresent(
+            standardLayoutExports = try container.decode(
                 [LayoutCommandStandardLayoutExportSpec].self,
                 forKey: .standardLayoutExports
-            ) ?? []
-            tool = try container.decodeIfPresent(XcircuiteFlowToolSpec.self, forKey: .tool) ?? XcircuiteFlowToolSpec()
+            )
+            tool = try container.decode(XcircuiteFlowToolSpec.self, forKey: .tool)
         }
     }
 
@@ -304,9 +304,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case nativeDRC
         case nativeLVS
         case pex
-        // Legacy encoded kinds are accepted so persisted flow specs remain resumable.
-        case legacyDRC = "pureSwiftDRC"
-        case legacyLVS = "pureSwiftLVS"
         case mockPEX
         case coreSpiceSimulation
         case postLayoutComparison
@@ -318,9 +315,9 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         switch kind {
         case .layoutCommand:
             self = .layoutCommand(try container.decode(LayoutCommand.self, forKey: .value))
-        case .nativeDRC, .legacyDRC:
+        case .nativeDRC:
             self = .nativeDRC(try container.decode(NativeDRC.self, forKey: .value))
-        case .nativeLVS, .legacyLVS:
+        case .nativeLVS:
             self = .nativeLVS(try container.decode(NativeLVS.self, forKey: .value))
         case .pex:
             self = .pex(try container.decode(PEX.self, forKey: .value))

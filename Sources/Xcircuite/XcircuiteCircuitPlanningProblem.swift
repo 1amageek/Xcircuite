@@ -68,15 +68,22 @@ public struct XcircuiteCircuitPlanningProblem: Codable, Sendable, Hashable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported circuit planning problem schema version: \(schemaVersion)."
+            )
+        }
         problemID = try container.decode(String.self, forKey: .problemID)
         runID = try container.decode(String.self, forKey: .runID)
         sourceRefs = try container.decode([XcircuitePlanningReference].self, forKey: .sourceRefs)
         initialStateRefs = try container.decode([XcircuitePlanningReference].self, forKey: .initialStateRefs)
-        assumptions = try container.decodeIfPresent([XcircuitePlanningAssumption].self, forKey: .assumptions) ?? []
-        riskClassifications = try container.decodeIfPresent(
+        assumptions = try container.decode([XcircuitePlanningAssumption].self, forKey: .assumptions)
+        riskClassifications = try container.decode(
             [XcircuitePlanningRiskClassification].self,
             forKey: .riskClassifications
-        ) ?? []
+        )
         objectives = try container.decode([XcircuitePlanningObjective].self, forKey: .objectives)
         constraints = try container.decode([XcircuitePlanningConstraint].self, forKey: .constraints)
         actionDomainRefs = try container.decode([String].self, forKey: .actionDomainRefs)

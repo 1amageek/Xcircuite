@@ -44,6 +44,13 @@ public struct XcircuiteRejectedPlanFeedbackSummary: Codable, Sendable, Hashable 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported rejected plan feedback summary schema version: \(schemaVersion)."
+            )
+        }
         runID = try container.decode(String.self, forKey: .runID)
         rejectedPlansPath = try container.decodeIfPresent(String.self, forKey: .rejectedPlansPath)
         recordCount = try container.decode(Int.self, forKey: .recordCount)
@@ -51,14 +58,14 @@ public struct XcircuiteRejectedPlanFeedbackSummary: Codable, Sendable, Hashable 
             [XcircuiteRejectedPlanCandidateFeedback].self,
             forKey: .candidateFeedback
         )
-        globalFeedback = try container.decodeIfPresent(
+        globalFeedback = try container.decode(
             [XcircuiteRejectedPlanGlobalFeedback].self,
             forKey: .globalFeedback
-        ) ?? []
-        diagnosticClassCounts = try container.decodeIfPresent(
+        )
+        diagnosticClassCounts = try container.decode(
             [String: Int].self,
             forKey: .diagnosticClassCounts
-        ) ?? [:]
+        )
         excludedCandidateIDs = try container.decode([String].self, forKey: .excludedCandidateIDs)
     }
 
@@ -124,7 +131,7 @@ public struct XcircuiteRejectedPlanCandidateFeedback: Codable, Sendable, Hashabl
         failedStepIDs = try container.decode([String].self, forKey: .failedStepIDs)
         failedGateIDs = try container.decode([String].self, forKey: .failedGateIDs)
         diagnosticCodes = try container.decode([String].self, forKey: .diagnosticCodes)
-        diagnosticClasses = try container.decodeIfPresent([String].self, forKey: .diagnosticClasses) ?? []
+        diagnosticClasses = try container.decode([String].self, forKey: .diagnosticClasses)
         nextActions = try container.decode([String].self, forKey: .nextActions)
     }
 

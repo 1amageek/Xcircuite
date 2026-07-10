@@ -376,7 +376,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         })
     }
 
-    @Test func legacyProblemTranslationAuditDecodesWithoutSourceDiagnosticCoverage() throws {
+    @Test func problemTranslationAuditRejectsMissingCoverageFields() throws {
         let payload = Data("""
         {
           "schemaVersion": 1,
@@ -411,13 +411,9 @@ struct XcircuiteProblemTranslationAuditorTests {
         }
         """.utf8)
 
-        let audit = try JSONDecoder().decode(XcircuiteProblemTranslationAudit.self, from: payload)
-
-        #expect(audit.sourceDiagnosticCoverage.isEmpty)
-        #expect(audit.undercoveredSourceDiagnostics.isEmpty)
-        #expect(audit.coverageSummary.sourceDiagnosticRefCount == 0)
-        #expect(audit.coverageSummary.fullyCoveredSourceDiagnosticCount == 0)
-        #expect(audit.coverageSummary.undercoveredSourceDiagnosticCount == 0)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(XcircuiteProblemTranslationAudit.self, from: payload)
+        }
     }
 
     @Test func auditorBlocksUnsupportedGoalAtomsWithoutCandidateEffects() throws {

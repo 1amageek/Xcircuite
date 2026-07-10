@@ -14,12 +14,7 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
     }
 
     func runManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.readJSON(
-            XcircuiteRunManifest.self,
-            from: XcircuitePackage(projectRoot: projectRoot)
-                .runDirectoryURL(for: runID)
-                .appending(path: "manifest.json")
-        )
+        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     func uniqueManifestArtifact(

@@ -23,7 +23,11 @@
         "maximumEvidenceAgeSeconds": 4102444800,
         "requirePassingHealthCheck": true
       },
-      "requiresApproval": false
+      "requiresApproval": false,
+      "retryPolicy": {
+        "maxAttempts": 1,
+        "retryableDiagnosticCodes": []
+      }
     },
     {
       "stageID": "008-lvs",
@@ -45,7 +49,11 @@
         "maximumEvidenceAgeSeconds": 4102444800,
         "requirePassingHealthCheck": true
       },
-      "requiresApproval": false
+      "requiresApproval": false,
+      "retryPolicy": {
+        "maxAttempts": 1,
+        "retryableDiagnosticCodes": []
+      }
     },
     {
       "stageID": "009-pex",
@@ -69,7 +77,11 @@
         "maximumEvidenceAgeSeconds": 4102444800,
         "requirePassingHealthCheck": true
       },
-      "requiresApproval": false
+      "requiresApproval": false,
+      "retryPolicy": {
+        "maxAttempts": 1,
+        "retryableDiagnosticCodes": []
+      }
     }
   ]
 }

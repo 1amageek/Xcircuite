@@ -1,7 +1,9 @@
 import XcircuitePackage
 
 public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
-    public var schemaVersion: Int
+    public static let currentSchemaVersion = 1
+
+    public let schemaVersion: Int
     public var status: String
     public var runID: String
     public var problemID: String
@@ -23,7 +25,6 @@ public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
     public var nextActions: [String]
 
     public init(
-        schemaVersion: Int = 1,
         status: String,
         runID: String,
         problemID: String,
@@ -44,7 +45,7 @@ public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
         blocking: Bool,
         nextActions: [String]
     ) {
-        self.schemaVersion = schemaVersion
+        self.schemaVersion = Self.currentSchemaVersion
         self.status = status
         self.runID = runID
         self.problemID = problemID
@@ -91,7 +92,14 @@ public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == Self.currentSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Expected problem translation audit schema version \(Self.currentSchemaVersion)."
+            )
+        }
         self.status = try container.decode(String.self, forKey: .status)
         self.runID = try container.decode(String.self, forKey: .runID)
         self.problemID = try container.decode(String.self, forKey: .problemID)
@@ -101,10 +109,10 @@ public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
             [XcircuiteProblemTranslationAuditEdge].self,
             forKey: .translationEdges
         )
-        self.sourceDiagnosticCoverage = try container.decodeIfPresent(
+        self.sourceDiagnosticCoverage = try container.decode(
             [XcircuiteProblemTranslationSourceDiagnosticCoverage].self,
             forKey: .sourceDiagnosticCoverage
-        ) ?? []
+        )
         self.coverageSummary = try container.decode(
             XcircuiteProblemTranslationAuditCoverageSummary.self,
             forKey: .coverageSummary
@@ -113,14 +121,14 @@ public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
             [XcircuiteProblemTranslationAuditIssue].self,
             forKey: .uncoveredSources
         )
-        self.uncoveredIntentClauses = try container.decodeIfPresent(
+        self.uncoveredIntentClauses = try container.decode(
             [XcircuiteProblemTranslationAuditIssue].self,
             forKey: .uncoveredIntentClauses
-        ) ?? []
-        self.undercoveredSourceDiagnostics = try container.decodeIfPresent(
+        )
+        self.undercoveredSourceDiagnostics = try container.decode(
             [XcircuiteProblemTranslationAuditIssue].self,
             forKey: .undercoveredSourceDiagnostics
-        ) ?? []
+        )
         self.orphanObjectives = try container.decode(
             [XcircuiteProblemTranslationAuditIssue].self,
             forKey: .orphanObjectives
@@ -137,10 +145,10 @@ public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
             [XcircuiteProblemTranslationAuditIssue].self,
             forKey: .orphanGoalAtoms
         )
-        self.unsupportedGoalAtoms = try container.decodeIfPresent(
+        self.unsupportedGoalAtoms = try container.decode(
             [XcircuiteProblemTranslationAuditIssue].self,
             forKey: .unsupportedGoalAtoms
-        ) ?? []
+        )
         self.diagnostics = try container.decode(
             [XcircuiteProblemTranslationAuditDiagnostic].self,
             forKey: .diagnostics
