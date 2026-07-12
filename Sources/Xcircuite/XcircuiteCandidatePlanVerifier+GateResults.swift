@@ -521,6 +521,10 @@ extension XcircuiteCandidatePlanVerifier {
                 technologyURL: try executionSpec.technologyRef.map {
                     try url(for: $0, manifest: manifest, projectRoot: projectRoot)
                 },
+                extractionDeckURL: try executionSpec.extractionDeckRef.map {
+                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
+                },
+                processProfileID: executionSpec.processProfileID,
                 waiverURL: try executionSpec.waiverRef.map {
                     try url(for: $0, manifest: manifest, projectRoot: projectRoot)
                 },
@@ -560,7 +564,7 @@ extension XcircuiteCandidatePlanVerifier {
                 gateResult: XcircuitePlanVerificationGateResult(
                     gateID: "native-lvs",
                     required: required,
-                    status: executionResult.result.passed ? "passed" : "failed",
+                    status: nativeLVSGateStatus(from: executionResult.result),
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
@@ -583,6 +587,23 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
                 artifactRefs: []
             )
+        }
+    }
+
+    func nativeLVSGateStatus(from result: LVSResult) -> String {
+        guard result.executionStatus == .completed else {
+            return "blocked"
+        }
+        guard result.readiness == .ready else {
+            return "blocked"
+        }
+        switch result.verdict {
+        case .match:
+            return result.passed ? "passed" : "failed"
+        case .mismatch:
+            return "failed"
+        case .blocked:
+            return "blocked"
         }
     }
 

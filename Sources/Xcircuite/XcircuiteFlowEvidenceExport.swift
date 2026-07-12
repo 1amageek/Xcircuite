@@ -2,6 +2,8 @@ import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowEvidenceExport: Sendable, Hashable, Codable {
+    public static let supportedSchemaVersions: Set<Int> = [1, 2]
+
     public var schemaVersion: Int
     public var status: String?
     public var reportPath: String?
@@ -30,7 +32,7 @@ public struct XcircuiteFlowEvidenceExport: Sendable, Hashable, Codable {
             throw XcircuiteFlowRuntimeSpecError.invalidPath(url.path(percentEncoded: false))
         }
         let export = try JSONDecoder().decode(XcircuiteFlowEvidenceExport.self, from: data)
-        guard export.schemaVersion == 1 else {
+        guard Self.supportedSchemaVersions.contains(export.schemaVersion) else {
             throw XcircuiteFlowRuntimeSpecError.unsupportedEvidenceExportSchemaVersion(export.schemaVersion)
         }
         try export.validate()

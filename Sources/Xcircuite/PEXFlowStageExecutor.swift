@@ -13,6 +13,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
     private let topCell: String
     private let corners: [PEXCorner]
     private let technology: XcircuitePEXTechnologySpec
+    private let technologyByCorner: [String: XcircuitePEXTechnologySpec]
+    private let processProfile: PEXProcessProfileReference?
     private let backendSelection: PEXBackendSelection
     private let options: PEXRunOptions
     private let engine: any PEXExecuting
@@ -33,6 +35,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         self.topCell = request.topCell
         self.corners = request.corners
         self.technology = Self.technologySpec(from: request.technology)
+        self.technologyByCorner = request.technologyByCorner.mapValues { Self.technologySpec(from: $0) }
+        self.processProfile = request.processProfile
         self.backendSelection = request.backendSelection
         self.options = request.options
         self.engine = engine
@@ -49,6 +53,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         topCell: String,
         corners: [PEXCorner],
         technology: XcircuitePEXTechnologySpec,
+        technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
+        processProfile: PEXProcessProfileReference? = nil,
         backendSelection: PEXBackendSelection,
         options: PEXRunOptions = .default,
         engine: any PEXExecuting
@@ -62,6 +68,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         self.topCell = topCell
         self.corners = corners
         self.technology = technology
+        self.technologyByCorner = technologyByCorner
+        self.processProfile = processProfile
         self.backendSelection = backendSelection
         self.options = options
         self.engine = engine
@@ -77,6 +85,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         topCell: String,
         corners: [PEXCorner],
         technology: TechnologyInput,
+        technologyByCorner: [String: TechnologyInput] = [:],
+        processProfile: PEXProcessProfileReference? = nil,
         options: PEXRunOptions = .default
     ) -> PEXFlowStageExecutor {
         PEXFlowStageExecutor(
@@ -90,6 +100,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 topCell: topCell,
                 corners: corners,
                 technology: technology,
+                technologyByCorner: technologyByCorner,
+                processProfile: processProfile,
                 backendSelection: .mock(),
                 options: options
             ),
@@ -106,6 +118,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         topCell: String,
         corners: [PEXCorner],
         technology: XcircuitePEXTechnologySpec,
+        technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
+        processProfile: PEXProcessProfileReference? = nil,
         options: PEXRunOptions = .default
     ) -> PEXFlowStageExecutor {
         PEXFlowStageExecutor(
@@ -118,6 +132,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             topCell: topCell,
             corners: corners,
             technology: technology,
+            technologyByCorner: technologyByCorner,
+            processProfile: processProfile,
             backendSelection: .mock(),
             options: options,
             engine: DefaultPEXEngine.withDefaults()
@@ -313,6 +329,11 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             ),
+            technologyByCorner: try resolvedTechnologyByCorner(
+                projectRoot: context.projectRoot,
+                runDirectory: context.runDirectory
+            ),
+            processProfile: processProfile,
             backendSelection: backendSelection,
             options: options,
             workingDirectory: workingDirectory
@@ -326,6 +347,23 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         case .inline(let technology):
             .inline(technology)
         }
+    }
+
+    private func resolvedTechnologyByCorner(
+        projectRoot: URL,
+        runDirectory: URL
+    ) throws -> [String: TechnologyInput] {
+        var resolved: [String: TechnologyInput] = [:]
+        for cornerID in technologyByCorner.keys.sorted() {
+            guard let technology = technologyByCorner[cornerID] else {
+                continue
+            }
+            resolved[cornerID] = try technology.makeTechnologyInput(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory
+            )
+        }
+        return resolved
     }
 
     private func validate(stage: FlowStageDefinition) throws {
@@ -576,11 +614,11 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             .layout
         case .netlistInput:
             .netlist
-        case .technologyInput:
+        case .technologyInput, .processProfileDeckInput:
             .technology
-        case .request, .log, .report:
+        case .request, .log, .report, .sourceConnectivityReport:
             .report
-        case .rawOutput, .spefRoundTrip, .parasiticIR:
+        case .rawOutput, .spefRoundTrip, .spiceBackannotation, .parasiticIR:
             .parasitic
         }
     }
@@ -589,9 +627,11 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         switch artifact.kind {
         case .rawOutput, .spefRoundTrip:
             .spef
-        case .parasiticIR, .request, .technologyInput:
+        case .parasiticIR, .request, .technologyInput, .sourceConnectivityReport:
             .json
-        case .log, .report:
+        case .spiceBackannotation:
+            .spice
+        case .log, .report, .processProfileDeckInput:
             .text
         case .layoutInput:
             layoutFormat(from: url)

@@ -12,6 +12,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
     private let schematicNetlistInput: XcircuiteFlowInputReference
     private let topCell: String
     private let technologyInput: XcircuiteFlowInputReference?
+    private let extractionDeckInput: XcircuiteFlowInputReference?
+    private let processProfileID: String?
     private let waiverInput: XcircuiteFlowInputReference?
     private let modelEquivalenceInput: XcircuiteFlowInputReference?
     private let terminalEquivalenceInput: XcircuiteFlowInputReference?
@@ -34,6 +36,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         self.schematicNetlistInput = .path(request.schematicNetlistURL.path(percentEncoded: false))
         self.topCell = request.topCell
         self.technologyInput = request.technologyURL.map { .path($0.path(percentEncoded: false)) }
+        self.extractionDeckInput = request.extractionDeckURL.map { .path($0.path(percentEncoded: false)) }
+        self.processProfileID = request.processProfileID
         self.waiverInput = request.waiverURL.map { .path($0.path(percentEncoded: false)) }
         self.modelEquivalenceInput = request.modelEquivalenceURL.map { .path($0.path(percentEncoded: false)) }
         self.terminalEquivalenceInput = request.terminalEquivalenceURL.map { .path($0.path(percentEncoded: false)) }
@@ -52,6 +56,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         schematicNetlistInput: XcircuiteFlowInputReference,
         topCell: String,
         technologyInput: XcircuiteFlowInputReference? = nil,
+        extractionDeckInput: XcircuiteFlowInputReference? = nil,
+        processProfileID: String? = nil,
         waiverInput: XcircuiteFlowInputReference? = nil,
         modelEquivalenceInput: XcircuiteFlowInputReference? = nil,
         terminalEquivalenceInput: XcircuiteFlowInputReference? = nil,
@@ -67,6 +73,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         self.schematicNetlistInput = schematicNetlistInput
         self.topCell = topCell
         self.technologyInput = technologyInput
+        self.extractionDeckInput = extractionDeckInput
+        self.processProfileID = processProfileID
         self.waiverInput = waiverInput
         self.modelEquivalenceInput = modelEquivalenceInput
         self.terminalEquivalenceInput = terminalEquivalenceInput
@@ -84,6 +92,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         schematicNetlistURL: URL,
         topCell: String,
         technologyURL: URL? = nil,
+        extractionDeckURL: URL? = nil,
+        processProfileID: String? = nil,
         terminalEquivalenceURL: URL? = nil,
         options: LVSOptions = LVSOptions()
     ) -> LVSFlowStageExecutor {
@@ -98,6 +108,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 schematicNetlistURL: schematicNetlistURL,
                 topCell: topCell,
                 technologyURL: technologyURL,
+                extractionDeckURL: extractionDeckURL,
+                processProfileID: processProfileID,
                 terminalEquivalenceURL: terminalEquivalenceURL,
                 backendSelection: LVSBackendSelection(backendID: backendID),
                 options: options
@@ -114,6 +126,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         schematicNetlistInput: XcircuiteFlowInputReference,
         topCell: String,
         technologyInput: XcircuiteFlowInputReference? = nil,
+        extractionDeckInput: XcircuiteFlowInputReference? = nil,
+        processProfileID: String? = nil,
         terminalEquivalenceInput: XcircuiteFlowInputReference? = nil,
         options: LVSOptions = LVSOptions()
     ) -> LVSFlowStageExecutor {
@@ -127,6 +141,8 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             schematicNetlistInput: schematicNetlistInput,
             topCell: topCell,
             technologyInput: technologyInput,
+            extractionDeckInput: extractionDeckInput,
+            processProfileID: processProfileID,
             terminalEquivalenceInput: terminalEquivalenceInput,
             backendSelection: LVSBackendSelection(backendID: backendID),
             options: options,
@@ -193,11 +209,21 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             let diagnostics = flowDiagnostics
                 + artifactManifestGate.diagnostics
                 + artifactIntegrityGate.diagnostics
-            let stageStatus: FlowStageStatus = gateStatus == .passed
-                && artifactManifestGate.status == .passed
+            let artifactsPassed = artifactManifestGate.status == .passed
                 && artifactIntegrityGate.status == .passed
-                ? .succeeded
-                : .failed
+            let stageStatus: FlowStageStatus
+            if !artifactsPassed {
+                stageStatus = .failed
+            } else {
+                switch gateStatus {
+                case .passed, .waived:
+                    stageStatus = .succeeded
+                case .blocked, .incomplete:
+                    stageStatus = .blocked
+                case .failed:
+                    stageStatus = .failed
+                }
+            }
 
             return FlowStageResult(
                 stageID: stage.stageID,
@@ -303,6 +329,11 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             ),
+            extractionDeckURL: try extractionDeckInput?.resolveExisting(
+                projectRoot: context.projectRoot,
+                runDirectory: context.runDirectory
+            ),
+            processProfileID: processProfileID,
             waiverURL: try waiverInput?.resolveExisting(
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
@@ -387,6 +418,36 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 producedByRunID: context.runID
             ))
         }
+        if let correspondenceURL = executionResult.correspondenceURL {
+            artifacts.append(try artifactBuilder.reference(
+                for: correspondenceURL,
+                projectRoot: context.projectRoot,
+                artifactID: "lvs-correspondence",
+                kind: .report,
+                format: .json,
+                producedByRunID: context.runID
+            ))
+        }
+        if let extractionReportURL = executionResult.extractionReportURL {
+            artifacts.append(try artifactBuilder.reference(
+                for: extractionReportURL,
+                projectRoot: context.projectRoot,
+                artifactID: "lvs-extraction-report",
+                kind: .report,
+                format: .json,
+                producedByRunID: context.runID
+            ))
+        }
+        if let transformLedgerURL = executionResult.transformLedgerURL {
+            artifacts.append(try artifactBuilder.reference(
+                for: transformLedgerURL,
+                projectRoot: context.projectRoot,
+                artifactID: "lvs-transform-ledger",
+                kind: .report,
+                format: .json,
+                producedByRunID: context.runID
+            ))
+        }
         return artifacts
     }
 
@@ -435,13 +496,20 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
     }
 
     private func gateStatus(from result: LVSResult) -> FlowGateStatus {
-        if result.passed {
-            return .passed
+        guard result.executionStatus == .completed else {
+            return .blocked
         }
-        if !result.completed {
-            return .incomplete
+        guard result.readiness == .ready else {
+            return .blocked
         }
-        return .failed
+        switch result.verdict {
+        case .match:
+            return result.passed ? .passed : .failed
+        case .mismatch:
+            return .failed
+        case .blocked:
+            return .blocked
+        }
     }
 
     private func flowDiagnostic(_ diagnostic: LVSDiagnostic) -> FlowDiagnostic {

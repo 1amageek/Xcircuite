@@ -14,6 +14,8 @@ struct PEXFlowStageExecutorTests {
 
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
+        _ = try writeText("tt-deck", name: "deck-tt.rc", root: root)
+        _ = try writeText("ss-deck", name: "deck-ss.rc", root: root)
 
         let result = try await DefaultFlowOrchestrator().run(
             request: FlowOperationRequest(
@@ -49,7 +51,14 @@ struct PEXFlowStageExecutorTests {
                         PEXCorner(id: PEXCornerID("tt"), name: "tt", temperature: 25),
                         PEXCorner(id: PEXCornerID("ss"), name: "ss", temperature: 125),
                     ],
-                    technology: .inline(makeTestTech())
+                    technology: .inline(makeTestTech()),
+                    technologyByCorner: ["ss": .inline(makeTestTech())],
+                    processProfile: PEXProcessProfileReference(
+                        cornerDeckPaths: [
+                            "tt": root.appending(path: "deck-tt.rc").path(percentEncoded: false),
+                            "ss": root.appending(path: "deck-ss.rc").path(percentEncoded: false),
+                        ]
+                    )
                 ),
             ]
         )
@@ -95,6 +104,7 @@ struct PEXFlowStageExecutorTests {
         #expect(channelValue("pex-total-net-count", in: observations) == .number(Double(totalNetCount)))
         #expect(channelValue("pex-total-capacitance-f", in: observations) == .number(totalCapacitanceF))
         #expect(channelValue("pex-multi-corner-successful-corner-count", in: observations) == .number(2))
+        #expect(channelValue("pex-multi-corner-comparison-basis", in: observations) == .string("perCornerTechnology"))
         #expect(channelValue("pex-multi-corner-failed-corner-count", in: observations) == .number(0))
         #expect(channelValue("pex-multi-corner-worst-capacitance-corner-id", in: observations) == .string("ss"))
         #expect(channelValue("pex-multi-corner-worst-resistance-corner-id", in: observations) == .string("ss"))
@@ -109,6 +119,7 @@ struct PEXFlowStageExecutorTests {
         #expect(ttStatusChannel.value == .string(PEXRunStatus.success.rawValue))
         #expect(ttIRChannel.value == .bool(true))
         #expect(channelResult("pex-failed-corner-count", in: evaluation)?.status == .accepted)
+        #expect(channelResult("pex-multi-corner-comparison-basis", in: evaluation)?.status == .rejected)
         #expect(channelResult("pex-multi-corner-failed-corner-count", in: evaluation)?.status == .accepted)
         #expect(channelResult("pex-multi-corner-error-diagnostic-count", in: evaluation)?.status == .accepted)
         #expect(channelResult(ttIRChannel.channelID, in: evaluation)?.status == .accepted)
@@ -124,8 +135,14 @@ struct PEXFlowStageExecutorTests {
             $0.channelID == "pex-multi-corner-total-capacitance-spread-f"
                 && $0.suggestedActions.contains("compare-post-layout-metrics")
         })
+        #expect(evaluation.feedbackSignals.contains {
+            $0.channelID == "pex-multi-corner-comparison-basis"
+                && $0.severity == .warning
+        })
         #expect(artifacts.contains { $0.format == .spef })
+        #expect(artifacts.contains { $0.kind == .technology && $0.path.contains("process-profile-decks") })
         #expect(artifacts.contains { $0.kind == .parasitic && $0.format == .json })
+        #expect(artifacts.contains { $0.kind == .parasitic && $0.format == .spice })
         #expect(artifacts.allSatisfy { !$0.path.hasPrefix("/") })
         #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
             $0.path.contains(".xcircuite/runs/run-pex/stages/009-pex/raw")
@@ -208,6 +225,9 @@ struct PEXFlowStageExecutorTests {
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
+        let evaluation = try #require(envelope.evaluationResult)
+        #expect(channelValue("pex-multi-corner-comparison-basis", in: observations) == .string("sharedTechnology"))
+        #expect(channelResult("pex-multi-corner-comparison-basis", in: evaluation)?.status == .accepted)
         #expect(channelValue("pex-multi-corner-worst-capacitance-corner-id", in: observations) == .string("ss"))
         #expect(channelValue("pex-multi-corner-total-capacitance-spread-f", in: observations) != nil)
         #expect(observations.channels.contains {

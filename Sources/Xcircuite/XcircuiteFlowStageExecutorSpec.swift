@@ -154,6 +154,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var topCell: String
         public var corners: [PEXCorner]
         public var technology: XcircuitePEXTechnologySpec?
+        public var technologyByCorner: [String: XcircuitePEXTechnologySpec]
+        public var processProfile: PEXProcessProfileReference?
         public var options: PEXRunOptions?
         public var tool: XcircuiteFlowToolSpec
 
@@ -168,6 +170,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             topCell: String,
             corners: [PEXCorner],
             technology: XcircuitePEXTechnologySpec? = nil,
+            technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
+            processProfile: PEXProcessProfileReference? = nil,
             options: PEXRunOptions? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
@@ -181,8 +185,66 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self.topCell = topCell
             self.corners = corners
             self.technology = technology
+            self.technologyByCorner = technologyByCorner
+            self.processProfile = processProfile
             self.options = options
             self.tool = tool
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case stageID
+            case layoutPath
+            case layoutInput
+            case layoutFormat
+            case sourceNetlistPath
+            case sourceNetlistInput
+            case sourceNetlistFormat
+            case topCell
+            case corners
+            case technology
+            case technologyByCorner
+            case processProfile
+            case options
+            case tool
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            stageID = try container.decode(String.self, forKey: .stageID)
+            layoutPath = try container.decodeIfPresent(String.self, forKey: .layoutPath)
+            layoutInput = try container.decodeIfPresent(XcircuiteFlowInputReference.self, forKey: .layoutInput)
+            layoutFormat = try container.decode(LayoutFormat.self, forKey: .layoutFormat)
+            sourceNetlistPath = try container.decodeIfPresent(String.self, forKey: .sourceNetlistPath)
+            sourceNetlistInput = try container.decodeIfPresent(XcircuiteFlowInputReference.self, forKey: .sourceNetlistInput)
+            sourceNetlistFormat = try container.decode(NetlistFormat.self, forKey: .sourceNetlistFormat)
+            topCell = try container.decode(String.self, forKey: .topCell)
+            corners = try container.decode([PEXCorner].self, forKey: .corners)
+            technology = try container.decodeIfPresent(XcircuitePEXTechnologySpec.self, forKey: .technology)
+            technologyByCorner = try container.decodeIfPresent(
+                [String: XcircuitePEXTechnologySpec].self,
+                forKey: .technologyByCorner
+            ) ?? [:]
+            processProfile = try container.decodeIfPresent(PEXProcessProfileReference.self, forKey: .processProfile)
+            options = try container.decodeIfPresent(PEXRunOptions.self, forKey: .options)
+            tool = try container.decode(XcircuiteFlowToolSpec.self, forKey: .tool)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(stageID, forKey: .stageID)
+            try container.encodeIfPresent(layoutPath, forKey: .layoutPath)
+            try container.encodeIfPresent(layoutInput, forKey: .layoutInput)
+            try container.encode(layoutFormat, forKey: .layoutFormat)
+            try container.encodeIfPresent(sourceNetlistPath, forKey: .sourceNetlistPath)
+            try container.encodeIfPresent(sourceNetlistInput, forKey: .sourceNetlistInput)
+            try container.encode(sourceNetlistFormat, forKey: .sourceNetlistFormat)
+            try container.encode(topCell, forKey: .topCell)
+            try container.encode(corners, forKey: .corners)
+            try container.encodeIfPresent(technology, forKey: .technology)
+            try container.encode(technologyByCorner, forKey: .technologyByCorner)
+            try container.encodeIfPresent(processProfile, forKey: .processProfile)
+            try container.encodeIfPresent(options, forKey: .options)
+            try container.encode(tool, forKey: .tool)
         }
     }
 
@@ -197,6 +259,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var topCell: String
         public var corners: [PEXCorner]
         public var technology: XcircuitePEXTechnologySpec?
+        public var technologyByCorner: [String: XcircuitePEXTechnologySpec]
+        public var processProfile: PEXProcessProfileReference?
         public var backendSelection: PEXBackendSelection
         public var options: PEXRunOptions?
         public var tool: XcircuiteFlowToolSpec
@@ -212,6 +276,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             topCell: String,
             corners: [PEXCorner],
             technology: XcircuitePEXTechnologySpec? = nil,
+            technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
+            processProfile: PEXProcessProfileReference? = nil,
             backendSelection: PEXBackendSelection,
             options: PEXRunOptions? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
@@ -226,9 +292,70 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self.topCell = topCell
             self.corners = corners
             self.technology = technology
+            self.technologyByCorner = technologyByCorner
+            self.processProfile = processProfile
             self.backendSelection = backendSelection
             self.options = options
             self.tool = tool
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case stageID
+            case layoutPath
+            case layoutInput
+            case layoutFormat
+            case sourceNetlistPath
+            case sourceNetlistInput
+            case sourceNetlistFormat
+            case topCell
+            case corners
+            case technology
+            case technologyByCorner
+            case processProfile
+            case backendSelection
+            case options
+            case tool
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            stageID = try container.decode(String.self, forKey: .stageID)
+            layoutPath = try container.decodeIfPresent(String.self, forKey: .layoutPath)
+            layoutInput = try container.decodeIfPresent(XcircuiteFlowInputReference.self, forKey: .layoutInput)
+            layoutFormat = try container.decode(LayoutFormat.self, forKey: .layoutFormat)
+            sourceNetlistPath = try container.decodeIfPresent(String.self, forKey: .sourceNetlistPath)
+            sourceNetlistInput = try container.decodeIfPresent(XcircuiteFlowInputReference.self, forKey: .sourceNetlistInput)
+            sourceNetlistFormat = try container.decode(NetlistFormat.self, forKey: .sourceNetlistFormat)
+            topCell = try container.decode(String.self, forKey: .topCell)
+            corners = try container.decode([PEXCorner].self, forKey: .corners)
+            technology = try container.decodeIfPresent(XcircuitePEXTechnologySpec.self, forKey: .technology)
+            technologyByCorner = try container.decodeIfPresent(
+                [String: XcircuitePEXTechnologySpec].self,
+                forKey: .technologyByCorner
+            ) ?? [:]
+            processProfile = try container.decodeIfPresent(PEXProcessProfileReference.self, forKey: .processProfile)
+            backendSelection = try container.decode(PEXBackendSelection.self, forKey: .backendSelection)
+            options = try container.decodeIfPresent(PEXRunOptions.self, forKey: .options)
+            tool = try container.decode(XcircuiteFlowToolSpec.self, forKey: .tool)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(stageID, forKey: .stageID)
+            try container.encodeIfPresent(layoutPath, forKey: .layoutPath)
+            try container.encodeIfPresent(layoutInput, forKey: .layoutInput)
+            try container.encode(layoutFormat, forKey: .layoutFormat)
+            try container.encodeIfPresent(sourceNetlistPath, forKey: .sourceNetlistPath)
+            try container.encodeIfPresent(sourceNetlistInput, forKey: .sourceNetlistInput)
+            try container.encode(sourceNetlistFormat, forKey: .sourceNetlistFormat)
+            try container.encode(topCell, forKey: .topCell)
+            try container.encode(corners, forKey: .corners)
+            try container.encodeIfPresent(technology, forKey: .technology)
+            try container.encode(technologyByCorner, forKey: .technologyByCorner)
+            try container.encodeIfPresent(processProfile, forKey: .processProfile)
+            try container.encode(backendSelection, forKey: .backendSelection)
+            try container.encodeIfPresent(options, forKey: .options)
+            try container.encode(tool, forKey: .tool)
         }
     }
 
@@ -401,6 +528,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 topCell: spec.topCell,
                 corners: spec.corners,
                 technology: try spec.resolvedTechnology(toolchainProfile: toolchainProfile),
+                technologyByCorner: try spec.resolvedTechnologyByCorner(toolchainProfile: toolchainProfile),
+                processProfile: try spec.resolvedProcessProfile(projectRoot: projectRoot),
                 backendSelection: spec.backendSelection,
                 options: spec.options ?? .default,
                 engine: DefaultPEXEngine.withDefaults()
@@ -415,6 +544,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 topCell: spec.topCell,
                 corners: spec.corners,
                 technology: try spec.resolvedTechnology(toolchainProfile: toolchainProfile),
+                technologyByCorner: try spec.resolvedTechnologyByCorner(toolchainProfile: toolchainProfile),
+                processProfile: try spec.resolvedProcessProfile(projectRoot: projectRoot),
                 options: spec.options ?? .default
             )
         case .coreSpiceSimulation(let spec):
@@ -617,6 +748,20 @@ private extension XcircuiteFlowStageExecutorSpec.MockPEX {
             field: "technology or toolchainProfile.pexTechnology"
         )
     }
+
+    func resolvedTechnologyByCorner(
+        toolchainProfile: XcircuiteFlowToolchainProfile?
+    ) throws -> [String: XcircuitePEXTechnologySpec] {
+        var resolved = toolchainProfile?.pexTechnologyByCorner ?? [:]
+        for (cornerID, technology) in technologyByCorner {
+            resolved[cornerID] = technology
+        }
+        return resolved
+    }
+
+    func resolvedProcessProfile(projectRoot: URL) throws -> PEXProcessProfileReference? {
+        try processProfile.map { try $0.resolved(projectRoot: projectRoot) }
+    }
 }
 
 private extension XcircuiteFlowStageExecutorSpec.PEX {
@@ -653,6 +798,52 @@ private extension XcircuiteFlowStageExecutorSpec.PEX {
         throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
             stageID: stageID,
             field: "technology or toolchainProfile.pexTechnology"
+        )
+    }
+
+    func resolvedTechnologyByCorner(
+        toolchainProfile: XcircuiteFlowToolchainProfile?
+    ) throws -> [String: XcircuitePEXTechnologySpec] {
+        var resolved = toolchainProfile?.pexTechnologyByCorner ?? [:]
+        for (cornerID, technology) in technologyByCorner {
+            resolved[cornerID] = technology
+        }
+        return resolved
+    }
+
+    func resolvedProcessProfile(projectRoot: URL) throws -> PEXProcessProfileReference? {
+        try processProfile.map { try $0.resolved(projectRoot: projectRoot) }
+    }
+}
+
+private extension PEXProcessProfileReference {
+    func resolved(projectRoot: URL) throws -> PEXProcessProfileReference {
+        func resolve(_ path: String?) throws -> String? {
+            guard let path else {
+                return nil
+            }
+            if path.hasPrefix("/") {
+                return path
+            }
+            return try XcircuiteFlowRuntimeSpec.resolvePath(path, projectRoot: projectRoot)
+                .path(percentEncoded: false)
+        }
+
+        var resolvedCornerDeckPaths: [String: String] = [:]
+        for (cornerID, path) in cornerDeckPaths {
+            if let resolvedPath = try resolve(path) {
+                resolvedCornerDeckPaths[cornerID] = resolvedPath
+            }
+        }
+        return PEXProcessProfileReference(
+            profileID: profileID,
+            pdkID: pdkID,
+            source: source,
+            requirementID: requirementID,
+            pdkRoot: try resolve(pdkRoot),
+            primaryDeckPath: try resolve(primaryDeckPath),
+            cornerDeckPaths: resolvedCornerDeckPaths,
+            metadata: metadata
         )
     }
 }

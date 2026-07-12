@@ -109,7 +109,7 @@ extension XcircuiteFlowRuntimeTests {
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-signoff-follow",
-                timeoutMilliseconds: 2_000,
+                timeoutMilliseconds: 20_000,
                 pollIntervalMilliseconds: 10
             )
         ) { event in

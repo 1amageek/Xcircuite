@@ -580,11 +580,11 @@ extension XcircuiteCandidatePlanVerifier {
             return .layout
         case .netlistInput:
             return .netlist
-        case .technologyInput:
+        case .technologyInput, .processProfileDeckInput:
             return .technology
-        case .request, .log, .report:
+        case .request, .log, .report, .sourceConnectivityReport:
             return .report
-        case .rawOutput, .spefRoundTrip, .parasiticIR:
+        case .rawOutput, .spefRoundTrip, .spiceBackannotation, .parasiticIR:
             return .parasitic
         }
     }
@@ -596,9 +596,11 @@ extension XcircuiteCandidatePlanVerifier {
         switch artifact.kind {
         case .rawOutput, .spefRoundTrip:
             return .spef
-        case .parasiticIR, .request, .technologyInput:
+        case .parasiticIR, .request, .technologyInput, .sourceConnectivityReport:
             return .json
-        case .log, .report:
+        case .spiceBackannotation:
+            return .spice
+        case .log, .report, .processProfileDeckInput:
             return .text
         case .layoutInput:
             return layoutFileFormat(from: url)

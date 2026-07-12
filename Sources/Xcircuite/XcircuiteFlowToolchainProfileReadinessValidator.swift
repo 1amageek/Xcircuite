@@ -64,7 +64,40 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
         if let technology = profile.pexTechnology {
             validate(technology, field: "pexTechnology", into: &issues)
         }
+        for cornerID in profile.pexTechnologyByCorner.keys.sorted() {
+            validateTechnologyCornerID(cornerID, into: &issues)
+            if let technology = profile.pexTechnologyByCorner[cornerID] {
+                validate(technology, field: "pexTechnologyByCorner.\(cornerID)", into: &issues)
+            }
+        }
         return issues
+    }
+
+    private func validateTechnologyCornerID(
+        _ cornerID: String,
+        into issues: inout [XcircuiteFlowToolchainProfileReadinessIssue]
+    ) {
+        guard !cornerID.isEmpty else {
+            issues.append(
+                XcircuiteFlowToolchainProfileReadinessIssue(
+                    code: Self.invalidFieldCode,
+                    field: "pexTechnologyByCorner",
+                    message: "PEX technology corner IDs must not be empty."
+                )
+            )
+            return
+        }
+        do {
+            try XcircuiteIdentifierValidator().validate(cornerID, kind: .artifactID)
+        } catch {
+            issues.append(
+                XcircuiteFlowToolchainProfileReadinessIssue(
+                    code: Self.invalidFieldCode,
+                    field: "pexTechnologyByCorner.\(cornerID)",
+                    message: "PEX technology corner IDs must be stable machine-readable identifiers."
+                )
+            )
+        }
     }
 
     private func validateTechnologyCatalogPath(

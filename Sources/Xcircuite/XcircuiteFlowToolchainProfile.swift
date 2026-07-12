@@ -9,7 +9,20 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
     public var drcTechnologyInput: XcircuiteFlowInputReference?
     public var lvsTechnologyInput: XcircuiteFlowInputReference?
     public var pexTechnology: XcircuitePEXTechnologySpec?
+    public var pexTechnologyByCorner: [String: XcircuitePEXTechnologySpec]
     public var metadata: [String: String]?
+
+    private enum CodingKeys: String, CodingKey {
+        case profileID
+        case pdkID
+        case technologyCatalogID
+        case technologyCatalogPath
+        case drcTechnologyInput
+        case lvsTechnologyInput
+        case pexTechnology
+        case pexTechnologyByCorner
+        case metadata
+    }
 
     public init(
         profileID: String? = nil,
@@ -19,6 +32,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         drcTechnologyInput: XcircuiteFlowInputReference? = nil,
         lvsTechnologyInput: XcircuiteFlowInputReference? = nil,
         pexTechnology: XcircuitePEXTechnologySpec? = nil,
+        pexTechnologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
         metadata: [String: String]? = nil
     ) {
         self.profileID = profileID
@@ -28,7 +42,46 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         self.drcTechnologyInput = drcTechnologyInput
         self.lvsTechnologyInput = lvsTechnologyInput
         self.pexTechnology = pexTechnology
+        self.pexTechnologyByCorner = pexTechnologyByCorner
         self.metadata = metadata
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profileID = try container.decodeIfPresent(String.self, forKey: .profileID)
+        pdkID = try container.decodeIfPresent(String.self, forKey: .pdkID)
+        technologyCatalogID = try container.decodeIfPresent(String.self, forKey: .technologyCatalogID)
+        technologyCatalogPath = try container.decodeIfPresent(String.self, forKey: .technologyCatalogPath)
+        drcTechnologyInput = try container.decodeIfPresent(
+            XcircuiteFlowInputReference.self,
+            forKey: .drcTechnologyInput
+        )
+        lvsTechnologyInput = try container.decodeIfPresent(
+            XcircuiteFlowInputReference.self,
+            forKey: .lvsTechnologyInput
+        )
+        pexTechnology = try container.decodeIfPresent(
+            XcircuitePEXTechnologySpec.self,
+            forKey: .pexTechnology
+        )
+        pexTechnologyByCorner = try container.decodeIfPresent(
+            [String: XcircuitePEXTechnologySpec].self,
+            forKey: .pexTechnologyByCorner
+        ) ?? [:]
+        metadata = try container.decodeIfPresent([String: String].self, forKey: .metadata)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(profileID, forKey: .profileID)
+        try container.encodeIfPresent(pdkID, forKey: .pdkID)
+        try container.encodeIfPresent(technologyCatalogID, forKey: .technologyCatalogID)
+        try container.encodeIfPresent(technologyCatalogPath, forKey: .technologyCatalogPath)
+        try container.encodeIfPresent(drcTechnologyInput, forKey: .drcTechnologyInput)
+        try container.encodeIfPresent(lvsTechnologyInput, forKey: .lvsTechnologyInput)
+        try container.encodeIfPresent(pexTechnology, forKey: .pexTechnology)
+        try container.encode(pexTechnologyByCorner, forKey: .pexTechnologyByCorner)
+        try container.encodeIfPresent(metadata, forKey: .metadata)
     }
 
     public func flowToolchainRecord(profileArtifactPath: String? = nil) -> FlowToolchainProfileRecord {
@@ -41,6 +94,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
             drcTechnologyInput: drcTechnologyInput?.flowToolchainInputRecord(),
             lvsTechnologyInput: lvsTechnologyInput?.flowToolchainInputRecord(),
             pexTechnology: pexTechnology?.flowToolchainTechnologyRecord(),
+            pexTechnologyByCorner: pexTechnologyByCorner.mapValues { $0.flowToolchainTechnologyRecord() },
             metadata: metadata
         )
     }

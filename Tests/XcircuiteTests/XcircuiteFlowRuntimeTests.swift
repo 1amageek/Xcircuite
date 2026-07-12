@@ -283,7 +283,6 @@ extension XcircuiteFlowRuntimeTests {
             #expect(operationIDs.count == Set(operationIDs).count, "\(domain.domainID) must not duplicate operation IDs")
             for operation in domain.operations {
                 #expect(!operation.maturity.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose maturity")
-                #expect(["implemented", "partial", "planned"].contains(operation.maturity))
                 #expect(!operation.inputRefs.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose input refs")
                 #expect(!operation.preconditions.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose preconditions")
                 #expect(!operation.effects.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose effects")

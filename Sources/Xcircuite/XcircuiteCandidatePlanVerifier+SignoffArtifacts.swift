@@ -43,6 +43,36 @@ extension XcircuiteCandidatePlanVerifier {
                 producedByRunID: runID
             ))
         }
+        if let correspondenceURL = executionResult.correspondenceURL {
+            artifacts.append(try artifactBuilder.reference(
+                for: correspondenceURL,
+                projectRoot: projectRoot,
+                artifactID: "planning-native-lvs-correspondence",
+                kind: .report,
+                format: .json,
+                producedByRunID: runID
+            ))
+        }
+        if let extractionReportURL = executionResult.extractionReportURL {
+            artifacts.append(try artifactBuilder.reference(
+                for: extractionReportURL,
+                projectRoot: projectRoot,
+                artifactID: "planning-native-lvs-extraction-report",
+                kind: .report,
+                format: .json,
+                producedByRunID: runID
+            ))
+        }
+        if let transformLedgerURL = executionResult.transformLedgerURL {
+            artifacts.append(try artifactBuilder.reference(
+                for: transformLedgerURL,
+                projectRoot: projectRoot,
+                artifactID: "planning-native-lvs-transform-ledger",
+                kind: .report,
+                format: .json,
+                producedByRunID: runID
+            ))
+        }
         if let log = try artifactBuilder.optionalReference(
             for: executionResult.result.logPath,
             projectRoot: projectRoot,
@@ -100,6 +130,12 @@ extension XcircuiteCandidatePlanVerifier {
             fallbackKinds: ["technology", "layout-technology"],
             references: references
         )
+        let extractionDeckRef = planningReference(
+            explicitID: hint.extractionDeckRefID ?? hint.extractionDeckRef,
+            fallbackIDs: ["extraction-deck-ref", "lvs-extraction-deck-ref"],
+            fallbackKinds: ["lvs-extraction-deck", "extraction-deck"],
+            references: references
+        )
         let backendID = hint.backendID ?? (layoutNetlistRef == nil ? "native-gds" : "native")
         guard backendID == "native" || backendID == "native-gds" else {
             throw CandidatePlanGateExecutionError.unsupportedLVSBackend(backendID)
@@ -111,6 +147,8 @@ extension XcircuiteCandidatePlanVerifier {
             schematicNetlistRef: schematicNetlistRef,
             topCell: hint.topCell ?? "top",
             technologyRef: technologyRef,
+            extractionDeckRef: extractionDeckRef,
+            processProfileID: hint.processProfileID,
             waiverRef: planningReference(
                 explicitID: hint.waiverRefID ?? hint.waiverRef,
                 fallbackIDs: ["lvs-waiver-ref"],
@@ -149,6 +187,9 @@ extension XcircuiteCandidatePlanVerifier {
                 schematicNetlistRefID: stringHint("schematicNetlistRefID", step: step),
                 technologyRef: stringHint("technologyRef", step: step),
                 technologyRefID: stringHint("technologyRefID", step: step),
+                extractionDeckRef: stringHint("extractionDeckRef", step: step),
+                extractionDeckRefID: stringHint("extractionDeckRefID", step: step),
+                processProfileID: stringHint("processProfileID", step: step),
                 waiverRef: stringHint("waiverRef", step: step),
                 waiverRefID: stringHint("waiverRefID", step: step),
                 modelEquivalenceRef: stringHint("modelEquivalenceRef", step: step),

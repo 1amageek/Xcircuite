@@ -62,6 +62,9 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                     "backendID": .string(summary.summary.backendID),
                     "topCell": .string(summary.summary.topCell),
                     "layoutInputKind": .string(summary.summary.layoutInputKind),
+                    "executionStatus": .string(summary.summary.executionStatus.rawValue),
+                    "verdict": .string(summary.summary.verdict.rawValue),
+                    "readiness": .string(summary.summary.readiness.rawValue),
                     "activeMismatchCount": .number(Double(summary.summary.activeMismatchCount)),
                     "mismatchBucketCount": .number(Double(summary.summary.mismatchBuckets.count)),
                 ]
@@ -76,6 +79,9 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                     "toolName": .string(summary.summary.toolName),
                     "topCell": .string(summary.summary.topCell),
                     "layoutInputKind": .string(summary.summary.layoutInputKind),
+                    "executionStatus": .string(summary.summary.executionStatus.rawValue),
+                    "verdict": .string(summary.summary.verdict.rawValue),
+                    "readiness": .string(summary.summary.readiness.rawValue),
                 ]
             ),
             evaluationResult: XcircuiteEvaluationResult(
@@ -97,6 +103,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                     "activeMismatchCount": .number(Double(summary.summary.activeMismatchCount)),
                     "waivedMismatchCount": .number(Double(summary.summary.waivedMismatchCount)),
                     "unusedWaiverCount": .number(Double(summary.summary.unusedWaiverIDs.count)),
+                    "blockingReasonCount": .number(Double(summary.summary.blockingReasons.count)),
                 ]
             ),
             metadata: [
@@ -217,16 +224,23 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                 confidence: confidence
             ),
             XcircuiteObservationChannel(
-                channelID: "lvs-completed",
+                channelID: "lvs-execution-status",
                 status: .observed,
-                value: .bool(summary.summary.completed),
+                value: .string(summary.summary.executionStatus.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
             XcircuiteObservationChannel(
-                channelID: "lvs-passed",
+                channelID: "lvs-verdict",
                 status: .observed,
-                value: .bool(summary.summary.passed),
+                value: .string(summary.summary.verdict.rawValue),
+                sourceArtifactIDs: [artifactID],
+                confidence: confidence
+            ),
+            XcircuiteObservationChannel(
+                channelID: "lvs-readiness",
+                status: .observed,
+                value: .string(summary.summary.readiness.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -619,7 +633,10 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         summary: LVSRunSummaryReport,
         gateStatus: FlowGateStatus
     ) -> XcircuiteEvaluationStatus {
-        if !summary.summary.completed || gateStatus == .incomplete {
+        if gateStatus == .blocked || summary.summary.readiness == .blocked {
+            return .blocked
+        }
+        if summary.summary.executionStatus != .completed || gateStatus == .incomplete {
             return .inconclusive
         }
         if summary.summary.activeMismatchCount > 0 || gateStatus == .failed {
@@ -636,6 +653,8 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             .rejected
         case .incomplete:
             .inconclusive
+        case .blocked:
+            .blocked
         }
     }
 
@@ -663,6 +682,8 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             0.5
         case .failed:
             0
+        case .blocked:
+            0
         }
     }
 
@@ -680,6 +701,8 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         case .incomplete:
             return 0.5
         case .failed:
+            return 1
+        case .blocked:
             return 1
         }
     }

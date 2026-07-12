@@ -96,6 +96,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     "backendID": .string(summary.summary.backendID),
                     "runStatus": .string(summary.summary.status),
                     "cornerCount": .number(Double(summary.summary.corners.count)),
+                    "multiCornerComparisonBasis": .string(summary.summary.multiCorner.comparisonBasis.rawValue),
                     "totalNetCount": .number(Double(aggregate.netCount)),
                     "totalElementCount": .number(Double(aggregate.elementCount)),
                 ]
@@ -109,6 +110,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     "backendID": .string(summary.summary.backendID),
                     "runID": .string(summary.summary.runID),
                     "runStatus": .string(summary.summary.status),
+                    "multiCornerComparisonBasis": .string(summary.summary.multiCorner.comparisonBasis.rawValue),
                     "completenessStatus": .string(summary.completeness.status.rawValue),
                 ]
             ),
@@ -188,6 +190,18 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                 channelID: "pex-multi-corner-error-diagnostic-count",
                 comparator: .equal,
                 target: .number(0)
+            ),
+            XcircuiteEvaluationCriterion(
+                criterionID: "pex-multi-corner-shared-technology",
+                channelID: "pex-multi-corner-comparison-basis",
+                comparator: .equal,
+                target: .string(PEXExtractorMultiCornerComparisonBasis.sharedTechnology.rawValue),
+                required: false,
+                metadata: [
+                    "interpretation": .string(
+                        "Optional technology-scope signal; every PVT promotion still requires foundry correlation evidence."
+                    ),
+                ]
             ),
             XcircuiteEvaluationCriterion(
                 criterionID: "pex-tool-evidence",
@@ -528,6 +542,13 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                 confidence: confidence
             ),
             XcircuiteObservationChannel(
+                channelID: "pex-multi-corner-comparison-basis",
+                status: .derived,
+                value: .string(multiCorner.comparisonBasis.rawValue),
+                sourceArtifactIDs: [artifactID],
+                confidence: confidence
+            ),
+            XcircuiteObservationChannel(
                 channelID: "pex-multi-corner-failed-corner-count",
                 status: .derived,
                 value: .number(Double(multiCorner.failedCornerCount)),
@@ -784,7 +805,21 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     ) -> [XcircuiteEvaluationChannelResult] {
         let multiCorner = summary.summary.multiCorner
         let errorDiagnosticCount = multiCornerErrorDiagnosticCount(summary)
+        let sharedTechnology = multiCorner.comparisonBasis == .sharedTechnology
         return [
+            XcircuiteEvaluationChannelResult(
+                criterionID: "pex-multi-corner-shared-technology",
+                channelID: "pex-multi-corner-comparison-basis",
+                status: sharedTechnology ? .accepted : .rejected,
+                observedValue: .string(multiCorner.comparisonBasis.rawValue),
+                residual: sharedTechnology ? 0 : 1,
+                likelihood: sharedTechnology ? 1 : 0,
+                confidence: confidence,
+                metadata: [
+                    "sharedTechnologyBasis": .bool(sharedTechnology),
+                    "requiresFoundryCorrelation": .bool(true),
+                ]
+            ),
             XcircuiteEvaluationChannelResult(
                 criterionID: "pex-multi-corner-failed-corner-count",
                 channelID: "pex-multi-corner-failed-corner-count",
@@ -894,6 +929,11 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
             summary: summary,
             confidence: confidence
         ))
+        signals.append(contentsOf: comparisonBasisSignals(
+            artifactID: artifactID,
+            summary: summary,
+            confidence: confidence
+        ))
         signals.append(contentsOf: multiCornerSpreadSignals(
             artifactID: artifactID,
             summary: summary,
@@ -939,6 +979,55 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         }
 
         return signals
+    }
+
+    private func comparisonBasisSignals(
+        artifactID: String,
+        summary: PEXRunSummaryReport,
+        confidence: XcircuiteEvidenceConfidence
+    ) -> [XcircuiteFeedbackSignal] {
+        switch summary.summary.multiCorner.comparisonBasis {
+        case .sharedTechnology:
+            return []
+        case .perCornerTechnology:
+            return [
+                XcircuiteFeedbackSignal(
+                    signalID: "\(artifactID)-process-specific-comparison",
+                    sourceEvaluationID: "\(artifactID)-evaluation",
+                    channelID: "pex-multi-corner-comparison-basis",
+                    routingLevel: .localSurface,
+                    severity: .warning,
+                    summary: "PEX corner spread is process-specific; foundry correlation evidence is required before PVT signoff promotion.",
+                    residual: 1,
+                    affectedArtifactIDs: [artifactID],
+                    suggestedActions: ["inspect-pex-summary", "compare-post-layout-metrics"],
+                    confidence: confidence,
+                    metadata: [
+                        "comparisonBasis": .string(PEXExtractorMultiCornerComparisonBasis.perCornerTechnology.rawValue),
+                        "requiresCorrelationEvidence": .bool(true),
+                    ]
+                ),
+            ]
+        case .unknown:
+            return [
+                XcircuiteFeedbackSignal(
+                    signalID: "\(artifactID)-unknown-comparison-basis",
+                    sourceEvaluationID: "\(artifactID)-evaluation",
+                    channelID: "pex-multi-corner-comparison-basis",
+                    routingLevel: .structureMapping,
+                    severity: .warning,
+                    summary: "PEX comparison basis is unknown; do not promote the retained spread to a PVT signoff claim.",
+                    residual: 1,
+                    affectedArtifactIDs: [artifactID],
+                    suggestedActions: ["inspect-pex-summary"],
+                    confidence: confidence,
+                    metadata: [
+                        "comparisonBasis": .string(PEXExtractorMultiCornerComparisonBasis.unknown.rawValue),
+                        "requiresCorrelationEvidence": .bool(true),
+                    ]
+                ),
+            ]
+        }
     }
 
     private func failedCornerSignals(
@@ -1124,6 +1213,8 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
             .rejected
         case .incomplete:
             .inconclusive
+        case .blocked:
+            .blocked
         }
     }
 
@@ -1178,6 +1269,8 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
             0.5
         case .failed:
             0
+        case .blocked:
+            0
         }
     }
 
@@ -1205,6 +1298,8 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         case .incomplete:
             return 0.5
         case .failed:
+            return 1
+        case .blocked:
             return 1
         }
     }

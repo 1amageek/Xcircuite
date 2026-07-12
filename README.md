@@ -1,10 +1,19 @@
 # Xcircuite
 
+Xcircuite is the headless core runtime of the LSI semiconductor design
+platform. It provides the project-aware flow, CLI, artifact ledger integration,
+tool qualification, and Agent-operable planning surface used by both
+`circuit-studio` and non-UI callers.
+
 `.xcircuite` project runtime: the adapter layer between `DesignFlowKernel` and the
 engine packages. It turns engine results into `FlowStageResult`s, gates, and
 artifact references — and implements **no** verdict logic, parsers, or external
 tool invocation itself (those stay in `CoreSpice` / `DRCEngine` / `LVSEngine` /
 `PEXEngine`).
+
+## License
+
+Xcircuite is released under the [MIT License](LICENSE).
 
 ## Stage executors
 

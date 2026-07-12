@@ -217,7 +217,6 @@ extension XcircuiteCandidatePlanVerifierTests {
                     ),
                     projectRoot: root
                 )
-
                 #expect(result.status == "accepted", "case=\(corpusID)")
                 #expect(result.accepted, "case=\(corpusID)")
                 let verification = try store.readJSON(

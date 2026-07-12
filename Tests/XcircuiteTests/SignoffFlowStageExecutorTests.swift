@@ -619,7 +619,9 @@ struct SignoffFlowStageExecutorTests {
         #expect(result.stages[0].artifacts.contains { $0.path.contains("lvs-artifact-manifest") })
         let summaryArtifact = try #require(result.stages[0].artifacts.first { $0.artifactID == "lvs-summary" })
         let summary = try decodeLVSSummary(summaryArtifact, root: root)
-        #expect(summary.summary.status == "passed")
+        #expect(summary.summary.executionStatus == .completed)
+        #expect(summary.summary.verdict == .match)
+        #expect(summary.summary.readiness == .ready)
         #expect(summary.summary.activeMismatchCount == 0)
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
             $0.path.hasSuffix("evidence/lvs-summary-envelope.json")
@@ -819,7 +821,9 @@ struct SignoffFlowStageExecutorTests {
         #expect(result.stages[0].diagnostics.contains { $0.code == "LVS_MODEL_MISMATCH" })
         let summaryArtifact = try #require(result.stages[0].artifacts.first { $0.artifactID == "lvs-summary" })
         let summary = try decodeLVSSummary(summaryArtifact, root: root)
-        #expect(summary.summary.status == "failed")
+        #expect(summary.summary.executionStatus == .completed)
+        #expect(summary.summary.verdict == .mismatch)
+        #expect(summary.summary.readiness == .ready)
         #expect(summary.summary.activeMismatchCount == 1)
         #expect(summary.summary.mismatchBuckets.first?.ruleID == "LVS_MODEL_MISMATCH")
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
@@ -1674,22 +1678,41 @@ struct SignoffFlowStageExecutorTests {
             let reportURL = workingDirectory.appending(path: "lvs-report.json")
             let manifestURL = workingDirectory.appending(path: "lvs-artifact-manifest.json")
             let logURL = workingDirectory.appending(path: "lvs.log")
+            let correspondenceURL = workingDirectory.appending(path: "lvs-correspondence.json")
             try "report".write(to: reportURL, atomically: true, encoding: .utf8)
             try "log".write(to: logURL, atomically: true, encoding: .utf8)
+            let correspondenceJSON = """
+            {
+              "schemaVersion": 2,
+              "deviceMappings": [],
+              "netMappings": [],
+              "portMappings": [],
+              "unmatchedLayoutObjectIDs": [],
+              "unmatchedSchematicObjectIDs": [],
+              "ambiguousLayoutObjectIDs": [],
+              "layoutSourceReferences": []
+            }
+            """
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try correspondenceJSON.write(to: correspondenceURL, atomically: true, encoding: .utf8)
+            let hasher = XcircuiteHasher()
             let manifest = LVSArtifactManifest(
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "StandardLVSStub",
-                passed: true,
-                completed: true,
+                executionStatus: .completed,
+                verdict: .match,
+                readiness: .ready,
+                blockingReasons: [],
                 inputs: [],
                 outputs: [
                     LVSArtifactRecord(
                         id: "report",
                         kind: .report,
                         path: reportURL.lastPathComponent,
-                        byteCount: nil,
-                        sha256: nil
+                        byteCount: Int(try hasher.byteCount(fileAt: reportURL)),
+                        sha256: try hasher.sha256(fileAt: reportURL)
                     ),
                     LVSArtifactRecord(
                         id: "log",
@@ -1697,6 +1720,13 @@ struct SignoffFlowStageExecutorTests {
                         path: logURL.lastPathComponent,
                         byteCount: nil,
                         sha256: nil
+                    ),
+                    LVSArtifactRecord(
+                        id: "lvs-correspondence",
+                        kind: .correspondence,
+                        path: correspondenceURL.lastPathComponent,
+                        byteCount: Int(try hasher.byteCount(fileAt: correspondenceURL)),
+                        sha256: try hasher.sha256(fileAt: correspondenceURL)
                     ),
                     LVSArtifactRecord(
                         id: "manifest",
@@ -1708,8 +1738,6 @@ struct SignoffFlowStageExecutorTests {
                 ],
                 diagnosticSummary: LVSDiagnosticSummary(infoCount: 0, warningCount: 0, errorCount: 0)
             )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
             return LVSExecutionResult(
@@ -1717,12 +1745,14 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native-gds",
                     toolName: "StandardLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 reportURL: reportURL,
-                artifactManifestURL: manifestURL
+                artifactManifestURL: manifestURL,
+                correspondenceURL: correspondenceURL
             )
         }
     }
@@ -1735,22 +1765,41 @@ struct SignoffFlowStageExecutorTests {
             let reportURL = workingDirectory.appending(path: "lvs-report.json")
             let manifestURL = workingDirectory.appending(path: "lvs-artifact-manifest.json")
             let logURL = workingDirectory.appending(path: "lvs.log")
+            let correspondenceURL = workingDirectory.appending(path: "lvs-correspondence.json")
             try "report".write(to: reportURL, atomically: true, encoding: .utf8)
             try "log".write(to: logURL, atomically: true, encoding: .utf8)
+            let correspondenceJSON = """
+            {
+              "schemaVersion": 2,
+              "deviceMappings": [],
+              "netMappings": [],
+              "portMappings": [],
+              "unmatchedLayoutObjectIDs": [],
+              "unmatchedSchematicObjectIDs": [],
+              "ambiguousLayoutObjectIDs": [],
+              "layoutSourceReferences": []
+            }
+            """
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try correspondenceJSON.write(to: correspondenceURL, atomically: true, encoding: .utf8)
+            let hasher = XcircuiteHasher()
             let manifest = LVSArtifactManifest(
                 generatedAt: "2026-06-29T00:00:00Z",
                 backendID: "native",
                 toolName: "DevicePolicyReportLVSStub",
-                passed: true,
-                completed: true,
+                executionStatus: .completed,
+                verdict: .match,
+                readiness: .ready,
+                blockingReasons: [],
                 inputs: [],
                 outputs: [
                     LVSArtifactRecord(
                         id: "report",
                         kind: .report,
                         path: reportURL.lastPathComponent,
-                        byteCount: nil,
-                        sha256: nil
+                        byteCount: Int(try hasher.byteCount(fileAt: reportURL)),
+                        sha256: try hasher.sha256(fileAt: reportURL)
                     ),
                     LVSArtifactRecord(
                         id: "log",
@@ -1758,6 +1807,13 @@ struct SignoffFlowStageExecutorTests {
                         path: logURL.lastPathComponent,
                         byteCount: nil,
                         sha256: nil
+                    ),
+                    LVSArtifactRecord(
+                        id: "lvs-correspondence",
+                        kind: .correspondence,
+                        path: correspondenceURL.lastPathComponent,
+                        byteCount: Int(try hasher.byteCount(fileAt: correspondenceURL)),
+                        sha256: try hasher.sha256(fileAt: correspondenceURL)
                     ),
                     LVSArtifactRecord(
                         id: "manifest",
@@ -1770,8 +1826,6 @@ struct SignoffFlowStageExecutorTests {
                 diagnosticSummary: LVSDiagnosticSummary(infoCount: 0, warningCount: 0, errorCount: 0),
                 devicePolicyReport: devicePolicyReport
             )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
             return LVSExecutionResult(
@@ -1779,13 +1833,15 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native",
                     toolName: "DevicePolicyReportLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 devicePolicyReport: devicePolicyReport,
                 reportURL: reportURL,
-                artifactManifestURL: manifestURL
+                artifactManifestURL: manifestURL,
+                correspondenceURL: correspondenceURL
             )
         }
     }
@@ -1811,8 +1867,10 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-23T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "CancellingLVSStub",
-                passed: true,
-                completed: true,
+                executionStatus: .completed,
+                verdict: .match,
+                readiness: .ready,
+                blockingReasons: [],
                 inputs: [],
                 outputs: [
                     LVSArtifactRecord(
@@ -1848,8 +1906,9 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native-gds",
                     toolName: "CancellingLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 reportURL: reportURL,
@@ -1896,8 +1955,10 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "UnindexedManifestOutputLVSStub",
-                passed: true,
-                completed: true,
+                executionStatus: .completed,
+                verdict: .match,
+                readiness: .ready,
+                blockingReasons: [],
                 inputs: [],
                 outputs: [
                     LVSArtifactRecord(
@@ -1940,8 +2001,9 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native-gds",
                     toolName: "UnindexedManifestOutputLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 reportURL: reportURL,
@@ -1960,8 +2022,10 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "DuplicateArtifactPathLVSStub",
-                passed: true,
-                completed: true,
+                executionStatus: .completed,
+                verdict: .match,
+                readiness: .ready,
+                blockingReasons: [],
                 inputs: [],
                 outputs: [
                     LVSArtifactRecord(
@@ -1990,8 +2054,9 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native-gds",
                     toolName: "DuplicateArtifactPathLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 reportURL: manifestURL,
@@ -2020,8 +2085,9 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native-gds",
                     toolName: "EscapingArtifactLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 reportURL: reportURL,
@@ -2045,8 +2111,9 @@ struct SignoffFlowStageExecutorTests {
                 result: LVSResult(
                     backendID: "native-gds",
                     toolName: "ExternalManifestLVSStub",
-                    success: true,
-                    completed: true,
+                    executionStatus: .completed,
+                    verdict: .match,
+                    readiness: .ready,
                     logPath: logURL.path(percentEncoded: false)
                 ),
                 reportURL: reportURL,

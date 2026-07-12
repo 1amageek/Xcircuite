@@ -584,6 +584,9 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         summary: DRCRunSummaryReport,
         gateStatus: FlowGateStatus
     ) -> XcircuiteEvaluationStatus {
+        if gateStatus == .blocked {
+            return .blocked
+        }
         if !summary.summary.completed || gateStatus == .incomplete {
             return .inconclusive
         }
@@ -601,6 +604,8 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
             .rejected
         case .incomplete:
             .inconclusive
+        case .blocked:
+            .blocked
         }
     }
 
@@ -628,6 +633,8 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
             0.5
         case .failed:
             0
+        case .blocked:
+            0
         }
     }
 
@@ -648,6 +655,8 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         case .incomplete:
             return 0.5
         case .failed:
+            return 1
+        case .blocked:
             return 1
         }
     }

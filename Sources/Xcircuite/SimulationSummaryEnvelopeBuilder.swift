@@ -513,6 +513,8 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
             .rejected
         case .incomplete:
             .inconclusive
+        case .blocked:
+            .blocked
         }
     }
 
@@ -525,6 +527,8 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         case .incomplete:
             0.5
         case .failed:
+            0
+        case .blocked:
             0
         }
     }

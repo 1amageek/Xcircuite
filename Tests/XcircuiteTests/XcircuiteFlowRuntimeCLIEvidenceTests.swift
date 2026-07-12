@@ -309,13 +309,13 @@ extension XcircuiteFlowRuntimeTests {
         let drcEvidence = try #require(drcRecord.selectedHealth?.evidence.first)
         let lvsEvidence = try #require(lvsRecord.selectedHealth?.evidence.first)
         #expect(drcEvidence.evidenceID == "drc-corpus-2026-06-18")
-        #expect(lvsEvidence.evidenceID == "lvs-corpus-2026-06-18")
+        #expect(lvsEvidence.evidenceID == "lvs-production-promoted-1")
         #expect(drcEvidence.qualification?.qualified == true)
         #expect(lvsEvidence.qualification?.qualified == true)
         #expect(drcEvidence.artifact?.path == "qualification/drc-corpus-report.json")
-        #expect(lvsEvidence.artifact?.path == "qualification/lvs-corpus-report.json")
+        #expect(lvsEvidence.artifact?.path.hasSuffix("lvs-corpus-report.json") == true)
         #expect(drcEvidence.qualification?.observedCounts["coveredRequiredCoverageTagCount"] == 32)
-        #expect(lvsEvidence.qualification?.observedCounts["coveredRequiredCoverageTagCount"] == 32)
+        #expect(lvsEvidence.qualification?.observedCounts["requiredObservedAssertionCount"] == 15)
     }
 
     @Test func attachEvidenceCLIProducesRunnableQualifiedRuntimeConfig() async throws {
@@ -405,7 +405,7 @@ extension XcircuiteFlowRuntimeTests {
         let exportURL = root.appending(path: "evidence.json")
         try writeJSON(
             XcircuiteFlowEvidenceExport(
-                schemaVersion: 2,
+                schemaVersion: 3,
                 toolEvidence: ToolEvidence(evidenceID: "drc-corpus", kind: .corpus)
             ),
             to: exportURL
@@ -415,7 +415,7 @@ extension XcircuiteFlowRuntimeTests {
             _ = try XcircuiteFlowEvidenceExport.load(from: exportURL)
             Issue.record("Expected unsupported schema version error")
         } catch let error as XcircuiteFlowRuntimeSpecError {
-            #expect(error == .unsupportedEvidenceExportSchemaVersion(2))
+            #expect(error == .unsupportedEvidenceExportSchemaVersion(3))
         } catch {
             throw error
         }

@@ -246,14 +246,14 @@ struct StageArtifactEnvelopeBuilder: Sendable {
                     confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence)
                 ),
             ]
-        case .failed, .incomplete:
+        case .failed, .incomplete, .blocked:
             return [
                 XcircuiteFeedbackSignal(
                     signalID: "\(artifactID)-repair-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "\(domain)-gate-status",
                     routingLevel: .structureMapping,
-                    severity: gateStatus == .failed ? .error : .warning,
+                    severity: gateStatus == .failed || gateStatus == .blocked ? .error : .warning,
                     summary: "\(domain.uppercased()) residual should be inspected before planning repair.",
                     residual: residual(from: gateStatus),
                     affectedArtifactIDs: [artifactID],
@@ -295,6 +295,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
             .rejected
         case .incomplete:
             .inconclusive
+        case .blocked:
+            .blocked
         }
     }
 
@@ -308,6 +310,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
             0.5
         case .failed:
             0
+        case .blocked:
+            0
         }
     }
 
@@ -318,6 +322,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         case .incomplete:
             0.5
         case .failed:
+            1
+        case .blocked:
             1
         }
     }

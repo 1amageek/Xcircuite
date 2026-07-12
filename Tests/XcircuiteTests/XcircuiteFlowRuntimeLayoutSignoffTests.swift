@@ -733,6 +733,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(summary.summary.corners.first?.topNets.isEmpty == false)
         #expect(pexStage.artifacts.contains { $0.kind == .parasitic && $0.format == .spef })
         #expect(pexStage.artifacts.contains { $0.kind == .parasitic && $0.format == .json })
+        #expect(pexStage.artifacts.contains { $0.kind == .parasitic && $0.format == .spice })
     }
 
     @Test func runtimeFeedsLayoutCommandOASISExportIntoPEXStage() async throws {

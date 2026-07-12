@@ -161,6 +161,10 @@ extension XcircuiteFlowRuntimeTests {
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
+                        processProfile: PEXProcessProfileReference(
+                            primaryDeckPath: "tech/tt.rc",
+                            cornerDeckPaths: ["tt": "tech/tt.rc"]
+                        ),
                         backendSelection: PEXBackendSelection(backendID: "magic"),
                         tool: qualifiedToolSpec(level: .smokeChecked)
                     )
@@ -178,6 +182,73 @@ extension XcircuiteFlowRuntimeTests {
         #expect(descriptor.trustProfile.level == .smokeChecked)
         #expect(descriptor.capabilities.contains { $0.operationID == "run-pex" })
         #expect(runtime.healthResults["pex-magic"]?.status == .passed)
+    }
+
+    @Test func runtimeSpecRoundTripsPEXCornerTechnologyOverrides() throws {
+        let baseTechnology = makePEXTechnology()
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
+                        stageID: "009-pex",
+                        layoutPath: "layout/top.gds",
+                        layoutFormat: .gds,
+                        sourceNetlistPath: "circuits/top.spice",
+                        topCell: "top",
+                        corners: [PEXCorner(id: "tt"), PEXCorner(id: "ss")],
+                        technology: .inline(baseTechnology),
+                        technologyByCorner: ["ss": .inline(baseTechnology)],
+                        backendSelection: PEXBackendSelection(backendID: "magic")
+                    )
+                ),
+            ]
+        )
+
+        let decoded = try JSONDecoder().decode(
+            XcircuiteFlowRuntimeSpec.self,
+            from: try JSONEncoder().encode(spec)
+        )
+        try decoded.validate()
+        guard case .pex(let pex) = decoded.executors[0] else {
+            Issue.record("Expected PEX executor")
+            return
+        }
+        #expect(pex.technologyByCorner.keys.sorted() == ["ss"])
+        #expect(pex.technologyByCorner["ss"] == .inline(baseTechnology))
+    }
+
+    @Test func runtimeSpecRejectsPEXCornerTechnologyForUndeclaredCorner() throws {
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
+                        stageID: "009-pex",
+                        layoutPath: "layout/top.gds",
+                        layoutFormat: .gds,
+                        sourceNetlistPath: "circuits/top.spice",
+                        topCell: "top",
+                        corners: [PEXCorner(id: "tt")],
+                        technology: .inline(makePEXTechnology()),
+                        technologyByCorner: ["ss": .inline(makePEXTechnology())],
+                        backendSelection: PEXBackendSelection(backendID: "magic")
+                    )
+                ),
+            ]
+        )
+
+        do {
+            try spec.validate()
+            Issue.record("Expected undeclared corner technology to be rejected")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            guard case .missingExecutorInput(let stageID, let field) = error else {
+                Issue.record("Expected a missing executor input diagnostic")
+                return
+            }
+            #expect(stageID == "009-pex")
+            #expect(field.contains("technologyByCorner[ss]"))
+        } catch {
+            throw error
+        }
     }
 
     @Test func runtimeSpecRejectsQualifiedMockPEXExecutor() throws {

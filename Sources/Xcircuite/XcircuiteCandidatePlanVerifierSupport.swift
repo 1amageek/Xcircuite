@@ -36,6 +36,8 @@ struct NativeLVSExecutionSpec: Sendable, Hashable {
     var schematicNetlistRef: XcircuitePlanningReference
     var topCell: String
     var technologyRef: XcircuitePlanningReference?
+    var extractionDeckRef: XcircuitePlanningReference?
+    var processProfileID: String?
     var waiverRef: XcircuitePlanningReference?
     var modelEquivalenceRef: XcircuitePlanningReference?
     var terminalEquivalenceRef: XcircuitePlanningReference?
@@ -70,6 +72,9 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
     var schematicNetlistRefID: String?
     var technologyRef: String?
     var technologyRefID: String?
+    var extractionDeckRef: String?
+    var extractionDeckRefID: String?
+    var processProfileID: String?
     var waiverRef: String?
     var waiverRefID: String?
     var modelEquivalenceRef: String?
@@ -89,6 +94,9 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
         schematicNetlistRefID: String? = nil,
         technologyRef: String? = nil,
         technologyRefID: String? = nil,
+        extractionDeckRef: String? = nil,
+        extractionDeckRefID: String? = nil,
+        processProfileID: String? = nil,
         waiverRef: String? = nil,
         waiverRefID: String? = nil,
         modelEquivalenceRef: String? = nil,
@@ -107,6 +115,9 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
         self.schematicNetlistRefID = schematicNetlistRefID
         self.technologyRef = technologyRef
         self.technologyRefID = technologyRefID
+        self.extractionDeckRef = extractionDeckRef
+        self.extractionDeckRefID = extractionDeckRefID
+        self.processProfileID = processProfileID
         self.waiverRef = waiverRef
         self.waiverRefID = waiverRefID
         self.modelEquivalenceRef = modelEquivalenceRef
@@ -127,6 +138,9 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
         schematicNetlistRefID = other.schematicNetlistRefID ?? schematicNetlistRefID
         technologyRef = other.technologyRef ?? technologyRef
         technologyRefID = other.technologyRefID ?? technologyRefID
+        extractionDeckRef = other.extractionDeckRef ?? extractionDeckRef
+        extractionDeckRefID = other.extractionDeckRefID ?? extractionDeckRefID
+        processProfileID = other.processProfileID ?? processProfileID
         waiverRef = other.waiverRef ?? waiverRef
         waiverRefID = other.waiverRefID ?? waiverRefID
         modelEquivalenceRef = other.modelEquivalenceRef ?? modelEquivalenceRef

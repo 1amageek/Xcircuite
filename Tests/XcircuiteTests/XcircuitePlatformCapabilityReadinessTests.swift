@@ -765,7 +765,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         let ruleSeedImport = try #require(drc.operations.first {
             $0.operationID == "drc.import-foundry-rule-seed"
         })
-        #expect(ruleSeedImport.maturity == "implemented")
+        #expect(ruleSeedImport.maturity == "available-unqualified")
         #expect(ruleSeedImport.producedArtifacts.contains("layout-tech-database"))
         #expect(ruleSeedImport.producedArtifacts.contains("drc-foundry-rule-import-report"))
         #expect(ruleSeedImport.verificationGates.contains("deck-readiness"))

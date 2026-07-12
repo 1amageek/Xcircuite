@@ -296,6 +296,28 @@ extension XcircuiteCandidatePlanVerifierTests {
         let top = LayoutCell(
             name: "TOP",
             shapes: routes,
+            labels: [
+                LayoutLabel(
+                    text: "in",
+                    position: try pin("gate", in: nmosPlaced).position,
+                    layer: try pin("gate", in: nmosPlaced).layer
+                ),
+                LayoutLabel(
+                    text: "out",
+                    position: try pin("drain", in: nmosPlaced).position,
+                    layer: try pin("drain", in: nmosPlaced).layer
+                ),
+                LayoutLabel(
+                    text: "vss",
+                    position: try pin("source", in: nmosPlaced).position,
+                    layer: try pin("source", in: nmosPlaced).layer
+                ),
+                LayoutLabel(
+                    text: "vdd",
+                    position: try pin("source", in: pmosPlaced).position,
+                    layer: try pin("source", in: pmosPlaced).layer
+                ),
+            ],
             instances: [
                 LayoutInstance(cellID: nmos.id, name: "XM2", transform: nmosTransform),
                 LayoutInstance(cellID: pmos.id, name: "XM1", transform: pmosTransform),
@@ -396,6 +418,23 @@ extension XcircuiteCandidatePlanVerifierTests {
             name: "TOP",
             shapes: m2Routes.flatMap(\.shapes) + sourceBulkRoutes,
             vias: m2Routes.flatMap(\.vias),
+            labels: [
+                LayoutLabel(
+                    text: "d",
+                    position: try pinPosition("drain", in: nmos, transform: baseTransform),
+                    layer: m2
+                ),
+                LayoutLabel(
+                    text: "g",
+                    position: try pinPosition("gate", in: nmos, transform: baseTransform),
+                    layer: m2
+                ),
+                LayoutLabel(
+                    text: "s",
+                    position: try pinPosition("source", in: nmos, transform: baseTransform),
+                    layer: m2
+                ),
+            ],
             instances: [
                 LayoutInstance(
                     cellID: nmos.id,

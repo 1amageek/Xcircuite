@@ -251,7 +251,8 @@ technology defaults were active for DRC/LVS/PEX.
 | `technologyCatalogPath` | string or null | no | Runtime path to a technology catalog JSON file; when project root is available, readiness validation loads it and verifies matching PDK/catalog entry plus required files |
 | `drcTechnologyInput` | `XcircuiteFlowInputReference` or null | no | Default DRC technology input when a `nativeDRC` stage omits `technologyPath` / `technologyInput` |
 | `lvsTechnologyInput` | `XcircuiteFlowInputReference` or null | no | Default LVS technology input when a `nativeLVS` stage omits `technologyPath` / `technologyInput` |
-| `pexTechnology` | `XcircuitePEXTechnologySpec` or null | no | Default PEX technology input when a `mockPEX` stage omits `technology` |
+| `pexTechnology` | `XcircuitePEXTechnologySpec` or null | no | Default PEX technology input when a PEX stage omits `technology` |
+| `pexTechnologyByCorner` | object of `XcircuitePEXTechnologySpec` | no | Default per-corner PEX technology overrides keyed by declared corner ID |
 | `metadata` | object or null | no | Additional string metadata for provenance |
 
 Technology catalog fields:
@@ -552,13 +553,21 @@ PEX-specific fields:
 | `sourceNetlistFormat` | string | no | Source netlist format, default `spice` |
 | `topCell` | string | yes | Top cell name |
 | `corners` | array | yes | PEX corner definitions |
-| `technology` | `XcircuitePEXTechnologySpec` or null | conditional | PEX technology input; supports `jsonFile`, `inline`, and `input`. Required when `toolchainProfile.pexTechnology` is absent |
+| `technology` | `XcircuitePEXTechnologySpec` or null | conditional | Base PEX technology input; supports `jsonFile`, `inline`, and `input`. Required when `toolchainProfile.pexTechnology` is absent |
+| `technologyByCorner` | object of `XcircuitePEXTechnologySpec` | no | Per-corner technology overrides keyed by an exact declared corner ID; stage-local values override toolchain-profile values |
+| `processProfile` | `PEXProcessProfileReference` or null | no | Optional Magic/process profile; relative PDK root and deck paths resolve against the project root, including distinct corner decks |
 | `options` | object or null | no | PEX engine options |
 
 Exactly one PEX layout input must be provided across `layoutPath` and
 `layoutInput`. Exactly one source netlist input must be provided across
 `sourceNetlistPath` and `sourceNetlistInput`. PEX technology must be supplied by
 the stage-local `technology` field or by `toolchainProfile.pexTechnology`.
+Per-corner process overrides may be supplied with `technologyByCorner` or
+`toolchainProfile.pexTechnologyByCorner`; these are carried into
+`PEXRunRequest.technologyByCorner` and captured as immutable run inputs.
+When a backend needs explicit process decks, `processProfile.cornerDeckPaths`
+is resolved against the project root and carried into
+`PEXRunRequest.processProfile`.
 `technology.input` and `toolchainProfile.pexTechnology.input` are resolved with
 the same `XcircuiteFlowInputReference` contract, so a flow can pass technology
 JSON from a project file or a prior stage artifact without changing the PEX
@@ -578,10 +587,17 @@ still come from `PEXRunResult.status` and `PEXArtifactCompletenessReport`.
 The companion `evidence/pex-summary-envelope.json` stores channels including
 `pex-artifact-completeness-status`, `pex-failed-corner-count`,
 `pex-total-capacitance-f`, `pex-total-resistance-ohm`,
+`pex-multi-corner-comparison-basis`,
 `pex-corner-<index>-<corner>-parasitic-ir-present`, and
 `pex-corner-<index>-<corner>-top-net-<index>-<net>-total-capacitance-f`.
 Artifact/completeness gaps produce `structureMapping` feedback, while dominant
 top-net signals are `localSurface` evidence for post-layout metric comparison.
+The optional evaluation criterion
+`pex-multi-corner-shared-technology` is rejected when the basis is
+`perCornerTechnology` or `unknown`; this does not fail ordinary PEX readiness,
+but emits a warning that foundry correlation evidence is required before using
+the spread as a PVT signoff claim. Even `sharedTechnology` is a scope signal,
+not proof of foundry qualification.
 
 ## XcircuiteFlowToolSpec
 
