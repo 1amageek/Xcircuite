@@ -13,7 +13,9 @@ tool invocation itself (those stay in `CoreSpice` / `DRCEngine` / `LVSEngine` /
 
 ## License
 
-Xcircuite is released under the [MIT License](LICENSE).
+Xcircuite is not currently granted an open-source license. Copyright remains
+with 1amageek; reuse, redistribution, and sublicensing require a separate
+written grant until a project license is published.
 
 ## Development checkout
 
