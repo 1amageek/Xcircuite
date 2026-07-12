@@ -1,0 +1,153 @@
+Xcircuite Commercial License 1.0
+
+Copyright (c) 2026 1amageek
+
+SPDX-License-Identifier: LicenseRef-Xcircuite-Commercial-1.0
+
+This license is a source-available license for Xcircuite. It is not an
+Open Source license and it does not grant a general royalty-free commercial
+license.
+
+1. Definitions
+
+"Licensor" means 1amageek.
+
+"Software" means the Xcircuite source code, binaries, command-line tools,
+documentation, schemas, fixtures, and other materials distributed in this
+repository by the Licensor, excluding Third-Party Components.
+
+"Licensee" means the person or legal entity exercising rights under this
+license.
+
+"Commercial License Agreement" means a written agreement, order form, or
+other written authorization issued or accepted by the Licensor that grants
+Commercial Use of a specified version or distribution of the Software.
+
+"Commercial Use" means use of the Software in a production, operational,
+revenue-generating, customer-facing, or externally delivered workflow. It
+also includes embedding the Software in a product or service made available
+to a third party.
+
+"Production Use" means execution of the Software in a live or operational
+environment used to perform work, deliver results, or support a business
+process, whether or not that environment is directly exposed to a customer.
+
+"Evaluation Use" means internal evaluation, research, testing, security
+review, and development work that does not provide the Software's functionality
+to external users and does not place the Software in a production workflow.
+
+"Licensee Application" means an application or service developed by Licensee
+that uses the Software as an internal component and whose primary purpose is
+not to offer the Software itself as a standalone product or service.
+
+"Competitive Service" means a product or service whose primary purpose is to
+provide semiconductor design flow orchestration, project runtime, artifact
+ledger, or equivalent EDA workflow functionality substantially similar to the
+Software.
+
+"Third-Party Components" means code, data, tools, or other materials that are
+identified as third-party or are obtained from a dependency listed in the
+package manifest. Third-Party Components are governed by their own licenses.
+
+2. Ownership
+
+The Software is licensed, not sold. The Licensor and its licensors retain all
+right, title, and interest in and to the Software, including all copyrights,
+patents, trade secrets, and other intellectual property rights. No rights are
+granted except those expressly stated in this license or in a Commercial
+License Agreement.
+
+3. Evaluation grant
+
+Subject to compliance with this license, the Licensor grants Licensee a
+limited, worldwide, non-exclusive, non-transferable, royalty-free license to
+copy, inspect, compile, modify, and use the Software solely for Evaluation
+Use. Licensee may make reasonable internal copies for that purpose.
+
+The Evaluation grant does not permit Commercial Use, Production Use,
+redistribution, sublicensing, resale, or provision of the Software's
+functionality to a third party.
+
+4. Commercial grant
+
+Commercial Use requires a valid Commercial License Agreement. The Commercial
+License Agreement controls the permitted versions, users, sites, deployment
+model, distribution rights, fees, support, and term. Unless the Commercial
+License Agreement expressly states otherwise, it grants Licensee only the
+right to use and modify the Software internally and to distribute compiled
+portions embedded in a Licensee Application to the Licensee Application's
+authorized users.
+
+5. Restrictions
+
+Licensee must not, directly or indirectly:
+
+* distribute or publish the Software's source code;
+* distribute the Software as a standalone library, framework, command-line
+  tool, or product;
+* sublicense, sell, rent, lease, lend, transfer, or resell the Software or
+  rights to the Software;
+* provide the Software or substantially similar functionality as a hosted,
+  managed, or service-bureau offering to a third party;
+* use the Software to operate or develop a Competitive Service without a
+  Commercial License Agreement that expressly permits that use;
+* remove or obscure copyright, license, or attribution notices;
+* use the Licensor's name, trademarks, or branding to imply endorsement; or
+* circumvent a license key, usage limit, technical control, or contractual
+  restriction.
+
+These restrictions do not limit rights that cannot lawfully be restricted or
+rights expressly granted in a Commercial License Agreement.
+
+6. Modifications and notices
+
+Licensee may create and use modifications under the applicable grant. A
+modification must retain this license and all existing copyright and license
+notices in source distributions permitted by a Commercial License Agreement.
+Licensee must clearly identify material modifications in distributed
+Licensee Applications when required by the Commercial License Agreement.
+
+7. Contributions
+
+Submitting a contribution to the Software does not change the license of the
+contribution or grant the Licensor additional rights unless the contribution
+is accompanied by a separate written contribution agreement accepted by the
+Licensor.
+
+8. Third-party components
+
+This license does not replace or modify the licenses of Third-Party Components.
+Licensee is responsible for complying with those licenses. The Software's
+package manifest and source documentation identify integration boundaries, but
+they do not transfer ownership of third-party materials to the Licensor.
+
+9. Termination
+
+The Evaluation grant terminates automatically when Licensee materially
+breaches this license and does not cure the breach within thirty days after
+written notice. A Commercial License Agreement may provide different
+termination terms. Upon termination, Licensee must stop the affected use and
+delete or return copies as required by the applicable agreement, except for
+copies retained solely where required by law.
+
+10. Disclaimer and limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE IS PROVIDED "AS IS" AND
+WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY,
+INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+TITLE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE
+LICENSOR SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS,
+REVENUE, DATA, OR BUSINESS INTERRUPTION, ARISING FROM OR RELATING TO THE
+SOFTWARE. A Commercial License Agreement may provide additional warranties,
+indemnities, or support terms.
+
+11. General
+
+This license is governed by the terms of the applicable Commercial License
+Agreement for Commercial Use. For Evaluation Use, no additional governing-law
+or venue term is granted by this license. If a provision is held invalid, the
+remaining provisions remain in effect. No waiver is effective unless it is in
+writing and signed by the Licensor.
+
+For Commercial Use, contact 1amageek to obtain a Commercial License Agreement.

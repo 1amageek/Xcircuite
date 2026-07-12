@@ -13,9 +13,14 @@ tool invocation itself (those stay in `CoreSpice` / `DRCEngine` / `LVSEngine` /
 
 ## License
 
-Xcircuite is not currently granted an open-source license. Copyright remains
-with 1amageek; reuse, redistribution, and sublicensing require a separate
-written grant until a project license is published.
+Xcircuite is source-available under the
+[Xcircuite Commercial License 1.0](LICENSE). The public repository grants
+Evaluation Use only. Production use, commercial product integration,
+customer-facing deployment, redistribution, and sublicensing require a
+separate written Commercial License Agreement with 1amageek.
+
+See [the licensing model](docs/licensing.md) for the rights matrix and the
+distinction between Xcircuite code and Third-Party Components.
 
 ## Development checkout
 
