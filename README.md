@@ -15,6 +15,14 @@ tool invocation itself (those stay in `CoreSpice` / `DRCEngine` / `LVSEngine` /
 
 Xcircuite is released under the [MIT License](LICENSE).
 
+## Development checkout
+
+The package manifest currently resolves the LSI engine packages through sibling
+path dependencies (`../CoreSpice`, `../DRCEngine`, `../LVSEngine`, and related
+packages). Build and test the package from the LSI workspace until those
+dependencies have public versioned SwiftPM repositories. Xcircuite itself is
+publicly available at <https://github.com/1amageek/Xcircuite>.
+
 ## Stage executors
 
 | Type | Responsibility |
