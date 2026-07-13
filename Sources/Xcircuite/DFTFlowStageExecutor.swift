@@ -72,7 +72,7 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                 artifactID: "dft-foundation-evidence",
                 context: context
             )
-            let persistedArtifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
+            let persistedArtifacts = result.artifacts
                 + [resultArtifact, foundationArtifact]
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: persistedArtifacts,

@@ -209,7 +209,7 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
                     context: context
                 )
                 artifacts.append(buildRequestArtifact)
-                artifacts.append(contentsOf: FoundationFlowProjection.legacyReferences(from: buildRequest.evidenceArtifacts))
+                artifacts.append(contentsOf: buildRequest.evidenceArtifacts)
                 artifacts.append(processEvidenceArtifact)
             }
 
@@ -277,16 +277,15 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
     private func reference(
         for url: URL,
         artifactID: String,
-        kind: XcircuiteFileKind,
+        kind: ArtifactKind,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: kind,
-            format: .json,
-            producedByRunID: context.runID
+            format: ArtifactFormat.json
         )
     }
 
@@ -294,9 +293,9 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
         _ value: Value,
         fileName: String,
         artifactID: String,
-        kind: XcircuiteFileKind,
+        kind: ArtifactKind,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -315,7 +314,7 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
     private func persistBlocked(
         correlation: DFTOracleCorrelationResult,
         diagnostics: [FlowDiagnostic],
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         context: FlowExecutionContext
     ) throws -> FlowStageResult {
         let resultArtifact = try persist(
