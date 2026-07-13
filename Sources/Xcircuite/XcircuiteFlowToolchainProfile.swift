@@ -105,6 +105,8 @@ private extension XcircuiteFlowInputReference {
         switch self {
         case .path(let path):
             .path(path)
+        case .artifact(let artifact):
+            .artifact(artifact)
         case .stageArtifact(let artifact):
             .stageArtifact(
                 FlowToolchainStageArtifactSelectorRecord(

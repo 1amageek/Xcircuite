@@ -1,0 +1,13 @@
+{
+  "layers": {
+    "M1": {
+      "gdsDatatype": 0,
+      "gdsLayer": 1
+    },
+    "VIA1": {
+      "gdsDatatype": 0,
+      "gdsLayer": 3
+    }
+  },
+  "schemaVersion": 1
+}

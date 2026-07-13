@@ -70,6 +70,8 @@ public extension XcircuiteFlowStageExecutorSpec {
             spec.stageID
         case .pdkStandardView(let spec):
             spec.stageID
+        case .pdkRuleDeck(let spec):
+            spec.stageID
         case .pdkOracle(let spec):
             spec.stageID
         case .pdkQualification(let spec):
@@ -148,6 +150,9 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .pdkStandardView(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .pdkStandardView(spec)
+        case .pdkRuleDeck(var spec):
+            spec.tool = spec.tool.attachingEvidence(evidence)
+            return .pdkRuleDeck(spec)
         case .pdkOracle(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .pdkOracle(spec)

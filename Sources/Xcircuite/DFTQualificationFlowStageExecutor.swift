@@ -152,11 +152,12 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
                 )
             }
 
-            let provenance = try DFTQualificationGate().evaluate(
+            var provenance = try DFTQualificationGate().evaluate(
                 qualificationEvidence,
                 expectedProcessID: corpus.processID,
                 expectedPDKDigest: corpus.pdkDigest
             )
+            provenance.requestDigests = corpus.cases.map(\.requestDigest).sorted()
             let provenanceArtifact = try persist(
                 provenance,
                 fileName: "dft-qualification-provenance.json",

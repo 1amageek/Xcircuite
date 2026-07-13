@@ -400,6 +400,9 @@ struct ReleaseFlowStageExecutorTests {
         #expect(manifest.artifacts.contains { $0.artifactID == "release-qualification-result" })
         #expect(manifest.artifacts.contains { $0.artifactID == "release-tapeout-result" })
         #expect(manifest.artifacts.contains { $0.artifactID == "release-profile-eligibility-result" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "approval-review-release-signoff" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "approval-review-release-qualification" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "approval-review-release-tapeout" })
         #expect(manifest.artifacts.allSatisfy { $0.producedByRunID == nil || $0.producedByRunID == runID })
     }
 

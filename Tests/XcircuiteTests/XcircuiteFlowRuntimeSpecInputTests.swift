@@ -76,14 +76,33 @@ extension XcircuiteFlowRuntimeTests {
             processProfileID: "fixture",
             deckDigest: String(repeating: "b", count: 64)
         )
+        let releaseRequestInput = digestBoundInput("electrical/signoff-request.json")
+        let releasePolicyInput = digestBoundInput("electrical/release-policy.json")
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .electricalStandardLayoutImport(
                     XcircuiteFlowStageExecutorSpec.ElectricalStandardLayoutImport(
-                        layoutInput: .path("layout/top.def"),
+                        layoutInput: digestBoundInput(
+                            "layout/top.def",
+                            kind: .layout,
+                            format: .def
+                        ),
                         layoutFormat: .def,
-                        technologyInput: .path("tech/process.lef"),
-                        connectivityInput: .path("layout/top.def"),
+                        technologyInput: digestBoundInput(
+                            "tech/process.lef",
+                            kind: .technology,
+                            format: .lef
+                        ),
+                        technologyLayerMappingInput: digestBoundInput(
+                            "tech/process-layer-map.json",
+                            kind: .technology,
+                            format: .json
+                        ),
+                        connectivityInput: digestBoundInput(
+                            "layout/top.def",
+                            kind: .layout,
+                            format: .def
+                        ),
                         topCellName: "top"
                     )
                 ),
@@ -102,7 +121,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
                 .electricalSignoffReleaseGate(
                     XcircuiteFlowStageExecutorSpec.ElectricalSignoffReleaseGate(
-                        requestInput: .path("electrical/signoff-request.json"),
+                        requestInput: releaseRequestInput,
                         runResultInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
                                 stageID: "electrical-signoff",
@@ -127,7 +146,10 @@ extension XcircuiteFlowRuntimeTests {
                                 format: .json
                             )
                         ),
-                        policyInput: .path("electrical/release-policy.json")
+                        policyInput: releasePolicyInput,
+                        processQualificationEvidenceInput: digestBoundInput(
+                            "electrical/process-qualification.json"
+                        )
                     )
                 ),
             ]
@@ -148,11 +170,67 @@ extension XcircuiteFlowRuntimeTests {
         #expect(signoff.axes == [.powerIntegrity, .erc])
         #expect(qualification.specPath == "electrical/qualification-spec.json")
         #expect(qualification.oraclePath == "electrical/oracle.json")
-        #expect(releaseGate.policyInput == .path("electrical/release-policy.json"))
+        #expect(releaseGate.requestInput == releaseRequestInput)
+        #expect(releaseGate.policyInput == releasePolicyInput)
+        #expect(releaseGate.processQualificationEvidenceInput == digestBoundInput("electrical/process-qualification.json"))
         #expect(decoded.executors[0].makeDescriptor().toolID == "native-electrical-standard-layout-import")
         #expect(decoded.executors[1].makeDescriptor().toolID == "native-electrical-signoff")
         #expect(decoded.executors[2].makeDescriptor().toolID == "native-electrical-signoff-qualification")
         #expect(decoded.executors[3].makeDescriptor().toolID == "native-electrical-signoff-release-gate")
+    }
+
+    @Test func runtimeSpecRejectsUnboundElectricalReleaseGateInputs() throws {
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .electricalSignoffReleaseGate(
+                    XcircuiteFlowStageExecutorSpec.ElectricalSignoffReleaseGate(
+                        requestInput: .path("request.json"),
+                        runResultInput: .path("run-result.json"),
+                        qualificationSpecInput: .path("qualification-spec.json"),
+                        qualificationReportInput: .path("qualification-report.json"),
+                        policyInput: .path("policy.json")
+                    )
+                ),
+            ]
+        )
+
+        do {
+            try spec.validate()
+            Issue.record("Expected digest-bound release gate input validation error")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            #expect(error == .missingExecutorInput(
+                stageID: "electrical-signoff.release-gate",
+                field: "requestInput must be a digest-bound artifact or stageArtifact reference"
+            ))
+        } catch {
+            throw error
+        }
+    }
+
+    @Test func runtimeSpecRejectsUnboundElectricalStandardLayoutInputs() throws {
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .electricalStandardLayoutImport(
+                    XcircuiteFlowStageExecutorSpec.ElectricalStandardLayoutImport(
+                        layoutInput: .path("layout/top.def"),
+                        layoutFormat: .def,
+                        technologyInput: .path("tech/process.lef")
+                    )
+                ),
+            ]
+        )
+
+        do {
+            try spec.validate()
+            Issue.record("Expected digest-bound standard-layout input validation error")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            #expect(error == .missingExecutorInput(
+                stageID: "electrical-signoff.standard-layout-import",
+                field: "layoutInput must be a digest-bound artifact or stageArtifact reference"
+            ))
+        } catch {
+            throw error
+        }
     }
 
     @Test func runtimeSpecRoundTripsLogicSynthesisAndEquivalenceStages() throws {
@@ -1376,6 +1454,20 @@ extension XcircuiteFlowRuntimeTests {
             healthStatus: .passed,
             evidence: evidenceSupporting(level: level)
         )
+    }
+
+    private func digestBoundInput(
+        _ path: String,
+        kind: XcircuiteFileKind = .report,
+        format: XcircuiteFileFormat = .json
+    ) -> XcircuiteFlowInputReference {
+        .artifact(XcircuiteFileReference(
+            path: path,
+            kind: kind,
+            format: format,
+            sha256: String(repeating: "a", count: 64),
+            byteCount: 0
+        ))
     }
 
     private func evidenceSupporting(level: ToolQualificationLevel) -> [ToolEvidence] {

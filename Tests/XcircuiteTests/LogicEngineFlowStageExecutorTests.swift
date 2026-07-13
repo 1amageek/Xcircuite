@@ -171,6 +171,72 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "logic-simulation-result" })
     }
 
+    @Test("simulation adapter preserves signed arithmetic semantics", .timeLimit(.minutes(1)))
+    func signedSimulationAdapter() async throws {
+        let root = try makeRoot(name: "logic-signed-simulation-adapter")
+        defer { removeRoot(root) }
+        let document = LogicDesignDocument(
+            topDesignName: "signed_adapter_top",
+            ports: [
+                LogicPort(name: "a", direction: .input, width: 4),
+                LogicPort(name: "b", direction: .input, width: 2),
+                LogicPort(name: "sum", direction: .output, width: 4),
+            ],
+            signals: [
+                LogicSignal(name: "a", width: 4, isSigned: true),
+                LogicSignal(name: "b", width: 2, isSigned: true),
+                LogicSignal(name: "sum", width: 4, isSigned: true),
+            ],
+            nodes: [LogicNode(
+                id: "signed-add",
+                kind: .add,
+                inputs: ["a", "b"],
+                outputs: ["sum"],
+                parameters: ["signed": "true"]
+            )]
+        )
+        let designReference = try writeJSON(document, name: "signed-design.json", root: root, kind: .netlist)
+        guard let designDigest = designReference.sha256 else {
+            throw LogicExecutionError.artifactDigestMismatch(designReference.path)
+        }
+        let design = LogicDesignReference(
+            artifact: designReference,
+            topDesignName: document.topDesignName,
+            designDigest: designDigest
+        )
+        let stimulus = LogicStimulusDocument(
+            events: [LogicStimulusEvent(time: 0, assignments: [
+                "a": try LogicVector(string: "1100"),
+                "b": try LogicVector(string: "01"),
+            ])],
+            assertions: [LogicAssertion(
+                id: "signed-sum",
+                time: 0,
+                signal: "sum",
+                expected: try LogicVector(string: "1101")
+            )]
+        )
+        let stimulusReference = try writeJSON(stimulus, name: "signed-stimulus.json", root: root, kind: .testPattern)
+        let request = LogicSimulationRequest(
+            runID: "logic-signed-simulation-adapter",
+            inputs: [designReference, stimulusReference],
+            design: design,
+            stimulus: stimulusReference
+        )
+        let requestPath = try writeRequest(request, name: "signed-simulation-request.json", root: root)
+        let context = try makeContext(root: root, runID: request.runID)
+        let result = try await LogicSimulationFlowStageExecutor(
+            requestInput: .path(requestPath)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.simulate", displayName: "Logic simulation"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        #expect(result.artifacts.contains { $0.artifactID == "logic-waveform" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-simulation-result" })
+    }
+
     @Test("synthesis adapter preserves equivalence-required provenance", .timeLimit(.minutes(1)))
     func synthesisAdapter() async throws {
         let root = try makeRoot(name: "logic-synthesis-adapter")

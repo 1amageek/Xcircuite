@@ -15,6 +15,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
     public let topCellName: String?
     private let layoutInput: XcircuiteFlowInputReference
     private let technologyInput: XcircuiteFlowInputReference?
+    private let technologyLayerMappingInput: XcircuiteFlowInputReference?
     private let connectivityInput: XcircuiteFlowInputReference?
     private let injectedTechnology: LayoutTechDatabase?
 
@@ -25,6 +26,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         layoutFormat: LayoutFileFormat,
         technologyInput: XcircuiteFlowInputReference? = nil,
         technologyFormat: LayoutFileFormat = .lef,
+        technologyLayerMappingInput: XcircuiteFlowInputReference? = nil,
         connectivityInput: XcircuiteFlowInputReference? = nil,
         connectivityFormat: LayoutFileFormat = .def,
         topCellName: String? = nil,
@@ -34,6 +36,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         self.toolID = toolID
         self.layoutFormat = layoutFormat
         self.technologyFormat = technologyFormat
+        self.technologyLayerMappingInput = technologyLayerMappingInput
         self.connectivityFormat = connectivityFormat
         self.topCellName = topCellName
         self.layoutInput = layoutInput
@@ -54,6 +57,31 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 runDirectory: context.runDirectory
             )
             let technology = try loadTechnology(context: context)
+            var inputArtifacts = [try inputReference(
+                layoutInput,
+                artifactID: "electrical-standard-layout-input",
+                kind: .layout,
+                format: xcircuiteFileFormat(for: layoutFormat),
+                context: context
+            )]
+            if let technologyInput {
+                inputArtifacts.append(try inputReference(
+                    technologyInput,
+                    artifactID: "electrical-standard-technology-input",
+                    kind: .technology,
+                    format: xcircuiteFileFormat(for: technologyFormat),
+                    context: context
+                ))
+            }
+            if let technologyLayerMappingInput {
+                inputArtifacts.append(try inputReference(
+                    technologyLayerMappingInput,
+                    artifactID: "electrical-standard-technology-layer-mapping-input",
+                    kind: .technology,
+                    format: .json,
+                    context: context
+                ))
+            }
             let document = try MaskDataFormatConverter(tech: technology).importDocument(
                 from: layoutURL,
                 format: layoutFormat
@@ -68,6 +96,13 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                     from: connectivityURL,
                     format: connectivityFormat
                 )
+                inputArtifacts.append(try inputReference(
+                    connectivityInput,
+                    artifactID: "electrical-standard-connectivity-input",
+                    kind: .layout,
+                    format: xcircuiteFileFormat(for: connectivityFormat),
+                    context: context
+                ))
             } else {
                 connectivityDocument = nil
             }
@@ -87,6 +122,27 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             )
             try context.packageStore.ensureDirectory(at: url.deletingLastPathComponent())
             try context.packageStore.writeJSON(snapshot, to: url, forProjectAt: context.projectRoot)
+            let inputManifest = ElectricalSignoffInputArtifactManifest(
+                runID: context.runID,
+                stageID: stage.stageID,
+                inputArtifacts: inputArtifacts
+            )
+            try inputManifest.validate()
+            let manifestPath = ".xcircuite/runs/\(context.runID)/electrical-signoff/standard-layout-inputs.json"
+            let manifestURL = try context.packageStore.url(
+                forProjectRelativePath: manifestPath,
+                inProjectAt: context.projectRoot
+            )
+            try context.packageStore.writeJSON(inputManifest, to: manifestURL, forProjectAt: context.projectRoot)
+            let manifestReference = try context.packageStore.fileReference(
+                forProjectRelativePath: manifestPath,
+                artifactID: "electrical-standard-layout-input-manifest",
+                kind: .report,
+                format: .json,
+                inProjectAt: context.projectRoot,
+                producedByRunID: context.runID,
+                verifiedByRunID: context.runID
+            )
             let reference = try context.packageStore.fileReference(
                 forProjectRelativePath: relativePath,
                 artifactID: "electrical-standard-physical-snapshot",
@@ -106,7 +162,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 status: .succeeded,
                 diagnostics: [],
                 gates: [gate],
-                artifacts: [reference]
+                artifacts: [manifestReference, reference]
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -135,20 +191,115 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
     }
 
     private func loadTechnology(context: FlowExecutionContext) throws -> LayoutTechDatabase {
+        let technology: LayoutTechDatabase
         if let injectedTechnology {
-            return injectedTechnology
+            technology = injectedTechnology
+        } else {
+            guard let technologyInput else {
+                throw ElectricalStandardLayoutImportError.missingTechnology
+            }
+            guard technologyFormat == .lef || technologyFormat == .json else {
+                throw ElectricalStandardLayoutImportError.unsupportedLayoutFormat(technologyFormat.rawValue)
+            }
+            let url = try technologyInput.resolveExisting(
+                projectRoot: context.projectRoot,
+                runDirectory: context.runDirectory
+            )
+            technology = try TechFormatConverter().loadTech(from: url)
         }
-        guard let technologyInput else {
-            throw ElectricalStandardLayoutImportError.missingTechnology
+
+        guard let technologyLayerMappingInput else {
+            let missingLayers = technology.layers
+                .filter { $0.gdsLayer <= 0 }
+                .map { $0.id.name }
+            guard missingLayers.isEmpty else {
+                throw ElectricalStandardLayoutImportError.missingTechnologyLayerMapping(missingLayers.sorted())
+            }
+            return technology
         }
-        guard technologyFormat == .lef || technologyFormat == .json else {
-            throw ElectricalStandardLayoutImportError.unsupportedLayoutFormat(technologyFormat.rawValue)
-        }
-        let url = try technologyInput.resolveExisting(
+
+        let mappingURL = try technologyLayerMappingInput.resolveExisting(
             projectRoot: context.projectRoot,
             runDirectory: context.runDirectory
         )
-        return try TechFormatConverter().loadTech(from: url)
+        let mapping: ElectricalStandardLayoutLayerMapping
+        do {
+            mapping = try JSONDecoder().decode(
+                ElectricalStandardLayoutLayerMapping.self,
+                from: Data(contentsOf: mappingURL)
+            )
+        } catch {
+            throw ElectricalStandardLayoutImportError.invalidTechnologyLayerMapping(
+                error.localizedDescription
+            )
+        }
+        return try mapping.apply(to: technology)
+    }
+
+    private func inputReference(
+        _ input: XcircuiteFlowInputReference,
+        artifactID: String,
+        kind: XcircuiteFileKind,
+        format: XcircuiteFileFormat,
+        context: FlowExecutionContext
+    ) throws -> XcircuiteFileReference {
+        switch input {
+        case .artifact(let suppliedReference):
+            _ = try input.resolveExisting(
+                projectRoot: context.projectRoot,
+                runDirectory: context.runDirectory
+            )
+            var reference = suppliedReference
+            reference.artifactID = artifactID
+            reference.kind = kind
+            reference.format = format
+            reference.verifiedByRunID = context.runID
+            return reference
+        case .path, .stageArtifact, .stageRawArtifact:
+            let url = try input.resolveExisting(
+                projectRoot: context.projectRoot,
+                runDirectory: context.runDirectory
+            )
+            let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
+            return try context.packageStore.fileReference(
+                forProjectRelativePath: path,
+                artifactID: artifactID,
+                kind: kind,
+                format: format,
+                inProjectAt: context.projectRoot,
+                verifiedByRunID: context.runID
+            )
+        }
+    }
+
+    private func xcircuiteFileFormat(for format: LayoutFileFormat) -> XcircuiteFileFormat {
+        switch format {
+        case .json:
+            return .json
+        case .gds:
+            return .gdsii
+        case .oasis:
+            return .oasis
+        case .lef:
+            return .lef
+        case .def:
+            return .def
+        case .cif, .dxf, .odb:
+            return .raw
+        }
+    }
+
+    private func projectRelativePath(for url: URL, projectRoot: URL) throws -> String {
+        let rootPath = projectRoot.standardizedFileURL.path(percentEncoded: false)
+        let artifactPath = url.standardizedFileURL.path(percentEncoded: false)
+        guard artifactPath.hasPrefix("\(rootPath)/") else {
+            throw ElectricalStandardLayoutImportError.artifactOutsideProject(artifactPath)
+        }
+        let relativePath = String(artifactPath.dropFirst(rootPath.count + 1))
+        guard !relativePath.isEmpty else {
+            throw ElectricalStandardLayoutImportError.artifactOutsideProject(artifactPath)
+        }
+        return relativePath
     }
 
     private func blockedResult(stageID: String, code: String, message: String) -> FlowStageResult {

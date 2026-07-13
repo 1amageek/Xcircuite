@@ -88,6 +88,60 @@ struct DFTFlowStageExecutorTests {
         #expect(decoded == spec)
     }
 
+    @Test("DFT downstream evidence bundle spec is agent-operable")
+    func downstreamEvidenceBundleSpecRoundTrip() throws {
+        let sources = [
+            DFTReleaseDownstreamEvidenceSource(domain: .equivalence, role: "equivalence", input: .path("equivalence.json")),
+            DFTReleaseDownstreamEvidenceSource(domain: .drc, role: "drc", input: .path("drc.json")),
+            DFTReleaseDownstreamEvidenceSource(domain: .lvs, role: "lvs", input: .path("lvs.json")),
+            DFTReleaseDownstreamEvidenceSource(domain: .pex, role: "pex", input: .path("pex.json")),
+        ]
+        let spec = XcircuiteFlowStageExecutorSpec.dft(
+            XcircuiteFlowStageExecutorSpec.DFT(
+                stageID: "dft.release-evidence",
+                requestPath: "",
+                releaseEvidenceSources: sources
+            )
+        )
+        let runtimeSpec = XcircuiteFlowRuntimeSpec(executors: [spec])
+        try runtimeSpec.validate(requireCompleteToolEvidence: false)
+        let decoded = try JSONDecoder().decode(
+            XcircuiteFlowStageExecutorSpec.self,
+            from: JSONEncoder().encode(spec)
+        )
+        #expect(decoded == spec)
+    }
+
+    @Test("DFT downstream evidence bundle blocks when a required domain is missing")
+    func blocksIncompleteDownstreamEvidenceBundle() async throws {
+        let root = try makeRoot()
+        defer { removeRoot(root) }
+        for domain in ["equivalence", "drc", "lvs"] {
+            try Data("{\"status\":\"passed\"}".utf8).write(
+                to: root.appending(path: "\(domain).json"),
+                options: .atomic
+            )
+        }
+        let executor = DFTReleaseDownstreamEvidenceBundleFlowStageExecutor(
+            sources: [
+                DFTReleaseDownstreamEvidenceSource(domain: .equivalence, role: "equivalence", input: .path("equivalence.json")),
+                DFTReleaseDownstreamEvidenceSource(domain: .drc, role: "drc", input: .path("drc.json")),
+                DFTReleaseDownstreamEvidenceSource(domain: .lvs, role: "lvs", input: .path("lvs.json")),
+            ]
+        )
+
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(stageID: "dft.release-evidence", displayName: "DFT downstream evidence"),
+            context: makeContext(root: root, runID: "dft-evidence-negative")
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains {
+            $0.code == "DFT_RELEASE_EVIDENCE_BUNDLE_INVALID" && $0.message.contains("pex")
+        })
+        #expect(result.artifacts.isEmpty)
+    }
+
     @Test("DFT release stage spec round-trips its review inputs")
     func releaseStageSpecRoundTrip() throws {
         let spec = XcircuiteFlowStageExecutorSpec.dft(
@@ -95,6 +149,9 @@ struct DFTFlowStageExecutorTests {
                 stageID: "dft.release",
                 requestPath: "dft-request.json",
                 releaseResultPath: "dft-result.json",
+                releaseQualificationPath: "dft-qualification-provenance.json",
+                releaseRequestDigest: String(repeating: "f", count: 64),
+                releaseProcessQualificationEvidencePath: "dft-process-qualification-evidence.json",
                 releaseDownstreamEvidencePath: "dft-downstream.json",
                 releaseApprovalPath: "dft-approval.json"
             )
@@ -103,6 +160,29 @@ struct DFTFlowStageExecutorTests {
         let decoded = try JSONDecoder().decode(XcircuiteFlowStageExecutorSpec.self, from: data)
 
         #expect(decoded == spec)
+    }
+
+    @Test("DFT release spec requires independent process qualification evidence")
+    func releaseSpecRequiresProcessQualificationEvidence() throws {
+        let spec = XcircuiteFlowStageExecutorSpec.dft(
+            XcircuiteFlowStageExecutorSpec.DFT(
+                stageID: "dft.release",
+                requestPath: "dft-request.json",
+                releaseResultPath: "dft-result.json",
+                releaseQualificationPath: "dft-qualification-provenance.json",
+                releaseRequestDigest: String(repeating: "f", count: 64),
+                releaseDownstreamEvidencePath: "dft-downstream.json"
+            )
+        )
+
+        do {
+            try XcircuiteFlowRuntimeSpec(executors: [spec]).validate(
+                requireCompleteToolEvidence: false
+            )
+            Issue.record("DFT release spec unexpectedly validated without process qualification evidence.")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            #expect(error.localizedDescription.contains("releaseProcessQualificationEvidencePath"))
+        }
     }
 
     @Test("DFT qualification stage spec round-trips its oracle inputs")
@@ -224,6 +304,503 @@ struct DFTFlowStageExecutorTests {
             .path))
     }
 
+    @Test("DFT release stage verifies downstream artifacts and records eligibility")
+    func executesReleaseStage() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: true)
+        defer { removeRoot(fixture.root) }
+
+        let result = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            approvalInput: .path("dft-approval.json"),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(result.status == .succeeded)
+        #expect(result.gates.contains { $0.gateID == "dft-release" && $0.status == .passed })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
+        #expect(FileManager.default.fileExists(atPath: fixture.root
+            .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-eligibility.json")
+            .path))
+        let eligibilityURL = fixture.root
+            .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-eligibility.json")
+        let eligibilityJSON = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: eligibilityURL)
+        ) as? [String: Any]
+        let requiredArtifactIDs = eligibilityJSON?["requiredArtifactIDs"] as? [String] ?? []
+        #expect(requiredArtifactIDs.contains("dft-process-qualification-evidence"))
+    }
+
+    @Test("DFT release stage blocks without independent process qualification evidence")
+    func blocksReleaseWithoutProcessQualificationEvidence() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: true)
+        defer { removeRoot(fixture.root) }
+
+        let result = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            approvalInput: .path("dft-approval.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains {
+            $0.code == "DFT_RELEASE_PROCESS_QUALIFICATION_INVALID"
+        })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-review-resume" })
+    }
+
+    @Test("DFT release stage blocks process qualification evidence for another PDK")
+    func blocksMismatchedProcessQualificationEvidence() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: true)
+        defer { removeRoot(fixture.root) }
+        let evidenceURL = fixture.root.appending(path: "dft-process-qualification-evidence.json")
+        var evidence = try JSONDecoder().decode(
+            ToolProcessQualificationEvidence.self,
+            from: Data(contentsOf: evidenceURL)
+        )
+        evidence.scope.pdkDigest = String(repeating: "f", count: 64)
+        try DFTArtifactJSONEncoder().encode(evidence).write(to: evidenceURL, options: .atomic)
+
+        let result = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            approvalInput: .path("dft-approval.json"),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains {
+            $0.code == "DFT_RELEASE_PROCESS_QUALIFICATION_INVALID"
+                && $0.message.contains("DFT_PROCESS_QUALIFICATION_PDK_MISMATCH")
+        })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-review-resume" })
+    }
+
+    @Test("DFT release stage consumes process-qualified provenance from the qualification stage")
+    func consumesQualificationProvenance() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: true)
+        defer { removeRoot(fixture.root) }
+        let resultURL = fixture.root.appending(path: "dft-result.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var result = try decoder.decode(
+            XcircuiteEngineResultEnvelope<DFTPayload>.self,
+            from: Data(contentsOf: resultURL)
+        )
+        result.payload.qualification = DFTQualificationProvenance(status: .smokeChecked)
+        try DFTArtifactJSONEncoder().encode(result).write(to: resultURL, options: .atomic)
+
+        let provenance = DFTQualificationProvenance(
+            status: .processQualified,
+            corpusRevision: "dft-corpus-r1",
+            oracleEvidence: String(repeating: "b", count: 64),
+            processID: fixture.request.pdk.processID,
+            pdkDigest: fixture.request.pdk.digest,
+            requestDigests: [String(repeating: "f", count: 64)]
+        )
+        let provenanceURL = fixture.root.appending(path: "dft-qualification-provenance.json")
+        try DFTArtifactJSONEncoder().encode(provenance).write(to: provenanceURL, options: .atomic)
+
+        let releaseResult = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            approvalInput: .path("dft-approval.json"),
+            qualificationInput: .path("dft-qualification-provenance.json"),
+            expectedQualificationRequestDigest: String(repeating: "f", count: 64),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(releaseResult.status == .succeeded)
+        #expect(releaseResult.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
+        let eligibilityURL = fixture.root
+            .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-eligibility.json")
+        let eligibilityJSON = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: eligibilityURL)
+        ) as? [String: Any]
+        let requiredArtifactIDs = eligibilityJSON?["requiredArtifactIDs"] as? [String] ?? []
+        #expect(requiredArtifactIDs.contains("dft-qualification-provenance"))
+    }
+
+    @Test("DFT release stage blocks qualification provenance bound to another request")
+    func blocksMismatchedQualificationRequestDigest() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: true)
+        defer { removeRoot(fixture.root) }
+        let resultURL = fixture.root.appending(path: "dft-result.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        var result = try decoder.decode(
+            XcircuiteEngineResultEnvelope<DFTPayload>.self,
+            from: Data(contentsOf: resultURL)
+        )
+        result.payload.qualification = DFTQualificationProvenance(status: .smokeChecked)
+        try DFTArtifactJSONEncoder().encode(result).write(to: resultURL, options: .atomic)
+
+        let provenance = DFTQualificationProvenance(
+            status: .processQualified,
+            corpusRevision: "dft-corpus-r1",
+            oracleEvidence: String(repeating: "b", count: 64),
+            processID: fixture.request.pdk.processID,
+            pdkDigest: fixture.request.pdk.digest,
+            requestDigests: [String(repeating: "f", count: 64)]
+        )
+        try DFTArtifactJSONEncoder().encode(provenance).write(
+            to: fixture.root.appending(path: "dft-qualification-provenance.json"),
+            options: .atomic
+        )
+
+        let releaseResult = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            qualificationInput: .path("dft-qualification-provenance.json"),
+            expectedQualificationRequestDigest: String(repeating: "a", count: 64),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(releaseResult.status == .blocked)
+        #expect(releaseResult.diagnostics.contains {
+            $0.code == "DFT_RELEASE_REVIEW_CONTRACT_INVALID"
+        })
+        #expect(releaseResult.artifacts.contains { $0.artifactID == "dft-release-review-resume" })
+    }
+
+    @Test("DFT release stage blocks tampered downstream artifacts before approval")
+    func blocksTamperedReleaseArtifact() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: true)
+        defer { removeRoot(fixture.root) }
+        let transformedURL = fixture.root
+            .appending(path: "dft/runs/\(fixture.request.runID)/transformed-design.json")
+        try Data("tampered-design".utf8).write(to: transformedURL, options: .atomic)
+
+        let result = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            approvalInput: .path("dft-approval.json"),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains {
+            $0.code == "DFT_RELEASE_SHA256MISMATCH" || $0.code == "DFT_RELEASE_BYTECOUNTMISMATCH"
+        })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-review-resume" })
+    }
+
+    @Test("DFT release stage persists a review resume contract when approval is missing")
+    func blocksReleaseUntilApproval() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: false)
+        defer { removeRoot(fixture.root) }
+
+        let result = try await DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+            context: makeContext(root: fixture.root, runID: fixture.request.runID)
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains { $0.code == "DFT_RELEASE_APPROVAL_REQUIRED" })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-review-resume" })
+        #expect(FileManager.default.fileExists(atPath: fixture.root
+            .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-review-resume.json")
+            .path))
+    }
+
+    @Test("DFT release stage resumes through the Xcircuite generic approval gate")
+    func resumesReleaseThroughFlowKernelApproval() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: false)
+        defer { removeRoot(fixture.root) }
+        let executor = DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .path("dft-downstream.json"),
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        )
+        let stage = FlowStageDefinition(
+            stageID: "dft.release",
+            displayName: "DFT release",
+            requiresApproval: false
+        )
+        let flowRequest = FlowOperationRequest(
+            projectRoot: fixture.root,
+            runID: fixture.request.runID,
+            intent: "Run the DFT release review and resume flow.",
+            stages: [stage]
+        )
+        let first = try await DefaultFlowOrchestrator().run(
+            request: flowRequest,
+            toolRegistry: ToolRegistry(),
+            healthResults: [:],
+            executors: [executor]
+        )
+
+        #expect(first.status == .blocked)
+        #expect(first.stages.first?.gates.contains {
+            $0.gateID == "approval" && $0.status == .incomplete
+        } == true)
+
+        let approval = try DefaultFlowGateApprovalRecorder().recordApproval(
+            FlowGateApprovalRequest(
+                projectRoot: fixture.root,
+                runID: fixture.request.runID,
+                stageID: "dft.release",
+                verdict: .approved,
+                reviewer: "human-reviewer",
+                note: "Reviewed DFT, equivalence, DRC, LVS and PEX evidence."
+            )
+        )
+        #expect(approval.approval.verdict == .approved)
+
+        let resumed = try await DefaultFlowRunResumer().resumeRun(
+            request: FlowRunResumeRequest(
+                projectRoot: fixture.root,
+                runID: fixture.request.runID
+            ),
+            toolRegistry: ToolRegistry(),
+            healthResults: [:],
+            executors: [executor]
+        )
+
+        #expect(resumed.result.status == .succeeded)
+        #expect(resumed.summary.approvalCount == 1)
+        #expect(resumed.result.stages.first?.gates.contains {
+            $0.gateID == "dft-release" && $0.status == .passed
+        } == true)
+        let manifest = try XcircuitePackageStore().loadRunManifest(
+            runID: fixture.request.runID,
+            inProjectAt: fixture.root
+        )
+        #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
+    }
+
+    @Test("DFT qualification and release stages compose through a retained provenance artifact")
+    func composesQualificationAndReleaseStages() async throws {
+        let fixture = try makeReleaseFixture(includeApproval: false)
+        defer { removeRoot(fixture.root) }
+        let pdkDigest = fixture.request.pdk.digest
+        let requestDigest = String(repeating: "f", count: 64)
+        let oracleDirectory = fixture.root.appending(path: "oracle")
+        try FileManager.default.createDirectory(at: oracleDirectory, withIntermediateDirectories: true)
+        let expectation = DFTOracleCaseExpectation(expectedStatus: .completed)
+        let expectationData = try JSONEncoder().encode(expectation)
+        let expectationURL = oracleDirectory.appending(path: "expectation.json")
+        try expectationData.write(to: expectationURL, options: .atomic)
+        let oracleArtifact = XcircuiteFileReference(
+            artifactID: "oracle-case",
+            path: "oracle/expectation.json",
+            kind: .report,
+            format: .json,
+            sha256: XcircuiteHasher().sha256(data: expectationData),
+            byteCount: Int64(expectationData.count)
+        )
+        let corpus = DFTOracleCorpus(
+            corpusID: "composed-corpus",
+            revision: "composed-revision",
+            processID: fixture.request.pdk.processID,
+            pdkDigest: pdkDigest,
+            cases: [
+                DFTOracleCorpusCase(
+                    caseID: "composed-case",
+                    operation: .scanInsertion,
+                    requestDigest: requestDigest,
+                    expectation: expectation,
+                    oracleArtifact: oracleArtifact
+                ),
+            ]
+        )
+        let timestamp = Date(timeIntervalSince1970: 1)
+        let nativeResult = XcircuiteEngineResultEnvelope(
+            schemaVersion: 1,
+            runID: fixture.request.runID,
+            status: .completed,
+            metadata: XcircuiteEngineExecutionMetadata(
+                engineID: "native-dft-fixture",
+                implementationID: "native-dft-fixture",
+                implementationVersion: "1",
+                startedAt: timestamp,
+                completedAt: timestamp.addingTimeInterval(1)
+            ),
+            payload: DFTPayload(transformedDesign: nil, faultCoverage: nil)
+        )
+        let observations = [
+            DFTOracleCaseObservation(
+                caseID: "composed-case",
+                operation: .scanInsertion,
+                requestDigest: requestDigest,
+                result: nativeResult
+            ),
+        ]
+        try JSONEncoder().encode(corpus).write(
+            to: fixture.root.appending(path: "dft-corpus.json"),
+            options: .atomic
+        )
+        try JSONEncoder().encode(observations).write(
+            to: fixture.root.appending(path: "dft-observations.json"),
+            options: .atomic
+        )
+        let correlation = try await DFTOracleCorrelationEngine(
+            artifactLoader: FileSystemDFTOracleArtifactLoader(rootURL: fixture.root)
+        ).correlate(corpus: corpus, observations: observations)
+        let qualificationEvidence = try correlation.makeQualificationEvidence(
+            evidenceID: "composed-qualification",
+            engineID: "native-dft-fixture",
+            implementationID: "native-dft-fixture",
+            approvedBy: "qualification-reviewer"
+        )
+        try JSONEncoder().encode(qualificationEvidence).write(
+            to: fixture.root.appending(path: "dft-qualification-evidence.json"),
+            options: .atomic
+        )
+
+        let resultURL = fixture.root.appending(path: "dft-result.json")
+        let resultDecoder = JSONDecoder()
+        resultDecoder.dateDecodingStrategy = .iso8601
+        var releaseCandidate = try resultDecoder.decode(
+            XcircuiteEngineResultEnvelope<DFTPayload>.self,
+            from: Data(contentsOf: resultURL)
+        )
+        releaseCandidate.payload.qualification = DFTQualificationProvenance(status: .smokeChecked)
+        try DFTArtifactJSONEncoder().encode(releaseCandidate).write(to: resultURL, options: .atomic)
+
+        let qualificationExecutor = DFTQualificationFlowStageExecutor(
+            corpusInput: .path("dft-corpus.json"),
+            observationsInput: .path("dft-observations.json"),
+            qualificationEvidenceInput: .path("dft-qualification-evidence.json")
+        )
+        let evidenceBundleExecutor = DFTReleaseDownstreamEvidenceBundleFlowStageExecutor(
+            sources: [
+                DFTReleaseDownstreamEvidenceSource(
+                    domain: .equivalence,
+                    role: "equivalence-signoff",
+                    input: .path("signoff/equivalence.json")
+                ),
+                DFTReleaseDownstreamEvidenceSource(
+                    domain: .drc,
+                    role: "drc-signoff",
+                    input: .path("signoff/drc.json")
+                ),
+                DFTReleaseDownstreamEvidenceSource(
+                    domain: .lvs,
+                    role: "lvs-signoff",
+                    input: .path("signoff/lvs.json")
+                ),
+                DFTReleaseDownstreamEvidenceSource(
+                    domain: .pex,
+                    role: "pex-signoff",
+                    input: .path("signoff/pex.json")
+                ),
+            ]
+        )
+        let releaseExecutor = DFTReleaseFlowStageExecutor(
+            stageID: "dft.release",
+            requestInput: .path("dft-request.json"),
+            resultInput: .path("dft-result.json"),
+            downstreamEvidenceInput: .stageRawArtifact(
+                .init(stageID: "dft.release-evidence", relativePath: "dft-downstream-evidence.json")
+            ),
+            qualificationInput: .stageRawArtifact(
+                .init(stageID: "dft.qualification", relativePath: "dft-qualification-provenance.json")
+            ),
+            expectedQualificationRequestDigest: requestDigest,
+            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
+        )
+        let stages = [
+            FlowStageDefinition(stageID: "dft.qualification", displayName: "DFT qualification"),
+            FlowStageDefinition(stageID: "dft.release-evidence", displayName: "DFT downstream evidence"),
+            FlowStageDefinition(stageID: "dft.release", displayName: "DFT release"),
+        ]
+        let flowRequest = FlowOperationRequest(
+            projectRoot: fixture.root,
+            runID: fixture.request.runID,
+            intent: "Qualify DFT evidence and release through the review loop.",
+            stages: stages
+        )
+        let executors: [any FlowStageExecutor] = [qualificationExecutor, evidenceBundleExecutor, releaseExecutor]
+        let first = try await DefaultFlowOrchestrator().run(
+            request: flowRequest,
+            toolRegistry: ToolRegistry(),
+            healthResults: [:],
+            executors: executors
+        )
+
+        #expect(first.status == .blocked)
+        #expect(first.stages.map(\.stageID) == [
+            "dft.qualification",
+            "dft.release-evidence",
+            "dft.release",
+        ])
+        #expect(first.stages.first?.status == .succeeded)
+        #expect(first.stages.last?.gates.contains {
+            $0.gateID == "approval" && $0.status == .incomplete
+        } == true)
+
+        _ = try DefaultFlowGateApprovalRecorder().recordApproval(
+            FlowGateApprovalRequest(
+                projectRoot: fixture.root,
+                runID: fixture.request.runID,
+                stageID: "dft.release",
+                verdict: .approved,
+                reviewer: "release-reviewer",
+                note: "Reviewed retained qualification provenance and downstream signoff evidence."
+            )
+        )
+        let resumed = try await DefaultFlowRunResumer().resumeRun(
+            request: FlowRunResumeRequest(projectRoot: fixture.root, runID: fixture.request.runID),
+            toolRegistry: ToolRegistry(),
+            healthResults: [:],
+            executors: executors
+        )
+
+        #expect(resumed.result.status == .succeeded)
+        #expect(resumed.summary.approvalCount == 1)
+        #expect(resumed.result.stages.map(\.stageID) == [
+            "dft.qualification",
+            "dft.release-evidence",
+            "dft.release",
+        ])
+        let manifest = try XcircuitePackageStore().loadRunManifest(
+            runID: fixture.request.runID,
+            inProjectAt: fixture.root
+        )
+        #expect(manifest.artifacts.contains { $0.artifactID == "dft-qualification-provenance" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "dft-downstream-evidence-bundle" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
+    }
+
     private func makeRequest(
         runID: String,
         designArtifact: XcircuiteFileReference = XcircuiteFileReference(
@@ -235,12 +812,16 @@ struct DFTFlowStageExecutorTests {
             byteCount: 10
         ),
         designDigest: String = String(repeating: "b", count: 64),
-        cellLibraryReference: DFTCellLibraryReference
+        cellLibraryReference: DFTCellLibraryReference? = nil
     ) -> DFTRequest {
         let design = designArtifact
+        var inputs = [design]
+        if let cellLibraryReference {
+            inputs.append(cellLibraryReference.artifact)
+        }
         return DFTRequest(
             runID: runID,
-            inputs: [design, cellLibraryReference.artifact],
+            inputs: inputs,
             design: LogicDesignReference(
                 artifact: design,
                 topDesignName: "top",
@@ -280,6 +861,163 @@ struct DFTFlowStageExecutorTests {
                 testModeSignal: "test_mode"
             ),
             insertionPolicy: DFTScanInsertionPolicy(scanCellName: "SDFF")
+        )
+    }
+
+    private func makeReleaseFixture(
+        includeApproval: Bool
+    ) throws -> (root: URL, request: DFTRequest) {
+        let root = try makeRoot()
+        let runID = "dft-release-run"
+        let designArtifact = try writeArtifact(
+            root: root,
+            path: "design.json",
+            artifactID: "design",
+            contents: "{\"kind\":\"source-design\"}"
+        )
+        let request = makeRequest(
+            runID: runID,
+            designArtifact: designArtifact,
+            designDigest: String(repeating: "a", count: 64)
+        )
+        let transformedArtifact = try writeArtifact(
+            root: root,
+            path: "dft/runs/\(runID)/transformed-design.json",
+            artifactID: "transformed-design",
+            contents: "{\"kind\":\"transformed-design\"}"
+        )
+        let diffArtifact = try writeArtifact(
+            root: root,
+            path: "dft/runs/\(runID)/design-diff.json",
+            artifactID: "design-diff",
+            contents: "{\"kind\":\"design-diff\"}"
+        )
+        let payload = DFTPayload(
+            transformedDesign: LogicDesignReference(
+                artifact: transformedArtifact,
+                topDesignName: "top",
+                designDigest: request.design.designDigest
+            ),
+            faultCoverage: nil,
+            designDiff: XcircuiteDesignDiff(
+                runID: runID,
+                title: "Qualified scan insertion",
+                actor: "dft-engine",
+                baseSnapshot: request.design.artifact,
+                proposedSnapshot: transformedArtifact,
+                changes: []
+            ),
+            qualification: DFTQualificationProvenance(
+                status: .processQualified,
+                corpusRevision: "dft-corpus-r1",
+                oracleEvidence: String(repeating: "b", count: 64),
+                processID: request.pdk.processID,
+                pdkDigest: request.pdk.digest
+            )
+        )
+        let timestamp = Date(timeIntervalSince1970: 10)
+        let resultEnvelope = XcircuiteEngineResultEnvelope(
+            schemaVersion: DFTRequest.currentSchemaVersion,
+            runID: runID,
+            status: .completed,
+            artifacts: [transformedArtifact, diffArtifact],
+            metadata: XcircuiteEngineExecutionMetadata(
+                engineID: "dft-engine",
+                implementationID: "qualified-scan",
+                implementationVersion: "1",
+                startedAt: timestamp,
+                completedAt: timestamp.addingTimeInterval(1)
+            ),
+            payload: payload
+        )
+        let requestData = try DFTArtifactJSONEncoder().encode(request)
+        try requestData.write(to: root.appending(path: "dft-request.json"), options: .atomic)
+        let resultData = try DFTArtifactJSONEncoder().encode(resultEnvelope)
+        try resultData.write(to: root.appending(path: "dft-result.json"), options: .atomic)
+        let processQualifiedAt = Date().addingTimeInterval(-60)
+        let processQualificationEvidence = ToolProcessQualificationEvidence(
+            qualificationID: "dft-fixture-process-qualification",
+            toolID: "dft-engine",
+            scope: ToolQualificationScope(
+                implementationID: "qualified-scan",
+                binaryDigest: String(repeating: "1", count: 64),
+                algorithmVersion: "1",
+                processProfileID: request.pdk.processID,
+                deckDigest: String(repeating: "2", count: 64),
+                pdkID: "fixture-pdk",
+                pdkDigest: request.pdk.digest
+            ),
+            status: .qualified,
+            corpusEvidenceIDs: ["dft-corpus-r1"],
+            oracleEvidenceIDs: ["dft-oracle-r1"],
+            healthEvidenceIDs: ["dft-health-r1"],
+            approvalEvidenceIDs: ["dft-approval-r1"],
+            evidenceArtifactIDs: ["dft-process-qualification"],
+            independenceVerified: true,
+            qualifiedAt: processQualifiedAt,
+            expiresAt: processQualifiedAt.addingTimeInterval(3_600)
+        )
+        let processQualificationData = try DFTArtifactJSONEncoder().encode(
+            processQualificationEvidence
+        )
+        try processQualificationData.write(
+            to: root.appending(path: "dft-process-qualification-evidence.json"),
+            options: .atomic
+        )
+
+        let downstreamEvidence = try [
+            DFTReleaseDownstreamEvidence.Domain.equivalence,
+            .drc,
+            .lvs,
+            .pex,
+        ].map { domain in
+            let artifact = try writeArtifact(
+                root: root,
+                path: "signoff/\(domain.rawValue).json",
+                artifactID: "\(domain.rawValue)-report",
+                contents: "{\"domain\":\"\(domain.rawValue)\",\"status\":\"passed\"}"
+            )
+            return DFTReleaseDownstreamEvidence(
+                domain: domain,
+                role: "\(domain.rawValue)-signoff",
+                artifact: artifact
+            )
+        }
+        let downstreamData = try DFTArtifactJSONEncoder().encode(downstreamEvidence)
+        try downstreamData.write(to: root.appending(path: "dft-downstream.json"), options: .atomic)
+        if includeApproval {
+            let approval = DFTReleaseReviewApproval(
+                reviewerID: "human-reviewer",
+                decision: .approved,
+                reviewedAt: Date(timeIntervalSince1970: 12),
+                note: "All DFT and downstream signoff artifacts reviewed."
+            )
+            let approvalData = try DFTArtifactJSONEncoder().encode(approval)
+            try approvalData.write(to: root.appending(path: "dft-approval.json"), options: .atomic)
+        }
+        return (root, request)
+    }
+
+    private func writeArtifact(
+        root: URL,
+        path: String,
+        artifactID: String,
+        contents: String
+    ) throws -> XcircuiteFileReference {
+        let url = root.appending(path: path)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = Data(contents.utf8)
+        try data.write(to: url, options: .atomic)
+        return XcircuiteFileReference(
+            artifactID: artifactID,
+            path: path,
+            kind: .report,
+            format: .json,
+            sha256: XcircuiteHasher().sha256(data: data),
+            byteCount: Int64(data.count)
         )
     }
 

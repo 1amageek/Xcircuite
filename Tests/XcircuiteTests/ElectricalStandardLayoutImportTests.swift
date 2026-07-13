@@ -12,6 +12,126 @@ import XcircuitePackage
 
 @Suite("Electrical standard layout import")
 struct ElectricalStandardLayoutImportTests {
+    @Test("checked-in DEF and LEF fixtures produce a canonical snapshot", .timeLimit(.minutes(1)))
+    func importsCheckedInStandardFixtures() async throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-standard-fixture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixtureRoot = URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .appending(path: "Fixtures/ElectricalSignoff/StandardLayout")
+        try FileManager.default.copyItem(
+            at: fixtureRoot.appending(path: "layout.def"),
+            to: root.appending(path: "layout.def")
+        )
+        try FileManager.default.copyItem(
+            at: fixtureRoot.appending(path: "technology.lef"),
+            to: root.appending(path: "technology.lef")
+        )
+        try FileManager.default.copyItem(
+            at: fixtureRoot.appending(path: "layer-map.json"),
+            to: root.appending(path: "layer-map.json")
+        )
+
+        let executor = ElectricalStandardLayoutImportFlowStageExecutor(
+            layoutInput: .path("layout.def"),
+            layoutFormat: .def,
+            technologyInput: .path("technology.lef"),
+            technologyFormat: .lef,
+            technologyLayerMappingInput: .path("layer-map.json"),
+            topCellName: "top"
+        )
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(
+                stageID: "electrical-signoff.standard-layout-import",
+                displayName: "Standard layout import"
+            ),
+            context: FlowExecutionContext(
+                projectRoot: root,
+                runID: "electrical-standard-fixture-run",
+                runDirectory: root.appending(path: "run"),
+                packageStore: XcircuitePackageStore(),
+                toolRegistry: ToolRegistry(),
+                healthResults: [:]
+            )
+        )
+
+        #expect(result.status == .succeeded, "\(result.diagnostics)")
+        let manifestReference = try #require(result.artifacts.first {
+            $0.artifactID == "electrical-standard-layout-input-manifest"
+        })
+        let manifestURL = try XcircuitePackageStore().url(
+            forProjectRelativePath: manifestReference.path,
+            inProjectAt: root
+        )
+        let manifest = try JSONDecoder().decode(
+            ElectricalSignoffInputArtifactManifest.self,
+            from: Data(contentsOf: manifestURL)
+        )
+        try manifest.validate()
+        #expect(manifest.inputArtifacts.count == 3)
+        #expect(manifest.inputArtifacts.contains { $0.format == .def && $0.sha256?.count == 64 })
+        #expect(manifest.inputArtifacts.contains { $0.format == .lef && $0.sha256?.count == 64 })
+        #expect(manifest.inputArtifacts.contains { $0.path == "layer-map.json" && $0.format == .json })
+
+        let snapshotReference = try #require(result.artifacts.first {
+            $0.artifactID == "electrical-standard-physical-snapshot"
+        })
+        let snapshotURL = try XcircuitePackageStore().url(
+            forProjectRelativePath: snapshotReference.path,
+            inProjectAt: root
+        )
+        let snapshot = try PhysicalDesignJSONCodec().decode(
+            PhysicalDesignSnapshot.self,
+            from: Data(contentsOf: snapshotURL)
+        )
+        #expect(snapshot.topCell == "top")
+        #expect(snapshot.routes.count == 1)
+        #expect(snapshot.routes.first?.netID == "VDD")
+    }
+
+    @Test("LEF technology without an explicit layer map is blocked", .timeLimit(.minutes(1)))
+    func blocksLEFWithoutLayerMapping() async throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-standard-lef-blocked-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixtureRoot = URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .appending(path: "Fixtures/ElectricalSignoff/StandardLayout")
+        try FileManager.default.copyItem(
+            at: fixtureRoot.appending(path: "layout.def"),
+            to: root.appending(path: "layout.def")
+        )
+        try FileManager.default.copyItem(
+            at: fixtureRoot.appending(path: "technology.lef"),
+            to: root.appending(path: "technology.lef")
+        )
+
+        let executor = ElectricalStandardLayoutImportFlowStageExecutor(
+            layoutInput: .path("layout.def"),
+            layoutFormat: .def,
+            technologyInput: .path("technology.lef"),
+            technologyFormat: .lef,
+            topCellName: "top"
+        )
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(
+                stageID: "electrical-signoff.standard-layout-import",
+                displayName: "Standard layout import"
+            ),
+            context: FlowExecutionContext(
+                projectRoot: root,
+                runID: "electrical-standard-lef-blocked-run",
+                runDirectory: root.appending(path: "run"),
+                packageStore: XcircuitePackageStore(),
+                toolRegistry: ToolRegistry(),
+                healthResults: [:]
+            )
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.first?.code == "ELECTRICAL_STANDARD_LAYOUT_IMPORT_BLOCKED")
+        #expect(result.diagnostics.first?.message.contains("GDS layer mapping") == true)
+    }
+
     @Test("DEF routed connectivity becomes a digest-bearing physical snapshot", .timeLimit(.minutes(1)))
     func importsDEFConnectivity() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-standard-layout-\(UUID().uuidString)")
@@ -40,6 +160,19 @@ struct ElectricalStandardLayoutImportTests {
         )
 
         #expect(result.status == .succeeded)
+        let manifestReference = try #require(result.artifacts.first {
+            $0.artifactID == "electrical-standard-layout-input-manifest"
+        })
+        let manifestURL = try XcircuitePackageStore().url(
+            forProjectRelativePath: manifestReference.path,
+            inProjectAt: root
+        )
+        let manifest = try JSONDecoder().decode(
+            ElectricalSignoffInputArtifactManifest.self,
+            from: Data(contentsOf: manifestURL)
+        )
+        try manifest.validate()
+        #expect(manifest.inputArtifacts.count == 1)
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-standard-physical-snapshot" })
         #expect(reference.sha256?.count == 64)
         #expect((reference.byteCount ?? 0) > 0)
@@ -135,6 +268,19 @@ struct ElectricalStandardLayoutImportTests {
             )
 
             #expect(result.status == .succeeded)
+            let manifestReference = try #require(result.artifacts.first {
+                $0.artifactID == "electrical-standard-layout-input-manifest"
+            })
+            let manifestURL = try XcircuitePackageStore().url(
+                forProjectRelativePath: manifestReference.path,
+                inProjectAt: root
+            )
+            let manifest = try JSONDecoder().decode(
+                ElectricalSignoffInputArtifactManifest.self,
+                from: Data(contentsOf: manifestURL)
+            )
+            try manifest.validate()
+            #expect(manifest.inputArtifacts.count == 2)
             #expect(result.artifacts.contains { $0.artifactID == "electrical-standard-physical-snapshot" })
         }
     }

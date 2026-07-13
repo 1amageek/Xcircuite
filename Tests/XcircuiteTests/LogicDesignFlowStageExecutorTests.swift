@@ -38,6 +38,43 @@ struct LogicDesignFlowStageExecutorTests {
             .appending(path: "stages/logic.elaborate/raw/logic-design.json").path))
     }
 
+    @Test("elaboration adapter persists a flattened hierarchy snapshot")
+    func elaborationPersistsFlattenedHierarchy() async throws {
+        let root = try makeRoot(name: "logic-hierarchy-elaboration-adapter")
+        defer { removeRoot(root) }
+        let sourceURL = root.appending(path: "top.sv")
+        try Data("""
+        module leaf(input logic a, output logic y);
+            assign y = a;
+        endmodule
+        module top(input logic a, output logic y);
+            leaf u_leaf(.a(a), .y(y));
+        endmodule
+        """.utf8).write(to: sourceURL, options: [.atomic])
+        let context = makeContext(root: root, runID: "logic-hierarchy-elaboration-adapter")
+
+        let result = try await LogicElaborationFlowStageExecutor(
+            sourceInput: .path(sourceURL.path),
+            topDesignName: "top"
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.elaborate", displayName: "Logic elaboration"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        guard let snapshotArtifact = result.artifacts.first(where: { $0.artifactID == "logic-design" }) else {
+            Issue.record("Expected the flattened logic-design artifact")
+            return
+        }
+        let snapshotURL = try XcircuitePackage(projectRoot: root).url(
+            forProjectRelativePath: snapshotArtifact.path
+        )
+        let snapshot = try LogicDesignSnapshotCodec.decode(try Data(contentsOf: snapshotURL))
+        #expect(snapshot.rtl.modules.count == 1)
+        #expect(snapshot.rtl.modules.first?.instances.isEmpty == true)
+        #expect(snapshot.rtl.modules.first?.assignments.count == 2)
+    }
+
     @Test("power-intent adapter preserves a completed result")
     func powerIntentPreservesResult() async throws {
         let root = try makeRoot(name: "logic-power-adapter")

@@ -4,6 +4,7 @@ import XcircuitePackage
 
 public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     case path(String)
+    case artifact(XcircuiteFileReference)
     case stageArtifact(StageArtifact)
     case stageRawArtifact(StageRawArtifact)
 
@@ -46,6 +47,7 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
 
     private enum Kind: String, Codable {
         case path
+        case artifact
         case stageArtifact
         case stageRawArtifact
     }
@@ -56,6 +58,8 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         switch kind {
         case .path:
             self = .path(try container.decode(String.self, forKey: .value))
+        case .artifact:
+            self = .artifact(try container.decode(XcircuiteFileReference.self, forKey: .value))
         case .stageArtifact:
             self = .stageArtifact(try container.decode(StageArtifact.self, forKey: .value))
         case .stageRawArtifact:
@@ -69,6 +73,9 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         case .path(let path):
             try container.encode(Kind.path, forKey: .kind)
             try container.encode(path, forKey: .value)
+        case .artifact(let artifact):
+            try container.encode(Kind.artifact, forKey: .kind)
+            try container.encode(artifact, forKey: .value)
         case .stageArtifact(let artifact):
             try container.encode(Kind.stageArtifact, forKey: .kind)
             try container.encode(artifact, forKey: .value)
@@ -82,6 +89,8 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         switch self {
         case .path(let path):
             return try XcircuiteFlowRuntimeSpec.resolvePath(path, projectRoot: projectRoot)
+        case .artifact(let reference):
+            return try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
         case .stageArtifact(let artifact):
             return try resolveStageArtifact(artifact, projectRoot: projectRoot, runDirectory: runDirectory)
         case .stageRawArtifact(let artifact):
@@ -92,6 +101,49 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
                 url = url.appending(path: component)
             }
             return url
+        }
+    }
+
+    private func resolveVerifiedArtifact(
+        _ reference: XcircuiteFileReference,
+        projectRoot: URL
+    ) throws -> URL {
+        let verifier = XcircuiteFileReferenceVerifier()
+        let integrity = verifier.verify(reference, projectRoot: projectRoot)
+        switch integrity.status {
+        case .verified:
+            guard let url = verifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
+                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
+            }
+            return url
+        case .missingArtifact:
+            throw XcircuiteRuntimeError.inputReferenceMissing(reference.path)
+        case .missingDigest:
+            throw XcircuiteRuntimeError.artifactReferenceMissingDigest(path: reference.path)
+        case .missingByteCount:
+            throw XcircuiteRuntimeError.artifactReferenceMissingByteCount(path: reference.path)
+        case .byteCountMismatch:
+            guard let expectedByteCount = integrity.expectedByteCount,
+                  let actualByteCount = integrity.actualByteCount else {
+                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
+            }
+            throw XcircuiteRuntimeError.artifactReferenceByteCountMismatch(
+                path: reference.path,
+                expected: expectedByteCount,
+                actual: actualByteCount
+            )
+        case .sha256Mismatch:
+            guard let expectedSHA256 = integrity.expectedSHA256,
+                  let actualSHA256 = integrity.actualSHA256 else {
+                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
+            }
+            throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
+                path: reference.path,
+                expected: expectedSHA256,
+                actual: actualSHA256
+            )
+        case .invalidPath, .invalidDigest, .invalidByteCount, .unreadableArtifact:
+            throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
         }
     }
 

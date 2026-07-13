@@ -3,6 +3,7 @@ import ElectricalSignoffCore
 import ElectricalSignoffEngine
 import ElectricalSignoffQualification
 import Foundation
+import ToolQualification
 import XcircuitePackage
 
 public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
@@ -13,6 +14,7 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
     private let qualificationSpecInput: XcircuiteFlowInputReference
     private let qualificationReportInput: XcircuiteFlowInputReference
     private let policyInput: XcircuiteFlowInputReference
+    private let processQualificationEvidenceInput: XcircuiteFlowInputReference?
     private let evaluator: any ElectricalSignoffReleaseGateEvaluating
 
     public init(
@@ -23,6 +25,7 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         qualificationSpecInput: XcircuiteFlowInputReference,
         qualificationReportInput: XcircuiteFlowInputReference,
         policyInput: XcircuiteFlowInputReference,
+        processQualificationEvidenceInput: XcircuiteFlowInputReference? = nil,
         evaluator: any ElectricalSignoffReleaseGateEvaluating = DefaultElectricalSignoffReleaseGateEvaluator()
     ) {
         self.stageID = stageID
@@ -32,6 +35,7 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         self.qualificationSpecInput = qualificationSpecInput
         self.qualificationReportInput = qualificationReportInput
         self.policyInput = policyInput
+        self.processQualificationEvidenceInput = processQualificationEvidenceInput
         self.evaluator = evaluator
     }
 
@@ -42,11 +46,26 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         do {
             try context.checkCancellation()
             try validate(stage: stage, context: context)
+            try validateIntegrityBoundInput(requestInput, field: "requestInput")
+            try validateIntegrityBoundInput(runResultInput, field: "runResultInput")
+            try validateIntegrityBoundInput(qualificationSpecInput, field: "qualificationSpecInput")
+            try validateIntegrityBoundInput(qualificationReportInput, field: "qualificationReportInput")
+            try validateIntegrityBoundInput(policyInput, field: "policyInput")
+            if let processQualificationEvidenceInput {
+                try validateIntegrityBoundInput(
+                    processQualificationEvidenceInput,
+                    field: "processQualificationEvidenceInput"
+                )
+            }
             let signoffRequest = try load(ElectricalSignoffRequest.self, from: requestInput, context: context)
             let runResult = try load(ElectricalSignoffRunResult.self, from: runResultInput, context: context)
             let qualificationSpec = try load(ElectricalSignoffQualificationSpec.self, from: qualificationSpecInput, context: context)
             let qualificationReport = try load(ElectricalSignoffQualificationReport.self, from: qualificationReportInput, context: context)
             let policy = try load(ElectricalSignoffReleaseGatePolicy.self, from: policyInput, context: context)
+            let processQualificationEvidence = try processQualificationEvidenceInput.map { input in
+                try load(ToolProcessQualificationEvidence.self, from: input, context: context)
+            }
+            try qualificationSpec.validate()
             guard signoffRequest.runID == context.runID, runResult.runID == context.runID else {
                 return failureResult(
                     stageID: stage.stageID,
@@ -65,7 +84,9 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
             let gateRequest = ElectricalSignoffReleaseGateRequest(
                 runID: context.runID,
                 runResult: runResult,
+                qualificationSpec: qualificationSpec,
                 qualificationReport: qualificationReport,
+                processQualificationEvidence: processQualificationEvidence,
                 policy: policy,
                 artifactIntegrity: artifactIntegrity
             )
@@ -83,6 +104,7 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
                 qualificationReportInput: qualificationReportInput,
                 policy: policy,
                 policyInput: policyInput,
+                processQualificationEvidenceInput: processQualificationEvidenceInput,
                 gateResultReference: reference,
                 context: context
             )
@@ -134,6 +156,30 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         }
         try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+    }
+
+    private func validateIntegrityBoundInput(
+        _ input: XcircuiteFlowInputReference,
+        field: String
+    ) throws {
+        switch input {
+        case .artifact(let reference):
+            guard reference.sha256 != nil, reference.byteCount != nil else {
+                throw ElectricalSignoffReleaseGateError.invalidRequest(
+                    "\(field) must include SHA-256 and byte count"
+                )
+            }
+        case .stageArtifact(let selector):
+            guard selector.artifactID != nil else {
+                throw ElectricalSignoffReleaseGateError.invalidRequest(
+                    "\(field) must select an artifactID"
+                )
+            }
+        case .path, .stageRawArtifact:
+            throw ElectricalSignoffReleaseGateError.invalidRequest(
+                "\(field) must be a digest-bound artifact or stageArtifact reference"
+            )
+        }
     }
 
     private func load<Value: Decodable>(
@@ -203,6 +249,7 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         qualificationReportInput: XcircuiteFlowInputReference,
         policy: ElectricalSignoffReleaseGatePolicy,
         policyInput: XcircuiteFlowInputReference,
+        processQualificationEvidenceInput: XcircuiteFlowInputReference?,
         gateResultReference: XcircuiteFileReference,
         context: FlowExecutionContext
     ) throws -> ElectricalSignoffReleaseArtifactBundle {
@@ -272,11 +319,20 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         let qualificationSpecStageArtifacts = try stageArtifacts(from: qualificationSpecInput, context: context)
         let qualificationReportStageArtifacts = try stageArtifacts(from: qualificationReportInput, context: context)
         let qualificationStageArtifacts = qualificationSpecStageArtifacts + qualificationReportStageArtifacts
-        let qualificationArtifacts = unique(
+        var qualificationArtifacts = unique(
             try qualificationStageArtifacts.map { sourceReference in
                 try verifiedReference(sourceReference, context: context)
             }
         ).filter { !mandatoryPaths.contains($0.path) }
+        if let processQualificationEvidenceInput {
+            qualificationArtifacts.append(try reference(
+                for: processQualificationEvidenceInput,
+                artifactID: "electrical-signoff-process-qualification-evidence",
+                kind: .report,
+                format: .json,
+                context: context
+            ))
+        }
 
         let runManifest = try optionalReference(
             path: ".xcircuite/runs/\(context.runID)/manifest.json",
@@ -369,16 +425,51 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         format: XcircuiteFileFormat,
         context: FlowExecutionContext
     ) throws -> XcircuiteFileReference {
-        let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
-        let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: path,
-            artifactID: artifactID,
-            kind: kind,
-            format: format,
-            inProjectAt: context.projectRoot,
-            verifiedByRunID: context.runID
-        )
+        switch input {
+        case .artifact(let inputReference):
+            _ = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
+            var reference = inputReference
+            reference.artifactID = artifactID
+            reference.kind = kind
+            reference.format = format
+            reference.verifiedByRunID = context.runID
+            return reference
+        case .stageArtifact(let selector):
+            let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
+            let resolvedPath = try projectRelativePath(for: url, projectRoot: context.projectRoot)
+            let stageReferences = try stageArtifactReferences(selector: selector, context: context)
+            let matches = stageReferences.filter { reference in
+                reference.path == resolvedPath
+                    && (selector.artifactID == nil || reference.artifactID == selector.artifactID)
+            }
+            guard let inputReference = matches.first, matches.count == 1 else {
+                throw ElectricalSignoffReleaseGateError.invalidRequest(
+                    "stage artifact reference is not uniquely addressable for \(selector.stageID)"
+                )
+            }
+            var reference = inputReference
+            reference.artifactID = artifactID
+            reference.kind = kind
+            reference.format = format
+            reference.verifiedByRunID = context.runID
+            return reference
+        case .path, .stageRawArtifact:
+            throw ElectricalSignoffReleaseGateError.invalidRequest(
+                "release gate inputs must be digest-bound artifact references"
+            )
+        }
+    }
+
+    private func stageArtifactReferences(
+        selector: XcircuiteFlowInputReference.StageArtifact,
+        context: FlowExecutionContext
+    ) throws -> [XcircuiteFileReference] {
+        let resultURL = context.runDirectory
+            .appending(path: "stages")
+            .appending(path: selector.stageID)
+            .appending(path: "result.json")
+        let data = try Data(contentsOf: resultURL)
+        return try JSONDecoder().decode(FlowStageResult.self, from: data).artifacts
     }
 
     private func optionalReference(

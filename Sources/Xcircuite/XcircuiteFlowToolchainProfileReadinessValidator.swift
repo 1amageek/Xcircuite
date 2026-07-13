@@ -285,6 +285,16 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
         switch reference {
         case .path(let path):
             validateRuntimePath(path, field: field, into: &issues)
+        case .artifact(let artifact):
+            if artifact.sha256 == nil || artifact.byteCount == nil {
+                issues.append(
+                    XcircuiteFlowToolchainProfileReadinessIssue(
+                        code: Self.invalidFieldCode,
+                        field: field,
+                        message: "\(field) artifact references must include SHA-256 and byte count."
+                    )
+                )
+            }
         case .stageArtifact(let artifact):
             validateStageArtifact(artifact, field: field, into: &issues)
         case .stageRawArtifact(let artifact):

@@ -200,8 +200,12 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var qualificationObservationsPath: String?
         public var qualificationEvidencePath: String?
         public var releaseResultPath: String?
+        public var releaseQualificationPath: String?
+        public var releaseRequestDigest: String?
+        public var releaseProcessQualificationEvidencePath: String?
         public var releaseDownstreamEvidencePath: String?
         public var releaseApprovalPath: String?
+        public var releaseEvidenceSources: [DFTReleaseDownstreamEvidenceSource]?
         public var tool: XcircuiteFlowToolSpec
 
         public init(
@@ -211,8 +215,12 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             qualificationObservationsPath: String? = nil,
             qualificationEvidencePath: String? = nil,
             releaseResultPath: String? = nil,
+            releaseQualificationPath: String? = nil,
+            releaseRequestDigest: String? = nil,
+            releaseProcessQualificationEvidencePath: String? = nil,
             releaseDownstreamEvidencePath: String? = nil,
             releaseApprovalPath: String? = nil,
+            releaseEvidenceSources: [DFTReleaseDownstreamEvidenceSource]? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
@@ -221,8 +229,12 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self.qualificationObservationsPath = qualificationObservationsPath
             self.qualificationEvidencePath = qualificationEvidencePath
             self.releaseResultPath = releaseResultPath
+            self.releaseQualificationPath = releaseQualificationPath
+            self.releaseRequestDigest = releaseRequestDigest
+            self.releaseProcessQualificationEvidencePath = releaseProcessQualificationEvidencePath
             self.releaseDownstreamEvidencePath = releaseDownstreamEvidencePath
             self.releaseApprovalPath = releaseApprovalPath
+            self.releaseEvidenceSources = releaseEvidenceSources
             self.tool = tool
         }
     }
@@ -268,6 +280,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var layoutFormat: LayoutFileFormat
         public var technologyInput: XcircuiteFlowInputReference
         public var technologyFormat: LayoutFileFormat
+        public var technologyLayerMappingInput: XcircuiteFlowInputReference?
         public var connectivityInput: XcircuiteFlowInputReference?
         public var connectivityFormat: LayoutFileFormat
         public var topCellName: String?
@@ -279,6 +292,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             layoutFormat: LayoutFileFormat,
             technologyInput: XcircuiteFlowInputReference,
             technologyFormat: LayoutFileFormat = .lef,
+            technologyLayerMappingInput: XcircuiteFlowInputReference? = nil,
             connectivityInput: XcircuiteFlowInputReference? = nil,
             connectivityFormat: LayoutFileFormat = .def,
             topCellName: String? = nil,
@@ -289,6 +303,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self.layoutFormat = layoutFormat
             self.technologyInput = technologyInput
             self.technologyFormat = technologyFormat
+            self.technologyLayerMappingInput = technologyLayerMappingInput
             self.connectivityInput = connectivityInput
             self.connectivityFormat = connectivityFormat
             self.topCellName = topCellName
@@ -344,6 +359,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var qualificationSpecInput: XcircuiteFlowInputReference
         public var qualificationReportInput: XcircuiteFlowInputReference
         public var policyInput: XcircuiteFlowInputReference
+        public var processQualificationEvidenceInput: XcircuiteFlowInputReference?
         public var tool: XcircuiteFlowToolSpec
 
         public init(
@@ -353,6 +369,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             qualificationSpecInput: XcircuiteFlowInputReference,
             qualificationReportInput: XcircuiteFlowInputReference,
             policyInput: XcircuiteFlowInputReference,
+            processQualificationEvidenceInput: XcircuiteFlowInputReference? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
@@ -361,6 +378,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self.qualificationSpecInput = qualificationSpecInput
             self.qualificationReportInput = qualificationReportInput
             self.policyInput = policyInput
+            self.processQualificationEvidenceInput = processQualificationEvidenceInput
             self.tool = tool
         }
     }
@@ -1131,6 +1149,12 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 releaseApprovalInput: spec.releaseApprovalPath.map { .path($0) }
             )
         case .dft(let spec):
+            if let sources = spec.releaseEvidenceSources {
+                return DFTReleaseDownstreamEvidenceBundleFlowStageExecutor(
+                    stageID: spec.stageID,
+                    sources: sources
+                )
+            }
             if let corpusPath = spec.qualificationCorpusPath {
                 guard let observationsPath = spec.qualificationObservationsPath else {
                     throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
@@ -1157,7 +1181,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                     requestInput: .path(spec.requestPath),
                     resultInput: .path(resultPath),
                     downstreamEvidenceInput: .path(downstreamEvidencePath),
-                    approvalInput: spec.releaseApprovalPath.map { .path($0) }
+                    approvalInput: spec.releaseApprovalPath.map { .path($0) },
+                    qualificationInput: spec.releaseQualificationPath.map { .path($0) },
+                    expectedQualificationRequestDigest: spec.releaseRequestDigest,
+                    processQualificationEvidenceInput: spec.releaseProcessQualificationEvidencePath.map { .path($0) }
                 )
             }
             return DFTFlowStageExecutor(
@@ -1261,6 +1288,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 layoutFormat: spec.layoutFormat,
                 technologyInput: spec.technologyInput,
                 technologyFormat: spec.technologyFormat,
+                technologyLayerMappingInput: spec.technologyLayerMappingInput,
                 connectivityInput: spec.connectivityInput,
                 connectivityFormat: spec.connectivityFormat,
                 topCellName: spec.topCellName
@@ -1293,6 +1321,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 stageID: spec.stageID,
                 toolID: "native-electrical-signoff-qualification",
                 requestInput: .path(spec.specPath),
+                oracleInput: spec.oraclePath.map { .path($0) },
                 qualificationScope: spec.qualificationScope,
                 runner: ElectricalSignoffQualificationRunner(
                     engine: ElectricalSignoffEngine(
@@ -1309,7 +1338,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 runResultInput: spec.runResultInput,
                 qualificationSpecInput: spec.qualificationSpecInput,
                 qualificationReportInput: spec.qualificationReportInput,
-                policyInput: spec.policyInput
+                policyInput: spec.policyInput,
+                processQualificationEvidenceInput: spec.processQualificationEvidenceInput
             )
         case .electricalRepairRevision(let spec):
             let requestURL = try XcircuiteFlowRuntimeSpec.resolvePath(spec.requestPath, projectRoot: projectRoot)
@@ -1388,8 +1418,12 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .logicQualification(let spec):
             LogicToolDescriptors.qualification(level: spec.tool.qualificationLevel)
         case .dft(let spec):
-            if spec.qualificationCorpusPath != nil || spec.qualificationObservationsPath != nil {
+            if spec.releaseEvidenceSources != nil {
+                DFTToolDescriptors.release(level: spec.tool.qualificationLevel)
+            } else if spec.qualificationCorpusPath != nil || spec.qualificationObservationsPath != nil {
                 DFTToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+            } else if spec.releaseResultPath != nil {
+                DFTToolDescriptors.release(level: spec.tool.qualificationLevel)
             } else {
                 DFTToolDescriptors.engine(level: spec.tool.qualificationLevel)
             }

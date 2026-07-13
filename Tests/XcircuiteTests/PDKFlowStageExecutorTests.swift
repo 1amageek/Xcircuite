@@ -104,6 +104,30 @@ struct PDKFlowStageExecutorTests {
         #expect(standardResult.status == .succeeded)
         #expect(standardResult.artifacts.count == 1)
 
+        let ruleDeckContext = makeContext(root: root, runID: "pdk-rule-deck-adapter")
+        let ruleDeckResult = try await PDKRuleDeckInspectionFlowStageExecutor.local(
+            manifestInput: .path("fixtures/valid-pdk/pdk.json"),
+            assetID: "rules"
+        ).execute(
+            stage: FlowStageDefinition(
+                stageID: PDKKitAPI.ruleDeckInspectionStageID,
+                displayName: "PDK rule-deck inspection"
+            ),
+            context: ruleDeckContext
+        )
+        #expect(ruleDeckResult.status == .succeeded)
+        #expect(ruleDeckResult.artifacts.count == 1)
+        let ruleDeckURL = ruleDeckContext.runDirectory
+            .appending(path: "stages")
+            .appending(path: PDKKitAPI.ruleDeckInspectionStageID)
+            .appending(path: "raw/pdk-result.json")
+        let ruleDeckData = try Data(contentsOf: ruleDeckURL)
+        let ruleDeckEnvelope = try JSONDecoder().decode(
+            XcircuiteEngineResultEnvelope<PDKRuleDeckInspectionPayload>.self,
+            from: ruleDeckData
+        )
+        #expect(ruleDeckEnvelope.payload.observedLayerIDs == ["active", "metal1"])
+
         let oracleContext = makeContext(root: root, runID: "pdk-oracle-adapter")
         let oracleResult = try await PDKOracleFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
@@ -272,6 +296,10 @@ struct PDKFlowStageExecutorTests {
                 manifestInput: .path("fixtures/valid-pdk/pdk.json"),
                 assetID: "cells",
                 format: .lef
+            )),
+            .pdkRuleDeck(.init(
+                manifestInput: .path("fixtures/valid-pdk/pdk.json"),
+                assetID: "rules"
             )),
             .pdkOracle(.init(
                 manifestInput: .path("fixtures/valid-pdk/pdk.json"),

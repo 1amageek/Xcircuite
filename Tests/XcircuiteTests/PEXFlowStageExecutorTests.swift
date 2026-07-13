@@ -367,7 +367,7 @@ struct PEXFlowStageExecutorTests {
                         displayName: "PEX",
                         retryPolicy: FlowStageRetryPolicy(
                             maxAttempts: 2,
-                            retryableDiagnosticCodes: ["PEX_EXECUTION_ERROR"]
+                            retryableDiagnosticCodes: ["PEX_BACKEND_EXECUTION_FAILED"]
                         )
                     ),
                 ]
@@ -398,7 +398,7 @@ struct PEXFlowStageExecutorTests {
         #expect(await engineState.executionCount() == 2)
         let stage = try #require(result.stages.first)
         #expect(stage.attempts.count == 2)
-        #expect(stage.attempts[0].diagnosticCodes.contains("PEX_EXECUTION_ERROR"))
+        #expect(stage.attempts[0].diagnosticCodes.contains("PEX_BACKEND_EXECUTION_FAILED"))
         #expect(stage.attempts[0].retryDecision.reason == .retryableDiagnosticMatched)
         #expect(stage.attempts[1].retryDecision.reason == .stageDidNotFail)
         #expect(stage.artifacts.contains { $0.artifactID == "009-pex-attempts" })
@@ -409,7 +409,7 @@ struct PEXFlowStageExecutorTests {
             from: Data(contentsOf: attemptsURL)
         )
         #expect(attempts.map(\.attemptIndex) == [1, 2])
-        #expect(attempts[0].retryDecision.matchedDiagnosticCodes == ["PEX_EXECUTION_ERROR"])
+        #expect(attempts[0].retryDecision.matchedDiagnosticCodes == ["PEX_BACKEND_EXECUTION_FAILED"])
 
         let ledger = try FlowRunLedgerLoader().loadRunLedger(runID: "run-pex-retry", projectRoot: root)
         #expect(ledger.progressEvents.map(\.kind).contains(.stageRetryScheduled))
@@ -931,7 +931,13 @@ struct PEXFlowStageExecutorTests {
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
             runCount += 1
             if runCount == 1 {
-                throw PEXError.adapterUnavailable(backendID: "mock-pex")
+                throw PEXError(
+                    kind: .backendExecutionFailed,
+                    stage: .backendExecution,
+                    cornerID: PEXCornerID("tt"),
+                    backendID: "mock-pex",
+                    message: "transient PEX backend failure"
+                )
             }
             return try await DefaultPEXEngine.withDefaults().run(request)
         }

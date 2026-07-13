@@ -103,7 +103,20 @@ struct ElectricalSignoffFlowStageExecutorTests {
 
         #expect(result.status == .succeeded)
         #expect(result.gates.map(\.status) == [.passed])
-        #expect(result.artifacts.count == 5)
+        #expect(result.artifacts.count == 6)
+        let inputManifestReference = try #require(result.artifacts.first {
+            $0.artifactID == "electrical-signoff-input-manifest"
+        })
+        let inputManifestURL = try XcircuitePackageStore().url(
+            forProjectRelativePath: inputManifestReference.path,
+            inProjectAt: root
+        )
+        let inputManifest = try JSONDecoder().decode(
+            ElectricalSignoffInputArtifactManifest.self,
+            from: Data(contentsOf: inputManifestURL)
+        )
+        try inputManifest.validate()
+        #expect(inputManifest.inputArtifacts.count == 1)
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-tool-evidence" })
         let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
         let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
@@ -140,6 +153,99 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let releaseEnvelope = try await DefaultRetainedQualificationEvaluator().execute(qualificationRequest)
         #expect(releaseEnvelope.status == .completed)
         #expect(releaseEnvelope.payload.qualified)
+    }
+
+    @Test("qualification stage retains the immutable independent oracle artifact", .timeLimit(.minutes(1)))
+    func qualificationStageRetainsOracleArtifact() async throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-oracle-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let request = makeRequest(runID: "electrical-qualification-oracle-run")
+        let caseID = "clean-erc-oracle"
+        let specification = ElectricalSignoffQualificationSpec(
+            corpusID: "electrical-oracle-corpus",
+            corpusVersion: "1",
+            pdkDigest: request.pdk.digest,
+            requireIndependentOracle: true,
+            cases: [ElectricalSignoffQualificationCase(
+                caseID: caseID,
+                kind: .positive,
+                axis: .erc,
+                request: request,
+                expected: ElectricalSignoffExpectedObservation(status: .completed, violationCount: 0)
+            )]
+        )
+        let oracleObservation = ElectricalSignoffOracleObservation(
+            oracleID: "independent-electrical-oracle",
+            toolVersion: "fixture-1",
+            pdkDigest: request.pdk.digest,
+            status: .completed,
+            violationCount: 0
+        )
+        let oracleSet = ElectricalSignoffOracleObservationSet(
+            oracleID: oracleObservation.oracleID,
+            toolVersion: oracleObservation.toolVersion,
+            pdkDigest: oracleObservation.pdkDigest,
+            observations: [
+                ElectricalSignoffOracleObservationSet.Entry(
+                    caseID: caseID,
+                    observation: oracleObservation
+                ),
+            ]
+        )
+        try JSONEncoder().encode(specification).write(to: root.appending(path: "qualification.json"))
+        try JSONEncoder().encode(oracleSet).write(to: root.appending(path: "oracle.json"))
+        let scope = ToolQualificationScope(
+            implementationID: "native-electrical-signoff",
+            binaryDigest: "binary",
+            algorithmVersion: "1",
+            processProfileID: "fixture",
+            deckDigest: request.pdk.digest
+        )
+        let executor = ElectricalSignoffQualificationFlowStageExecutor(
+            requestInput: .path("qualification.json"),
+            oracleInput: .path("oracle.json"),
+            qualificationScope: scope,
+            runner: ElectricalSignoffQualificationRunner(
+                engine: StubElectricalSignoffEngine(),
+                oracle: try LocalElectricalSignoffQualificationOracle(observationSet: oracleSet)
+            )
+        )
+        let context = FlowExecutionContext(
+            projectRoot: root,
+            runID: request.runID,
+            runDirectory: root.appending(path: "run"),
+            packageStore: XcircuitePackageStore(),
+            toolRegistry: ToolRegistry(),
+            healthResults: [:]
+        )
+
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(stageID: "electrical-signoff.qualification", displayName: "Electrical qualification"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        let inputManifestReference = try #require(result.artifacts.first {
+            $0.artifactID == "electrical-signoff-input-manifest"
+        })
+        let inputManifestURL = try XcircuitePackageStore().url(
+            forProjectRelativePath: inputManifestReference.path,
+            inProjectAt: root
+        )
+        let inputManifest = try JSONDecoder().decode(
+            ElectricalSignoffInputArtifactManifest.self,
+            from: Data(contentsOf: inputManifestURL)
+        )
+        try inputManifest.validate()
+        #expect(inputManifest.inputArtifacts.count == 2)
+        let oracleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-observations" })
+        #expect(oracleReference.sha256?.count == 64)
+        let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
+        let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
+        let suite = try JSONDecoder().decode(RetainedCorpusSuite.self, from: Data(contentsOf: suiteURL))
+        let requirements = try #require(suite.requirements)
+        #expect(requirements.requiredArtifacts.contains(oracleReference.path))
+        #expect(requirements.requireExternalOracles)
     }
 
     @Test("qualification stage participates in approval and resume without changing the run ID", .timeLimit(.minutes(1)))
@@ -214,7 +320,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
 
     @Test("release gate persists a reproducible all-corner signoff decision", .timeLimit(.minutes(1)))
     func releaseGatePersistsDecision() async throws {
-        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-release-gate-(UUID().uuidString)")
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-release-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let request = ElectricalSignoffRequest(
             runID: "electrical-release-gate-run",
@@ -255,17 +361,47 @@ struct ElectricalSignoffFlowStageExecutorTests {
         )
         let runResult = makeCompleteRunResult(request: request, artifact: reportReference)
         let report = makeOracleQualificationReport(runID: request.runID, pdkDigest: request.pdk.digest)
-        let policy = ElectricalSignoffReleaseGatePolicy(
+        var policy = ElectricalSignoffReleaseGatePolicy(
             policyID: "electrical-release-v1",
             pdkDigest: request.pdk.digest,
             requiredAxes: [.erc, .esd],
             requiredCornerIDs: ["slow", "fast"]
         )
+        policy.requireProcessQualificationEvidence = true
+        let processQualificationEvidence = ToolProcessQualificationEvidence(
+            qualificationID: "electrical-process-qualification-v1",
+            toolID: "native-electrical-signoff",
+            scope: ToolQualificationScope(
+                implementationID: "native-electrical-signoff",
+                binaryDigest: "binary-digest",
+                algorithmVersion: "1",
+                processProfileID: "fixture",
+                deckDigest: "deck-digest",
+                pdkID: "fixture-pdk",
+                pdkDigest: request.pdk.digest
+            ),
+            status: .qualified,
+            corpusEvidenceIDs: ["electrical-corpus-evidence"],
+            oracleEvidenceIDs: ["electrical-oracle-evidence"],
+            healthEvidenceIDs: ["electrical-health-evidence"],
+            approvalEvidenceIDs: ["electrical-approval-evidence"],
+            evidenceArtifactIDs: ["electrical-process-qualification-record"],
+            independenceVerified: true,
+            qualifiedAt: Date(timeIntervalSinceNow: -60),
+            expiresAt: Date(timeIntervalSinceNow: 3600)
+        )
         let specification = ElectricalSignoffQualificationSpec(
             corpusID: "electrical-release-corpus",
             corpusVersion: "1",
             pdkDigest: request.pdk.digest,
-            cases: []
+            requireIndependentOracle: true,
+            cases: [ElectricalSignoffQualificationCase(
+                caseID: "release-clean",
+                kind: .positive,
+                axis: .erc,
+                request: request,
+                expected: ElectricalSignoffExpectedObservation(status: .completed, violationCount: 0)
+            )]
         )
         try JSONEncoder().encode(request).write(to: root.appending(path: "request.json"))
         try Data("source".utf8).write(to: root.appending(path: "input.json"))
@@ -273,13 +409,61 @@ struct ElectricalSignoffFlowStageExecutorTests {
         try JSONEncoder().encode(specification).write(to: root.appending(path: "qualification-spec.json"))
         try JSONEncoder().encode(report).write(to: root.appending(path: "qualification-report.json"))
         try JSONEncoder().encode(policy).write(to: root.appending(path: "release-policy.json"))
+        try JSONEncoder().encode(processQualificationEvidence).write(
+            to: root.appending(path: "process-qualification.json")
+        )
+
+        let packageStore = XcircuitePackageStore()
+        let requestReference = try packageStore.fileReference(
+            forProjectRelativePath: "request.json",
+            artifactID: "release-request-input",
+            kind: .report,
+            format: .json,
+            inProjectAt: root
+        )
+        let runResultReference = try packageStore.fileReference(
+            forProjectRelativePath: "run-result.json",
+            artifactID: "release-run-result-input",
+            kind: .report,
+            format: .json,
+            inProjectAt: root
+        )
+        let qualificationSpecReference = try packageStore.fileReference(
+            forProjectRelativePath: "qualification-spec.json",
+            artifactID: "release-qualification-spec-input",
+            kind: .report,
+            format: .json,
+            inProjectAt: root
+        )
+        let qualificationReportReference = try packageStore.fileReference(
+            forProjectRelativePath: "qualification-report.json",
+            artifactID: "release-qualification-report-input",
+            kind: .report,
+            format: .json,
+            inProjectAt: root
+        )
+        let policyReference = try packageStore.fileReference(
+            forProjectRelativePath: "release-policy.json",
+            artifactID: "release-policy-input",
+            kind: .technology,
+            format: .json,
+            inProjectAt: root
+        )
+        let processQualificationEvidenceReference = try packageStore.fileReference(
+            forProjectRelativePath: "process-qualification.json",
+            artifactID: "process-qualification-input",
+            kind: .report,
+            format: .json,
+            inProjectAt: root
+        )
 
         let executor = ElectricalSignoffReleaseGateFlowStageExecutor(
-            requestInput: .path("request.json"),
-            runResultInput: .path("run-result.json"),
-            qualificationSpecInput: .path("qualification-spec.json"),
-            qualificationReportInput: .path("qualification-report.json"),
-            policyInput: .path("release-policy.json")
+            requestInput: .artifact(requestReference),
+            runResultInput: .artifact(runResultReference),
+            qualificationSpecInput: .artifact(qualificationSpecReference),
+            qualificationReportInput: .artifact(qualificationReportReference),
+            policyInput: .artifact(policyReference),
+            processQualificationEvidenceInput: .artifact(processQualificationEvidenceReference)
         )
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "electrical-signoff.release-gate", displayName: "Electrical release gate"),
@@ -287,7 +471,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
                 projectRoot: root,
                 runID: request.runID,
                 runDirectory: root.appending(path: "run"),
-                packageStore: XcircuitePackageStore(),
+                packageStore: packageStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -306,7 +490,29 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(bundle.runID == request.runID)
         #expect(bundle.request.path == "request.json")
         #expect(bundle.gateResult.path == reference.path)
+        #expect(bundle.qualificationArtifacts.contains { $0.path == "process-qualification.json" })
         #expect(bundle.bundleDigest.isEmpty == false)
+
+        try Data("tampered-policy".utf8).write(
+            to: root.appending(path: "release-policy.json"),
+            options: .atomic
+        )
+        let tampered = try await executor.execute(
+            stage: FlowStageDefinition(stageID: "electrical-signoff.release-gate", displayName: "Electrical release gate"),
+            context: FlowExecutionContext(
+                projectRoot: root,
+                runID: request.runID,
+                runDirectory: root.appending(path: "run"),
+                packageStore: packageStore,
+                toolRegistry: ToolRegistry(),
+                healthResults: [:]
+            )
+        )
+        #expect(tampered.status == .failed)
+        #expect(tampered.diagnostics.contains {
+            $0.code == "ELECTRICAL_SIGNOFF_RELEASE_GATE_EXECUTION_ERROR"
+                && $0.message.contains("byte count mismatch")
+        }, "Tampered result: \(tampered)")
     }
 
     private func makeContext(runID: String) -> FlowExecutionContext {
@@ -381,6 +587,8 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let caseResult = ElectricalSignoffQualificationCaseResult(
             caseID: "release-clean",
             axis: .erc,
+            cornerID: "slow",
+            pdkCornerID: "slow",
             nativeStatus: .completed,
             nativeViolationCount: 0,
             nativeDiagnosticCodes: [],

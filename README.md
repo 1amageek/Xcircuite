@@ -377,8 +377,9 @@ candidate waveform / comparison artifacts with coverage tags.
 
 ```bash
 swift build
-perl -e 'alarm 900; exec @ARGV' xcodebuild test -scheme Xcircuite-Package -destination 'platform=macOS'
+perl -e 'alarm 420; exec @ARGV' swift test --parallel --num-workers 4
 ```
 
-The current full regression passes with 523 test cases in 55 suites, including
-the retained multi-engine signoff-artifact, review and same-run resume flow.
+The latest bounded full regression passed 542 test cases in 58 suites using an
+isolated SwiftPM scratch path. This is package-integration evidence, not foundry
+or process qualification.
