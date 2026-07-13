@@ -1,6 +1,6 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import DesignFlowKernel
 
 /// Simulation as a first-class flow stage, at the same maturity as
 /// DRC/LVS/PEX: the netlist's own analysis runs in-process (CoreSpice),
@@ -112,31 +112,27 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 try artifactBuilder.reference(
                     for: netlistCopy,
                     projectRoot: context.projectRoot,
-                    kind: .netlist,
-                    format: .spice,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.netlist,
+                    format: ArtifactFormat.spice
                 ),
                 try artifactBuilder.reference(
                     for: waveformURL,
                     projectRoot: context.projectRoot,
-                    kind: .waveform,
-                    format: .csv,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.waveform,
+                    format: ArtifactFormat.csv
                 ),
                 try artifactBuilder.reference(
                     for: measurementsURL,
                     projectRoot: context.projectRoot,
-                    kind: .measurement,
-                    format: .json,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.measurement,
+                    format: ArtifactFormat.json
                 ),
                 try artifactBuilder.reference(
                     for: summaryURL,
                     projectRoot: context.projectRoot,
                     artifactID: "simulation-summary",
-                    kind: .report,
-                    format: .json,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.report,
+                    format: ArtifactFormat.json
                 ),
             ]
             let preEnvelopeArtifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
@@ -162,14 +158,14 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             let envelopeArtifact = try SimulationSummaryEnvelopeBuilder().envelopeReference(
                 summary: summary,
                 summaryArtifactID: "simulation-summary",
-                stageArtifacts: artifacts,
+                stageArtifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
                 gateStatus: gateStatus,
                 diagnostics: diagnostics,
                 stageID: stage.stageID,
                 toolID: toolID,
                 context: context
             )
-            artifacts.append(envelopeArtifact)
+            artifacts.append(try FoundationFlowProjection.artifactReference(from: envelopeArtifact))
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
                 projectRoot: context.projectRoot

@@ -75,7 +75,7 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
                 gateStatus = .failed
                 stageStatus = .failed
             }
-            let artifacts = unique(FoundationFlowProjection.legacyReferences(from: result.artifacts) + [wrapperReference])
+            let artifacts = unique(result.artifacts + [wrapperReference])
             return FlowStageResult(
                 stageID: stage.stageID,
                 status: stageStatus,
@@ -188,23 +188,21 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
     private func persist(
         _ result: XcircuiteElectricalRepairRevisionResult,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let relativePath = ".xcircuite/runs/\(context.runID)/electrical-signoff/repair-revision.json"
         let url = try context.packageStore.url(forProjectRelativePath: relativePath, inProjectAt: context.projectRoot)
         try context.packageStore.ensureDirectory(at: url.deletingLastPathComponent())
         try context.packageStore.writeJSON(result, to: url, forProjectAt: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: relativePath,
+        return try StageArtifactReferenceBuilder().reference(
+            for: url,
+            projectRoot: context.projectRoot,
             artifactID: "electrical-signoff-repair-revision",
-            kind: .designDiff,
-            format: .json,
-            inProjectAt: context.projectRoot,
-            producedByRunID: context.runID,
-            verifiedByRunID: context.runID
+            kind: ArtifactKind.designDiff,
+            format: ArtifactFormat.json
         )
     }
 
-    private func unique(_ references: [XcircuiteFileReference]) -> [XcircuiteFileReference] {
+    private func unique(_ references: [ArtifactReference]) -> [ArtifactReference] {
         var paths = Set<String>()
         return references.filter { paths.insert($0.path).inserted }
     }

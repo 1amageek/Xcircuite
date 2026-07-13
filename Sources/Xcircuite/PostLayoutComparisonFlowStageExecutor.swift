@@ -1,6 +1,6 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import DesignFlowKernel
 
 public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -90,9 +90,8 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
                     for: reportURL,
                     projectRoot: context.projectRoot,
                     artifactID: "post-layout-comparison",
-                    kind: .report,
-                    format: .json,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.report,
+                    format: ArtifactFormat.json
                 ),
             ]
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(

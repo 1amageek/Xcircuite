@@ -8,13 +8,13 @@ public struct ElectricalSignoffInputArtifactManifest: Sendable, Hashable, Codabl
     public var schemaVersion: Int
     public var runID: String
     public var stageID: String
-    public var inputArtifacts: [XcircuiteFileReference]
+    public var inputArtifacts: [ArtifactReference]
     public var manifestDigest: String
 
     public init(
         runID: String,
         stageID: String,
-        inputArtifacts: [XcircuiteFileReference],
+        inputArtifacts: [ArtifactReference],
         manifestDigest: String? = nil,
         schemaVersion: Int = Self.currentSchemaVersion
     ) {
@@ -45,9 +45,6 @@ public struct ElectricalSignoffInputArtifactManifest: Sendable, Hashable, Codabl
             guard paths.insert(artifact.path).inserted else {
                 throw ElectricalSignoffInputArtifactManifestError.duplicatePath(artifact.path)
             }
-            guard artifact.sha256 != nil, artifact.byteCount != nil else {
-                throw ElectricalSignoffInputArtifactManifestError.missingIntegrity(artifact.path)
-            }
         }
         let expectedDigest = Self.digest(
             runID: runID,
@@ -65,20 +62,18 @@ public struct ElectricalSignoffInputArtifactManifest: Sendable, Hashable, Codabl
     public static func digest(
         runID: String,
         stageID: String,
-        inputArtifacts: [XcircuiteFileReference]
+        inputArtifacts: [ArtifactReference]
     ) -> String {
         let canonical = ("runID=\(runID)\nstageID=\(stageID)" + inputArtifacts
             .sorted { $0.path < $1.path }
             .map { artifact in
                 [
-                    artifact.artifactID ?? "",
+                    artifact.artifactID,
                     artifact.path,
                     artifact.kind.rawValue,
                     artifact.format.rawValue,
-                    artifact.sha256 ?? "",
-                    artifact.byteCount.map(String.init) ?? "",
-                    artifact.producedByRunID ?? "",
-                    artifact.verifiedByRunID ?? "",
+                    artifact.sha256,
+                    String(artifact.byteCount),
                 ].joined(separator: "|")
             }
             .joined(separator: "\n"))

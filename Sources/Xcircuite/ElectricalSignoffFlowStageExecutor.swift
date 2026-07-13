@@ -3,7 +3,6 @@ import DesignFlowKernel
 import ElectricalSignoffCore
 import ElectricalSignoffEngine
 import Foundation
-import DesignFlowKernel
 
 public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -65,7 +64,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
             foundationEvidence,
             context: context
         )
-        var artifacts: [XcircuiteFileReference] = [
+        var artifacts: [ArtifactReference] = [
             persistedRunResult,
             persistedFoundationEvidence,
         ]
@@ -164,7 +163,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
     private func persistRepairPlan(
         _ plan: ElectricalSignoffRepairPlan,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
         let relativePath = "\(relativeDirectory)/repair-plan.json"
         let fileURL = try context.packageStore.url(
@@ -173,21 +172,19 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         )
         try context.packageStore.ensureDirectory(at: fileURL.deletingLastPathComponent())
         try context.packageStore.writeJSON(plan, to: fileURL, forProjectAt: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: relativePath,
+        return try StageArtifactReferenceBuilder().reference(
+            for: fileURL,
+            projectRoot: context.projectRoot,
             artifactID: "electrical-signoff-repair-plan",
-            kind: .report,
-            format: .json,
-            inProjectAt: context.projectRoot,
-            producedByRunID: context.runID,
-            verifiedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     private func persistRunResult(
         _ runResult: ElectricalSignoffRunResult,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
         let relativePath = "\(relativeDirectory)/run-result.json"
         let fileURL = try context.packageStore.url(
@@ -196,21 +193,19 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         )
         try context.packageStore.ensureDirectory(at: fileURL.deletingLastPathComponent())
         try context.packageStore.writeJSON(runResult, to: fileURL, forProjectAt: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: relativePath,
+        return try StageArtifactReferenceBuilder().reference(
+            for: fileURL,
+            projectRoot: context.projectRoot,
             artifactID: "electrical-signoff-run-result",
-            kind: .report,
-            format: .json,
-            inProjectAt: context.projectRoot,
-            producedByRunID: context.runID,
-            verifiedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     private func persistFoundationEvidence(
         _ evidence: ElectricalSignoffFoundationEvidence,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
         let relativePath = "\(relativeDirectory)/foundation-evidence.json"
         let fileURL = try context.packageStore.url(
@@ -219,14 +214,12 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         )
         try context.packageStore.ensureDirectory(at: fileURL.deletingLastPathComponent())
         try context.packageStore.writeJSON(evidence, to: fileURL, forProjectAt: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: relativePath,
+        return try StageArtifactReferenceBuilder().reference(
+            for: fileURL,
+            projectRoot: context.projectRoot,
             artifactID: "electrical-signoff-foundation-evidence",
-            kind: .report,
-            format: .json,
-            inProjectAt: context.projectRoot,
-            producedByRunID: context.runID,
-            verifiedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 

@@ -1,25 +1,25 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import DesignFlowKernel
 
 public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     case path(String)
-    case artifact(XcircuiteFileReference)
+    case artifact(ArtifactReference)
     case stageArtifact(StageArtifact)
     case stageRawArtifact(StageRawArtifact)
 
     public struct StageArtifact: Sendable, Hashable, Codable {
         public var stageID: String
         public var artifactID: String?
-        public var kind: XcircuiteFileKind?
-        public var format: XcircuiteFileFormat?
+        public var kind: ArtifactKind?
+        public var format: ArtifactFormat?
         public var pathSuffix: String?
 
         public init(
             stageID: String,
             artifactID: String? = nil,
-            kind: XcircuiteFileKind? = nil,
-            format: XcircuiteFileFormat? = nil,
+            kind: ArtifactKind? = nil,
+            format: ArtifactFormat? = nil,
             pathSuffix: String? = nil
         ) {
             self.stageID = stageID
@@ -59,7 +59,7 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         case .path:
             self = .path(try container.decode(String.self, forKey: .value))
         case .artifact:
-            self = .artifact(try container.decode(XcircuiteFileReference.self, forKey: .value))
+            self = .artifact(try container.decode(ArtifactReference.self, forKey: .value))
         case .stageArtifact:
             self = .stageArtifact(try container.decode(StageArtifact.self, forKey: .value))
         case .stageRawArtifact:
@@ -105,46 +105,35 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     }
 
     private func resolveVerifiedArtifact(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         projectRoot: URL
     ) throws -> URL {
-        let verifier = XcircuiteFileReferenceVerifier()
-        let integrity = verifier.verify(reference, projectRoot: projectRoot)
-        switch integrity.status {
-        case .verified:
-            guard let url = verifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
-                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
+        let verifier = LocalArtifactVerifier()
+        let integrity = verifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
+            guard let issue = integrity.issues.first else {
+                throw XcircuiteRuntimeError.invalidInputReference(reference.path)
             }
-            return url
-        case .missingArtifact:
-            throw XcircuiteRuntimeError.inputReferenceMissing(reference.path)
-        case .missingDigest:
-            throw XcircuiteRuntimeError.artifactReferenceMissingDigest(path: reference.path)
-        case .missingByteCount:
-            throw XcircuiteRuntimeError.artifactReferenceMissingByteCount(path: reference.path)
-        case .byteCountMismatch:
-            guard let expectedByteCount = integrity.expectedByteCount,
-                  let actualByteCount = integrity.actualByteCount else {
-                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
+            switch issue.code {
+            case .missingFile:
+                throw XcircuiteRuntimeError.inputReferenceMissing(reference.path)
+            case .byteCountMismatch:
+                throw XcircuiteRuntimeError.artifactReferenceByteCountMismatch(
+                    path: reference.path,
+                    expected: Int64(reference.byteCount),
+                    actual: Int64(issue.actualByteCount ?? 0)
+                )
+            case .digestMismatch:
+                throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
+                    path: reference.path,
+                    expected: reference.sha256,
+                    actual: issue.actualDigest?.hexadecimalValue ?? "unknown"
+                )
+            default:
+                throw XcircuiteRuntimeError.invalidInputReference(issue.detail ?? issue.code.rawValue)
             }
-            throw XcircuiteRuntimeError.artifactReferenceByteCountMismatch(
-                path: reference.path,
-                expected: expectedByteCount,
-                actual: actualByteCount
-            )
-        case .sha256Mismatch:
-            guard let expectedSHA256 = integrity.expectedSHA256,
-                  let actualSHA256 = integrity.actualSHA256 else {
-                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
-            }
-            throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
-                path: reference.path,
-                expected: expectedSHA256,
-                actual: actualSHA256
-            )
-        case .invalidPath, .invalidDigest, .invalidByteCount, .unreadableArtifact:
-            throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
         }
+        return try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
     }
 
     func resolveExisting(projectRoot: URL, runDirectory: URL) throws -> URL {
@@ -228,43 +217,7 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
                 matchCount: matches.count
             )
         }
-        let verifier = XcircuiteFileReferenceVerifier()
-        let integrity = verifier.verify(reference, projectRoot: projectRoot)
-        switch integrity.status {
-        case .verified:
-            guard let url = verifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
-                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
-            }
-            return url
-        case .missingArtifact:
-            throw XcircuiteRuntimeError.inputReferenceMissing(reference.path)
-        case .missingDigest:
-            throw XcircuiteRuntimeError.artifactReferenceMissingDigest(path: reference.path)
-        case .missingByteCount:
-            throw XcircuiteRuntimeError.artifactReferenceMissingByteCount(path: reference.path)
-        case .byteCountMismatch:
-            guard let expectedByteCount = integrity.expectedByteCount,
-                  let actualByteCount = integrity.actualByteCount else {
-                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
-            }
-            throw XcircuiteRuntimeError.artifactReferenceByteCountMismatch(
-                path: reference.path,
-                expected: expectedByteCount,
-                actual: actualByteCount
-            )
-        case .sha256Mismatch:
-            guard let expectedSHA256 = integrity.expectedSHA256,
-                  let actualSHA256 = integrity.actualSHA256 else {
-                throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
-            }
-            throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
-                path: reference.path,
-                expected: expectedSHA256,
-                actual: actualSHA256
-            )
-        case .invalidPath, .invalidDigest, .invalidByteCount, .unreadableArtifact:
-            throw XcircuiteRuntimeError.invalidInputReference(integrity.message)
-        }
+        return try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
     }
 
     private static func stageDirectory(runDirectory: URL, stageID: String) -> URL {

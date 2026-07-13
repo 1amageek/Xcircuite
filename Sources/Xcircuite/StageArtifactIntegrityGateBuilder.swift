@@ -1,12 +1,36 @@
-import DesignFlowKernel
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 struct StageArtifactIntegrityGateBuilder: Sendable {
     private let verifier: XcircuiteFileReferenceVerifier
+    private let foundationVerifier: LocalArtifactVerifier
 
-    init(verifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()) {
+    init(
+        verifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier(),
+        foundationVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+    ) {
         self.verifier = verifier
+        self.foundationVerifier = foundationVerifier
+    }
+
+    func gate(
+        for artifacts: [ArtifactReference],
+        projectRoot: URL
+    ) -> FlowGateResult {
+        let diagnostics = artifacts.compactMap { artifact -> FlowDiagnostic? in
+            let integrity = foundationVerifier.verify(artifact, relativeTo: projectRoot)
+            guard !integrity.isVerified else {
+                return nil
+            }
+            return diagnostic(for: artifact, integrity: integrity)
+        }
+
+        return FlowGateResult(
+            gateID: "artifact-integrity",
+            status: diagnostics.isEmpty ? .passed : .failed,
+            diagnostics: diagnostics
+        )
     }
 
     func gate(
@@ -26,6 +50,42 @@ struct StageArtifactIntegrityGateBuilder: Sendable {
             status: diagnostics.isEmpty ? .passed : .failed,
             diagnostics: diagnostics
         )
+    }
+
+    private func diagnostic(
+        for artifact: ArtifactReference,
+        integrity: ArtifactIntegrity
+    ) -> FlowDiagnostic {
+        let details = integrity.issues.map { issue -> String in
+            switch issue.code {
+            case .byteCountMismatch:
+                return "byteCount expected=\(issue.expectedByteCount.map(String.init) ?? "unknown") actual=\(issue.actualByteCount.map(String.init) ?? "unknown")"
+            case .digestMismatch:
+                return "digest expected=\(issue.expectedDigest?.hexadecimalValue ?? "unknown") actual=\(issue.actualDigest?.hexadecimalValue ?? "unknown")"
+            default:
+                return issue.detail ?? issue.code.rawValue
+            }
+        }.joined(separator: "; ")
+        return FlowDiagnostic(
+            severity: .error,
+            code: foundationDiagnosticCode(for: integrity),
+            message: "Artifact integrity verification failed. artifactID=\(artifact.id.rawValue) path=\(artifact.path) \(details)"
+        )
+    }
+
+    private func foundationDiagnosticCode(for integrity: ArtifactIntegrity) -> String {
+        guard let issue = integrity.issues.first else {
+            return "ARTIFACT_INTEGRITY_VERIFIED"
+        }
+        return switch issue.code {
+        case .missingFile: "ARTIFACT_INTEGRITY_MISSING_ARTIFACT"
+        case .notRegularFile: "ARTIFACT_INTEGRITY_NOT_REGULAR_FILE"
+        case .byteCountMismatch: "ARTIFACT_INTEGRITY_BYTE_COUNT_MISMATCH"
+        case .digestMismatch: "ARTIFACT_INTEGRITY_SHA256_MISMATCH"
+        case .invalidLocation: "ARTIFACT_INTEGRITY_INVALID_PATH"
+        case .unreadableFile: "ARTIFACT_INTEGRITY_UNREADABLE_ARTIFACT"
+        case .unsupportedDigestAlgorithm: "ARTIFACT_INTEGRITY_UNSUPPORTED_DIGEST"
+        }
     }
 
     private func diagnostic(

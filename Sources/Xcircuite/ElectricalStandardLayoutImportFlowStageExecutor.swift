@@ -1,10 +1,10 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LayoutCore
 import LayoutIO
 import LayoutTech
 import PhysicalDesignCore
-import DesignFlowKernel
 
 public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -134,23 +134,19 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 inProjectAt: context.projectRoot
             )
             try context.packageStore.writeJSON(inputManifest, to: manifestURL, forProjectAt: context.projectRoot)
-            let manifestReference = try context.packageStore.fileReference(
-                forProjectRelativePath: manifestPath,
+            let manifestReference = try StageArtifactReferenceBuilder().reference(
+                for: manifestURL,
+                projectRoot: context.projectRoot,
                 artifactID: "electrical-standard-layout-input-manifest",
-                kind: .report,
-                format: .json,
-                inProjectAt: context.projectRoot,
-                producedByRunID: context.runID,
-                verifiedByRunID: context.runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             )
-            let reference = try context.packageStore.fileReference(
-                forProjectRelativePath: relativePath,
+            let reference = try StageArtifactReferenceBuilder().reference(
+                for: url,
+                projectRoot: context.projectRoot,
                 artifactID: "electrical-standard-physical-snapshot",
-                kind: .layout,
-                format: .json,
-                inProjectAt: context.projectRoot,
-                producedByRunID: context.runID,
-                verifiedByRunID: context.runID
+                kind: ArtifactKind.layout,
+                format: ArtifactFormat.json
             )
             let gate = FlowGateResult(
                 gateID: "electrical-standard-layout-import",
@@ -239,40 +235,45 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
     private func inputReference(
         _ input: XcircuiteFlowInputReference,
         artifactID: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         switch input {
         case .artifact(let suppliedReference):
             _ = try input.resolveExisting(
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
-            var reference = suppliedReference
-            reference.artifactID = artifactID
-            reference.kind = kind
-            reference.format = format
-            reference.verifiedByRunID = context.runID
-            return reference
+            return ArtifactReference(
+                id: try ArtifactID(rawValue: artifactID),
+                locator: ArtifactLocator(
+                    location: suppliedReference.locator.location,
+                    role: .input,
+                    kind: kind,
+                    format: format
+                ),
+                digest: suppliedReference.digest,
+                byteCount: suppliedReference.byteCount,
+                producer: suppliedReference.producer
+            )
         case .path, .stageArtifact, .stageRawArtifact:
             let url = try input.resolveExisting(
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
             let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
-            return try context.packageStore.fileReference(
-                forProjectRelativePath: path,
+            return try StageArtifactReferenceBuilder().reference(
+                for: url,
+                projectRoot: context.projectRoot,
                 artifactID: artifactID,
                 kind: kind,
-                format: format,
-                inProjectAt: context.projectRoot,
-                verifiedByRunID: context.runID
+                format: format
             )
         }
     }
 
-    private func xcircuiteFileFormat(for format: LayoutFileFormat) -> XcircuiteFileFormat {
+    private func xcircuiteFileFormat(for format: LayoutFileFormat) -> ArtifactFormat {
         switch format {
         case .json:
             return .json

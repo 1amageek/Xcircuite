@@ -1,9 +1,8 @@
-import DesignFlowKernel
 import CircuiteFoundation
+import DesignFlowKernel
 import Foundation
 import PhysicalDesignCore
 import PhysicalDesignEngine
-import DesignFlowKernel
 
 /// Prepares an immutable physical-design review packet and binds the generic
 /// Xcircuite approval record to the native physical-design resume gate.
@@ -43,14 +42,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 kind: .report,
                 format: .json
             )
-            let manifestArtifact = try StageArtifactReferenceBuilder().reference(
-                for: manifestURL,
-                projectRoot: context.projectRoot,
-                artifactID: "physical-design-run-manifest",
-                kind: .report,
-                format: .json,
-                producedByRunID: context.runID
-            )
+            let manifestArtifact = manifestReference
             let gate = PhysicalDesignReviewGate(
                 artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
             )
@@ -232,7 +224,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         fileName: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -245,9 +237,8 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 

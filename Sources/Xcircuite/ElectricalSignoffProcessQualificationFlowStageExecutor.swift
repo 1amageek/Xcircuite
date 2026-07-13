@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import ElectricalSignoffQualification
 import Foundation
@@ -121,9 +122,7 @@ public struct ElectricalSignoffProcessQualificationFlowStageExecutor: FlowStageE
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
         switch requestInput {
         case .artifact(let reference):
-            guard reference.sha256 != nil, reference.byteCount != nil else {
-                throw ElectricalSignoffProcessQualificationFlowError.unverifiedInput
-            }
+            _ = reference
         case .stageArtifact(let selector):
             guard selector.artifactID != nil else {
                 throw ElectricalSignoffProcessQualificationFlowError.unboundStageArtifact
@@ -136,18 +135,16 @@ public struct ElectricalSignoffProcessQualificationFlowStageExecutor: FlowStageE
     private func reference(
         for url: URL,
         artifactID: String,
-        kind: XcircuiteFileKind,
+        kind: ArtifactKind,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
-        let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: path,
+    ) throws -> ArtifactReference {
+        _ = try projectRelativePath(for: url, projectRoot: context.projectRoot)
+        return try StageArtifactReferenceBuilder().reference(
+            for: url,
+            projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: kind,
-            format: .json,
-            inProjectAt: context.projectRoot,
-            producedByRunID: context.runID,
-            verifiedByRunID: context.runID
+            format: ArtifactFormat.json
         )
     }
 
@@ -156,21 +153,19 @@ public struct ElectricalSignoffProcessQualificationFlowStageExecutor: FlowStageE
         relativePath: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let url = try context.packageStore.url(
             forProjectRelativePath: relativePath,
             inProjectAt: context.projectRoot
         )
         try context.packageStore.ensureDirectory(at: url.deletingLastPathComponent())
         try context.packageStore.writeJSON(value, to: url, forProjectAt: context.projectRoot)
-        return try context.packageStore.fileReference(
-            forProjectRelativePath: relativePath,
+        return try StageArtifactReferenceBuilder().reference(
+            for: url,
+            projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .release,
-            format: .json,
-            inProjectAt: context.projectRoot,
-            producedByRunID: context.runID,
-            verifiedByRunID: context.runID
+            kind: ArtifactKind.release,
+            format: ArtifactFormat.json
         )
     }
 
@@ -187,7 +182,7 @@ public struct ElectricalSignoffProcessQualificationFlowStageExecutor: FlowStageE
         stageID: String,
         code: String,
         message: String,
-        artifacts: [XcircuiteFileReference] = []
+        artifacts: [ArtifactReference] = []
     ) -> FlowStageResult {
         let diagnostic = FlowDiagnostic(severity: .error, code: code, message: message)
         return FlowStageResult(
@@ -201,7 +196,7 @@ public struct ElectricalSignoffProcessQualificationFlowStageExecutor: FlowStageE
 
     private func artifactIntegrityFailureResult(
         stageID: String,
-        inputReference: XcircuiteFileReference,
+        inputReference: ArtifactReference,
         issues: [ElectricalSignoffProcessQualificationArtifactIntegrityIssue]
     ) -> FlowStageResult {
         let diagnostics = issues.map { issue in

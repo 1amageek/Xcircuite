@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import DRCEngine
 import Foundation
@@ -5,7 +6,6 @@ import LayoutCore
 import LayoutCommands
 import LayoutIO
 import LayoutTech
-import DesignFlowKernel
 
 public protocol LayoutCommandRunning: Sendable {
     func run(request: LayoutCommandRequest, baseURL: URL) throws -> LayoutCommandResult
@@ -325,7 +325,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func xcircuiteFileFormat(for format: LayoutFileFormat) throws -> XcircuiteFileFormat {
+    private func xcircuiteFileFormat(for format: LayoutFileFormat) throws -> ArtifactFormat {
         switch format {
         case .gds:
             return .gdsii
@@ -461,39 +461,35 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         drcLayoutURL: URL?,
         standardLayoutArtifacts: [StandardLayoutArtifact],
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         var artifacts = [
             try artifactBuilder.reference(
                 for: expectedPaths.outputDocumentURL,
                 projectRoot: context.projectRoot,
                 artifactID: "layout-document",
-                kind: .layout,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.layout,
+                format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.artifactManifestURL,
                 projectRoot: context.projectRoot,
                 artifactID: "layout-command-manifest",
-                kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.resultURL,
                 projectRoot: context.projectRoot,
                 artifactID: "layout-command-result",
-                kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.effectiveRequestURL,
                 projectRoot: context.projectRoot,
                 artifactID: "layout-command-effective-request",
-                kind: .other,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.other,
+                format: ArtifactFormat.json
             ),
         ]
         if let drcLayoutURL {
@@ -501,9 +497,8 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 for: drcLayoutURL,
                 projectRoot: context.projectRoot,
                 artifactID: "drc-layout",
-                kind: .layout,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.layout,
+                format: ArtifactFormat.json
             ))
         }
         for artifact in standardLayoutArtifacts {
@@ -511,9 +506,8 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 for: artifact.url,
                 projectRoot: context.projectRoot,
                 artifactID: artifact.artifactID,
-                kind: .layout,
-                format: artifact.format,
-                producedByRunID: context.runID
+                kind: ArtifactKind.layout,
+                format: artifact.format
             ))
         }
         return artifacts
@@ -570,7 +564,7 @@ private struct LayoutCommandArtifactPaths: Sendable, Hashable {
 private struct StandardLayoutArtifact: Sendable, Hashable {
     var url: URL
     var artifactID: String
-    var format: XcircuiteFileFormat
+    var format: ArtifactFormat
 }
 
 private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {

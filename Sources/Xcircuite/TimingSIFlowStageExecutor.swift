@@ -5,7 +5,6 @@ import Foundation
 import LogicIR
 import SignalIntegrityEngine
 import TimingCore
-import DesignFlowKernel
 
 public struct TimingSIFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -116,7 +115,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
     private func persistResult(
         _ result: SignalIntegrityExecutionResult,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory.appending(path: "stages").appending(path: stageID).appending(path: "raw")
         try context.packageStore.ensureDirectory(at: directory)
         let url = directory.appending(path: "timing-signal-integrity-result.json")
@@ -127,15 +126,14 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             for: url,
             projectRoot: context.projectRoot,
             artifactID: "timing-signal-integrity-result",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     private func makeStageResult(
         result: SignalIntegrityExecutionResult,
-        resultArtifact: XcircuiteFileReference
+        resultArtifact: ArtifactReference
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map {
             FlowDiagnostic(severity: flowSeverity($0.severity), code: $0.code.rawValue, message: $0.summary)

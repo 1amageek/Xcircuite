@@ -1,8 +1,8 @@
-import DesignFlowKernel
 import Foundation
+import CircuiteFoundation
+import DesignFlowKernel
 import PhysicalDesignCore
 import PhysicalDesignEngine
-import DesignFlowKernel
 
 public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -73,7 +73,7 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
             let result = try await engine.execute(request)
             try context.checkCancellation()
             let diagnostics = FoundationFlowProjection.flowDiagnostics(result.diagnostics)
-            let artifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
+            let artifacts = result.artifacts
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
                 projectRoot: context.projectRoot

@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import ElectricalSignoffCore
 import ElectricalSignoffEngine
@@ -7,7 +8,6 @@ import QualificationEngine
 import ReleaseCore
 import SignoffToolSupport
 import ToolQualification
-import DesignFlowKernel
 
 public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -104,7 +104,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             )
             try context.packageStore.ensureDirectory(at: reportURL.deletingLastPathComponent())
             try context.packageStore.writeJSON(spec, to: specOutputURL, forProjectAt: context.projectRoot)
-            let specReference = try context.packageStore.fileReference(
+            let specReference = try foundationReference(
                 forProjectRelativePath: specPath,
                 artifactID: "electrical-signoff-qualification-spec",
                 kind: .report,
@@ -114,7 +114,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 verifiedByRunID: context.runID
             )
             try context.packageStore.writeJSON(report, to: reportURL, forProjectAt: context.projectRoot)
-            let reportReference = try context.packageStore.fileReference(
+            let reportReference = try foundationReference(
                 forProjectRelativePath: reportPath,
                 artifactID: "electrical-signoff-qualification-report",
                 kind: .report,
@@ -136,7 +136,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 inProjectAt: context.projectRoot
             )
             try context.packageStore.writeJSON(inputManifest, to: inputManifestURL, forProjectAt: context.projectRoot)
-            let inputManifestReference = try context.packageStore.fileReference(
+            let inputManifestReference = try foundationReference(
                 forProjectRelativePath: inputManifestPath,
                 artifactID: "electrical-signoff-input-manifest",
                 kind: .report,
@@ -158,7 +158,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 inProjectAt: context.projectRoot
             )
             try context.packageStore.writeJSON(evidence, to: evidenceURL, forProjectAt: context.projectRoot)
-            let evidenceReference = try context.packageStore.fileReference(
+            let evidenceReference = try foundationReference(
                 forProjectRelativePath: evidencePath,
                 artifactID: "electrical-signoff-tool-evidence",
                 kind: .report,
@@ -205,7 +205,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
-            var oracleEvidence = [XcircuiteFileReference]()
+            var oracleEvidence = [ArtifactReference]()
             var oracleEvidenceError: String?
             do {
                 oracleEvidence = try externalOracleEvidenceReferences(context: context)
@@ -251,15 +251,15 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
     private func persistRetainedQualification(
         report: ElectricalSignoffQualificationReport,
         spec: ElectricalSignoffQualificationSpec,
-        specReference: XcircuiteFileReference,
-        reportReference: XcircuiteFileReference,
-        evidenceReference: XcircuiteFileReference,
-        oracleReference: XcircuiteFileReference?,
-        oracleExecutionArtifacts: [XcircuiteFileReference],
-        inputManifestReference: XcircuiteFileReference,
+        specReference: ArtifactReference,
+        reportReference: ArtifactReference,
+        evidenceReference: ArtifactReference,
+        oracleReference: ArtifactReference?,
+        oracleExecutionArtifacts: [ArtifactReference],
+        inputManifestReference: ArtifactReference,
         artifactRoot: String,
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let nativeLane = ReleaseQualificationLane(
             laneID: "electrical-signoff-native-corpus",
             domain: "electrical-signoff",
@@ -312,9 +312,9 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             passRate: report.caseCount == 0 ? 0 : Double(report.matchedCaseCount) / Double(report.caseCount),
             oracleAgreementRate: report.oracleCaseCount == 0 ? nil : Double(report.oracleAgreementCount) / Double(report.oracleCaseCount),
             durationBudgetPassRate: 1,
-            report: RetainedCorpusReport.ArtifactIdentity(path: reportReference.path, sha256: reportReference.sha256, byteCount: reportReference.byteCount, status: "verified"),
+            report: RetainedCorpusReport.ArtifactIdentity(path: reportReference.path, sha256: reportReference.sha256, byteCount: Int64(reportReference.byteCount), status: "verified"),
             toolEvidence: RetainedCorpusReport.ToolEvidenceObservation(evidenceID: "electrical-signoff:\(spec.corpusID):\(spec.corpusVersion)", checkedAt: iso8601String(from: report.generatedAt), failureCodes: report.failureCodes),
-            toolEvidenceExport: RetainedCorpusReport.ArtifactIdentity(path: evidenceReference.path, sha256: evidenceReference.sha256, byteCount: evidenceReference.byteCount, status: "verified")
+            toolEvidenceExport: RetainedCorpusReport.ArtifactIdentity(path: evidenceReference.path, sha256: evidenceReference.sha256, byteCount: Int64(evidenceReference.byteCount), status: "verified")
         )
         var externalResults: [RetainedCorpusReport.ExternalOracleResult] = []
         if report.qualificationLevel >= .oracleChecked {
@@ -347,7 +347,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         let retainedReportURL = try context.packageStore.url(forProjectRelativePath: reportPath, inProjectAt: context.projectRoot)
         try context.packageStore.writeJSON(suite, to: suiteURL, forProjectAt: context.projectRoot)
         try context.packageStore.writeJSON(retainedReport, to: retainedReportURL, forProjectAt: context.projectRoot)
-        let suiteReference = try context.packageStore.fileReference(
+        let suiteReference = try foundationReference(
             forProjectRelativePath: suitePath,
             artifactID: "electrical-signoff-retained-suite",
             kind: .report,
@@ -356,7 +356,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             producedByRunID: context.runID,
             verifiedByRunID: context.runID
         )
-        let retainedReportReference = try context.packageStore.fileReference(
+        let retainedReportReference = try foundationReference(
             forProjectRelativePath: reportPath,
             artifactID: "electrical-signoff-retained-report",
             kind: .report,
@@ -372,26 +372,32 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         _ input: XcircuiteFlowInputReference,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         switch input {
         case .artifact(let suppliedReference):
             _ = try input.resolveExisting(
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
-            var reference = suppliedReference
-            reference.artifactID = artifactID
-            reference.kind = .report
-            reference.format = .json
-            reference.verifiedByRunID = context.runID
-            return reference
+            return ArtifactReference(
+                id: try ArtifactID(rawValue: artifactID),
+                locator: ArtifactLocator(
+                    location: suppliedReference.locator.location,
+                    role: .input,
+                    kind: ArtifactKind.report,
+                    format: ArtifactFormat.json
+                ),
+                digest: suppliedReference.digest,
+                byteCount: suppliedReference.byteCount,
+                producer: suppliedReference.producer
+            )
         case .path, .stageArtifact, .stageRawArtifact:
             let url = try input.resolveExisting(
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
             let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
-            return try context.packageStore.fileReference(
+            return try foundationReference(
                 forProjectRelativePath: path,
                 artifactID: artifactID,
                 kind: .report,
@@ -400,6 +406,26 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 verifiedByRunID: context.runID
             )
         }
+    }
+
+    private func foundationReference(
+        forProjectRelativePath path: String,
+        artifactID: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        inProjectAt projectRoot: URL,
+        producedByRunID: String? = nil,
+        verifiedByRunID: String? = nil
+    ) throws -> ArtifactReference {
+        _ = producedByRunID
+        _ = verifiedByRunID
+        return try StageArtifactReferenceBuilder().reference(
+            for: projectRoot.appending(path: path),
+            projectRoot: projectRoot,
+            artifactID: artifactID,
+            kind: kind,
+            format: format
+        )
     }
 
     private func prepareOracle(
@@ -504,7 +530,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         guard FileManager.default.fileExists(atPath: outputURL.path(percentEncoded: false)) else {
             throw ElectricalSignoffQualificationFlowError.externalOracleOutputMissing(outputPath)
         }
-        let observationReference = try context.packageStore.fileReference(
+        let observationReference = try foundationReference(
             forProjectRelativePath: outputPath,
             artifactID: "electrical-signoff-oracle-observations",
             kind: .report,
@@ -514,7 +540,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             verifiedByRunID: context.runID
         )
         let executionArtifacts = try [
-            context.packageStore.fileReference(
+            foundationReference(
                 forProjectRelativePath: stdoutPath,
                 artifactID: "electrical-signoff-oracle-stdout",
                 kind: .report,
@@ -523,7 +549,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 producedByRunID: context.runID,
                 verifiedByRunID: context.runID
             ),
-            context.packageStore.fileReference(
+            foundationReference(
                 forProjectRelativePath: stderrPath,
                 artifactID: "electrical-signoff-oracle-stderr",
                 kind: .report,
@@ -532,7 +558,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 producedByRunID: context.runID,
                 verifiedByRunID: context.runID
             ),
-            context.packageStore.fileReference(
+            foundationReference(
                 forProjectRelativePath: executionPath,
                 artifactID: "electrical-signoff-oracle-execution",
                 kind: .report,
@@ -568,15 +594,15 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         return formatter.string(from: date)
     }
 
-    private func externalOracleEvidenceReferences(context: FlowExecutionContext) throws -> [XcircuiteFileReference] {
+    private func externalOracleEvidenceReferences(context: FlowExecutionContext) throws -> [ArtifactReference] {
         guard oracleProcessConfiguration != nil else { return [] }
         let artifactRoot = ".xcircuite/runs/\(context.runID)/qualification/oracle"
-        let descriptors: [(String, String, XcircuiteFileFormat)] = [
+        let descriptors: [(String, String, ArtifactFormat)] = [
             ("stdout.txt", "electrical-signoff-oracle-stdout", .text),
             ("stderr.txt", "electrical-signoff-oracle-stderr", .text),
             ("execution.json", "electrical-signoff-oracle-execution", .json),
         ]
-        var references: [XcircuiteFileReference] = []
+        var references: [ArtifactReference] = []
         for (fileName, artifactID, format) in descriptors {
             let relativePath = "\(artifactRoot)/\(fileName)"
             let url = try context.packageStore.url(
@@ -586,7 +612,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
             }
-            references.append(try context.packageStore.fileReference(
+            references.append(try foundationReference(
                 forProjectRelativePath: relativePath,
                 artifactID: artifactID,
                 kind: .report,
@@ -603,7 +629,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         stageID: String,
         code: String,
         message: String,
-        artifacts: [XcircuiteFileReference] = []
+        artifacts: [ArtifactReference] = []
     ) -> FlowStageResult {
         let diagnostic = FlowDiagnostic(severity: .error, code: code, message: message)
         return FlowStageResult(
@@ -617,8 +643,8 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
 
     private struct OraclePreparation: Sendable {
         let observationURL: URL
-        let observationReference: XcircuiteFileReference
-        let executionArtifacts: [XcircuiteFileReference]
+        let observationReference: ArtifactReference
+        let executionArtifacts: [ArtifactReference]
     }
 }
 

@@ -30,7 +30,7 @@ struct ReleaseStageExecutionSupport: Sendable {
         stageID: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let stageDirectory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -45,9 +45,8 @@ struct ReleaseStageExecutionSupport: Sendable {
             for: outputURL,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
@@ -56,7 +55,7 @@ struct ReleaseStageExecutionSupport: Sendable {
         stageID: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let stageDirectory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -71,16 +70,15 @@ struct ReleaseStageExecutionSupport: Sendable {
             for: outputURL,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     func stageResult<Result: ReleaseStageExecutionResult>(
         result: Result,
         stageID: String,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         approved: Bool
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map(flowDiagnostic)
@@ -144,7 +142,7 @@ struct ReleaseStageExecutionSupport: Sendable {
         )
     }
 
-    private func uniqueArtifacts(_ artifacts: [XcircuiteFileReference]) -> [XcircuiteFileReference] {
+    private func uniqueArtifacts(_ artifacts: [ArtifactReference]) -> [ArtifactReference] {
         Array(Set(artifacts)).sorted { $0.path < $1.path }
     }
 }

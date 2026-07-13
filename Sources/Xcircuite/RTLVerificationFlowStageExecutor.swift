@@ -6,7 +6,6 @@ import RTLVerificationCore
 import RTLVerificationEngine
 import TimingCore
 import ToolQualification
-import DesignFlowKernel
 
 public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -678,7 +677,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         _ envelope: RTLVerificationResult,
         request: RTLVerificationRequest,
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let outputDirectory = rawDirectory(context: context)
         let auditDirectory = context.runDirectory
             .appending(path: "stages")
@@ -697,9 +696,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             for: outputURL,
             projectRoot: context.projectRoot,
             artifactID: "rtl-verification-result",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let qualificationURL = outputDirectory.appending(path: "qualification.json")
         try context.packageStore.writeJSON(
@@ -711,9 +709,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             for: qualificationURL,
             projectRoot: context.projectRoot,
             artifactID: "rtl-verification-qualification",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let reviewArtifact = makeReviewArtifact(envelope)
         let reviewURL = reviewDirectory.appending(path: "rtl-verification-review.json")
@@ -726,9 +723,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             for: reviewURL,
             projectRoot: context.projectRoot,
             artifactID: "rtl-verification-review",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let requestDigest = try digest(for: request)
         let auditArtifactIDs = envelope.artifacts.compactMap(\.artifactID)
@@ -758,9 +754,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             for: auditURL,
             projectRoot: context.projectRoot,
             artifactID: "rtl-verification-audit",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         return [resultReference, qualificationReference, reviewReference, auditReference]
     }
@@ -786,7 +781,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     private func loadResumableResult(
         request: RTLVerificationRequest,
         context: FlowExecutionContext
-    ) throws -> (envelope: RTLVerificationResult, artifacts: [XcircuiteFileReference])? {
+    ) throws -> (envelope: RTLVerificationResult, artifacts: [ArtifactReference])? {
         let resultURL = rawDirectory(context: context)
             .appending(path: "rtl-verification-result.json")
         let auditURL = auditDirectory(context: context)
@@ -864,23 +859,22 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
 
     private func persistedStageReferences(
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let definitions: [(URL, String)] = [
             (rawDirectory(context: context).appending(path: "rtl-verification-result.json"), "rtl-verification-result"),
             (rawDirectory(context: context).appending(path: "qualification.json"), "rtl-verification-qualification"),
             (reviewDirectory(context: context).appending(path: "rtl-verification-review.json"), "rtl-verification-review"),
             (auditDirectory(context: context).appending(path: "rtl-verification-audit.json"), "rtl-verification-audit")
         ]
-        var references: [XcircuiteFileReference] = []
+        var references: [ArtifactReference] = []
         for (url, artifactID) in definitions {
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             references.append(try artifactBuilder.reference(
                 for: url,
                 projectRoot: context.projectRoot,
                 artifactID: artifactID,
-                kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         return references
@@ -940,7 +934,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
 
     private func stageResult(
         envelope: RTLVerificationResult,
-        resultArtifacts: [XcircuiteFileReference]
+        resultArtifacts: [ArtifactReference]
     ) -> FlowStageResult {
         let diagnostics = envelope.diagnostics.map(flowDiagnostic)
         let gate = FlowGateResult(
@@ -959,7 +953,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             status: stageStatus,
             diagnostics: diagnostics,
             gates: [gate],
-            artifacts: FoundationFlowProjection.legacyReferences(from: envelope.artifacts) + resultArtifacts
+            artifacts: envelope.artifacts + resultArtifacts
         )
     }
 

@@ -4,7 +4,6 @@ import DesignFlowKernel
 import Foundation
 import STAEngine
 import TimingCore
-import DesignFlowKernel
 
 public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -161,7 +160,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
     private func persistResult(
         _ result: STAExecutionResult,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -175,15 +174,14 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             for: url,
             projectRoot: context.projectRoot,
             artifactID: "timing-sta-result",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     private func makeStageResult(
         result: STAExecutionResult,
-        resultArtifact: XcircuiteFileReference
+        resultArtifact: ArtifactReference
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map { diagnostic in
             FlowDiagnostic(

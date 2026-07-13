@@ -1,7 +1,7 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LogicDesign
-import DesignFlowKernel
 
 public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -58,25 +58,23 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             let sourceReference = try support.artifactBuilder.reference(
                 for: sourceURL,
                 projectRoot: context.projectRoot,
-                kind: .powerIntent,
-                format: format == .upf ? .upf : .cpf,
-                producedByRunID: context.runID
+                kind: ArtifactKind.powerIntent,
+                format: format == .upf ? ArtifactFormat.upf : ArtifactFormat.cpf
             )
             let designReference = try support.artifactBuilder.reference(
                 for: designURL,
                 projectRoot: context.projectRoot,
-                kind: .rtl,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.rtl,
+                format: ArtifactFormat.json
             )
             let request = PowerIntentParsingRequest(
                 runID: context.runID,
                 inputs: [
-                    try FoundationFlowProjection.locator(from: sourceReference),
-                    try FoundationFlowProjection.locator(from: designReference),
+                    sourceReference.locator,
+                    designReference.locator,
                 ],
                 design: LogicDesignReference(
-                    artifact: try FoundationFlowProjection.locator(from: designReference),
+                    artifact: designReference.locator,
                     topDesignName: topDesignName,
                     designDigest: designDigest
                 ),
@@ -104,13 +102,12 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                     for: intentURL,
                     projectRoot: context.projectRoot,
                     artifactID: "power-intent",
-                    kind: .powerIntent,
-                    format: .json,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.powerIntent,
+                    format: ArtifactFormat.json
                 )
                 var payload = result.payload
                 payload.reference = PowerIntentReference(
-                    artifact: try FoundationFlowProjection.locator(from: intentReference, role: .output),
+                    artifact: intentReference.locator,
                     designDigest: designDigest
                 )
                 persistedResult = PowerIntentParsingResult(
@@ -144,7 +141,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     private func persistResult(
         _ result: PowerIntentParsingResult,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -156,16 +153,15 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             for: url,
             projectRoot: context.projectRoot,
             artifactID: "\(stageID)-result",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     private func makeStageResult(
         result: PowerIntentParsingResult,
-        resultArtifact: XcircuiteFileReference,
-        artifacts: [XcircuiteFileReference],
+        resultArtifact: ArtifactReference,
+        artifacts: [ArtifactReference],
         context: FlowExecutionContext
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map { diagnostic in
