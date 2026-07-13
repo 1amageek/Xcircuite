@@ -93,7 +93,10 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         )
         return XcircuiteSymbolicPlannerSolverFamilyComparisonResult(
             comparison: comparison,
-            comparisonArtifact: comparisonArtifact
+            comparisonArtifact: try requireFoundationArtifactReference(
+                comparisonArtifact,
+                field: "comparison.comparisonArtifact"
+            )
         )
     }
 

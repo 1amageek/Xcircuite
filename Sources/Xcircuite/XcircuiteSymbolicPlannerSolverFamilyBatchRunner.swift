@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
@@ -121,7 +122,10 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         )
         return XcircuiteSymbolicPlannerSolverFamilyBatchResult(
             batchRun: batchRun,
-            batchArtifact: batchArtifact,
+            batchArtifact: try requireFoundationArtifactReference(
+                batchArtifact,
+                field: "solverFamily.batchArtifact"
+            ),
             comparisonResult: comparisonResult,
             promotionResult: promotionResult
         )
@@ -188,7 +192,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
 
     private func promoteIfRequested(
         request: XcircuiteSymbolicPlannerSolverFamilyBatchRequest,
-        comparisonArtifact: XcircuiteFileReference,
+        comparisonArtifact: ArtifactReference,
         projectRoot: URL,
         diagnostics: inout [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) async throws -> XcircuiteSymbolicPlannerSolverFamilyPromotionResult? {

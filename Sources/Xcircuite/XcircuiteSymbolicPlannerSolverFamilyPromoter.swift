@@ -129,12 +129,28 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             comparisonID: comparison.comparisonID,
             selectedCandidateIndex: selectedIndex,
             selectedToolID: qualification.toolID,
-            sourceComparisonArtifact: comparisonInput.reference,
+            sourceComparisonArtifact: try requireFoundationArtifactReference(
+                comparisonInput.reference,
+                field: "promotion.sourceComparisonArtifact"
+            ),
             sourceQualificationArtifact: qualificationArtifact,
-            promotedCandidatePlanArtifact: promotedCandidatePlanArtifact,
-            promotedSolverPlanArtifact: promotedSolverPlanArtifact,
-            promotedPlanReplayValidationArtifact: promotedPlanReplayValidationArtifact,
-            promotedPlanVerificationArtifact: (verificationResult?.planVerificationArtifact).map(legacyArtifactReference),
+            promotedCandidatePlanArtifact: try requireFoundationArtifactReference(
+                promotedCandidatePlanArtifact,
+                field: "promotion.promotedCandidatePlanArtifact"
+            ),
+            promotedSolverPlanArtifact: try promotedSolverPlanArtifact.map {
+                try requireFoundationArtifactReference(
+                    $0,
+                    field: "promotion.promotedSolverPlanArtifact"
+                )
+            },
+            promotedPlanReplayValidationArtifact: try promotedPlanReplayValidationArtifact.map {
+                try requireFoundationArtifactReference(
+                    $0,
+                    field: "promotion.promotedPlanReplayValidationArtifact"
+                )
+            },
+            promotedPlanVerificationArtifact: verificationResult?.planVerificationArtifact,
             verificationStatus: verificationResult?.status,
             verificationAccepted: verificationResult?.accepted,
             diagnostics: diagnostics
@@ -146,7 +162,10 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         )
         return XcircuiteSymbolicPlannerSolverFamilyPromotionResult(
             promotion: promotion,
-            promotionArtifact: promotionArtifact
+            promotionArtifact: try requireFoundationArtifactReference(
+                promotionArtifact,
+                field: "promotion.promotionArtifact"
+            )
         )
     }
 

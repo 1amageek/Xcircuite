@@ -1,14 +1,15 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchResult: Codable, Sendable, Hashable {
     public var batchRun: XcircuiteSymbolicPlannerSolverFamilyBatchRun
-    public var batchArtifact: XcircuiteFileReference
+    public var batchArtifact: ArtifactReference
     public var comparisonResult: XcircuiteSymbolicPlannerSolverFamilyComparisonResult
     public var promotionResult: XcircuiteSymbolicPlannerSolverFamilyPromotionResult?
 
     public init(
         batchRun: XcircuiteSymbolicPlannerSolverFamilyBatchRun,
-        batchArtifact: XcircuiteFileReference,
+        batchArtifact: ArtifactReference,
         comparisonResult: XcircuiteSymbolicPlannerSolverFamilyComparisonResult,
         promotionResult: XcircuiteSymbolicPlannerSolverFamilyPromotionResult?
     ) {

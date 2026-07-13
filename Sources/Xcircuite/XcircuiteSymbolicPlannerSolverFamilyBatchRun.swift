@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchRun: Codable, Sendable, Hashable {
@@ -10,8 +11,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRun: Codable, Sendable, H
     public var qualifiedCandidateCount: Int
     public var failedCandidateCount: Int
     public var candidates: [XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult]
-    public var comparisonArtifact: XcircuiteFileReference
-    public var promotionArtifact: XcircuiteFileReference?
+    public var comparisonArtifact: ArtifactReference
+    public var promotionArtifact: ArtifactReference?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
 
     public init(
@@ -24,8 +25,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRun: Codable, Sendable, H
         qualifiedCandidateCount: Int,
         failedCandidateCount: Int,
         candidates: [XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult],
-        comparisonArtifact: XcircuiteFileReference,
-        promotionArtifact: XcircuiteFileReference?,
+        comparisonArtifact: ArtifactReference,
+        promotionArtifact: ArtifactReference?,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
     ) {
         self.schemaVersion = schemaVersion

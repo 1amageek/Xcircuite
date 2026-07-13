@@ -8,12 +8,12 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
     public var comparisonID: String
     public var selectedCandidateIndex: Int
     public var selectedToolID: String
-    public var sourceComparisonArtifact: XcircuiteFileReference?
+    public var sourceComparisonArtifact: ArtifactReference?
     public var sourceQualificationArtifact: ArtifactReference?
-    public var promotedCandidatePlanArtifact: XcircuiteFileReference
-    public var promotedSolverPlanArtifact: XcircuiteFileReference?
-    public var promotedPlanReplayValidationArtifact: XcircuiteFileReference?
-    public var promotedPlanVerificationArtifact: XcircuiteFileReference?
+    public var promotedCandidatePlanArtifact: ArtifactReference
+    public var promotedSolverPlanArtifact: ArtifactReference?
+    public var promotedPlanReplayValidationArtifact: ArtifactReference?
+    public var promotedPlanVerificationArtifact: ArtifactReference?
     public var verificationStatus: String?
     public var verificationAccepted: Bool?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
@@ -25,12 +25,12 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
         comparisonID: String,
         selectedCandidateIndex: Int,
         selectedToolID: String,
-        sourceComparisonArtifact: XcircuiteFileReference?,
+        sourceComparisonArtifact: ArtifactReference?,
         sourceQualificationArtifact: ArtifactReference?,
-        promotedCandidatePlanArtifact: XcircuiteFileReference,
-        promotedSolverPlanArtifact: XcircuiteFileReference?,
-        promotedPlanReplayValidationArtifact: XcircuiteFileReference?,
-        promotedPlanVerificationArtifact: XcircuiteFileReference?,
+        promotedCandidatePlanArtifact: ArtifactReference,
+        promotedSolverPlanArtifact: ArtifactReference?,
+        promotedPlanReplayValidationArtifact: ArtifactReference?,
+        promotedPlanVerificationArtifact: ArtifactReference?,
         verificationStatus: String?,
         verificationAccepted: Bool?,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
