@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerProofValidationArtifactSet: Codable, Sendable, Hashable {
     public var validationArtifact: XcircuiteFileReference

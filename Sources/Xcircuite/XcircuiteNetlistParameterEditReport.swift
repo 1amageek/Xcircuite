@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteNetlistParameterEditReport: Codable, Sendable, Hashable {
     public var schemaVersion: Int

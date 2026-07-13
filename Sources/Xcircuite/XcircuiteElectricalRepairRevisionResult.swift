@@ -1,7 +1,7 @@
 import ElectricalSignoffEngine
 import Foundation
 import PhysicalDesignCore
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteElectricalRepairRevisionResult: Sendable, Hashable, Codable {
     public static let currentSchemaVersion = 1
@@ -29,7 +29,7 @@ public struct XcircuiteElectricalRepairRevisionResult: Sendable, Hashable, Codab
     public var runID: String
     public var selectedCandidateID: String
     public var repairPlanArtifact: XcircuiteFileReference
-    public var physicalDesignResult: XcircuiteEngineResultEnvelope<PhysicalDesignPayload>
+    public var physicalDesignResult: PhysicalDesignResult
     public var digestLineage: DigestLineage
     public var rerunRequired: Bool
 
@@ -37,7 +37,7 @@ public struct XcircuiteElectricalRepairRevisionResult: Sendable, Hashable, Codab
         runID: String,
         selectedCandidateID: String,
         repairPlanArtifact: XcircuiteFileReference,
-        physicalDesignResult: XcircuiteEngineResultEnvelope<PhysicalDesignPayload>,
+        physicalDesignResult: PhysicalDesignResult,
         digestLineage: DigestLineage,
         rerunRequired: Bool = true,
         schemaVersion: Int = Self.currentSchemaVersion

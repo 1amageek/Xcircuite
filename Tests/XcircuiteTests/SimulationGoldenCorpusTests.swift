@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Simulation golden corpus", .timeLimit(.minutes(1)))
 struct SimulationGoldenCorpusTests {

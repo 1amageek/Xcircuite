@@ -4,7 +4,7 @@ import LayoutCore
 import LayoutIO
 import LVSEngine
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifier {
     func decodedHint<T: Decodable>(

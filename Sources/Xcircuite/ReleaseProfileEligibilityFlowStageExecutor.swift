@@ -1,14 +1,14 @@
 import DesignFlowKernel
 import Foundation
 import ReleaseEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct ReleaseProfileEligibilityFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let requestInput: XcircuiteFlowInputReference
     private let engine: any ReleaseProfileEligibilityEvaluating
-    private let support: ReleaseStageExecutionAdapterSupport
+    private let support: ReleaseStageExecutionSupport
 
     public init(
         stageID: String = "release.profile",
@@ -20,7 +20,7 @@ public struct ReleaseProfileEligibilityFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.requestInput = requestInput
         self.engine = engine
-        self.support = ReleaseStageExecutionAdapterSupport()
+        self.support = ReleaseStageExecutionSupport()
     }
 
     public func execute(
@@ -45,19 +45,19 @@ public struct ReleaseProfileEligibilityFlowStageExecutor: FlowStageExecutor {
                     message: "Release profile eligibility request run ID does not match the flow context."
                 )
             }
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(
-                envelope,
+            let artifact = try support.persistResult(
+                result,
                 stageID: stageID,
                 artifactID: "release-profile-eligibility-result",
                 context: context
             )
             return support.stageResult(
-                envelope: envelope,
+                result: result,
                 stageID: stageID,
-                artifacts: envelope.artifacts + [artifact],
-                approved: envelope.payload.eligible
+                artifacts: [artifact],
+                approved: result.payload.eligible
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

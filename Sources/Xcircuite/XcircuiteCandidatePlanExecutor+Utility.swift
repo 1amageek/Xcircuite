@@ -5,7 +5,7 @@ import LayoutCore
 import LayoutIO
 import LayoutTech
 import LVSEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteCandidatePlanExecutor {
     func projectRelativePath(for url: URL, projectRoot: URL) throws -> String {

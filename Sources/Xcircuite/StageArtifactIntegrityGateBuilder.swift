@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 struct StageArtifactIntegrityGateBuilder: Sendable {
     private let verifier: XcircuiteFileReferenceVerifier

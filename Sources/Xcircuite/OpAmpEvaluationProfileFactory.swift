@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct OpAmpEvaluationProfileFactory: Sendable {
     public init() {}

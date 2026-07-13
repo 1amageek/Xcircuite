@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum DFTToolDescriptors {
     public static func engine(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {

@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Post-layout comparison flow stage executor", .timeLimit(.minutes(1)))
 struct PostLayoutComparisonFlowStageExecutorTests {

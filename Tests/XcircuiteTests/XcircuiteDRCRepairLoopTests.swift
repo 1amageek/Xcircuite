@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite DRC repair loop")
 struct XcircuiteDRCRepairLoopTests {

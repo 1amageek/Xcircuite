@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public extension XcircuiteFlowRunSpec {
     func validate() throws {
@@ -43,6 +43,21 @@ public extension XcircuiteFlowRuntimeSpec {
         let executorStageIDs = Set(executors.map(\.stageID))
         for stage in runSpec.stages where !executorStageIDs.contains(stage.stageID) {
             throw XcircuiteFlowRuntimeSpecError.missingRuntimeExecutorForRunStage(stage.stageID)
+        }
+        let processQualificationStageIDs = Set(
+            executors.compactMap { executor -> String? in
+                if case .electricalSignoffProcessQualification = executor {
+                    return executor.stageID
+                }
+                return nil
+            }
+        )
+        for stage in runSpec.stages where processQualificationStageIDs.contains(stage.stageID) {
+            guard stage.requiresApproval else {
+                throw XcircuiteFlowRuntimeSpecError.electricalProcessQualificationRequiresApproval(
+                    stage.stageID
+                )
+            }
         }
     }
 }

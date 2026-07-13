@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     private let ledgerLoader: any FlowRunLedgerLoading

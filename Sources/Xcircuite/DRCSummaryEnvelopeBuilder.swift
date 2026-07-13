@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import DRCEngine
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 struct DRCSummaryEnvelopeBuilder: Sendable {
     func envelopeReference(

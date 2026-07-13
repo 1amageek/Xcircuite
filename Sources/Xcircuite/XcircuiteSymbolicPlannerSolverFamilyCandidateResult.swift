@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Sendable, Hashable {
     public var candidateIndex: Int

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite symbolic planner LVS repair-domain corpus")
 struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {

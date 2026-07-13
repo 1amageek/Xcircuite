@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
     private let packageStore: XcircuitePackageStore

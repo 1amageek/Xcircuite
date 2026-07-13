@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteProblemTranslationAuditor: Sendable {
     private struct SourceIntentClause: Sendable, Hashable {

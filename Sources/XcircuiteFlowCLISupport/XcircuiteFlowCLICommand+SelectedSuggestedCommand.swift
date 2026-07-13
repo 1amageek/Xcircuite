@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
     static func runSelectedSuggestedCommand(arguments: [String]) async throws -> String {

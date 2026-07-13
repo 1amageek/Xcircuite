@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 struct XcircuiteResolvedActionDomainSnapshot: Sendable, Hashable {
     var snapshot: XcircuitePlanningActionDomainSnapshot

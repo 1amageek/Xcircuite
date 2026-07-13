@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuitePlanningRiskClassification: Codable, Sendable, Hashable {
     public var riskID: String

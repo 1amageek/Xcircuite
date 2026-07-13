@@ -1,6 +1,6 @@
 import Testing
 @testable import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite candidate plan verifier correctness gates")
 struct XcircuiteCandidatePlanVerifierCorrectnessGateTests {

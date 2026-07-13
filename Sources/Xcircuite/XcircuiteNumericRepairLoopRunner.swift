@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteNumericRepairLoopRunner: Sendable {
     private struct PolicySelection: Sendable, Hashable {

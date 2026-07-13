@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct SimulationGoldenCorpusRunner: Sendable {
     private let engine: any SimulationExecuting

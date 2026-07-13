@@ -3,7 +3,6 @@ import DesignFlowKernel
 import PDKKit
 import Testing
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("PDK external inspection process providers")
@@ -19,7 +18,7 @@ struct PDKExternalInspectionProcessProviderTests {
         let resolved = try LocalPDKAssetResolver().resolve(asset, relativeTo: manifestURL)
         let request = PDKStandardViewInspectionRequest(
             runID: "pdk-external-standard-view",
-            inputs: [resolved.reference],
+            inputs: [resolved.reference.locator],
             format: .lef,
             assetID: "cells",
             projectRootPath: root.path
@@ -49,8 +48,8 @@ struct PDKExternalInspectionProcessProviderTests {
         #expect(envelope.status == .completed, "\(envelope.diagnostics)")
         #expect(envelope.payload.isValid)
         #expect(envelope.artifacts.count >= 5)
-        #expect(envelope.artifacts.contains { $0.artifactID == "pdk-external-execution" })
-        #expect(envelope.artifacts.contains { $0.artifactID == "pdk-external-stderr" })
+        #expect(envelope.artifacts.contains { $0.location.value.hasSuffix("/execution.json") })
+        #expect(envelope.artifacts.contains { $0.location.value.hasSuffix("/stderr.txt") })
 
         let executionURL = root
             .appending(path: ".xcircuite/runs/pdk-external-standard-view/stages/pdk.external-standard-view/raw/external-pdk/execution.json")
@@ -73,7 +72,7 @@ struct PDKExternalInspectionProcessProviderTests {
         let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
         let request = PDKRuleDeckInspectionRequest(
             runID: "pdk-external-rule-deck-failure",
-            inputs: [pdk.manifest],
+            inputs: [pdk.manifest.locator],
             pdk: pdk,
             assetID: "rules",
             projectRootPath: root.path
@@ -128,7 +127,7 @@ struct PDKExternalInspectionProcessProviderTests {
         let runID = "pdk-external-stage"
         let rawRequest = PDKStandardViewInspectionRequest(
             runID: runID,
-            inputs: [resolved.reference],
+            inputs: [resolved.reference.locator],
             format: .lef,
             assetID: "cells",
             projectRootPath: root.path
@@ -169,11 +168,11 @@ struct PDKExternalInspectionProcessProviderTests {
             .appending(path: "raw/pdk-result.json")
         let rawData = try Data(contentsOf: rawURL)
         let envelope = try JSONDecoder().decode(
-            XcircuiteEngineResultEnvelope<PDKManifestViewInspectionPayload>.self,
+            PDKManifestViewInspectionResult.self,
             from: rawData
         )
         #expect(envelope.status == .completed)
-        #expect(envelope.artifacts.contains { $0.artifactID == "pdk-external-execution" })
+        #expect(envelope.artifacts.contains { $0.location.value.hasSuffix("/execution.json") })
         #expect(FileManager.default.fileExists(atPath: context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)

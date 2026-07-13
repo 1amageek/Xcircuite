@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PEXFlowStageExecutor: FlowStageExecutor {
     public let stageID: String

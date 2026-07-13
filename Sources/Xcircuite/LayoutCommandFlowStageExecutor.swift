@@ -5,7 +5,7 @@ import LayoutCore
 import LayoutCommands
 import LayoutIO
 import LayoutTech
-import XcircuitePackage
+import DesignFlowKernel
 
 public protocol LayoutCommandRunning: Sendable {
     func run(request: LayoutCommandRequest, baseURL: URL) throws -> LayoutCommandResult

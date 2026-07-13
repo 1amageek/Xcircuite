@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
     public let stageID: String

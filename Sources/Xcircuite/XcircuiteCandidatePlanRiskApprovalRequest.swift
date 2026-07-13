@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanRiskApprovalRequest: Codable, Sendable, Hashable {
     public var runID: String

@@ -1,15 +1,15 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import LogicEngineCore
 import LogicSynthesis
-import XcircuitePackage
 
 public struct LogicSynthesisFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let requestInput: XcircuiteFlowInputReference
     private let injectedEngine: (any LogicSynthesisExecuting)?
-    private let support: LogicEngineStageExecutionAdapterSupport
+    private let support: LogicEngineStageExecutionSupport
 
     public init(
         stageID: String = "logic.synthesize",
@@ -21,7 +21,7 @@ public struct LogicSynthesisFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.requestInput = requestInput
         self.injectedEngine = engine
-        self.support = LogicEngineStageExecutionAdapterSupport()
+        self.support = LogicEngineStageExecutionSupport()
     }
 
     public func execute(
@@ -58,17 +58,19 @@ public struct LogicSynthesisFlowStageExecutor: FlowStageExecutor {
                     defaultOutputDirectory: rawDirectory
                 )
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let resultArtifact = try support.persistEnvelope(
-                envelope,
+            let resultArtifact = try support.persistResult(
+                result,
                 fileName: "logic-synthesis-result.json",
                 artifactID: "logic-synthesis-result",
                 stageID: stageID,
                 context: context
             )
             return support.result(
-                envelope: envelope,
+                status: result.status,
+                diagnostics: result.diagnostics,
+                artifacts: result.artifacts,
                 resultArtifact: resultArtifact,
                 stageID: stageID,
                 gateID: stageID,

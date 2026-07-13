@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import PDKKit
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -10,7 +10,7 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
     private let assetID: String
     private let format: PDKStandardViewFormat
     private let engine: any PDKManifestViewInspecting
-    private let support: PDKStageExecutionAdapterSupport
+    private let support: PDKStageExecutionSupport
 
     public init(
         stageID: String = PDKKitAPI.standardViewInspectionStageID,
@@ -26,7 +26,7 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
         self.assetID = assetID
         self.format = format
         self.engine = engine
-        self.support = PDKStageExecutionAdapterSupport()
+        self.support = PDKStageExecutionSupport()
     }
 
     public static func local(
@@ -84,16 +84,16 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
             let request = PDKManifestViewInspectionRequest(
                 runID: context.runID,
-                inputs: [pdk.manifest],
+                inputs: [pdk.manifest.locator],
                 pdk: pdk,
                 assetID: assetID,
                 format: format,
                 projectRootPath: context.projectRoot.path(percentEncoded: false)
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(envelope, stageID: stageID, context: context)
-            return support.stageResult(envelope: envelope, stageID: stageID, artifact: artifact)
+            let artifact = try support.persistResult(result, stageID: stageID, context: context)
+            return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {

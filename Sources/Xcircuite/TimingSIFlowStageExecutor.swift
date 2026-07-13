@@ -1,17 +1,17 @@
 import CryptoKit
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LogicIR
-import PDKCore
 import SignalIntegrityEngine
 import TimingCore
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct TimingSIFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     public let inputs: TimingSIFlowInputs
-    public let engine: (any SignalIntegrityAnalyzing)?
+    public let engine: (any SignalIntegrityFoundationEngine)?
 
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -19,7 +19,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         inputs: TimingSIFlowInputs,
         stageID: String = "timing.signal-integrity",
         toolID: String = "native-signal-integrity",
-        engine: (any SignalIntegrityAnalyzing)? = nil
+        engine: (any SignalIntegrityFoundationEngine)? = nil
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -36,14 +36,14 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             try context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
-            let executingEngine: any SignalIntegrityAnalyzing = engine ?? NativeSignalIntegrityEngine(
+            let executingEngine: any SignalIntegrityFoundationEngine = engine ?? NativeSignalIntegrityEngine(
                 reader: ProjectSITimingArtifactReader(projectRoot: context.projectRoot),
                 artifactStore: nil
             )
-            let envelope = try await executingEngine.execute(request)
+            let result = try await executingEngine.execute(request)
             try context.checkCancellation()
-            let resultArtifact = try persistEnvelope(envelope, context: context)
-            return makeStageResult(envelope: envelope, resultArtifact: resultArtifact)
+            let resultArtifact = try persistResult(result, context: context)
+            return makeStageResult(result: result, resultArtifact: resultArtifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
@@ -69,27 +69,21 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> SignalIntegrityRequest {
+    private func makeRequest(context: FlowExecutionContext) throws -> SignalIntegrityFoundationRequest {
         let design = try reference(input: inputs.design, context: context, artifactID: "timing-si-design", kind: .netlist, fallback: .json)
         let constraints = try reference(input: inputs.constraints, context: context, artifactID: "timing-si-constraints", kind: .constraint, fallback: .sdc)
         let pdkManifest = try reference(input: inputs.pdkManifest, context: context, artifactID: "timing-si-pdk-manifest", kind: .technology, fallback: .json)
-        let parasitics = try reference(input: inputs.parasitics, context: context, artifactID: "timing-si-parasitics", kind: .parasitic, fallback: .spef)
-        let pdk = PDKReference(
-            manifest: pdkManifest,
-            processID: inputs.processID,
-            version: inputs.pdkVersion,
-            digest: inputs.pdkDigest
-        )
-        return SignalIntegrityRequest(
+        let parasitics = try reference(input: inputs.parasitics, context: context, artifactID: "timing-si-parasitics", kind: .parasitics, fallback: .spef)
+        return SignalIntegrityFoundationRequest(
             runID: context.runID,
-            inputs: [design, constraints, pdkManifest, parasitics],
-            design: LogicDesignReference(
-                artifact: design,
-                topDesignName: inputs.topDesignName,
-                designDigest: design.sha256 ?? ""
-            ),
-            constraints: TimingConstraintReference(artifact: constraints, modeIDs: inputs.modeIDs),
-            pdk: pdk,
+            design: design,
+            topDesignName: inputs.topDesignName,
+            constraints: constraints,
+            requestedModeIDs: inputs.modeIDs,
+            pdkManifest: pdkManifest,
+            processID: inputs.processID,
+            pdkVersion: inputs.pdkVersion,
+            pdkDigest: try ContentDigest(algorithm: .sha256, hexadecimalValue: inputs.pdkDigest),
             parasitics: parasitics,
             maxDeltaDelay: inputs.maxDeltaDelay,
             maxNoiseRatio: inputs.maxNoiseRatio
@@ -100,22 +94,27 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         input: XcircuiteFlowInputReference,
         context: FlowExecutionContext,
         artifactID: String,
-        kind: XcircuiteFileKind,
-        fallback: XcircuiteFileFormat
-    ) throws -> XcircuiteFileReference {
+        kind: ArtifactKind,
+        fallback: ArtifactFormat
+    ) throws -> ArtifactReference {
         let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
-        return try artifactBuilder.reference(
-            for: url,
-            projectRoot: context.projectRoot,
-            artifactID: artifactID,
-            kind: kind,
-            format: format(for: url, fallback: fallback),
-            producedByRunID: context.runID
+        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: context.projectRoot)
+        let data = try Data(contentsOf: url)
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format(for: url, fallback: fallback)
+            ),
+            digest: try SHA256ContentDigester().digest(data: data),
+            byteCount: UInt64(data.count)
         )
     }
 
-    private func persistEnvelope(
-        _ envelope: XcircuiteEngineResultEnvelope<SignalIntegrityPayload>,
+    private func persistResult(
+        _ result: SignalIntegrityExecutionResult,
         context: FlowExecutionContext
     ) throws -> XcircuiteFileReference {
         let directory = context.runDirectory.appending(path: "stages").appending(path: stageID).appending(path: "raw")
@@ -123,7 +122,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         let url = directory.appending(path: "timing-signal-integrity-result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(envelope).write(to: url, options: .atomic)
+        try encoder.encode(result).write(to: url, options: .atomic)
         return try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,
@@ -135,21 +134,21 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
     }
 
     private func makeStageResult(
-        envelope: XcircuiteEngineResultEnvelope<SignalIntegrityPayload>,
+        result: SignalIntegrityExecutionResult,
         resultArtifact: XcircuiteFileReference
     ) -> FlowStageResult {
-        let diagnostics = envelope.diagnostics.map {
-            FlowDiagnostic(severity: flowSeverity($0.severity), code: $0.code, message: $0.message)
+        let diagnostics = result.diagnostics.map {
+            FlowDiagnostic(severity: flowSeverity($0.severity), code: $0.code.rawValue, message: $0.summary)
         }
         let gateStatus: FlowGateStatus
-        switch envelope.status {
-        case .completed: gateStatus = envelope.payload.violations.isEmpty ? .passed : .failed
+        switch result.status {
+        case .completed: gateStatus = result.payload.violations.isEmpty ? .passed : .failed
         case .blocked: gateStatus = .blocked
         case .failed: gateStatus = .failed
         case .cancelled: gateStatus = .incomplete
         }
         let stageStatus: FlowStageStatus
-        switch envelope.status {
+        switch result.status {
         case .completed: stageStatus = .succeeded
         case .blocked: stageStatus = .blocked
         case .failed, .cancelled: stageStatus = .failed
@@ -159,19 +158,19 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             status: stageStatus,
             diagnostics: diagnostics,
             gates: [FlowGateResult(gateID: stageID, status: gateStatus, diagnostics: diagnostics)],
-            artifacts: envelope.artifacts + [resultArtifact]
+            artifacts: [resultArtifact]
         )
     }
 
-    private func flowSeverity(_ severity: XcircuiteEngineDiagnosticSeverity) -> FlowDiagnosticSeverity {
+    private func flowSeverity(_ severity: DiagnosticSeverity) -> FlowDiagnosticSeverity {
         switch severity {
-        case .info: return .info
+        case .information: return .info
         case .warning: return .warning
         case .error: return .error
         }
     }
 
-    private func format(for url: URL, fallback: XcircuiteFileFormat) -> XcircuiteFileFormat {
+    private func format(for url: URL, fallback: ArtifactFormat) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "spef": return .spef
         case "sdc": return .sdc
@@ -184,24 +183,32 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
 private struct ProjectSITimingArtifactReader: TimingArtifactReading {
     let projectRoot: URL
 
-    func read(_ reference: XcircuiteFileReference) async throws -> Data {
-        let url = reference.path.hasPrefix("/")
-            ? URL(filePath: reference.path)
-            : projectRoot.appending(path: reference.path)
+    func read(_ reference: ArtifactReference) async throws -> Data {
+        let url: URL
+        do {
+            url = try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+        } catch {
+            throw TimingError.artifactReadFailed(
+                path: reference.path,
+                message: error.localizedDescription
+            )
+        }
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
             throw TimingError.artifactReadFailed(path: reference.path, message: error.localizedDescription)
         }
-        if let byteCount = reference.byteCount, byteCount != Int64(data.count) {
-            throw TimingError.artifactSizeMismatch(path: reference.path, expected: byteCount, actual: Int64(data.count))
+        if reference.byteCount != UInt64(data.count) {
+            throw TimingError.artifactSizeMismatch(
+                path: reference.path,
+                expected: Int64(reference.byteCount),
+                actual: Int64(data.count)
+            )
         }
-        if let digest = reference.sha256 {
-            let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard actual.caseInsensitiveCompare(digest) == .orderedSame else {
-                throw TimingError.artifactDigestMismatch(path: reference.path)
-            }
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actual.caseInsensitiveCompare(reference.sha256) == .orderedSame else {
+            throw TimingError.artifactDigestMismatch(path: reference.path)
         }
         return data
     }

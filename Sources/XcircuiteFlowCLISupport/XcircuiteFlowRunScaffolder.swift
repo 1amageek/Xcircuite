@@ -3,7 +3,7 @@ import Foundation
 import PEXEngine
 import ToolQualification
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 /// Generates a minimal valid `XcircuiteFlowRunSpec` + `XcircuiteFlowRuntimeSpec`
 /// pair so a caller never has to hand-write the trust-evidence shape from

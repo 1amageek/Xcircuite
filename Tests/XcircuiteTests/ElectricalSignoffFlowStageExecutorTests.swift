@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import ElectricalSignoffCore
 import ElectricalSignoffEngine
 import ElectricalSignoffQualification
@@ -9,46 +10,59 @@ import PhysicalDesignCore
 import QualificationEngine
 import Testing
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("Electrical signoff flow adapter")
 struct ElectricalSignoffFlowStageExecutorTests {
     @Test("maps completed per-axis envelopes to passed flow gates", .timeLimit(.minutes(1)))
     func mapsCompletedEnvelopes() async throws {
-        let request = makeRequest(runID: "electrical-flow-run")
+        let request = try makeRequest(runID: "electrical-flow-run")
         let executor = ElectricalSignoffFlowStageExecutor(
             stageID: "electrical-signoff",
             request: request,
             axes: [.erc, .esd],
             engine: StubElectricalSignoffEngine()
         )
+        let context = try makeContext(runID: request.runID)
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "electrical-signoff", displayName: "Electrical signoff"),
-            context: makeContext(runID: request.runID)
+            context: context
         )
 
-        #expect(result.status == .succeeded)
-        #expect(result.gates.map(\.status) == [.passed, .passed])
-        #expect(result.gates.map(\.gateID) == ["erc", "esd"])
+        #expect(result.status == FlowStageStatus.succeeded)
+        #expect(result.gates.map(\.status) == [FlowGateStatus.passed, .passed, .passed])
+        #expect(result.gates.map(\.gateID) == ["erc", "esd", "artifact-integrity"])
+        let foundationReference = try #require(
+            result.artifacts.first { $0.artifactID == "electrical-signoff-foundation-evidence" }
+        )
+        #expect(foundationReference.sha256?.count == 64)
+        let foundationURL = try XcircuitePackageStore().url(
+            forProjectRelativePath: foundationReference.path,
+            inProjectAt: context.projectRoot
+        )
+        let foundationEvidence = try JSONDecoder().decode(
+            ElectricalSignoffFoundationEvidence.self,
+            from: Data(contentsOf: foundationURL)
+        )
+        #expect(foundationEvidence.evidence.provenance.inputs.count == 3)
     }
 
     @Test("failed electrical axes retain a typed repair plan artifact", .timeLimit(.minutes(1)))
     func failedAxisPersistsRepairPlan() async throws {
-        let request = makeRequest(runID: "electrical-repair-plan-run")
+        let request = try makeRequest(runID: "electrical-repair-plan-run")
         let executor = ElectricalSignoffFlowStageExecutor(
             stageID: "electrical-signoff",
             request: request,
             axes: [.erc],
             engine: RepairCandidateElectricalSignoffEngine()
         )
-        let context = makeContext(runID: request.runID)
+        let context = try makeContext(runID: request.runID)
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "electrical-signoff", displayName: "Electrical signoff"),
             context: context
         )
 
-        #expect(result.status == .failed)
+        #expect(result.status == FlowStageStatus.failed)
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-repair-plan" })
         let root = context.projectRoot
         let url = try XcircuitePackageStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
@@ -62,7 +76,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
     func qualificationStagePersistsReleaseArtifacts() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-flow-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let request = makeRequest(runID: "electrical-qualification-flow-run")
+        let request = try makeRequest(runID: "electrical-qualification-flow-run")
         let specification = ElectricalSignoffQualificationSpec(
             corpusID: "electrical-flow-corpus",
             corpusVersion: "1",
@@ -101,8 +115,8 @@ struct ElectricalSignoffFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == .succeeded)
-        #expect(result.gates.map(\.status) == [.passed])
+        #expect(result.status == FlowStageStatus.succeeded)
+        #expect(result.gates.map(\.status) == [FlowGateStatus.passed])
         #expect(result.artifacts.count == 6)
         let inputManifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-signoff-input-manifest"
@@ -143,10 +157,10 @@ struct ElectricalSignoffFlowStageExecutorTests {
             runID: request.runID,
             projectRoot: root.path,
             processProfileID: "fixture",
-            suiteArtifact: suiteReference,
-            qualificationReportArtifact: retainedReportReference,
-            domainReportArtifacts: [qualificationReportReference],
-            evidenceArtifacts: [evidenceReference],
+            suiteArtifact: try FoundationFlowProjection.artifactReference(from: suiteReference),
+            qualificationReportArtifact: try FoundationFlowProjection.artifactReference(from: retainedReportReference),
+            domainReportArtifacts: [try FoundationFlowProjection.artifactReference(from: qualificationReportReference)],
+            evidenceArtifacts: [try FoundationFlowProjection.artifactReference(from: evidenceReference)],
             toolEvidence: [toolEvidence],
             policy: policy
         )
@@ -159,7 +173,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
     func qualificationStageRetainsOracleArtifact() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-oracle-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let request = makeRequest(runID: "electrical-qualification-oracle-run")
+        let request = try makeRequest(runID: "electrical-qualification-oracle-run")
         let caseID = "clean-erc-oracle"
         let specification = ElectricalSignoffQualificationSpec(
             corpusID: "electrical-oracle-corpus",
@@ -224,7 +238,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == FlowStageStatus.succeeded)
         let inputManifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-signoff-input-manifest"
         })
@@ -253,7 +267,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-external-oracle-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-qualification-external-oracle-run"
-        let request = makeRequest(runID: runID)
+        let request = try makeRequest(runID: runID)
         let caseID = "clean-erc-external-oracle"
         let specification = ElectricalSignoffQualificationSpec(
             corpusID: "electrical-external-oracle-corpus",
@@ -328,7 +342,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == FlowStageStatus.succeeded)
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stdout" })
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stderr" })
         let executionReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-execution" })
@@ -355,7 +369,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-external-oracle-failure-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-qualification-external-oracle-failure-run"
-        let request = makeRequest(runID: runID)
+        let request = try makeRequest(runID: runID)
         let specification = ElectricalSignoffQualificationSpec(
             corpusID: "electrical-external-oracle-failure-corpus",
             corpusVersion: "1",
@@ -406,7 +420,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == .failed)
+        #expect(result.status == FlowStageStatus.failed)
         #expect(result.diagnostics.first?.code == "ELECTRICAL_SIGNOFF_EXTERNAL_ORACLE_PROCESS_FAILED")
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stdout" })
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stderr" })
@@ -422,7 +436,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-resume-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-qualification-resume-run"
-        let request = makeRequest(runID: runID)
+        let request = try makeRequest(runID: runID)
         let specification = ElectricalSignoffQualificationSpec(
             corpusID: "electrical-resume-corpus",
             corpusVersion: "1",
@@ -465,8 +479,8 @@ struct ElectricalSignoffFlowStageExecutorTests {
             healthResults: [:],
             executors: [executor]
         )
-        #expect(blocked.status == .blocked)
-        #expect(blocked.stages.first?.gates.contains { $0.gateID == "approval" && $0.status == .incomplete } == true)
+        #expect(blocked.status == FlowRunStatus.blocked)
+        #expect(blocked.stages.first?.gates.contains { $0.gateID == "approval" && $0.status == FlowGateStatus.incomplete } == true)
 
         _ = try DefaultFlowGateApprovalRecorder().recordApproval(
             FlowGateApprovalRequest(
@@ -483,52 +497,26 @@ struct ElectricalSignoffFlowStageExecutorTests {
             healthResults: [:],
             executors: [executor]
         )
-        #expect(resumed.result.status == .succeeded)
-        #expect(resumed.result.stages.first?.gates.contains { $0.gateID == "approval" && $0.status == .passed } == true)
+        #expect(resumed.result.status == FlowRunStatus.succeeded)
+        #expect(resumed.result.stages.first?.gates.contains { $0.gateID == "approval" && $0.status == FlowGateStatus.passed } == true)
     }
 
     @Test("release gate persists a reproducible all-corner signoff decision", .timeLimit(.minutes(1)))
     func releaseGatePersistsDecision() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-release-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let request = ElectricalSignoffRequest(
-            runID: "electrical-release-gate-run",
-            inputs: [],
-            design: LogicDesignReference(
-                artifact: XcircuiteFileReference(path: "input.json", kind: .other, format: .json),
-                topDesignName: "top",
-                designDigest: "design"
-            ),
-            physicalDesign: PhysicalDesignReference(
-                layoutArtifact: XcircuiteFileReference(path: "input.json", kind: .other, format: .json),
-                topCell: "top",
-                layoutDigest: "layout"
-            ),
-            pdk: PDKReference(
-                manifest: XcircuiteFileReference(path: "input.json", kind: .other, format: .json),
-                processID: "fixture",
-                version: "1",
-                digest: "pdk"
-            ),
-            configuration: ElectricalSignoffConfiguration(
-                requiredAxes: [.erc, .esd],
-                operatingConditions: [
-                    ElectricalOperatingCondition(id: "slow", pdkCornerID: "slow", temperatureC: 125, supplyVoltageScale: 0.9, activityScale: 1),
-                    ElectricalOperatingCondition(id: "fast", pdkCornerID: "fast", temperatureC: -40, supplyVoltageScale: 1.1, activityScale: 1),
-                ]
-            )
-        )
+        let request = try makeReleaseGateRequest()
         let reportData = Data("electrical-report".utf8)
         try reportData.write(to: root.appending(path: "report.json"))
-        let reportReference = XcircuiteFileReference(
-            artifactID: "electrical-report",
+        let reportReference = try makeFoundationArtifactReference(
+            id: "electrical-report",
             path: "report.json",
+            role: .output,
             kind: .report,
             format: .json,
-            sha256: XcircuiteHasher().sha256(data: reportData),
-            byteCount: Int64(reportData.count)
+            data: reportData
         )
-        let runResult = makeCompleteRunResult(request: request, artifact: reportReference)
+        let runResult = try makeCompleteRunResult(request: request, artifact: reportReference)
         let report = makeOracleQualificationReport(runID: request.runID, pdkDigest: request.pdk.digest)
         var policy = ElectricalSignoffReleaseGatePolicy(
             policyID: "electrical-release-v1",
@@ -646,8 +634,8 @@ struct ElectricalSignoffFlowStageExecutorTests {
             )
         )
 
-        #expect(result.status == .succeeded)
-        #expect(result.gates.map(\.status) == [.passed])
+        #expect(result.status == FlowStageStatus.succeeded)
+        #expect(result.gates.map(\.status) == [FlowGateStatus.passed])
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-release-gate" })
         let url = try XcircuitePackageStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
         let gate = try JSONDecoder().decode(ElectricalSignoffReleaseGateResult.self, from: Data(contentsOf: url))
@@ -677,15 +665,20 @@ struct ElectricalSignoffFlowStageExecutorTests {
                 healthResults: [:]
             )
         )
-        #expect(tampered.status == .failed)
+        #expect(tampered.status == FlowStageStatus.failed)
         #expect(tampered.diagnostics.contains {
             $0.code == "ELECTRICAL_SIGNOFF_RELEASE_GATE_EXECUTION_ERROR"
                 && $0.message.contains("byte count mismatch")
         }, "Tampered result: \(tampered)")
     }
 
-    private func makeContext(runID: String) -> FlowExecutionContext {
+    private func makeContext(runID: String) throws -> FlowExecutionContext {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-flow-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fixture = Data("source".utf8)
+        for path in ["design.json", "layout.json", "pdk.json"] {
+            try fixture.write(to: root.appending(path: path), options: .atomic)
+        }
         return FlowExecutionContext(
             projectRoot: root,
             runID: runID,
@@ -696,29 +689,102 @@ struct ElectricalSignoffFlowStageExecutorTests {
         )
     }
 
-    private func makeRequest(runID: String) -> ElectricalSignoffRequest {
-        let reference = XcircuiteFileReference(path: "input.json", kind: .other, format: .json)
+    private func makeRequest(runID: String) throws -> ElectricalSignoffRequest {
+        let inputData = Data("source".utf8)
+        let reference = try makeFoundationArtifactReference(
+            id: "electrical-input",
+            path: "design.json",
+            role: .input,
+            kind: .netlist,
+            format: .json,
+            data: inputData
+        )
+        let layoutReference = try makeFoundationArtifactReference(
+            id: "electrical-layout",
+            path: "layout.json",
+            role: .input,
+            kind: .layout,
+            format: .json,
+            data: inputData
+        )
+        let pdkReference = try makeFoundationArtifactReference(
+            id: "electrical-pdk",
+            path: "pdk.json",
+            role: .input,
+            kind: .technology,
+            format: .json,
+            data: inputData
+        )
         return ElectricalSignoffRequest(
             runID: runID,
             inputs: [reference],
-            design: LogicDesignReference(artifact: reference, topDesignName: "top", designDigest: "design"),
-            physicalDesign: PhysicalDesignReference(layoutArtifact: reference, topCell: "top", layoutDigest: "layout"),
-            pdk: PDKReference(manifest: reference, processID: "fixture", version: "1", digest: "pdk")
+            design: LogicDesignReference(artifact: reference.locator, topDesignName: "top", designDigest: "design"),
+            physicalDesign: PhysicalDesignReference(layoutArtifact: layoutReference, topCell: "top", layoutDigest: "layout"),
+            pdk: PDKReference(manifest: pdkReference, processID: "fixture", version: "1", digest: pdkReference.sha256)
+        )
+    }
+
+    private func makeReleaseGateRequest() throws -> ElectricalSignoffRequest {
+        let inputData = Data("source".utf8)
+        let designReference = try makeFoundationArtifactReference(
+            id: "release-design",
+            path: "input.json",
+            role: .input,
+            kind: .netlist,
+            format: .json,
+            data: inputData
+        )
+        let layoutReference = try makeFoundationArtifactReference(
+            id: "release-layout",
+            path: "input.json",
+            role: .input,
+            kind: .layout,
+            format: .json,
+            data: inputData
+        )
+        let pdkReference = try makeFoundationArtifactReference(
+            id: "release-pdk",
+            path: "input.json",
+            role: .input,
+            kind: .technology,
+            format: .json,
+            data: inputData
+        )
+        return ElectricalSignoffRequest(
+            runID: "electrical-release-gate-run",
+            inputs: [designReference],
+            design: LogicDesignReference(
+                artifact: designReference.locator,
+                topDesignName: "top",
+                designDigest: "design"
+            ),
+            physicalDesign: PhysicalDesignReference(
+                layoutArtifact: layoutReference,
+                topCell: "top",
+                layoutDigest: "layout"
+            ),
+            pdk: PDKReference(
+                manifest: pdkReference,
+                processID: "fixture",
+                version: "1",
+                digest: pdkReference.sha256
+            ),
+            configuration: ElectricalSignoffConfiguration(
+                requiredAxes: [.erc, .esd],
+                operatingConditions: [
+                    ElectricalOperatingCondition(id: "slow", pdkCornerID: "slow", temperatureC: 125, supplyVoltageScale: 0.9, activityScale: 1),
+                    ElectricalOperatingCondition(id: "fast", pdkCornerID: "fast", temperatureC: -40, supplyVoltageScale: 1.1, activityScale: 1),
+                ]
+            )
         )
     }
 
     private func makeCompleteRunResult(
         request: ElectricalSignoffRequest,
-        artifact: XcircuiteFileReference
-    ) -> ElectricalSignoffRunResult {
-        let metadata = XcircuiteEngineExecutionMetadata(
-            engineID: "native",
-            implementationID: "native-electrical-signoff",
-            implementationVersion: "1",
-            startedAt: Date(timeIntervalSince1970: 1),
-            completedAt: Date(timeIntervalSince1970: 2)
-        )
-        var corners: [String: [ElectricalSignoffAnalysisAxis: XcircuiteEngineResultEnvelope<ElectricalSignoffPayload>]] = [:]
+        artifact: ArtifactReference
+    ) throws -> ElectricalSignoffRunResult {
+        let metadata = try makeElectricalProvenance(identifier: "native-electrical-signoff", startedAt: 1, completedAt: 2)
+        var corners: [String: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult]] = [:]
         for condition in request.configuration.operatingConditions {
             for axis in request.configuration.requiredAxes {
                 let payload = ElectricalSignoffPayload(
@@ -734,7 +800,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
                     ),
                     cornerID: condition.id
                 )
-                corners[condition.id, default: [:]][axis] = XcircuiteEngineResultEnvelope(
+                corners[condition.id, default: [:]][axis] = ElectricalSignoffResult(
                     schemaVersion: 1,
                     runID: request.runID,
                     status: .completed,
@@ -795,23 +861,17 @@ private struct StubElectricalSignoffEngine: ElectricalSignoffExecuting {
         _ request: ElectricalSignoffRequest,
         axes: [ElectricalSignoffAnalysisAxis]
     ) async throws -> ElectricalSignoffRunResult {
-        let metadata = XcircuiteEngineExecutionMetadata(
-            engineID: "stub-electrical-signoff",
-            implementationID: "stub",
-            implementationVersion: "1",
-            startedAt: Date(timeIntervalSince1970: 1),
-            completedAt: Date(timeIntervalSince1970: 1)
-        )
-        let results = Dictionary(uniqueKeysWithValues: axes.map { axis in
+        let metadata = try makeElectricalProvenance(identifier: "stub-electrical-signoff", startedAt: 1, completedAt: 1)
+        let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: axes.map { axis in
             let payload = ElectricalSignoffPayload(violationCount: 0, axis: axis)
-            let envelope = XcircuiteEngineResultEnvelope(
+            let result = ElectricalSignoffResult(
                 schemaVersion: 1,
                 runID: request.runID,
                 status: .completed,
                 metadata: metadata,
                 payload: payload
             )
-            return (axis, envelope)
+            return (axis, result)
         })
         return ElectricalSignoffRunResult(runID: request.runID, status: .completed, axisResults: results)
     }
@@ -822,14 +882,8 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
         _ request: ElectricalSignoffRequest,
         axes: [ElectricalSignoffAnalysisAxis]
     ) async throws -> ElectricalSignoffRunResult {
-        let metadata = XcircuiteEngineExecutionMetadata(
-            engineID: "repair-stub",
-            implementationID: "repair-stub",
-            implementationVersion: "1",
-            startedAt: Date(timeIntervalSince1970: 1),
-            completedAt: Date(timeIntervalSince1970: 1)
-        )
-        let results = Dictionary(uniqueKeysWithValues: axes.map { axis in
+        let metadata = try makeElectricalProvenance(identifier: "repair-stub", startedAt: 1, completedAt: 1)
+        let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: axes.map { axis in
             let payload = ElectricalSignoffPayload(
                 violationCount: 1,
                 axis: axis,
@@ -841,7 +895,7 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
                     actions: ["insert_domain_isolation"]
                 )]
             )
-            return (axis, XcircuiteEngineResultEnvelope(
+            return (axis, ElectricalSignoffResult(
                 schemaVersion: 1,
                 runID: request.runID,
                 status: .completed,
@@ -851,4 +905,44 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
         })
         return ElectricalSignoffRunResult(runID: request.runID, status: .completed, axisResults: results)
     }
+}
+
+private func makeFoundationArtifactReference(
+    id: String,
+    path: String,
+    role: ArtifactRole,
+    kind: ArtifactKind,
+    format: ArtifactFormat,
+    data: Data
+) throws -> ArtifactReference {
+    ArtifactReference(
+        id: try ArtifactID(rawValue: id),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: role,
+            kind: kind,
+            format: format
+        ),
+        digest: try ContentDigest(
+            algorithm: .sha256,
+            hexadecimalValue: try SHA256ContentDigester().digest(data: data).hexadecimalValue
+        ),
+        byteCount: UInt64(data.count)
+    )
+}
+
+private func makeElectricalProvenance(
+    identifier: String,
+    startedAt: TimeInterval,
+    completedAt: TimeInterval
+) throws -> ExecutionProvenance {
+    try ExecutionProvenance(
+        producer: try ProducerIdentity(
+            kind: .engine,
+            identifier: identifier,
+            version: "1"
+        ),
+        startedAt: Date(timeIntervalSince1970: startedAt),
+        completedAt: Date(timeIntervalSince1970: completedAt)
+    )
 }

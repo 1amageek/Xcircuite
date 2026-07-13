@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerInstalledSolverLaneDiscoveryResult: Codable, Sendable, Hashable {
     public var lane: XcircuiteSymbolicPlannerInstalledSolverLane

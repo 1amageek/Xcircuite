@@ -5,7 +5,7 @@ import LVSEngine
 import Testing
 import ToolQualification
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Signoff flow stage executors")
 struct SignoffFlowStageExecutorTests {

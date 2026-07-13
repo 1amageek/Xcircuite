@@ -7,7 +7,7 @@ import PEXEngine
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifierTests {
     @Test func artifactIntegrityBlocksWithoutProjectRoot() throws {

@@ -37,7 +37,7 @@ DRC/LVS/PEX/simulation executors append artifact gates to the persisted
 ```
 
 `artifact-integrity` verifies each indexed output artifact through
-`XcircuiteFileReferenceVerifier`, including project-relative containment,
+`LocalArtifactVerifier`, including project-relative containment,
 symlink containment, SHA-256 digest, and byte count. DRC and LVS stages also add
 `drc-artifacts` and `lvs-artifacts` gates. Those gates decode the engine
 artifact manifest and verify that every declared output appears in
@@ -69,7 +69,7 @@ result, the stage fails with typed `ARTIFACT_INTEGRITY_*` or
 flowchart LR
   Engine["Engine-backed stage result"] --> DomainGate["domain gate"]
   Engine --> ManifestGate["drc/lvs/pex flow artifact gate"]
-  Engine --> Artifacts["XcircuiteFileReference list"]
+  Engine --> Artifacts["ArtifactReference list"]
   Artifacts --> Integrity["artifact-integrity gate"]
   Artifacts --> Envelope["summary evaluation envelope"]
   DomainGate --> Stage["FlowStageResult.status"]
@@ -211,11 +211,17 @@ The dft executor has three mutually exclusive modes:
 
 | Mode | Required fields | Responsibility |
 |---|---|---|
-| qualification | stageID, requestPath, qualificationCorpusPath, qualificationObservationsPath | Correlate retained DFT oracle cases and persist qualification provenance |
+| qualification | stageID, requestPath, qualificationCorpusPath, qualificationObservationsPath | Correlate retained DFT oracle cases, persist qualification provenance and optionally build independent process evidence |
 | downstream evidence | stageID, releaseEvidenceSources | Resolve and hash exactly one equivalence, DRC, LVS and PEX artifact |
-| release | stageID, requestPath, releaseResultPath, releaseDownstreamEvidencePath, releaseProcessQualificationEvidencePath | Validate DFT provenance, independent ToolQualification process evidence, downstream signoff and approval/resume |
+| release | stageID, requestPath, releaseResultPath, releaseDownstreamEvidencePath, one process evidence input | Validate DFT provenance, independent ToolQualification process evidence, downstream signoff and approval/resume |
 
-Release mode also accepts releaseQualificationPath and releaseRequestDigest when the retained qualification provenance is produced by a prior qualification stage. releaseProcessQualificationEvidencePath is mandatory in release mode and must point to a project-rooted ToolProcessQualificationEvidence JSON artifact. The adapter checks evidence freshness, PDK scope, process profile, tool identity, implementation identity, independence, corpus/oracle/health/approval references and blocker state. It persists the validated evidence reference in the immutable eligibility artifact.
+Qualification mode may set `qualificationProcessEvidenceBuildPath` to a
+`ToolProcessQualificationEvidenceBuildRequest` produced from independent,
+artifact-backed evidence. The qualification stage writes
+`dft-process-qualification-evidence.json` only after the builder validates all
+evidence groups, scope, artifact integrity metadata, independence and freshness.
+
+Release mode also accepts `releaseQualificationPath` and `releaseRequestDigest` when the retained qualification provenance is produced by a prior qualification stage. Exactly one of `releaseProcessQualificationEvidencePath` or `releaseProcessQualificationEvidenceInput` is mandatory; the latter supports a `stageRawArtifact` reference to the qualification stage output. The adapter checks evidence freshness, PDK scope, process profile, tool identity, implementation identity, independence, corpus/oracle/health/approval references and blocker state. It persists the validated evidence reference in the immutable eligibility artifact.
 
 The release chain is: dft.qualification -> dft.release-evidence -> dft.release -> approval gate -> resume and re-evaluate dft.release.
 
@@ -226,6 +232,9 @@ Successful release stages persist `dft-release-eligibility.json` and
 references to the request, result, eligibility, independent process evidence,
 downstream evidence bundle, candidate artifacts and human approval so a
 reviewer or Agent can inspect the exact release packet without re-running DFT.
+When process evidence is stage-bound, it also retains the qualification build
+request and support artifacts, and verifies every named reference again before
+the packet is persisted.
 
 ### PDK external inspection executors
 
@@ -437,7 +446,7 @@ output paths into the flow-managed raw stage directory:
   layout-command-artifact-manifest.json
 ```
 
-The stage result indexes these files as `XcircuiteFileReference`s with SHA-256
+The stage result indexes these files as `ArtifactReference`s with SHA-256
 digests, so downstream verification stages can consume produced artifacts without
 depending on UI state. DRC consumption is implemented for `drc-layout.json`; LVS
 consumption is implemented for GDSII/OASIS/CIF/DXF standard layout exports
@@ -554,7 +563,7 @@ input exists before invoking the engine.
 identifier and should be the preferred selector for stage-to-stage contracts.
 `kind`, `format`, and `pathSuffix` can further narrow or validate the match.
 `stageArtifact.pathSuffix`, when present, follows the same relative path segment
-rules. `stageArtifact` requires the selected `XcircuiteFileReference` to carry a
+rules. `stageArtifact` requires the selected `ArtifactReference` to carry a
 SHA-256 digest; digest mismatch is a stage failure before the downstream engine is
 invoked.
 
@@ -681,7 +690,7 @@ not proof of foundry qualification.
 |---|---|---|---|
 | `evidenceID` | string | yes | Stable evidence identifier |
 | `kind` | string | yes | `smoke`, `corpus`, `oracle`, `healthCheck`, `productionApproval` |
-| `artifact` | `XcircuiteFileReference` or null | no | Evidence artifact reference |
+| `artifact` | `ArtifactReference` or null | no | Evidence artifact reference |
 | `qualification` | `ToolEvidenceQualificationSummary` or null | no | Generic pass/fail qualification summary |
 | `checkedAt` | ISO 8601 date string or legacy numeric Date | no | Check timestamp when available |
 

@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
     private let packageStore: XcircuitePackageStore

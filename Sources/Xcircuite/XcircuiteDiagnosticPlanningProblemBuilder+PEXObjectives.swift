@@ -2,7 +2,7 @@ import DRCEngine
 import Foundation
 import LVSEngine
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteDiagnosticPlanningProblemBuilder {
     func pexObjectives(

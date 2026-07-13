@@ -1,17 +1,33 @@
 import DesignFlowKernel
 import Foundation
 import PDKCore
-import XcircuitePackage
+import PDKDiscovery
+import PDKStandardViews
+import PDKValidation
+import DesignFlowKernel
 
-struct PDKStageExecutionAdapterSupport: Sendable {
+protocol PDKStageExecutionResult: Sendable {
+    var status: PDKExecutionStatus { get }
+    var diagnostics: [DesignDiagnostic] { get }
+}
+
+extension PDKDiscoveryResult: PDKStageExecutionResult {}
+extension PDKValidationExecutionResult: PDKStageExecutionResult {}
+extension PDKCorpusValidationExecutionResult: PDKStageExecutionResult {}
+extension PDKQualificationExecutionResult: PDKStageExecutionResult {}
+extension PDKOracleComparisonResult: PDKStageExecutionResult {}
+extension PDKRuleDeckInspectionResult: PDKStageExecutionResult {}
+extension PDKManifestViewInspectionResult: PDKStageExecutionResult {}
+
+struct PDKStageExecutionSupport: Sendable {
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     init(artifactBuilder: StageArtifactReferenceBuilder = StageArtifactReferenceBuilder()) {
         self.artifactBuilder = artifactBuilder
     }
 
-    func persistEnvelope<Payload: Sendable & Hashable & Codable>(
-        _ envelope: XcircuiteEngineResultEnvelope<Payload>,
+    func persistResult<Result: Encodable>(
+        _ result: Result,
         stageID: String,
         context: FlowExecutionContext
     ) throws -> XcircuiteFileReference {
@@ -23,7 +39,7 @@ struct PDKStageExecutionAdapterSupport: Sendable {
         let outputURL = stageDirectory.appending(path: "pdk-result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(envelope).write(to: outputURL, options: .atomic)
+        try encoder.encode(result).write(to: outputURL, options: .atomic)
         return try artifactBuilder.reference(
             for: outputURL,
             projectRoot: context.projectRoot,
@@ -51,15 +67,89 @@ struct PDKStageExecutionAdapterSupport: Sendable {
         )
     }
 
-    func stageResult<Payload: Sendable & Hashable & Codable>(
-        envelope: XcircuiteEngineResultEnvelope<Payload>,
+    func inputLocator(
+        for url: URL,
+        context: FlowExecutionContext,
+        artifactID: String,
+        kind: XcircuiteFileKind,
+        format: XcircuiteFileFormat
+    ) throws -> ArtifactLocator {
+        let reference = try inputReference(
+            for: url,
+            context: context,
+            artifactID: artifactID,
+            kind: kind,
+            format: format
+        )
+        let location: ArtifactLocation
+        if reference.path.hasPrefix("/") {
+            location = try ArtifactLocation(fileURL: URL(filePath: reference.path))
+        } else {
+            location = try ArtifactLocation(workspaceRelativePath: reference.path)
+        }
+        return ArtifactLocator(
+            location: location,
+            role: .input,
+            kind: try ArtifactKind(rawValue: reference.kind.rawValue),
+            format: try ArtifactFormat(rawValue: reference.format.rawValue)
+        )
+    }
+
+    func foundationInputReference(
+        for url: URL,
+        context: FlowExecutionContext,
+        artifactID: String,
+        kind: XcircuiteFileKind,
+        format: XcircuiteFileFormat
+    ) throws -> ArtifactReference {
+        let legacy = try inputReference(
+            for: url,
+            context: context,
+            artifactID: artifactID,
+            kind: kind,
+            format: format
+        )
+        guard let hexadecimalValue = legacy.sha256,
+              let byteCount = legacy.byteCount,
+              byteCount >= 0 else {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "PDK input artifact digest metadata is incomplete."
+            )
+        }
+        let artifactIDValue: ArtifactID?
+        if let rawValue = legacy.artifactID {
+            artifactIDValue = try ArtifactID(rawValue: rawValue)
+        } else {
+            artifactIDValue = nil
+        }
+        let location: ArtifactLocation
+        if legacy.path.hasPrefix("/") {
+            location = try ArtifactLocation(fileURL: URL(filePath: legacy.path))
+        } else {
+            location = try ArtifactLocation(workspaceRelativePath: legacy.path)
+        }
+        return try ArtifactReference(
+            id: artifactIDValue,
+            locator: ArtifactLocator(
+                location: location,
+                role: .input,
+                kind: try ArtifactKind(rawValue: legacy.kind.rawValue),
+                format: try ArtifactFormat(rawValue: legacy.format.rawValue)
+            ),
+            digest: ContentDigest(algorithm: .sha256, hexadecimalValue: hexadecimalValue),
+            byteCount: UInt64(byteCount)
+        )
+    }
+
+    func stageResult<Result: PDKStageExecutionResult>(
+        result: Result,
         stageID: String,
         artifact: XcircuiteFileReference
     ) -> FlowStageResult {
-        let diagnostics = envelope.diagnostics.map(flowDiagnostic)
-        let gateStatus = gateStatus(for: envelope.status)
+        let diagnostics = result.diagnostics.map(flowDiagnostic)
+        let gateStatus = gateStatus(for: result.status)
         let stageStatus: FlowStageStatus
-        switch envelope.status {
+        switch result.status {
         case .completed:
             stageStatus = .succeeded
         case .blocked:
@@ -94,24 +184,24 @@ struct PDKStageExecutionAdapterSupport: Sendable {
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func flowDiagnostic(_ diagnostic: XcircuiteEngineDiagnostic) -> FlowDiagnostic {
+    private func flowDiagnostic(_ diagnostic: DesignDiagnostic) -> FlowDiagnostic {
         FlowDiagnostic(
             severity: flowSeverity(diagnostic.severity),
-            code: diagnostic.code,
-            message: diagnostic.message
+            code: diagnostic.code.rawValue,
+            message: diagnostic.summary
         )
     }
 
-    private func flowSeverity(_ severity: XcircuiteEngineDiagnosticSeverity) -> FlowDiagnosticSeverity {
+    private func flowSeverity(_ severity: DiagnosticSeverity) -> FlowDiagnosticSeverity {
         switch severity {
-        case .info: .info
+        case .information: .info
         case .warning: .warning
         case .error: .error
         }
     }
 
     private func gateStatus(
-        for status: XcircuiteEngineExecutionStatus
+        for status: PDKExecutionStatus
     ) -> FlowGateStatus {
         switch status {
         case .completed: .passed

@@ -1,6 +1,7 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
+import CircuiteFoundation
 
 public enum PDKToolDescriptors {
     public static func discovery(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
@@ -77,7 +78,7 @@ public enum PDKToolDescriptors {
         toolID: String,
         displayName: String,
         operationID: String,
-        inputFormats: [XcircuiteFileFormat],
+        inputFormats: [ArtifactFormat],
         level: ToolQualificationLevel
     ) -> ToolDescriptor {
         ToolDescriptor(

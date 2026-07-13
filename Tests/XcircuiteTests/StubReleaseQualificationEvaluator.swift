@@ -1,12 +1,13 @@
 import Foundation
 import QualificationEngine
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
+import CircuiteFoundation
 
 struct StubReleaseQualificationEvaluator: ReleaseQualificationEvaluating {
     func execute(
         _ request: ReleaseQualificationRequest
-    ) async throws -> XcircuiteEngineResultEnvelope<ReleaseQualificationPayload> {
+    ) async throws -> ReleaseQualificationResult {
         let now = Date()
         let payload = ReleaseQualificationPayload(
             qualified: true,
@@ -16,14 +17,16 @@ struct StubReleaseQualificationEvaluator: ReleaseQualificationEvaluating {
             qualificationDigest: String(repeating: "a", count: 64),
             promotionStatus: .corpusChecked
         )
-        return XcircuiteEngineResultEnvelope(
+        return ReleaseQualificationResult(
             schemaVersion: 1,
             runID: request.runID,
             status: .completed,
-            metadata: XcircuiteEngineExecutionMetadata(
-                engineID: "release-qualification",
-                implementationID: "stub-release-qualification",
-                implementationVersion: "1.0.0",
+            metadata: try ExecutionProvenance(
+                producer: try ProducerIdentity(
+                    kind: .engine,
+                    identifier: "stub-release-qualification",
+                    version: "1.0.0"
+                ),
                 startedAt: now,
                 completedAt: now
             ),

@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteCandidatePlanGenerator {
     func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {

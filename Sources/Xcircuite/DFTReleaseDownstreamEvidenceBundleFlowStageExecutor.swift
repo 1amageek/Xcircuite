@@ -1,7 +1,7 @@
 import DFTCore
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
 
 public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -46,7 +46,7 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                 return DFTReleaseDownstreamEvidence(
                     domain: source.domain,
                     role: source.role,
-                    artifact: artifact
+                    artifact: try FoundationFlowProjection.artifactReference(from: artifact)
                 )
             }
             let evidenceData = try encode(evidence)
@@ -65,7 +65,7 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                 format: .json,
                 producedByRunID: context.runID
             )
-            let sourceArtifacts = evidence.map(\.artifact)
+            let sourceArtifacts = FoundationFlowProjection.legacyReferences(from: evidence.map(\.artifact))
             return FlowStageResult(
                 stageID: stage.stageID,
                 status: .succeeded,

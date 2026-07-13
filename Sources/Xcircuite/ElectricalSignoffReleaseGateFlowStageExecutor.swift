@@ -1,10 +1,10 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import ElectricalSignoffCore
 import ElectricalSignoffEngine
 import ElectricalSignoffQualification
 import Foundation
 import ToolQualification
-import XcircuitePackage
 
 public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -79,7 +79,7 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
                     .flatMap(\.artifacts)
             ))
             let artifactIntegrity = artifactReferences.map {
-                XcircuiteFileReferenceVerifier().verify($0, projectRoot: context.projectRoot)
+                LocalArtifactVerifier().verify($0, relativeTo: context.projectRoot)
             }
             let gateRequest = ElectricalSignoffReleaseGateRequest(
                 runID: context.runID,
@@ -303,12 +303,12 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
             qualificationReportReference.path,
             policyReference.path,
         ])
-        let sourceArtifacts = unique(
+        let sourceArtifacts = uniqueCanonical(
             try requestInputs(request).map { sourceReference in
                 try verifiedReference(sourceReference, context: context)
             }
         ).filter { !mandatoryPaths.contains($0.path) }
-        let cornerAxisEvidence = unique(
+        let cornerAxisEvidence = uniqueCanonical(
             try runResult.cornerResults.values
                 .flatMap { $0.values }
                 .flatMap(\.artifacts)
@@ -319,19 +319,23 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         let qualificationSpecStageArtifacts = try stageArtifacts(from: qualificationSpecInput, context: context)
         let qualificationReportStageArtifacts = try stageArtifacts(from: qualificationReportInput, context: context)
         let qualificationStageArtifacts = qualificationSpecStageArtifacts + qualificationReportStageArtifacts
-        var qualificationArtifacts = unique(
+        var qualificationArtifacts = uniqueCanonical(
             try qualificationStageArtifacts.map { sourceReference in
-                try verifiedReference(sourceReference, context: context)
+                try verifiedReference(
+                    FoundationFlowProjection.artifactReference(from: sourceReference),
+                    context: context
+                )
             }
         ).filter { !mandatoryPaths.contains($0.path) }
         if let processQualificationEvidenceInput {
-            qualificationArtifacts.append(try reference(
+            let legacyReference = try reference(
                 for: processQualificationEvidenceInput,
                 artifactID: "electrical-signoff-process-qualification-evidence",
                 kind: .report,
                 format: .json,
                 context: context
-            ))
+            )
+            qualificationArtifacts.append(try FoundationFlowProjection.artifactReference(from: legacyReference))
         }
 
         let runManifest = try optionalReference(
@@ -378,30 +382,30 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         return try ElectricalSignoffReleaseArtifactBundle(
             runID: context.runID,
             createdAt: Date(),
-            gateResult: gateResultReference,
-            request: requestReference,
-            runResult: runResultReference,
-            qualificationSpec: qualificationSpecReference,
-            qualificationReport: qualificationReportReference,
+            gateResult: try FoundationFlowProjection.artifactReference(from: gateResultReference),
+            request: try FoundationFlowProjection.artifactReference(from: requestReference),
+            runResult: try FoundationFlowProjection.artifactReference(from: runResultReference),
+            qualificationSpec: try FoundationFlowProjection.artifactReference(from: qualificationSpecReference),
+            qualificationReport: try FoundationFlowProjection.artifactReference(from: qualificationReportReference),
             qualificationArtifacts: qualificationArtifacts,
-            policy: policyReference,
+            policy: try FoundationFlowProjection.artifactReference(from: policyReference),
             sourceArtifacts: sourceArtifacts,
             cornerAxisEvidence: cornerAxisEvidence,
-            repairPlan: repairPlan,
-            approvalArtifacts: approvalArtifacts,
-            plan: plan,
-            actionLog: actionLog,
-            runManifest: runManifest
+            repairPlan: try repairPlan.map { try FoundationFlowProjection.artifactReference(from: $0) },
+            approvalArtifacts: try approvalArtifacts.map { try FoundationFlowProjection.artifactReference(from: $0) },
+            plan: try plan.map { try FoundationFlowProjection.artifactReference(from: $0) },
+            actionLog: try actionLog.map { try FoundationFlowProjection.artifactReference(from: $0) },
+            runManifest: try runManifest.map { try FoundationFlowProjection.artifactReference(from: $0) }
         )
     }
 
-    private func requestInputs(_ request: ElectricalSignoffRequest) -> [XcircuiteFileReference] {
+    private func requestInputs(_ request: ElectricalSignoffRequest) throws -> [ArtifactReference] {
         var references = request.inputs
-        references.append(request.design.artifact)
+        references.append(try request.materializedArtifact(for: request.design.artifact, role: "design"))
         references.append(request.physicalDesign.layoutArtifact)
         references.append(request.pdk.manifest)
         if let powerIntent = request.powerIntent {
-            references.append(powerIntent.artifact)
+            references.append(try request.materializedArtifact(for: powerIntent.artifact, role: "power-intent"))
         }
         if let parasitics = request.parasitics {
             references.append(parasitics)
@@ -527,6 +531,11 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
         return references.filter { paths.insert($0.path).inserted }
     }
 
+    private func uniqueCanonical(_ references: [ArtifactReference]) -> [ArtifactReference] {
+        var paths = Set<String>()
+        return references.filter { paths.insert($0.path).inserted }
+    }
+
     private func projectRelativePath(for url: URL, projectRoot: URL) throws -> String {
         let root = projectRoot.standardizedFileURL.path(percentEncoded: false)
         let path = url.standardizedFileURL.path(percentEncoded: false)
@@ -541,18 +550,16 @@ public struct ElectricalSignoffReleaseGateFlowStageExecutor: FlowStageExecutor {
     }
 
     private func verifiedReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
-        try context.packageStore.fileReference(
-            forProjectRelativePath: reference.path,
-            artifactID: reference.artifactID,
-            kind: reference.kind,
-            format: reference.format,
-            inProjectAt: context.projectRoot,
-            producedByRunID: reference.producedByRunID,
-            verifiedByRunID: context.runID
-        )
+    ) throws -> ArtifactReference {
+        let integrity = LocalArtifactVerifier().verify(reference, relativeTo: context.projectRoot)
+        guard integrity.isVerified else {
+            throw ElectricalSignoffReleaseGateError.invalidRequest(
+                "artifact integrity verification failed for \(reference.path)"
+            )
+        }
+        return reference
     }
 
     private func failureResult(stageID: String, code: String, message: String) -> FlowStageResult {

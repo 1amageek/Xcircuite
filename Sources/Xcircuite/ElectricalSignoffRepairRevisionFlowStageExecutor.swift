@@ -1,8 +1,8 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import ElectricalSignoffEngine
 import Foundation
 import PhysicalDesignCore
-import XcircuitePackage
 
 public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -50,13 +50,7 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
                 digestLineage: lineage
             )
             let wrapperReference = try persist(persisted, context: context)
-            var diagnostics = result.diagnostics.map { diagnostic in
-                FlowDiagnostic(
-                    severity: flowSeverity(for: diagnostic.severity),
-                    code: diagnostic.code,
-                    message: diagnostic.message
-                )
-            }
+            var diagnostics = result.diagnostics.map(FoundationFlowProjection.flowDiagnostic)
             let committed = persisted.committedNewRevision
             if result.status == .completed && !committed {
                 diagnostics.append(FlowDiagnostic(
@@ -81,7 +75,7 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
                 gateStatus = .failed
                 stageStatus = .failed
             }
-            let artifacts = unique(result.artifacts + [wrapperReference])
+            let artifacts = unique(FoundationFlowProjection.legacyReferences(from: result.artifacts) + [wrapperReference])
             return FlowStageResult(
                 stageID: stage.stageID,
                 status: stageStatus,
@@ -208,14 +202,6 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
             producedByRunID: context.runID,
             verifiedByRunID: context.runID
         )
-    }
-
-    private func flowSeverity(for severity: XcircuiteEngineDiagnosticSeverity) -> FlowDiagnosticSeverity {
-        switch severity {
-        case .info: return .info
-        case .warning: return .warning
-        case .error: return .error
-        }
     }
 
     private func unique(_ references: [XcircuiteFileReference]) -> [XcircuiteFileReference] {

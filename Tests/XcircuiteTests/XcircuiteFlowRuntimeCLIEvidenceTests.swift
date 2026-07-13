@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LayoutIO
@@ -7,9 +8,9 @@ import LVSEngine
 import PEXEngine
 import Testing
 import ToolQualification
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func resumeRunCLIUsesRuntimeConfig() async throws {
@@ -451,12 +452,13 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-failed",
                     kind: .corpus,
-                    artifact: XcircuiteFileReference(
+                    artifact: try FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,
-                        sha256: String(repeating: "1", count: 64)
-                    ),
+                        sha256: String(repeating: "1", count: 64),
+                        byteCount: 0
+                    )),
                     qualification: ToolEvidenceQualificationSummary(
                         qualified: false,
                         policyID: "strict",
@@ -520,12 +522,13 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-mismatch",
                     kind: .corpus,
-                    artifact: XcircuiteFileReference(
+                    artifact: try FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,
-                        sha256: String(repeating: "1", count: 64)
-                    ),
+                        sha256: String(repeating: "1", count: 64),
+                        byteCount: 0
+                    )),
                     qualification: ToolEvidenceQualificationSummary(
                         qualified: true,
                         policyID: "strict",

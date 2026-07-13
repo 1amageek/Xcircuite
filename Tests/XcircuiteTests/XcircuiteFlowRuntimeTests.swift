@@ -9,7 +9,7 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite flow runtime")
 struct XcircuiteFlowRuntimeTests {}

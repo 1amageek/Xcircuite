@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore
@@ -165,7 +165,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         let evidence = ToolEvidence(
             evidenceID: "\(toolID)-symbolic-planner-corpus-\(suiteID)",
             kind: .corpus,
-            artifact: corpusArtifact ?? suiteSpecArtifact,
+            artifact: (corpusArtifact ?? suiteSpecArtifact).flatMap(foundationArtifactReference),
             qualification: ToolEvidenceQualificationSummary(
                 qualified: status == "qualified",
                 policyID: policyID,

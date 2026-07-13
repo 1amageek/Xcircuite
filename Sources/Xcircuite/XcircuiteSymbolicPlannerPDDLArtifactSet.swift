@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPDDLArtifactSet: Codable, Sendable, Hashable {
     public var domainArtifact: XcircuiteFileReference

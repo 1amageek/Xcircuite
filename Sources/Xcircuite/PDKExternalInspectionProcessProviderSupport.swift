@@ -1,12 +1,11 @@
-import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import PDKKit
 import SignoffToolSupport
-import XcircuitePackage
 
 struct PDKExternalInspectionProcessRun: Sendable {
     var resultData: Data?
-    var artifacts: [XcircuiteFileReference]
+    var artifacts: [ArtifactReference]
     var exitCode: Int32?
     var failure: PDKExternalInspectionProcessError?
 }
@@ -15,21 +14,15 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
     let configuration: PDKExternalInspectionProcessConfiguration
     let stageID: String
     let runner: any PDKExternalInspectionProcessRunning
-    let packageStore: XcircuitePackageStore
-    let artifactBuilder: StageArtifactReferenceBuilder
 
     init(
         configuration: PDKExternalInspectionProcessConfiguration,
         stageID: String,
-        runner: any PDKExternalInspectionProcessRunning,
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
-        artifactBuilder: StageArtifactReferenceBuilder = StageArtifactReferenceBuilder()
+        runner: any PDKExternalInspectionProcessRunning
     ) {
         self.configuration = configuration
         self.stageID = stageID
         self.runner = runner
-        self.packageStore = packageStore
-        self.artifactBuilder = artifactBuilder
     }
 
     func execute<Request: Encodable>(
@@ -40,17 +33,17 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
     ) async throws -> PDKExternalInspectionProcessRun {
         try configuration.validate()
         do {
-            try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
+            _ = try ArtifactID(rawValue: stageID)
         } catch {
             throw PDKExternalInspectionProcessError.invalidStageID(stageID)
         }
         do {
-            try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
+            _ = try ArtifactID(rawValue: runID)
         } catch {
             throw PDKExternalInspectionProcessError.invalidRunID(runID)
         }
         do {
-            try XcircuiteIdentifierValidator().validate(assetID, kind: .artifactID)
+            _ = try ArtifactID(rawValue: assetID)
         } catch {
             throw PDKExternalInspectionProcessError.invalidAssetID(assetID)
         }
@@ -68,7 +61,10 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
             .appending(path: "raw")
             .appending(path: "external-pdk")
         do {
-            try packageStore.ensureDirectory(at: artifactDirectory)
+            try FileManager.default.createDirectory(
+                at: artifactDirectory,
+                withIntermediateDirectories: true
+            )
         } catch {
             throw PDKExternalInspectionProcessError.artifactPreparationFailed(
                 path: artifactDirectory.path(percentEncoded: false),
@@ -183,48 +179,48 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
             )
         }
 
-        let artifacts: [XcircuiteFileReference]
+        let artifacts: [ArtifactReference]
         do {
-            artifacts = try [
-                artifactBuilder.reference(
+            artifacts = [
+                try foundationReference(
                     for: requestURL,
                     projectRoot: projectRoot,
                     artifactID: "pdk-external-request",
+                    role: .input,
                     kind: .request,
-                    format: .json,
-                    producedByRunID: runID
+                    format: .json
                 ),
-                artifactBuilder.reference(
+                try foundationReference(
                     for: resultURL,
                     projectRoot: projectRoot,
                     artifactID: "pdk-external-result",
+                    role: .output,
                     kind: .report,
-                    format: .json,
-                    producedByRunID: runID
+                    format: .json
                 ),
-                artifactBuilder.reference(
+                try foundationReference(
                     for: standardOutputURL,
                     projectRoot: projectRoot,
                     artifactID: "pdk-external-stdout",
-                    kind: .report,
-                    format: .text,
-                    producedByRunID: runID
+                    role: .output,
+                    kind: .log,
+                    format: .text
                 ),
-                artifactBuilder.reference(
+                try foundationReference(
                     for: standardErrorURL,
                     projectRoot: projectRoot,
                     artifactID: "pdk-external-stderr",
-                    kind: .report,
-                    format: .text,
-                    producedByRunID: runID
+                    role: .output,
+                    kind: .log,
+                    format: .text
                 ),
-                artifactBuilder.reference(
+                try foundationReference(
                     for: executionURL,
                     projectRoot: projectRoot,
                     artifactID: "pdk-external-execution",
-                    kind: .report,
-                    format: .json,
-                    producedByRunID: runID
+                    role: .output,
+                    kind: .evidence,
+                    format: .json
                 ),
             ]
         } catch {
@@ -242,21 +238,67 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         )
     }
 
-    func appendArtifacts<Payload: Sendable & Hashable & Codable>(
+    func appendArtifacts(
         to data: Data,
-        artifacts: [XcircuiteFileReference],
-        as payloadType: Payload.Type
+        artifacts: [ArtifactReference],
+        as resultType: PDKRuleDeckInspectionResult.Type
     ) throws -> Data {
-        _ = payloadType
-        var envelope = try JSONDecoder().decode(
-            XcircuiteEngineResultEnvelope<Payload>.self,
-            from: data
-        )
-        let existing = Set(envelope.artifacts)
-        envelope.artifacts.append(contentsOf: artifacts.filter { !existing.contains($0) })
+        _ = resultType
+        var result = try JSONDecoder().decode(PDKRuleDeckInspectionResult.self, from: data)
+        let existing = Set(result.artifacts)
+        result.artifacts.append(contentsOf: artifacts.map(\.locator).filter { !existing.contains($0) })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(envelope)
+        return try encoder.encode(result)
+    }
+
+    func appendArtifacts(
+        to data: Data,
+        artifacts: [ArtifactReference],
+        as resultType: PDKStandardViewInspectionResult.Type
+    ) throws -> Data {
+        _ = resultType
+        var result = try JSONDecoder().decode(PDKStandardViewInspectionResult.self, from: data)
+        let existing = Set(result.artifacts)
+        result.artifacts.append(contentsOf: artifacts.map(\.locator).filter { !existing.contains($0) })
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(result)
+    }
+
+    private func foundationReference(
+        for url: URL,
+        projectRoot: URL,
+        artifactID: String,
+        role: ArtifactRole,
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
+        let root = projectRoot.standardizedFileURL.resolvingSymlinksInPath()
+        let candidate = url.standardizedFileURL.resolvingSymlinksInPath()
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard candidate.path == root.path || candidate.path.hasPrefix(rootPath) else {
+            throw PDKExternalInspectionProcessError.artifactPreparationFailed(
+                path: candidate.path,
+                reason: "Artifact path escapes project root."
+            )
+        }
+        let relativePath = String(candidate.path.dropFirst(root.path.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: relativePath),
+            role: role,
+            kind: kind,
+            format: format
+        )
+        let measured = try LocalArtifactReferencer().reference(locator, relativeTo: root)
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: artifactID),
+            locator: measured.locator,
+            digest: measured.digest,
+            byteCount: measured.byteCount,
+            producer: measured.producer
+        )
     }
 
     private func resultData(

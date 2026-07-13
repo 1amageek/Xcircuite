@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteFlowToolchainProfileArtifactStore: Sendable {
     public static let artifactID = "flow-toolchain-profile"

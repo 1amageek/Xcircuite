@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuitePlanningAssumption: Codable, Sendable, Hashable {
     public var assumptionID: String

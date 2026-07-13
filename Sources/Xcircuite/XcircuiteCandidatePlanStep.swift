@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanStep: Codable, Sendable, Hashable {
     public var stepID: String

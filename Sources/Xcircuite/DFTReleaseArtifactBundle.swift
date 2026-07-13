@@ -1,6 +1,6 @@
 import Foundation
 import DFTCore
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct DFTReleaseArtifactBundle: Sendable, Hashable, Codable {
     public static let currentSchemaVersion = 1
@@ -13,6 +13,7 @@ public struct DFTReleaseArtifactBundle: Sendable, Hashable, Codable {
     public var result: XcircuiteFileReference
     public var qualificationProvenance: XcircuiteFileReference?
     public var processQualificationEvidence: XcircuiteFileReference
+    public var processQualificationSupportArtifacts: [XcircuiteFileReference]
     public var downstreamEvidenceBundle: XcircuiteFileReference
     public var downstreamEvidence: [DFTReleaseDownstreamEvidence]
     public var candidateArtifacts: [XcircuiteFileReference]
@@ -26,6 +27,7 @@ public struct DFTReleaseArtifactBundle: Sendable, Hashable, Codable {
         result: XcircuiteFileReference,
         qualificationProvenance: XcircuiteFileReference?,
         processQualificationEvidence: XcircuiteFileReference,
+        processQualificationSupportArtifacts: [XcircuiteFileReference],
         downstreamEvidenceBundle: XcircuiteFileReference,
         downstreamEvidence: [DFTReleaseDownstreamEvidence],
         candidateArtifacts: [XcircuiteFileReference],
@@ -40,6 +42,7 @@ public struct DFTReleaseArtifactBundle: Sendable, Hashable, Codable {
         self.result = result
         self.qualificationProvenance = qualificationProvenance
         self.processQualificationEvidence = processQualificationEvidence
+        self.processQualificationSupportArtifacts = processQualificationSupportArtifacts
         self.downstreamEvidenceBundle = downstreamEvidenceBundle
         self.downstreamEvidence = downstreamEvidence
         self.candidateArtifacts = candidateArtifacts

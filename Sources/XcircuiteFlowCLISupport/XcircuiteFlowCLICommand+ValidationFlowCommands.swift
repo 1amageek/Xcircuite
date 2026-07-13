@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
     static func validatePlanningProblem(arguments: [String]) throws -> String {

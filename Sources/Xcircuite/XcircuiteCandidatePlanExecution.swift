@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
     public static let currentSchemaVersion = 1

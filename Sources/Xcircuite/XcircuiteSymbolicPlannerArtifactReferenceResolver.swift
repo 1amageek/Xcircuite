@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
     private let packageStore: XcircuitePackageStore

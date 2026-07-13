@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 struct PEXSummaryEnvelopeBuilder: Sendable {
     private struct AggregateMetrics: Sendable, Hashable {

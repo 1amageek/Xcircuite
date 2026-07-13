@@ -15,7 +15,7 @@
       "processProfileID" : "sky130.open-pdk.digital-mos.signoff"
     }
   ],
-  "reportPath" : "\/Users\/1amageek\/Desktop\/LSI\/ci-artifacts\/signoff\/lvs-production\/retained-run-promoted-1\/lvs-corpus-report.json",
+  "reportPath" : "qualification/lvs-corpus-report.json",
   "reportSHA256" : "140252fdc44b9bb9fb295ae1f96ab700aa7a80337fd1e4bd78b643f3639f061d",
   "schemaVersion" : 2,
   "status" : "passed",
@@ -59,7 +59,7 @@
     "artifact" : {
       "format" : "JSON",
       "kind" : "report",
-      "path" : "\/Users\/1amageek\/Desktop\/LSI\/ci-artifacts\/signoff\/lvs-production\/retained-run-promoted-1\/lvs-corpus-report.json",
+      "path" : "qualification/lvs-corpus-report.json",
       "sha256" : "140252fdc44b9bb9fb295ae1f96ab700aa7a80337fd1e4bd78b643f3639f061d"
     },
     "checkedAt" : "2026-07-12T05:51:45Z",

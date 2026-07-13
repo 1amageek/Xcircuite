@@ -90,32 +90,34 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
 
         for spec in executors {
             let stageID = spec.stageID
-            let descriptor = spec.makeDescriptor()
-            if var existing = descriptors[descriptor.toolID] {
-                guard existing.descriptor == descriptor else {
-                    throw XcircuiteFlowRuntimeSpecError.conflictingRuntimeToolDescriptor(
-                        toolID: descriptor.toolID,
-                        stageIDs: (existing.stageIDs + [stageID]).sorted()
-                    )
+            for descriptor in [spec.makeDescriptor()] + spec.additionalToolDescriptors() {
+                if var existing = descriptors[descriptor.toolID] {
+                    guard existing.descriptor == descriptor else {
+                        throw XcircuiteFlowRuntimeSpecError.conflictingRuntimeToolDescriptor(
+                            toolID: descriptor.toolID,
+                            stageIDs: (existing.stageIDs + [stageID]).sorted()
+                        )
+                    }
+                    existing.stageIDs.append(stageID)
+                    descriptors[descriptor.toolID] = existing
+                } else {
+                    descriptors[descriptor.toolID] = (descriptor: descriptor, stageIDs: [stageID])
                 }
-                existing.stageIDs.append(stageID)
-                descriptors[descriptor.toolID] = existing
-            } else {
-                descriptors[descriptor.toolID] = (descriptor: descriptor, stageIDs: [stageID])
             }
 
-            let health = spec.makeHealthResult()
-            if var existing = healthResults[health.toolID] {
-                guard existing.health == health else {
-                    throw XcircuiteFlowRuntimeSpecError.conflictingRuntimeToolHealth(
-                        toolID: health.toolID,
-                        stageIDs: (existing.stageIDs + [stageID]).sorted()
-                    )
+            for health in [spec.makeHealthResult()] + spec.additionalToolHealthResults() {
+                if var existing = healthResults[health.toolID] {
+                    guard existing.health == health else {
+                        throw XcircuiteFlowRuntimeSpecError.conflictingRuntimeToolHealth(
+                            toolID: health.toolID,
+                            stageIDs: (existing.stageIDs + [stageID]).sorted()
+                        )
+                    }
+                    existing.stageIDs.append(stageID)
+                    healthResults[health.toolID] = existing
+                } else {
+                    healthResults[health.toolID] = (health: health, stageIDs: [stageID])
                 }
-                existing.stageIDs.append(stageID)
-                healthResults[health.toolID] = existing
-            } else {
-                healthResults[health.toolID] = (health: health, stageIDs: [stageID])
             }
         }
 

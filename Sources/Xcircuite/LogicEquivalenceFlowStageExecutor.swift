@@ -1,17 +1,17 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LogicEngineCore
 import LogicSynthesis
 import RTLVerificationCore
 import RTLVerificationEngine
-import XcircuitePackage
 
 public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let requestInput: XcircuiteFlowInputReference
     private let injectedEngine: (any RTLVerificationExecuting)?
-    private let support: LogicEngineStageExecutionAdapterSupport
+    private let support: LogicEngineStageExecutionSupport
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
@@ -24,7 +24,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.requestInput = requestInput
         self.injectedEngine = engine
-        self.support = LogicEngineStageExecutionAdapterSupport()
+        self.support = LogicEngineStageExecutionSupport()
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
@@ -72,8 +72,16 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             let verificationRequest = RTLVerificationRequest(
                 runID: request.runID,
                 inputs: [
-                    request.sourceDesign.artifact,
-                    request.mappedDesign.artifact,
+                    try materializedReference(
+                        request.sourceDesign.artifact,
+                        artifactID: "logic-equivalence-source",
+                        context: context
+                    ),
+                    try materializedReference(
+                        request.mappedDesign.artifact,
+                        artifactID: "logic-equivalence-mapped",
+                        context: context
+                    ),
                     request.synthesisProvenance,
                 ],
                 design: request.sourceDesign,
@@ -92,17 +100,17 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 )
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
-            let envelope = try await verificationEngine.execute(verificationRequest)
+            let result = try await verificationEngine.execute(verificationRequest)
             try context.checkCancellation()
 
-            let resultArtifact = try support.persistEnvelope(
-                envelope,
+            let resultArtifact = try support.persistResult(
+                result,
                 fileName: "logic-equivalence-result.json",
                 artifactID: "logic-equivalence-result",
                 stageID: stageID,
                 context: context
             )
-            let evidence = makeEvidence(request: request, envelope: envelope)
+            let evidence = makeEvidence(request: request, result: result)
             try evidence.validate()
             let evidenceArtifact = try persistJSON(
                 evidence,
@@ -123,7 +131,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 context: context
             )
             let review = makeReviewArtifact(
-                envelope: envelope,
+                result: result,
                 acceptance: acceptance,
                 stageID: stageID
             )
@@ -146,7 +154,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             let accepted = acceptance.state == .accepted
             let audit = try makeAuditRecord(
                 request: request,
-                envelope: envelope,
+                result: result,
                 acceptance: acceptance,
                 artifactIDs: [
                     "logic-equivalence-result",
@@ -170,15 +178,15 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             if accepted {
                 stageStatus = .succeeded
                 gateStatus = .passed
-            } else if envelope.status == .failed {
+            } else if result.status == .failed {
                 stageStatus = .failed
                 gateStatus = .failed
             } else {
                 stageStatus = .blocked
                 gateStatus = .blocked
             }
-            return support.result(
-                envelope: envelope,
+            return support.rtlResult(
+                result,
                 resultArtifact: resultArtifact,
                 stageID: stageID,
                 gateID: stageID,
@@ -261,11 +269,12 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             return nil
         }
 
-        let envelope = try context.packageStore.readJSON(
-            XcircuiteEngineResultEnvelope<RTLVerificationPayload>.self,
+        let result = try context.packageStore.readJSON(
+            RTLVerificationResult.self,
             from: resultURL
         )
-        guard envelope.runID == context.runID, envelope.status == audit.status else {
+        guard result.runID == context.runID,
+              result.status == audit.status else {
             return nil
         }
         let evidence = try context.packageStore.readJSON(
@@ -299,7 +308,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             from: reviewURL
         )
         let expectedReview = makeReviewArtifact(
-            envelope: envelope,
+            result: result,
             acceptance: acceptance,
             stageID: stageID
         )
@@ -318,8 +327,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 "The persisted logic equivalence review does not match the result envelope."
             )
         }
-        guard audit.status == envelope.status,
-              audit.qualificationState == envelope.payload.qualification.state else {
+        guard audit.status == result.status,
+              audit.qualificationState == result.payload.qualification.state else {
             throw LogicExecutionError.invalidArtifact(
                 "The persisted logic equivalence audit does not match the result envelope."
             )
@@ -379,15 +388,15 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         if accepted {
             stageStatus = .succeeded
             gateStatus = .passed
-        } else if envelope.status == .failed {
+        } else if result.status == .failed {
             stageStatus = .failed
             gateStatus = .failed
         } else {
             stageStatus = .blocked
             gateStatus = .blocked
         }
-        return support.result(
-            envelope: envelope,
+        return support.rtlResult(
+            result,
             resultArtifact: resultArtifact,
             stageID: stageID,
             gateID: stageID,
@@ -416,13 +425,13 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
 
     private func makeEvidence(
         request: LogicSynthesisEquivalenceRequest,
-        envelope: XcircuiteEngineResultEnvelope<RTLVerificationPayload>
+        result: RTLVerificationResult
     ) -> LogicSynthesisEquivalenceEvidence {
-        let isProved = envelope.status == .completed && envelope.payload.proofStatus == "proved"
+        let isProved = result.status == .completed && result.payload.proofStatus == "proved"
         let status: LogicEquivalenceEvidenceStatus
         if isProved {
             status = .proved
-        } else if envelope.payload.proofStatus == "unproven" {
+        } else if result.payload.proofStatus == "unproven" {
             status = .unproven
         } else {
             status = .blocked
@@ -434,7 +443,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             proofScope: request.proofScope,
             status: status,
             proofArtifact: isProved
-                ? envelope.artifacts.first(where: { $0.artifactID == "rtl-verification-report" })
+                ? result.artifacts.first(where: { $0.artifactID == "rtl-verification-report" })
                 : nil
         )
     }
@@ -465,48 +474,56 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
     }
 
     private func makeReviewArtifact(
-        envelope: XcircuiteEngineResultEnvelope<RTLVerificationPayload>,
+        result: RTLVerificationResult,
         acceptance: LogicSynthesisAcceptanceResult,
         stageID: String
     ) -> RTLVerificationReviewArtifact {
-        let actions = Array(Set(
-            envelope.payload.findings.flatMap(\.suggestedActions)
-                + envelope.diagnostics.flatMap(\.suggestedActions)
-                + acceptance.diagnostics.flatMap(\.suggestedActions)
-                + (acceptance.state == .accepted ? [] : ["inspect_logic_synthesis_acceptance"])
-        )).sorted()
+        let findingActions = result.payload.findings.flatMap(\.suggestedActions)
+        let resultActions = result.diagnostics.flatMap(\.suggestedActions)
+        let acceptanceActions = acceptance.diagnostics.flatMap { diagnostic in
+            diagnostic.suggestedActions.map(\.code)
+        }
+        var actionSet = Set(findingActions)
+        actionSet.formUnion(resultActions)
+        actionSet.formUnion(acceptanceActions)
+        if acceptance.state != .accepted {
+            actionSet.insert("inspect_logic_synthesis_acceptance")
+        }
+        let actions = actionSet.sorted()
         return RTLVerificationReviewArtifact(
             stageID: stageID,
-            runID: envelope.runID,
-            analysis: envelope.payload.analysis,
-            status: envelope.status,
-            findings: envelope.payload.findings,
-            diagnostics: envelope.diagnostics + acceptance.diagnostics,
-            appliedWaivers: envelope.payload.appliedWaivers,
-            qualification: envelope.payload.qualification,
-            approvalRequired: acceptance.state != .accepted || envelope.status != .completed,
+            runID: result.runID,
+            analysis: result.payload.analysis,
+            status: result.status,
+            findings: result.payload.findings,
+            diagnostics: result.diagnostics + rtlDiagnostics(acceptance.diagnostics),
+            appliedWaivers: result.payload.appliedWaivers,
+            qualification: result.payload.qualification,
+            approvalRequired: acceptance.state != .accepted || result.status != .completed,
             suggestedActions: actions
         )
     }
 
     private func makeAuditRecord(
         request: LogicSynthesisEquivalenceRequest,
-        envelope: XcircuiteEngineResultEnvelope<RTLVerificationPayload>,
+        result: RTLVerificationResult,
         acceptance: LogicSynthesisAcceptanceResult,
         artifactIDs: [String]
     ) throws -> RTLVerificationStageAuditRecord {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let requestDigest = XcircuiteHasher().sha256(data: try encoder.encode(request))
+        let requestDigest = try SHA256ContentDigester()
+            .digest(data: try encoder.encode(request))
+            .hexadecimalValue
         let acceptanceAction = "acceptance_state_\(acceptance.state.rawValue)"
         return RTLVerificationStageAuditRecord(
             stageID: stageID,
-            runID: envelope.runID,
+            runID: result.runID,
             requestDigest: requestDigest,
-            status: envelope.status,
-            qualificationState: envelope.payload.qualification.state,
+            status: result.status,
+            qualificationState: result.payload.qualification.state,
             artifactIDs: artifactIDs + [acceptanceAction],
-            resumable: envelope.status == .completed || envelope.status == .blocked,
+            resumable: result.status == .completed || result.status == .blocked,
             nextActions: [acceptanceAction]
         )
     }
@@ -514,6 +531,42 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
     private func digest(for request: LogicSynthesisEquivalenceRequest) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return XcircuiteHasher().sha256(data: try encoder.encode(request))
+        return try SHA256ContentDigester()
+            .digest(data: try encoder.encode(request))
+            .hexadecimalValue
+    }
+
+    private func materializedReference(
+        _ locator: ArtifactLocator,
+        artifactID: String,
+        context: FlowExecutionContext
+    ) throws -> ArtifactReference {
+        let url = try locator.location.resolvedFileURL(relativeTo: context.projectRoot)
+        let legacyReference = try artifactBuilder.reference(
+            for: url,
+            projectRoot: context.projectRoot,
+            artifactID: artifactID,
+            kind: .rtl,
+            format: url.pathExtension.lowercased() == "json" ? .json : .text,
+            producedByRunID: context.runID
+        )
+        return try FoundationFlowProjection.artifactReference(from: legacyReference)
+    }
+
+    private func rtlDiagnostics(_ diagnostics: [DesignDiagnostic]) -> [RTLDiagnostic] {
+        diagnostics.map { diagnostic in
+            let severity: RTLDiagnosticSeverity
+            switch diagnostic.severity {
+            case .information: severity = .info
+            case .warning: severity = .warning
+            case .error: severity = .error
+            }
+            return RTLDiagnostic(
+                severity: severity,
+                code: diagnostic.code.rawValue,
+                message: diagnostic.summary,
+                suggestedActions: diagnostic.suggestedActions.map(\.code)
+            )
+        }
     }
 }

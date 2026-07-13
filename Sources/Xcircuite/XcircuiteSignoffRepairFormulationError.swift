@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuiteSignoffRepairFormulationError: Error, LocalizedError, Equatable {
     case missingRepairHintSource

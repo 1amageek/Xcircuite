@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("op-amp design capabilities", .timeLimit(.minutes(2)))
 struct OpAmpDesignFlowTests {

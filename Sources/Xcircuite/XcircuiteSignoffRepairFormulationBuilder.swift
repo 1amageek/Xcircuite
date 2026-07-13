@@ -1,7 +1,7 @@
 import DRCEngine
 import Foundation
 import LVSEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private struct LoadedReports {

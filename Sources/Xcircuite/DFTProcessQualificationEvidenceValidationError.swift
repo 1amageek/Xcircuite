@@ -7,6 +7,7 @@ public enum DFTProcessQualificationEvidenceValidationError: Error, LocalizedErro
     case implementationMismatch(expected: String, actual: String)
     case processMismatch(expected: String, actual: String)
     case pdkMismatch(expected: String, actual: String)
+    case modelMismatch(required: [String], qualified: [String])
 
     public var code: String {
         switch self {
@@ -22,6 +23,8 @@ public enum DFTProcessQualificationEvidenceValidationError: Error, LocalizedErro
             return "DFT_PROCESS_QUALIFICATION_PROCESS_MISMATCH"
         case .pdkMismatch:
             return "DFT_PROCESS_QUALIFICATION_PDK_MISMATCH"
+        case .modelMismatch:
+            return "DFT_PROCESS_QUALIFICATION_MODEL_MISMATCH"
         }
     }
 
@@ -39,6 +42,8 @@ public enum DFTProcessQualificationEvidenceValidationError: Error, LocalizedErro
             return "process profile \(actual) does not match request process \(expected)"
         case .pdkMismatch(let expected, let actual):
             return "PDK digest \(actual) does not match request PDK \(expected)"
+        case .modelMismatch(let required, let qualified):
+            return "process-specific models \(required.joined(separator: ", ")) are used by the DFT result but are not qualified; qualified models are \(qualified.joined(separator: ", "))"
         }
     }
 }

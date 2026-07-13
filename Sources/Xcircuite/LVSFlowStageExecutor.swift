@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import LVSEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct LVSFlowStageExecutor: FlowStageExecutor {
     public let stageID: String

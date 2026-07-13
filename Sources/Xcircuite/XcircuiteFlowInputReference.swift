@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     case path(String)

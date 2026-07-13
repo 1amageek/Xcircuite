@@ -9,7 +9,7 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func generatedLayoutCLIRejectsMalformedJSONAsTypedReadError() async throws {
@@ -108,6 +108,9 @@ extension XcircuiteFlowRuntimeTests {
             lvsFormat: LVSLayoutFormat,
             pexFormat: LayoutFormat
         ) async throws {
+            let canonicalArtifactFormat = try ArtifactFormat(
+                rawValue: artifactFormat.rawValue.lowercased()
+            )
             let spec = XcircuiteFlowRuntimeSpec(
                 executors: [
                     .layoutCommand(
@@ -210,7 +213,7 @@ extension XcircuiteFlowRuntimeTests {
                         FlowStageDefinition(
                             stageID: "009-pex",
                             displayName: "PEX",
-                            requiredTool: mockPEXContractRequirement(requiredLayoutFormat: artifactFormat)
+                            requiredTool: mockPEXContractRequirement(requiredLayoutFormat: canonicalArtifactFormat)
                         ),
                     ]
                 )

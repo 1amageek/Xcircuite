@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuitePlanningObjective: Codable, Sendable, Hashable {
     public var objectiveID: String

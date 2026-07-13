@@ -1,8 +1,9 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import PhysicalDesignCore
 import PhysicalDesignEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 /// Prepares an immutable physical-design review packet and binds the generic
 /// Xcircuite approval record to the native physical-design resume gate.
@@ -35,7 +36,14 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
-            let manifestReference = try StageArtifactReferenceBuilder().reference(
+            let manifestReference = try foundationReference(
+                for: manifestURL,
+                projectRoot: context.projectRoot,
+                artifactID: "physical-design-run-manifest",
+                kind: .report,
+                format: .json
+            )
+            let manifestArtifact = try StageArtifactReferenceBuilder().reference(
                 for: manifestURL,
                 projectRoot: context.projectRoot,
                 artifactID: "physical-design-run-manifest",
@@ -73,7 +81,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                         diagnostics: [diagnostic]
                     )
                 ],
-                artifacts: [manifestReference, packetReference]
+                artifacts: [manifestArtifact, packetReference]
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -121,7 +129,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             stage: packet.stage,
             verdict: .approved,
             reviewer: approval.reviewer,
-            reviewerKind: approval.reviewerKind,
+            reviewerKind: PhysicalDesignReviewerKind(rawValue: approval.reviewerKind.rawValue) ?? .system,
             note: approval.note,
             manifestDigest: packet.manifestDigest,
             proposedLayoutDigest: packet.proposedLayout.layoutDigest,
@@ -172,8 +180,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                     actions: ["prepare_a_new_physical_design_review_packet"]
                 ))
             }
-            if let expectedByteCount = packet.manifestReference.byteCount,
-               Int64(manifestData.count) != expectedByteCount {
+            if Int64(manifestData.count) != Int64(packet.manifestReference.byteCount) {
                 diagnostics.append(diagnostic(
                     code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_SIZE_MISMATCH",
                     message: "The reviewed physical-design manifest byte count changed after packet creation.",
@@ -232,10 +239,8 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             .appending(path: "raw")
         try context.packageStore.ensureDirectory(at: directory)
         let url = directory.appending(path: fileName)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(value).write(to: url, options: .atomic)
+        let data = try PhysicalDesignJSONCodec().encode(value)
+        try data.write(to: url, options: .atomic)
         return try StageArtifactReferenceBuilder().reference(
             for: url,
             projectRoot: context.projectRoot,
@@ -246,11 +251,33 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         )
     }
 
-    private func flowDiagnostic(_ diagnostic: XcircuiteEngineDiagnostic) -> FlowDiagnostic {
+    private func foundationReference(
+        for url: URL,
+        projectRoot: URL,
+        artifactID: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
+        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: projectRoot)
+        let data = try Data(contentsOf: url)
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            digest: try SHA256ContentDigester().digest(data: data),
+            byteCount: UInt64(data.count)
+        )
+    }
+
+    private func flowDiagnostic(_ diagnostic: DesignDiagnostic) -> FlowDiagnostic {
         FlowDiagnostic(
             severity: diagnostic.severity == .warning ? .warning : .error,
-            code: diagnostic.code,
-            message: diagnostic.message
+            code: diagnostic.code.rawValue,
+            message: diagnostic.summary
         )
     }
 

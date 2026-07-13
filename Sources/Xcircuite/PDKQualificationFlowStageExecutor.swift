@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import PDKKit
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PDKQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -10,7 +10,7 @@ public struct PDKQualificationFlowStageExecutor: FlowStageExecutor {
     private let corpusInput: XcircuiteFlowInputReference
     private let oracleInput: XcircuiteFlowInputReference
     private let engine: any PDKQualificationExecuting
-    private let support: PDKStageExecutionAdapterSupport
+    private let support: PDKStageExecutionSupport
 
     public init(
         stageID: String = PDKKitAPI.qualificationStageID,
@@ -26,7 +26,7 @@ public struct PDKQualificationFlowStageExecutor: FlowStageExecutor {
         self.corpusInput = corpusInput
         self.oracleInput = oracleInput
         self.engine = engine
-        self.support = PDKStageExecutionAdapterSupport()
+        self.support = PDKStageExecutionSupport()
     }
 
     public static func local(
@@ -64,14 +64,14 @@ public struct PDKQualificationFlowStageExecutor: FlowStageExecutor {
                 runDirectory: context.runDirectory
             )
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
-            let corpus = try support.inputReference(
+            let corpus = try support.foundationInputReference(
                 for: corpusURL,
                 context: context,
                 artifactID: "pdk-corpus-report",
                 kind: .report,
                 format: .json
             )
-            let oracle = try support.inputReference(
+            let oracle = try support.foundationInputReference(
                 for: oracleURL,
                 context: context,
                 artifactID: "pdk-oracle-report",
@@ -85,10 +85,10 @@ public struct PDKQualificationFlowStageExecutor: FlowStageExecutor {
                 oracleReport: oracle,
                 projectRootPath: context.projectRoot.path(percentEncoded: false)
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(envelope, stageID: stageID, context: context)
-            return support.stageResult(envelope: envelope, stageID: stageID, artifact: artifact)
+            let artifact = try support.persistResult(result, stageID: stageID, context: context)
+            return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {

@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum SignoffToolDescriptors {
     public static func pexToolID(backendID: String) -> String {
@@ -222,6 +222,27 @@ public enum SignoffToolDescriptors {
             capabilities: [
                 ToolCapability(
                     operationID: "qualify-electrical-signoff",
+                    inputFormats: [.json],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func nativeElectricalProcessQualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "native-electrical-signoff-process-qualification",
+            displayName: "Native Electrical Signoff Process Qualification",
+            kind: .reporting,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "qualify-electrical-signoff-process",
                     inputFormats: [.json],
                     outputFormats: [.json]
                 ),

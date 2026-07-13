@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
     private let packageStore: XcircuitePackageStore

@@ -2,7 +2,7 @@ import DesignFlowKernel
 import Foundation
 import PDKCore
 import PDKDiscovery
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -10,7 +10,7 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
     private let searchRoots: [XcircuiteFlowInputReference]
     private let requiredProcessID: String?
     private let engine: any PDKDiscovering
-    private let support: PDKStageExecutionAdapterSupport
+    private let support: PDKStageExecutionSupport
 
     public init(
         stageID: String = "pdk.discover",
@@ -24,7 +24,7 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
         self.searchRoots = searchRoots
         self.requiredProcessID = requiredProcessID
         self.engine = engine
-        self.support = PDKStageExecutionAdapterSupport()
+        self.support = PDKStageExecutionSupport()
     }
 
     public static func local(
@@ -54,10 +54,10 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
                 searchRoots: resolvedRoots,
                 requiredProcessID: requiredProcessID
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(envelope, stageID: stageID, context: context)
-            return support.stageResult(envelope: envelope, stageID: stageID, artifact: artifact)
+            let artifact = try support.persistResult(result, stageID: stageID, context: context)
+            return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {

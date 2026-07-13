@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverArtifactSet: Codable, Sendable, Hashable {
     public var runArtifact: XcircuiteFileReference

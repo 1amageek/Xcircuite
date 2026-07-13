@@ -7,7 +7,7 @@ import QualificationEngine
 import ReleaseCore
 import SignoffToolSupport
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String

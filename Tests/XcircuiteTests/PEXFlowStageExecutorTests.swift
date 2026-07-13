@@ -4,7 +4,7 @@ import PEXEngine
 import Testing
 import ToolQualification
 @testable import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("PEX flow stage executor")
 struct PEXFlowStageExecutorTests {

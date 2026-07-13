@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Timing headless flow")
 struct TimingHeadlessFlowTests {

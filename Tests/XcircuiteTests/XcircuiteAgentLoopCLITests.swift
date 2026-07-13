@@ -2,7 +2,7 @@ import DesignFlowKernel
 import Foundation
 import Testing
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("xcircuite-flow agent loop", .timeLimit(.minutes(2)))
 struct XcircuiteAgentLoopCLITests {

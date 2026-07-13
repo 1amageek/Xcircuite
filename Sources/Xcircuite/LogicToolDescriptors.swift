@@ -1,5 +1,5 @@
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum LogicToolDescriptors {
     public static func synthesis(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {

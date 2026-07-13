@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LayoutCommands
@@ -10,7 +11,7 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsLayoutCommandDRCExportIntoDRCStage() async throws {
@@ -511,6 +512,7 @@ extension XcircuiteFlowRuntimeTests {
         for layoutCase in standardMaskLVSCases() {
             let root = try makeTemporaryRoot("runtime-layout-command-\(layoutCase.name)-lvs")
             defer { removeTemporaryRoot(root) }
+            let artifactFormat = try ArtifactFormat(rawValue: layoutCase.artifactFormat.rawValue.lowercased())
             try writeLayoutCommandRequest(root: root)
             try writeStandardLayoutTechnology(root: root)
             _ = try writeNetlist(
@@ -568,12 +570,12 @@ extension XcircuiteFlowRuntimeTests {
                         FlowStageDefinition(
                             stageID: "006-layout",
                             displayName: "Layout command",
-                            requiredTool: layoutCommandRequirement(requiredStandardOutputFormat: layoutCase.artifactFormat)
+                            requiredTool: layoutCommandRequirement(requiredStandardOutputFormat: artifactFormat)
                         ),
                         FlowStageDefinition(
                             stageID: "008-lvs",
                             displayName: "LVS",
-                            requiredTool: lvsRequirement(requiredLayoutFormat: layoutCase.artifactFormat)
+                            requiredTool: lvsRequirement(requiredLayoutFormat: artifactFormat)
                         ),
                     ]
                 )
@@ -584,7 +586,7 @@ extension XcircuiteFlowRuntimeTests {
             let lvsStage = try #require(result.stages.first { $0.stageID == "008-lvs" })
             let layoutArtifact = try #require(layoutStage.artifacts.first { $0.artifactID == layoutCase.artifactID })
             #expect(layoutArtifact.kind == .layout)
-            #expect(layoutArtifact.format == layoutCase.artifactFormat)
+            #expect(layoutArtifact.format.rawValue.lowercased() == artifactFormat.rawValue.lowercased())
             #expect(layoutArtifact.path.hasSuffix(layoutCase.fileSuffix))
             #expect(layoutArtifact.sha256 != nil)
             #expect(layoutArtifact.byteCount != nil)

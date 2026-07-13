@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LVSEngine
@@ -12,7 +13,6 @@ import PhysicalDesignCore
 import Testing
 import TimingCore
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("End-to-end design flow")
@@ -53,13 +53,19 @@ struct EndToEndDesignFlowTests {
             root: root,
             kind: .rtl
         )
+        let snapshotRevision: ContentDigest?
+        if let digest = snapshot.designDigest {
+            snapshotRevision = try ContentDigest(algorithm: .sha256, hexadecimalValue: digest)
+        } else {
+            snapshotRevision = nil
+        }
         let loweringRequest = LogicLoweringRequest(
             runID: runID,
             inputs: [snapshotReference],
-            design: LogicDesignReference(
+            design: LogicFoundationDesignReference(
                 artifact: snapshotReference,
                 topDesignName: "e2e_top",
-                designDigest: snapshot.designDigest ?? ""
+                designRevision: snapshotRevision
             )
         )
         let loweringRequestPath = try writeJSON(
@@ -67,7 +73,7 @@ struct EndToEndDesignFlowTests {
             name: "logic-lowering-request.json",
             root: root,
             kind: .other
-        ).path
+        ).locator.location.value
 
         let logicDocument = LogicDesignDocument(
             topDesignName: "e2e_top",
@@ -113,10 +119,10 @@ struct EndToEndDesignFlowTests {
         let simulationRequest = LogicSimulationRequest(
             runID: runID,
             inputs: [logicDesignReference, stimulusReference],
-            design: LogicDesignReference(
+            design: LogicFoundationDesignReference(
                 artifact: logicDesignReference,
                 topDesignName: "e2e_top",
-                designDigest: logicDesignReference.sha256 ?? ""
+                designRevision: logicDesignReference.digest
             ),
             stimulus: stimulusReference,
             seed: 7
@@ -126,7 +132,7 @@ struct EndToEndDesignFlowTests {
             name: "logic-simulation-request.json",
             root: root,
             kind: .other
-        ).path
+        ).locator.location.value
 
         try writeSTAInputs(to: root)
         let pdkReference = try writeJSON(
@@ -135,20 +141,23 @@ struct EndToEndDesignFlowTests {
             root: root,
             kind: .technology
         )
-        let constraintsReference = try XcircuitePackageStore().fileReference(
+        let constraintsLegacyReference = try XcircuitePackageStore().fileReference(
             forProjectRelativePath: "constraints.sdc",
             artifactID: "e2e-constraints",
             kind: .constraint,
             format: .sdc,
             inProjectAt: root
         )
+        let constraintsReference = try FoundationFlowProjection.artifactReference(
+            from: constraintsLegacyReference
+        )
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [logicDesignReference, constraintsReference, pdkReference],
             design: LogicDesignReference(
-                artifact: logicDesignReference,
+                artifact: logicDesignReference.locator,
                 topDesignName: "e2e_top",
-                designDigest: logicDesignReference.sha256 ?? ""
+                designDigest: logicDesignReference.digest.hexadecimalValue
             ),
             constraints: TimingConstraintReference(
                 artifact: constraintsReference,
@@ -158,7 +167,7 @@ struct EndToEndDesignFlowTests {
                 manifest: pdkReference,
                 processID: "fixture-process",
                 version: "1",
-                digest: pdkReference.sha256 ?? ""
+                digest: pdkReference.digest.hexadecimalValue
             ),
             stage: .floorplan,
             initialSnapshot: PhysicalDesignSnapshot(
@@ -171,7 +180,7 @@ struct EndToEndDesignFlowTests {
             name: "physical-design-request.json",
             root: root,
             kind: .other
-        ).path
+        ).locator.location.value
 
         let drcLayoutURL = root.appending(path: "drc-layout.json")
         _ = try writeJSON(
@@ -449,19 +458,26 @@ struct EndToEndDesignFlowTests {
         _ value: Value,
         name: String,
         root: URL,
-        kind: XcircuiteFileKind
-    ) throws -> XcircuiteFileReference {
+        kind: ArtifactKind
+    ) throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(value).write(
             to: root.appending(path: name),
             options: .atomic
         )
-        return try XcircuitePackageStore().fileReference(
-            forProjectRelativePath: name,
+        let data = try Data(contentsOf: root.appending(path: name))
+        let locator = try ArtifactLocator(
+            location: ArtifactLocation(workspaceRelativePath: name),
+            role: .input,
             kind: kind,
-            format: .json,
-            inProjectAt: root
+            format: .json
+        )
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: name.replacingOccurrences(of: ".json", with: "")),
+            locator: locator,
+            digest: try SHA256ContentDigester().digest(data: data),
+            byteCount: UInt64(data.count)
         )
     }
 

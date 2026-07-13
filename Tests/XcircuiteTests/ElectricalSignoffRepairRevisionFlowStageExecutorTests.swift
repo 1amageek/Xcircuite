@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import ElectricalSignoffEngine
 import Foundation
 import LogicIR
@@ -7,7 +8,7 @@ import PhysicalDesignCore
 import Testing
 import TimingCore
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Electrical signoff repair revision")
@@ -32,8 +33,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         let layoutURL = try store.url(forProjectRelativePath: layoutPath, inProjectAt: root)
         try store.ensureDirectory(at: layoutURL.deletingLastPathComponent())
         try snapshotData.write(to: layoutURL)
-        let hasher = XcircuiteHasher()
-        let layoutDigest = hasher.sha256(data: snapshotData)
+        let layoutDigest = try SHA256ContentDigester().digest(data: snapshotData).hexadecimalValue
         let layoutReference = XcircuiteFileReference(
             artifactID: "base-layout",
             path: layoutPath,
@@ -46,7 +46,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             runID: runID,
             designDigest: "design-digest",
             layoutDigest: layoutDigest,
-            pdkDigest: "pdk-digest",
+            pdkDigest: String(repeating: "c", count: 64),
             candidates: [ElectricalSignoffRepairPlan.Candidate(
                 candidateID: "repair-1",
                 axis: .erc,
@@ -67,29 +67,54 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             path: planPath,
             kind: .report,
             format: .json,
-            sha256: hasher.sha256(data: planData),
+            sha256: try SHA256ContentDigester().digest(data: planData).hexadecimalValue,
             byteCount: Int64(planData.count)
         )
+        let designReference = try makeFoundationReference(
+            id: "design-input",
+            path: "design.json",
+            kind: .netlist,
+            format: .json,
+            digest: String(repeating: "a", count: 64),
+            byteCount: 1
+        )
+        let constraintReference = try makeFoundationReference(
+            id: "constraint-input",
+            path: "constraints.sdc",
+            kind: .constraint,
+            format: .sdc,
+            digest: String(repeating: "b", count: 64),
+            byteCount: 1
+        )
+        let pdkReference = try makeFoundationReference(
+            id: "pdk-input",
+            path: "pdk.json",
+            kind: .technology,
+            format: .json,
+            digest: String(repeating: "c", count: 64),
+            byteCount: 1
+        )
+        let layoutFoundationReference = try FoundationFlowProjection.artifactReference(from: layoutReference)
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: XcircuiteFileReference(path: "design.json", kind: .netlist, format: .json),
+                artifact: designReference.locator,
                 topDesignName: "top",
                 designDigest: "design-digest"
             ),
             constraints: TimingConstraintReference(
-                artifact: XcircuiteFileReference(path: "constraints.sdc", kind: .constraint, format: .sdc),
+                artifact: constraintReference,
                 modeIDs: ["functional"]
             ),
             pdk: PDKReference(
-                manifest: XcircuiteFileReference(path: "pdk.json", kind: .technology, format: .json),
+                manifest: pdkReference,
                 processID: "fixture",
                 version: "1",
-                digest: "pdk-digest"
+                digest: pdkReference.sha256
             ),
             inputLayout: PhysicalDesignReference(
-                layoutArtifact: layoutReference,
+                layoutArtifact: layoutFoundationReference,
                 topCell: "top",
                 layoutDigest: layoutDigest
             ),
@@ -119,7 +144,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == FlowStageStatus.succeeded)
         let wrapperReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-repair-revision" })
         let wrapperURL = try store.url(forProjectRelativePath: wrapperReference.path, inProjectAt: root)
         let persisted = try JSONDecoder().decode(XcircuiteElectricalRepairRevisionResult.self, from: Data(contentsOf: wrapperURL))
@@ -128,4 +153,25 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         #expect(persisted.digestLineage.parentLayoutDigest == layoutDigest)
         #expect(persisted.digestLineage.newLayoutDigest != layoutDigest)
     }
+}
+
+private func makeFoundationReference(
+    id: String,
+    path: String,
+    kind: ArtifactKind,
+    format: ArtifactFormat,
+    digest: String,
+    byteCount: UInt64
+) throws -> ArtifactReference {
+    ArtifactReference(
+        id: try ArtifactID(rawValue: id),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .input,
+            kind: kind,
+            format: format
+        ),
+        digest: try ContentDigest(algorithm: .sha256, hexadecimalValue: digest),
+        byteCount: byteCount
+    )
 }

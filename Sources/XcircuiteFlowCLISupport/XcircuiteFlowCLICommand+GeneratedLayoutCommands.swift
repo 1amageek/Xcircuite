@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
     static func collectGeneratedLayoutSignoffCorpus(arguments: [String]) throws -> String {

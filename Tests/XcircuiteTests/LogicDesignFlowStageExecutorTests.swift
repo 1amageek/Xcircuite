@@ -3,7 +3,6 @@ import Foundation
 import LogicDesign
 import Testing
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("LogicDesign flow stage adapters")
@@ -28,7 +27,7 @@ struct LogicDesignFlowStageExecutorTests {
         )
 
         #expect(result.status == .succeeded)
-        #expect(result.artifacts.count == 2)
+        #expect(result.artifacts.count == 3)
         #expect(result.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.artifacts.contains { $0.artifactID == "logic-design" })
         #expect(result.artifacts.allSatisfy {
@@ -99,7 +98,7 @@ struct LogicDesignFlowStageExecutorTests {
         )
 
         #expect(result.status == .succeeded)
-        #expect(result.artifacts.count == 2)
+        #expect(result.artifacts.count == 4)
         #expect(result.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.artifacts.allSatisfy {
             XcircuiteFileReferenceVerifier().verify($0, projectRoot: root).status == .verified

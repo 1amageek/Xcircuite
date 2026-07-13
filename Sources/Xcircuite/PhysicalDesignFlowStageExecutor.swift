@@ -2,7 +2,7 @@ import DesignFlowKernel
 import Foundation
 import PhysicalDesignCore
 import PhysicalDesignEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -70,16 +70,17 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
             let engine = injectedEngine ?? PhysicalDesignEngine(
                 artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let diagnostics = envelope.diagnostics.map(flowDiagnostic)
+            let diagnostics = FoundationFlowProjection.flowDiagnostics(result.diagnostics)
+            let artifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
-                for: envelope.artifacts,
+                for: artifacts,
                 projectRoot: context.projectRoot
             )
             let allDiagnostics = diagnostics + integrityGate.diagnostics
             let stageStatus: FlowStageStatus
-            switch envelope.status {
+            switch result.status {
             case .completed:
                 stageStatus = integrityGate.status == .passed ? .succeeded : .failed
             case .blocked:
@@ -96,12 +97,12 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
                 gates: [
                     FlowGateResult(
                         gateID: "physical-design",
-                        status: gateStatus(for: envelope.status),
+                        status: gateStatus(for: result.status),
                         diagnostics: diagnostics
                     ),
                     integrityGate,
                 ],
-                artifacts: envelope.artifacts
+                artifacts: artifacts
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -118,24 +119,7 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func flowDiagnostic(_ diagnostic: XcircuiteEngineDiagnostic) -> FlowDiagnostic {
-        let entity = diagnostic.entity.map { " entity=\($0)" } ?? ""
-        return FlowDiagnostic(
-            severity: flowSeverity(diagnostic.severity),
-            code: diagnostic.code,
-            message: diagnostic.message + entity
-        )
-    }
-
-    private func flowSeverity(_ severity: XcircuiteEngineDiagnosticSeverity) -> FlowDiagnosticSeverity {
-        switch severity {
-        case .info: .info
-        case .warning: .warning
-        case .error: .error
-        }
-    }
-
-    private func gateStatus(for status: XcircuiteEngineExecutionStatus) -> FlowGateStatus {
+    private func gateStatus(for status: PhysicalDesignExecutionStatus) -> FlowGateStatus {
         switch status {
         case .completed: .passed
         case .blocked: .blocked

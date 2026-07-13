@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import PDKKit
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -9,7 +9,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
     private let suiteInput: XcircuiteFlowInputReference
     private let rootInput: XcircuiteFlowInputReference
     private let engine: any PDKCorpusValidating
-    private let support: PDKStageExecutionAdapterSupport
+    private let support: PDKStageExecutionSupport
 
     public init(
         stageID: String = PDKKitAPI.corpusValidationStageID,
@@ -23,7 +23,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
         self.suiteInput = suiteInput
         self.rootInput = rootInput
         self.engine = engine
-        self.support = PDKStageExecutionAdapterSupport()
+        self.support = PDKStageExecutionSupport()
     }
 
     public static func local(
@@ -65,7 +65,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
                     message: "The PDK corpus root input is not a directory."
                 )
             }
-            let suiteReference = try support.inputReference(
+            let suiteReference = try support.inputLocator(
                 for: suiteURL,
                 context: context,
                 artifactID: "pdk-corpus-suite",
@@ -78,10 +78,10 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
                 rootPath: rootURL.path(percentEncoded: false),
                 inputs: [suiteReference]
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(envelope, stageID: stageID, context: context)
-            return support.stageResult(envelope: envelope, stageID: stageID, artifact: artifact)
+            let artifact = try support.persistResult(result, stageID: stageID, context: context)
+            return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {

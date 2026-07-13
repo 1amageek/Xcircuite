@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     private let packageStore: XcircuitePackageStore

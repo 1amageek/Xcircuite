@@ -4,7 +4,7 @@ import LVSEngine
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite signoff repair formulation builder")
 struct XcircuiteSignoffRepairFormulationBuilderTests {

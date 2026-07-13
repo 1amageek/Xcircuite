@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 struct XcircuiteCandidatePlanRiskReviewer: Sendable {
     func riskReviews(

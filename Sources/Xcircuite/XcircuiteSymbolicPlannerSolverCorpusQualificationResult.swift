@@ -1,5 +1,5 @@
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, Sendable, Hashable {
     public var schemaVersion: Int

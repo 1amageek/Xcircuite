@@ -1,7 +1,7 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import LogicDesign
-import XcircuitePackage
 
 public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -9,7 +9,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
     private let sourceInput: XcircuiteFlowInputReference
     private let topDesignName: String
     private let injectedEngine: (any LogicElaborating)?
-    private let support: LogicDesignFlowStageAdapterSupport
+    private let support: LogicDesignFlowStageSupport
 
     public init(
         stageID: String = "logic.elaborate",
@@ -23,7 +23,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
         self.sourceInput = sourceInput
         self.topDesignName = topDesignName
         self.injectedEngine = engine
-        self.support = LogicDesignFlowStageAdapterSupport()
+        self.support = LogicDesignFlowStageSupport()
     }
 
     public func execute(
@@ -47,9 +47,12 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
             )
             let request = LogicElaborationRequest(
                 runID: context.runID,
-                inputs: [sourceReference],
+                inputs: [try FoundationFlowProjection.locator(from: sourceReference)],
                 topDesignName: topDesignName,
-                sources: [SystemVerilogSourceUnit(path: sourceReference.path, source: source)]
+                sources: [SystemVerilogSourceUnit(
+                    path: sourceReference.path,
+                    source: source
+                )]
             )
             let engine = injectedEngine ?? LogicElaboratingEngine(
                 sourceProvider: FileSystemSystemVerilogSourceProvider(root: context.projectRoot)
@@ -57,7 +60,8 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
             let envelope = try await engine.execute(request)
             try context.checkCancellation()
 
-            var persistedEnvelope = envelope
+            var persistedResult = envelope
+            var resultArtifacts = [sourceReference]
             if let snapshot = envelope.payload.snapshot {
                 let directory = context.runDirectory
                     .appending(path: "stages")
@@ -78,7 +82,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     format: .json,
                     producedByRunID: context.runID
                 )
-                var payload = persistedEnvelope.payload
+                var payload = persistedResult.payload
                 let designDigest: String
                 if let snapshotDigest = snapshot.designDigest {
                     designDigest = snapshotDigest
@@ -86,32 +90,39 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     designDigest = try LogicDesignSnapshotCodec.digest(snapshot)
                 }
                 payload.design = LogicDesignReference(
-                    artifact: snapshotReference,
+                    artifact: try FoundationFlowProjection.locator(from: snapshotReference),
                     topDesignName: snapshot.rtl.topModuleName,
                     designDigest: designDigest,
                     provenance: LogicDesignProvenance(
                         sourceDesignDigest: designDigest,
                         transformationID: "systemverilog-elaboration",
-                        producerID: persistedEnvelope.metadata.engineID,
-                        producerVersion: persistedEnvelope.metadata.implementationVersion,
+                        producerID: persistedResult.metadata.engineID,
+                        producerVersion: persistedResult.metadata.implementationVersion,
                         runID: context.runID
                     )
                 )
-                persistedEnvelope.payload = payload
-                persistedEnvelope.artifacts.append(snapshotReference)
+                persistedResult = LogicElaborationResult(
+                    schemaVersion: persistedResult.schemaVersion,
+                    runID: persistedResult.runID,
+                    status: persistedResult.status,
+                    diagnostics: persistedResult.diagnostics,
+                    metadata: persistedResult.metadata,
+                    payload: payload
+                )
+                resultArtifacts.append(snapshotReference)
             }
-            let resultArtifact = try support.writeEnvelope(
-                persistedEnvelope,
+            let resultArtifact = try support.writeResult(
+                persistedResult,
                 stageID: stageID,
                 context: context,
                 fileName: "logic-result.json"
             )
             return support.stageResult(
                 resultArtifact: resultArtifact,
-                envelopeStatus: persistedEnvelope.status,
-                diagnostics: persistedEnvelope.diagnostics,
+                status: persistedResult.status,
+                diagnostics: persistedResult.diagnostics,
                 stageID: stageID,
-                artifacts: persistedEnvelope.artifacts,
+                artifacts: resultArtifacts,
                 context: context
             )
         } catch let cancellationError as FlowRunCancellationError {

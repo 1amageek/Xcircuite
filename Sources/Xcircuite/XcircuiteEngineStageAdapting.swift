@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public protocol XcircuiteEngineStageAdapting: FlowStageExecutor {
     associatedtype Engine: XcircuiteEngineExecuting

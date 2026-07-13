@@ -7,7 +7,7 @@ import PEXEngine
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 
 struct ProducedLayoutCorpusCase: Sendable, Hashable {

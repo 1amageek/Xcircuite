@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import LogicQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -9,7 +9,7 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
     private let reportInput: XcircuiteFlowInputReference
     private let processEvidenceInput: XcircuiteFlowInputReference?
     private let releaseApprovalInput: XcircuiteFlowInputReference?
-    private let support: LogicEngineStageExecutionAdapterSupport
+    private let support: LogicEngineStageExecutionSupport
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
@@ -24,7 +24,7 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
         self.reportInput = reportInput
         self.processEvidenceInput = processEvidenceInput
         self.releaseApprovalInput = releaseApprovalInput
-        self.support = LogicEngineStageExecutionAdapterSupport()
+        self.support = LogicEngineStageExecutionSupport()
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 

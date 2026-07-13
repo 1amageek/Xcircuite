@@ -3,7 +3,6 @@ import Foundation
 import PDKKit
 import Testing
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("PDK flow stage adapters")
@@ -122,11 +121,14 @@ struct PDKFlowStageExecutorTests {
             .appending(path: PDKKitAPI.ruleDeckInspectionStageID)
             .appending(path: "raw/pdk-result.json")
         let ruleDeckData = try Data(contentsOf: ruleDeckURL)
-        let ruleDeckEnvelope = try JSONDecoder().decode(
-            XcircuiteEngineResultEnvelope<PDKRuleDeckInspectionPayload>.self,
+        let ruleDeckInspectionResult = try JSONDecoder().decode(
+            PDKRuleDeckInspectionResult.self,
             from: ruleDeckData
         )
-        #expect(ruleDeckEnvelope.payload.observedLayerIDs == ["active", "metal1"])
+        #expect(ruleDeckInspectionResult.payload.observedLayerIDs == ["active", "metal1"])
+        let sourceArtifact = try #require(ruleDeckInspectionResult.payload.sourceArtifact)
+        #expect(sourceArtifact.byteCount > 0)
+        #expect(sourceArtifact.locator.role == .input)
 
         let oracleContext = makeContext(root: root, runID: "pdk-oracle-adapter")
         let oracleResult = try await PDKOracleFlowStageExecutor.local(
@@ -162,11 +164,11 @@ struct PDKFlowStageExecutorTests {
             .appending(path: PDKKitAPI.qualificationStageID)
             .appending(path: "raw/pdk-result.json")
         let rawData = try Data(contentsOf: rawURL)
-        let envelope = try JSONDecoder().decode(
-            XcircuiteEngineResultEnvelope<PDKQualificationAssessment>.self,
+        let result = try JSONDecoder().decode(
+            PDKQualificationExecutionResult.self,
             from: rawData
         )
-        #expect(envelope.payload.state == .oracleCorrelated)
+        #expect(result.payload.state == .oracleCorrelated)
     }
 
     @Test("qualification trust scope blocks mismatched evidence and resumes after approval")

@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuiteGeneratedLayoutSignoffCorpusReportValidationError: Error, Equatable, LocalizedError {
     case invalidIntegrityStatus(path: String, status: String)

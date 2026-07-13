@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 enum XcircuiteRunManifestTamperError: Error {
     case invalidManifestObject

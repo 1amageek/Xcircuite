@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerFamilyCandidateResult: Codable, Sendable, Hashable {
     public var candidateIndex: Int

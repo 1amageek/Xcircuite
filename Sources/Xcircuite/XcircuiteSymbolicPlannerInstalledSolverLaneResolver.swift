@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerInstalledSolverLaneResolver: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore

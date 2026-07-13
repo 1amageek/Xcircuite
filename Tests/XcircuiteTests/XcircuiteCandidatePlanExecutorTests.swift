@@ -4,7 +4,7 @@ import LayoutTech
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite candidate plan executor")
 struct XcircuiteCandidatePlanExecutorTests {

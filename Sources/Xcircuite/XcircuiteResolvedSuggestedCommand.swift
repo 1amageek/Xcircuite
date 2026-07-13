@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteResolvedSuggestedCommand: Sendable, Hashable, Codable {
     public var selection: XcircuiteSuggestedCommandSelection

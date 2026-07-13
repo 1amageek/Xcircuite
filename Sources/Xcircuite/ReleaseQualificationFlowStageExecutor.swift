@@ -1,14 +1,14 @@
 import DesignFlowKernel
 import Foundation
 import QualificationEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct ReleaseQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let requestInput: XcircuiteFlowInputReference
     private let engine: any ReleaseQualificationEvaluating
-    private let support: ReleaseStageExecutionAdapterSupport
+    private let support: ReleaseStageExecutionSupport
 
     public init(
         stageID: String = "release.qualification",
@@ -20,7 +20,7 @@ public struct ReleaseQualificationFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.requestInput = requestInput
         self.engine = engine
-        self.support = ReleaseStageExecutionAdapterSupport()
+        self.support = ReleaseStageExecutionSupport()
     }
 
     public func execute(
@@ -46,19 +46,19 @@ public struct ReleaseQualificationFlowStageExecutor: FlowStageExecutor {
                 return support.failureResult(stageID: stage.stageID, code: "RELEASE_QUALIFICATION_PROJECT_ROOT_MISMATCH", message: "Qualification request project root does not match the flow context.")
             }
             request.projectRoot = context.projectRoot.path
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(
-                envelope,
+            let artifact = try support.persistResult(
+                result,
                 stageID: stageID,
                 artifactID: "release-qualification-result",
                 context: context
             )
             return support.stageResult(
-                envelope: envelope,
+                result: result,
                 stageID: stageID,
-                artifacts: envelope.artifacts + [artifact],
-                approved: envelope.payload.qualified
+                artifacts: [artifact],
+                approved: result.payload.qualified
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

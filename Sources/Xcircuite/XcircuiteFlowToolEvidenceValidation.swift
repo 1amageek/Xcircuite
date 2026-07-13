@@ -22,9 +22,7 @@ extension ToolEvidence {
                 )
             }
 
-            if let sha256 = artifact.sha256 {
-                try validateArtifactSHA256(sha256, stageID: stageID)
-            }
+            try validateArtifactSHA256(artifact.sha256, stageID: stageID)
         }
 
         if qualification?.qualified == true, !hasPassingQualificationSupport {

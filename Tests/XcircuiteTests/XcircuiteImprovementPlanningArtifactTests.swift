@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite improvement planning artifacts")
 struct XcircuiteImprovementPlanningArtifactTests {

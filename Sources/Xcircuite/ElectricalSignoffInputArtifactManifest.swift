@@ -1,5 +1,6 @@
 import Foundation
-import XcircuitePackage
+import CircuiteFoundation
+import DesignFlowKernel
 
 public struct ElectricalSignoffInputArtifactManifest: Sendable, Hashable, Codable {
     public static let currentSchemaVersion = 1
@@ -81,6 +82,10 @@ public struct ElectricalSignoffInputArtifactManifest: Sendable, Hashable, Codabl
                 ].joined(separator: "|")
             }
             .joined(separator: "\n"))
-        return XcircuiteHasher().sha256(data: Data(canonical.utf8))
+        do {
+            return try SHA256ContentDigester().digest(data: Data(canonical.utf8)).hexadecimalValue
+        } catch {
+            return ""
+        }
     }
 }

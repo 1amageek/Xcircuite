@@ -3,7 +3,7 @@ import LVSEngine
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite LVS repair loop")
 struct XcircuiteLVSRepairLoopTests {

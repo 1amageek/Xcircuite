@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum ReleaseToolDescriptors {
     public static func qualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {

@@ -63,9 +63,37 @@ public enum XcircuiteEnginePackageCatalog {
         XcircuiteEnginePackageDescriptor(
             packageID: "DFTEngine",
             products: ["ScanInsertion", "ATPGEngine", "BISTEngine"],
-            stageIDs: ["dft.scan", "dft.atpg", "dft.bist"],
-            inputArtifactRoles: ["mapped-design", "test-constraints", "pdk-reference"],
-            outputArtifactRoles: ["test-design", "test-patterns", "fault-coverage-report"]
+            stageIDs: [
+                "dft.scan",
+                "dft.atpg",
+                "dft.bist",
+                "dft.qualification",
+                "dft.release-evidence",
+                "dft.release",
+            ],
+            inputArtifactRoles: [
+                "mapped-design",
+                "test-constraints",
+                "pdk-reference",
+                "dft-oracle-corpus",
+                "dft-oracle-observations",
+                "dft-qualification-evidence",
+                "dft-process-qualification-build-request",
+                "dft-process-qualification-evidence",
+                "dft-downstream-evidence",
+                "dft-release-approval",
+            ],
+            outputArtifactRoles: [
+                "test-design",
+                "test-patterns",
+                "fault-coverage-report",
+                "dft-qualification-provenance",
+                "dft-process-qualification-evidence",
+                "dft-downstream-evidence-bundle",
+                "dft-release-result",
+                "dft-release-eligibility",
+                "dft-release-artifact-bundle",
+            ]
         ),
         XcircuiteEnginePackageDescriptor(
             packageID: "PhysicalDesignEngine",
@@ -84,9 +112,9 @@ public enum XcircuiteEnginePackageCatalog {
         XcircuiteEnginePackageDescriptor(
             packageID: "ElectricalSignoffEngine",
             products: ["PowerIntegrityEngine", "ERCEngine", "ESDEngine", "LatchUpEngine", "AgingEngine", "ElectricalSignoffQualification"],
-            stageIDs: ["electrical.power-integrity", "electrical.erc", "electrical.esd", "electrical.latch-up", "electrical.aging", "electrical-signoff.standard-layout-import", "electrical-signoff", "electrical-signoff.qualification", "electrical-signoff.repair-revision", "electrical-signoff.release-gate"],
-            inputArtifactRoles: ["logic-design", "physical-design", "power-intent", "parasitics", "pdk-reference", "standard-layout", "layout-technology", "electrical-qualification-spec", "electrical-release-policy", "electrical-repair-plan"],
-            outputArtifactRoles: ["electrical-standard-physical-snapshot", "electrical-signoff-report", "electrical-signoff-run-result", "electrical-qualification-report", "electrical-tool-evidence", "electrical-repair-plan", "electrical-repair-revision", "electrical-release-gate", "electrical-release-artifact-bundle"]
+            stageIDs: ["electrical.power-integrity", "electrical.erc", "electrical.esd", "electrical.latch-up", "electrical.aging", "electrical-signoff.standard-layout-import", "electrical-signoff", "electrical-signoff.qualification", "electrical-signoff.process-qualification", "electrical-signoff.repair-revision", "electrical-signoff.release-gate"],
+            inputArtifactRoles: ["logic-design", "physical-design", "power-intent", "parasitics", "pdk-reference", "standard-layout", "layout-technology", "electrical-qualification-spec", "electrical-process-qualification-request", "electrical-process-corpus", "electrical-process-oracle", "electrical-process-health", "electrical-process-approval", "electrical-process-evidence", "electrical-release-policy", "electrical-repair-plan"],
+            outputArtifactRoles: ["electrical-standard-physical-snapshot", "electrical-signoff-report", "electrical-signoff-run-result", "electrical-qualification-report", "electrical-tool-evidence", "electrical-process-qualification", "electrical-process-qualification-evidence", "electrical-repair-plan", "electrical-repair-revision", "electrical-release-gate", "electrical-release-artifact-bundle"]
         ),
         XcircuiteEnginePackageDescriptor(
             packageID: "ReleaseEngine",

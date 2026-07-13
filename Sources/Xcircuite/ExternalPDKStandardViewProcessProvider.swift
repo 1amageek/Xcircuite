@@ -1,6 +1,6 @@
 import Foundation
+import CircuiteFoundation
 import PDKKit
-import XcircuitePackage
 
 public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewResultProviding {
     private let support: PDKExternalInspectionProcessProviderSupport
@@ -27,7 +27,7 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
             projectRootPath: request.projectRootPath
         )
         if let failure = run.failure {
-            return try failureEnvelope(
+            return try failureResult(
                 request: request,
                 artifacts: run.artifacts,
                 finding: PDKValidationFinding(
@@ -43,10 +43,10 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
             return try support.appendArtifacts(
                 to: run.resultData ?? Data(),
                 artifacts: run.artifacts,
-                as: PDKStandardViewInspectionPayload.self
+                as: PDKStandardViewInspectionResult.self
             )
         } catch {
-            return try failureEnvelope(
+            return try failureResult(
                 request: request,
                 artifacts: run.artifacts,
                 finding: PDKValidationFinding(
@@ -54,24 +54,24 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
                     code: "pdk.external.process-result-invalid",
                     message: "External process result could not be decoded: " + error.localizedDescription,
                     entity: request.assetID,
-                    suggestedActions: ["inspect_external_process_artifacts", "repair_external_result_envelope"]
+                    suggestedActions: ["inspect_external_process_artifacts", "repair_external_result"]
                 )
             )
         }
     }
 
-    private func failureEnvelope(
+    private func failureResult(
         request: PDKStandardViewInspectionRequest,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         finding: PDKValidationFinding
     ) throws -> Data {
-        let envelope = XcircuiteEngineResultEnvelope(
+        let result = PDKStandardViewInspectionResult(
             schemaVersion: PDKStandardViewInspectionRequest.currentSchemaVersion,
             runID: request.runID,
-            status: XcircuiteEngineExecutionStatus.failed,
+            status: .failed,
             diagnostics: [PDKStandardViewDiagnosticMapper.map(finding)],
-            artifacts: artifacts,
-            metadata: XcircuiteEngineExecutionMetadata(
+            artifacts: artifacts.map(\.locator),
+            metadata: PDKExecutionMetadata(
                 engineID: "PDKStandardViewInspection",
                 implementationID: "ExternalPDKStandardViewProcessProvider",
                 implementationVersion: "1",
@@ -85,13 +85,13 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
                 parserID: "external-process",
                 parserVersion: "unknown",
                 limitations: [
-                    "The external process did not produce an accepted standard-view result envelope.",
+                    "The external process did not produce an accepted standard-view result.",
                     "Process execution and tool qualification remain separate evidence gates."
                 ]
             )
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(envelope)
+        return try encoder.encode(result)
     }
 }

@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuitePlanningCandidateAction: Codable, Sendable, Hashable {
     public var actionID: String

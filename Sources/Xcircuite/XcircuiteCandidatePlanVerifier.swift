@@ -4,7 +4,7 @@ import LayoutCore
 import LayoutIO
 import LVSEngine
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanVerifier: Sendable {
     let packageStore: XcircuitePackageStore

@@ -1,7 +1,6 @@
 import DFTCore
 import Foundation
 import ToolQualification
-import XcircuitePackage
 
 public struct DFTProcessQualificationEvidenceValidator: DFTProcessQualificationEvidenceValidating {
     public init() {}
@@ -9,7 +8,7 @@ public struct DFTProcessQualificationEvidenceValidator: DFTProcessQualificationE
     public func validate(
         _ evidence: ToolProcessQualificationEvidence,
         request: DFTRequest,
-        result: XcircuiteEngineResultEnvelope<DFTPayload>,
+        result: DFTResult,
         at date: Date
     ) throws {
         guard evidence.isStructurallyValid else {
@@ -60,6 +59,18 @@ public struct DFTProcessQualificationEvidenceValidator: DFTProcessQualificationE
             throw DFTProcessQualificationEvidenceValidationError.pdkMismatch(
                 expected: request.pdk.digest,
                 actual: evidence.scope.pdkDigest ?? ""
+            )
+        }
+
+        let requiredModelIDs = Set(
+            result.payload.coverageEvidence?.outcomes.compactMap(\.modelID) ?? []
+        )
+        let qualifiedModelIDs = Set(evidence.qualifiedModelIDs)
+        let missingModelIDs = requiredModelIDs.subtracting(qualifiedModelIDs).sorted()
+        guard missingModelIDs.isEmpty else {
+            throw DFTProcessQualificationEvidenceValidationError.modelMismatch(
+                required: missingModelIDs,
+                qualified: qualifiedModelIDs.sorted()
             )
         }
     }

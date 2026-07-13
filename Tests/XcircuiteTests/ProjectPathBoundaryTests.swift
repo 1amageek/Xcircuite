@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 @testable import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Project path boundary")
 struct ProjectPathBoundaryTests {

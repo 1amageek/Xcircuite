@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverExecutionReport: Codable, Sendable, Hashable {
     public var schemaVersion: Int

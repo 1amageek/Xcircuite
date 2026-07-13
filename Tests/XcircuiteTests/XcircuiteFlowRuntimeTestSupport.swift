@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LayoutIO
@@ -9,7 +10,7 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     struct NoopDRCEngine: DRCExecuting {
@@ -125,7 +126,7 @@ extension XcircuiteFlowRuntimeTests {
     }
 
     func drcRequirement(
-        requiredLayoutFormat: XcircuiteFileFormat = .json,
+        requiredLayoutFormat: ArtifactFormat = .json,
         requiredQualifiedEvidenceKinds: [ToolEvidenceKind] = []
     ) -> ToolTrustRequirement {
         ToolTrustRequirement(
@@ -139,9 +140,9 @@ extension XcircuiteFlowRuntimeTests {
     }
 
     func layoutCommandRequirement(
-        requiredStandardOutputFormat: XcircuiteFileFormat? = nil
+        requiredStandardOutputFormat: ArtifactFormat? = nil
     ) -> ToolTrustRequirement {
-        var outputFormats: [XcircuiteFileFormat] = [.json]
+        var outputFormats: [ArtifactFormat] = [.json]
         if let requiredStandardOutputFormat, !outputFormats.contains(requiredStandardOutputFormat) {
             outputFormats.append(requiredStandardOutputFormat)
         }
@@ -154,7 +155,7 @@ extension XcircuiteFlowRuntimeTests {
         )
     }
 
-    func lvsRequirement(requiredLayoutFormat: XcircuiteFileFormat = .gdsii) -> ToolTrustRequirement {
+    func lvsRequirement(requiredLayoutFormat: ArtifactFormat = .gdsii) -> ToolTrustRequirement {
         ToolTrustRequirement(
             kind: .lvs,
             operationID: "run-lvs",
@@ -164,7 +165,7 @@ extension XcircuiteFlowRuntimeTests {
         )
     }
 
-    func pexRequirement(requiredLayoutFormat: XcircuiteFileFormat = .gdsii) -> ToolTrustRequirement {
+    func pexRequirement(requiredLayoutFormat: ArtifactFormat = .gdsii) -> ToolTrustRequirement {
         ToolTrustRequirement(
             kind: .pex,
             operationID: "run-pex",
@@ -174,7 +175,7 @@ extension XcircuiteFlowRuntimeTests {
         )
     }
 
-    func mockPEXContractRequirement(requiredLayoutFormat: XcircuiteFileFormat = .gdsii) -> ToolTrustRequirement {
+    func mockPEXContractRequirement(requiredLayoutFormat: ArtifactFormat = .gdsii) -> ToolTrustRequirement {
         ToolTrustRequirement(
             kind: .pex,
             operationID: "run-pex",

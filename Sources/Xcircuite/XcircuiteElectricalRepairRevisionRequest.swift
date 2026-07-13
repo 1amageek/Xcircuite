@@ -1,7 +1,7 @@
 import ElectricalSignoffEngine
 import Foundation
 import PhysicalDesignCore
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteElectricalRepairRevisionRequest: Sendable, Hashable, Codable {
     public static let currentSchemaVersion = 1

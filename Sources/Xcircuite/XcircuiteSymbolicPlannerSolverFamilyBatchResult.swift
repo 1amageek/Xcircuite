@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchResult: Codable, Sendable, Hashable {
     public var batchRun: XcircuiteSymbolicPlannerSolverFamilyBatchRun

@@ -1,8 +1,8 @@
 import DFTCore
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import ToolQualification
-import XcircuitePackage
 
 public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -52,7 +52,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             try validate(stage: stage)
             let request = try loadRequest(context: context)
             let unqualifiedResult = try loadResult(context: context)
-            let result: XcircuiteEngineResultEnvelope<DFTPayload>
+            let result: DFTResult
             do {
                 result = try applyQualification(
                     to: unqualifiedResult,
@@ -81,9 +81,9 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             let downstreamEvidence = try loadDownstreamEvidence(context: context)
             let approval = try loadApproval(context: context)
 
-            let candidateArtifacts = result.artifacts
+            let candidateArtifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
                 + [qualifiedResultArtifact]
-                + downstreamEvidence.map(\.artifact)
+                + FoundationFlowProjection.legacyReferences(from: downstreamEvidence.map(\.artifact))
             let integrityDiagnostics = candidateArtifacts.compactMap { artifact -> FlowDiagnostic? in
                 let integrity = artifactIntegrityVerifier.verify(
                     artifact,
@@ -227,19 +227,19 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
 
     private func loadResult(
         context: FlowExecutionContext
-    ) throws -> XcircuiteEngineResultEnvelope<DFTPayload> {
+    ) throws -> DFTResult {
         let data = try Data(contentsOf: try resultInput.resolveExisting(
             projectRoot: context.projectRoot,
             runDirectory: context.runDirectory
         ))
-        return try decode(data, as: XcircuiteEngineResultEnvelope<DFTPayload>.self)
+        return try decode(data, as: DFTResult.self)
     }
 
     private func applyQualification(
-        to unqualifiedResult: XcircuiteEngineResultEnvelope<DFTPayload>,
+        to unqualifiedResult: DFTResult,
         request: DFTRequest,
         context: FlowExecutionContext
-    ) throws -> XcircuiteEngineResultEnvelope<DFTPayload> {
+    ) throws -> DFTResult {
         var result = unqualifiedResult
         if let qualificationInput {
             let qualificationURL = try qualificationInput.resolveExisting(
@@ -287,8 +287,9 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 producedByRunID: context.runID
             )
             result.payload.qualification = provenance
-            if !result.artifacts.contains(qualificationArtifact) {
-                result.artifacts.append(qualificationArtifact)
+            let qualificationReference = try FoundationFlowProjection.artifactReference(from: qualificationArtifact)
+            if !result.artifacts.contains(qualificationReference) {
+                result.artifacts.append(qualificationReference)
             }
         }
 
@@ -339,16 +340,17 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             format: .json,
             producedByRunID: context.runID
         )
+        let processQualificationReference = try FoundationFlowProjection.artifactReference(from: processQualificationArtifact)
         if let existing = result.artifacts.first(where: {
-            $0.artifactID == processQualificationArtifact.artifactID
+            $0.id.rawValue == processQualificationReference.id.rawValue
         }) {
-            guard existing == processQualificationArtifact else {
+            guard existing == processQualificationReference else {
                 throw DFTReleaseEligibilityError.processQualificationInvalid(
                     "process qualification artifact identity conflicts with the retained result artifact"
                 )
             }
         } else {
-            result.artifacts.append(processQualificationArtifact)
+            result.artifacts.append(processQualificationReference)
         }
         return result
     }
@@ -392,10 +394,10 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "result.json")
-        let hasher = XcircuiteHasher()
+        let digester = SHA256ContentDigester()
         guard FileManager.default.fileExists(atPath: stageResultURL.path(percentEncoded: false)),
-              try hasher.sha256(fileAt: stageResultURL) == stageResultSHA256,
-              try hasher.byteCount(fileAt: stageResultURL) == stageResultByteCount else {
+              try digester.digest(fileAt: stageResultURL).hexadecimalValue == stageResultSHA256,
+              try UInt64(Data(contentsOf: stageResultURL).count) == stageResultByteCount else {
             return nil
         }
 
@@ -441,7 +443,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
 
     private func makeReleaseArtifactBundle(
         eligibilityArtifact: XcircuiteFileReference,
-        result: XcircuiteEngineResultEnvelope<DFTPayload>,
+        result: DFTResult,
         resultArtifact: XcircuiteFileReference,
         downstreamEvidence: [DFTReleaseDownstreamEvidence],
         approval: DFTReleaseReviewApproval,
@@ -474,20 +476,107 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 "validated process qualification artifact is missing from the release candidate"
             )
         }
+        let processQualificationSupportArtifacts = try processQualificationSupportArtifacts(
+            context: context
+        )
+        let manifestCandidates = [
+            eligibilityArtifact,
+            requestArtifact,
+            resultArtifact,
+            qualificationArtifact,
+            FoundationFlowProjection.legacyReference(from: processQualificationArtifact),
+        ]
+        .compactMap { $0 }
+            + processQualificationSupportArtifacts
+            + [downstreamBundleArtifact]
+            + FoundationFlowProjection.legacyReferences(from: downstreamEvidence.map(\.artifact))
+        try verifyReleaseManifestArtifacts(
+            manifestCandidates,
+            context: context
+        )
+        let manifestArtifacts = uniqueArtifacts(manifestCandidates)
         return DFTReleaseArtifactBundle(
             runID: context.runID,
             eligibility: eligibilityArtifact,
             request: requestArtifact,
             result: resultArtifact,
             qualificationProvenance: qualificationArtifact,
-            processQualificationEvidence: processQualificationArtifact,
+            processQualificationEvidence: FoundationFlowProjection.legacyReference(from: processQualificationArtifact),
+            processQualificationSupportArtifacts: processQualificationSupportArtifacts,
             downstreamEvidenceBundle: downstreamBundleArtifact,
             downstreamEvidence: downstreamEvidence,
             candidateArtifacts: uniqueArtifacts(
-                result.artifacts + [resultArtifact] + downstreamEvidence.map(\.artifact)
+                FoundationFlowProjection.legacyReferences(from: result.artifacts) + manifestArtifacts
             ),
             approval: approval
         )
+    }
+
+    private func verifyReleaseManifestArtifacts(
+        _ artifacts: [XcircuiteFileReference],
+        context: FlowExecutionContext
+    ) throws {
+        var artifactsByID: [String: XcircuiteFileReference] = [:]
+        for artifact in artifacts {
+            if let artifactID = artifact.artifactID,
+               let existing = artifactsByID[artifactID],
+               existing != artifact {
+                throw DFTReleaseEligibilityError.invalidReviewContract(
+                    "release manifest artifact ID \(artifactID) resolves to conflicting references"
+                )
+            }
+            if let artifactID = artifact.artifactID {
+                artifactsByID[artifactID] = artifact
+            }
+            let integrity = artifactIntegrityVerifier.verify(
+                artifact,
+                projectRoot: context.projectRoot
+            )
+            guard integrity.status == .verified else {
+                throw DFTReleaseEligibilityError.invalidReviewContract(
+                    "release manifest artifact \(artifact.artifactID ?? artifact.path) is not verified: \(integrity.message)"
+                )
+            }
+        }
+    }
+
+    private func processQualificationSupportArtifacts(
+        context: FlowExecutionContext
+    ) throws -> [XcircuiteFileReference] {
+        let stageID: String
+        switch processQualificationEvidenceInput {
+        case .stageArtifact(let selector):
+            stageID = selector.stageID
+        case .stageRawArtifact(let selector):
+            stageID = selector.stageID
+        case .path, .artifact, .none:
+            return []
+        }
+        let resultURL = context.runDirectory
+            .appending(path: "stages")
+            .appending(path: stageID)
+            .appending(path: "result.json")
+        guard FileManager.default.fileExists(atPath: resultURL.path(percentEncoded: false)) else {
+            throw DFTReleaseEligibilityError.processQualificationInvalid(
+                "stage-bound process qualification evidence has no persisted source stage result"
+            )
+        }
+        let result = try context.packageStore.readJSON(
+            FlowStageResult.self,
+            from: resultURL
+        )
+        guard result.status == .succeeded else {
+            throw DFTReleaseEligibilityError.processQualificationInvalid(
+                "stage-bound process qualification evidence source stage is not successful"
+            )
+        }
+        // The primary process-qualification artifact is materialized from the
+        // stage-bound input above. Keep only the supporting artifacts from the
+        // source stage result so the same artifact ID cannot be registered with
+        // a legacy projection that differs only in producer metadata.
+        return uniqueArtifacts(result.artifacts).filter {
+            $0.artifactID != "dft-process-qualification-evidence"
+        }
     }
 
     private func reference(
@@ -522,7 +611,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
 
     private func blockedResult(
         request: DFTRequest,
-        result: XcircuiteEngineResultEnvelope<DFTPayload>,
+        result: DFTResult,
         resultArtifact: XcircuiteFileReference? = nil,
         diagnostics: [FlowDiagnostic],
         context: FlowExecutionContext

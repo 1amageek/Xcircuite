@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuitePlanningArtifactStore: Sendable {
     public static let actionDomainArtifactID = "planning-action-domain-snapshot"

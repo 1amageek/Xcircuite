@@ -1,7 +1,7 @@
 import Foundation
 import LVSEngine
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 struct ActionDomainSnapshotContext: Sendable, Hashable {
     var snapshot: XcircuitePlanningActionDomainSnapshot

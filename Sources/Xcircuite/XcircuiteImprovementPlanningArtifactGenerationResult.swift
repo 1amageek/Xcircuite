@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteImprovementPlanningArtifactGenerationResult: Codable, Sendable, Hashable {
     public var status: String

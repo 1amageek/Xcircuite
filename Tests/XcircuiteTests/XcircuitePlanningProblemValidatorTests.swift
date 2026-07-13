@@ -3,7 +3,7 @@ import PEXEngine
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("Xcircuite planning problem validator")
 struct XcircuitePlanningProblemValidatorTests {

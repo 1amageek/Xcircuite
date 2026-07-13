@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
     private let packageStore: XcircuitePackageStore

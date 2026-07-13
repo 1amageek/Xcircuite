@@ -1,17 +1,16 @@
 import CryptoKit
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import LogicIR
-import PDKCore
 import STAEngine
 import TimingCore
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     public let inputs: TimingSTAFlowInputs
-    public let engine: (any STAAnalyzing)?
+    public let engine: (any STAFoundationEngine)?
 
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -19,7 +18,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         inputs: TimingSTAFlowInputs,
         stageID: String = "timing.sta",
         toolID: String = "native-sta",
-        engine: (any STAAnalyzing)? = nil
+        engine: (any STAFoundationEngine)? = nil
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -36,7 +35,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             try context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
-            let executingEngine: any STAAnalyzing
+            let executingEngine: any STAFoundationEngine
             if let engine {
                 executingEngine = engine
             } else {
@@ -45,10 +44,10 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
                     artifactStore: nil
                 )
             }
-            let envelope = try await executingEngine.execute(request)
+            let result = try await executingEngine.execute(request)
             try context.checkCancellation()
-            let resultArtifact = try persistEnvelope(envelope, context: context)
-            return makeStageResult(envelope: envelope, resultArtifact: resultArtifact)
+            let resultArtifact = try persistResult(result, context: context)
+            return makeStageResult(result: result, resultArtifact: resultArtifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
@@ -77,7 +76,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> STARequest {
+    private func makeRequest(context: FlowExecutionContext) throws -> STAFoundationRequest {
         let design = try reference(
             input: inputs.design,
             context: context,
@@ -93,7 +92,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
                 kind: .timingLibrary,
                 formatFallback: .liberty
             )
-            return TimingLibraryReference(artifact: reference, cornerIDs: inputs.cornerIDs)
+            return STAFoundationLibraryReference(artifact: reference, cornerIDs: inputs.cornerIDs)
         }
         let constraints = try reference(
             input: inputs.constraints,
@@ -114,30 +113,23 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
                 input: $0,
                 context: context,
                 artifactID: "timing-parasitics",
-                kind: .parasitic,
+                kind: .parasitics,
                 formatFallback: .spef
             )
         }
-        let pdk = PDKReference(
-            manifest: pdkManifest,
-            processID: inputs.processID,
-            version: inputs.pdkVersion,
-            digest: inputs.pdkDigest
-        )
-        return STARequest(
+        return STAFoundationRequest(
             runID: context.runID,
-            inputs: [design] + libraries.map(\.artifact) + [constraints, pdkManifest] + (parasitics.map { [$0] } ?? []),
-            design: LogicDesignReference(
-                artifact: design,
-                topDesignName: inputs.topDesignName,
-                designDigest: design.sha256 ?? ""
-            ),
+            design: design,
+            topDesignName: inputs.topDesignName,
             libraries: libraries,
-            constraints: TimingConstraintReference(artifact: constraints, modeIDs: inputs.modeIDs),
-            pdk: pdk,
-            parasitics: parasitics,
+            constraints: constraints,
             requestedModeIDs: inputs.modeIDs,
             requestedCornerIDs: inputs.cornerIDs,
+            pdkManifest: pdkManifest,
+            processID: inputs.processID,
+            pdkVersion: inputs.pdkVersion,
+            pdkDigest: try ContentDigest(algorithm: .sha256, hexadecimalValue: inputs.pdkDigest),
+            parasitics: parasitics,
             analysisKinds: inputs.analysisKinds,
             requiresSignoff: inputs.requiresSignoff
         )
@@ -147,22 +139,27 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         input: XcircuiteFlowInputReference,
         context: FlowExecutionContext,
         artifactID: String,
-        kind: XcircuiteFileKind,
-        formatFallback: XcircuiteFileFormat
-    ) throws -> XcircuiteFileReference {
+        kind: ArtifactKind,
+        formatFallback: ArtifactFormat
+    ) throws -> ArtifactReference {
         let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
-        return try artifactBuilder.reference(
-            for: url,
-            projectRoot: context.projectRoot,
-            artifactID: artifactID,
-            kind: kind,
-            format: format(for: url, fallback: formatFallback),
-            producedByRunID: context.runID
+        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: context.projectRoot)
+        let data = try Data(contentsOf: url)
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format(for: url, fallback: formatFallback)
+            ),
+            digest: try SHA256ContentDigester().digest(data: data),
+            byteCount: UInt64(data.count)
         )
     }
 
-    private func persistEnvelope(
-        _ envelope: XcircuiteEngineResultEnvelope<STAPayload>,
+    private func persistResult(
+        _ result: STAExecutionResult,
         context: FlowExecutionContext
     ) throws -> XcircuiteFileReference {
         let directory = context.runDirectory
@@ -173,7 +170,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         let url = directory.appending(path: "timing-sta-result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(envelope).write(to: url, options: .atomic)
+        try encoder.encode(result).write(to: url, options: .atomic)
         return try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,
@@ -185,20 +182,20 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
     }
 
     private func makeStageResult(
-        envelope: XcircuiteEngineResultEnvelope<STAPayload>,
+        result: STAExecutionResult,
         resultArtifact: XcircuiteFileReference
     ) -> FlowStageResult {
-        let diagnostics = envelope.diagnostics.map { diagnostic in
+        let diagnostics = result.diagnostics.map { diagnostic in
             FlowDiagnostic(
                 severity: flowSeverity(diagnostic.severity),
-                code: diagnostic.code,
-                message: diagnostic.message
+                code: diagnostic.code.rawValue,
+                message: diagnostic.summary
             )
         }
         let gateStatus: FlowGateStatus
-        switch envelope.status {
+        switch result.status {
         case .completed:
-            gateStatus = envelope.payload.violations.isEmpty ? .passed : .failed
+            gateStatus = result.payload.violations.isEmpty ? .passed : .failed
         case .failed:
             gateStatus = .failed
         case .blocked:
@@ -207,7 +204,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             gateStatus = .incomplete
         }
         let stageStatus: FlowStageStatus
-        switch envelope.status {
+        switch result.status {
         case .completed: stageStatus = .succeeded
         case .blocked: stageStatus = .blocked
         case .failed, .cancelled: stageStatus = .failed
@@ -217,19 +214,19 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             status: stageStatus,
             diagnostics: diagnostics,
             gates: [FlowGateResult(gateID: stageID, status: gateStatus, diagnostics: diagnostics)],
-            artifacts: envelope.artifacts + [resultArtifact]
+            artifacts: [resultArtifact]
         )
     }
 
-    private func flowSeverity(_ severity: XcircuiteEngineDiagnosticSeverity) -> FlowDiagnosticSeverity {
+    private func flowSeverity(_ severity: DiagnosticSeverity) -> FlowDiagnosticSeverity {
         switch severity {
-        case .info: return .info
+        case .information: return .info
         case .warning: return .warning
         case .error: return .error
         }
     }
 
-    private func format(for url: URL, fallback: XcircuiteFileFormat) -> XcircuiteFileFormat {
+    private func format(for url: URL, fallback: ArtifactFormat) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "lib": return .liberty
         case "sdc": return .sdc
@@ -246,12 +243,15 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
 private struct ProjectTimingArtifactReader: TimingArtifactReading {
     let projectRoot: URL
 
-    func read(_ reference: XcircuiteFileReference) async throws -> Data {
+    func read(_ reference: ArtifactReference) async throws -> Data {
         let url: URL
-        if reference.path.hasPrefix("/") {
-            url = URL(filePath: reference.path)
-        } else {
-            url = projectRoot.appending(path: reference.path)
+        do {
+            url = try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+        } catch {
+            throw TimingError.artifactReadFailed(
+                path: reference.path,
+                message: error.localizedDescription
+            )
         }
         let data: Data
         do {
@@ -259,14 +259,16 @@ private struct ProjectTimingArtifactReader: TimingArtifactReading {
         } catch {
             throw TimingError.artifactReadFailed(path: reference.path, message: error.localizedDescription)
         }
-        if let byteCount = reference.byteCount, byteCount != Int64(data.count) {
-            throw TimingError.artifactSizeMismatch(path: reference.path, expected: byteCount, actual: Int64(data.count))
+        if reference.byteCount != UInt64(data.count) {
+            throw TimingError.artifactSizeMismatch(
+                path: reference.path,
+                expected: Int64(reference.byteCount),
+                actual: Int64(data.count)
+            )
         }
-        if let digest = reference.sha256 {
-            let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard actual.caseInsensitiveCompare(digest) == .orderedSame else {
-                throw TimingError.artifactDigestMismatch(path: reference.path)
-            }
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actual.caseInsensitiveCompare(reference.sha256) == .orderedSame else {
+            throw TimingError.artifactDigestMismatch(path: reference.path)
         }
         return data
     }

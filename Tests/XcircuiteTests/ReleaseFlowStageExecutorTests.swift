@@ -9,16 +9,16 @@ import SignoffEngine
 import TapeoutEngine
 import Testing
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 @testable import Xcircuite
 
-@Suite("Release flow stage adapters")
+@Suite("Release flow stage executors")
 struct ReleaseFlowStageExecutorTests {
-    @Test("signoff adapter persists a blocked envelope")
-    func signoffPersistsBlockedEnvelope() async throws {
-        let root = try makeRoot(name: "release-signoff-adapter")
+    @Test("signoff executor persists a blocked result")
+    func signoffPersistsBlockedResult() async throws {
+        let root = try makeRoot(name: "release-signoff-stage")
         defer { removeRoot(root) }
-        let runID = "release-signoff-adapter"
+        let runID = "release-signoff-stage"
         let request = SignoffRequest(
             runID: runID,
             inputs: [],
@@ -43,26 +43,26 @@ struct ReleaseFlowStageExecutorTests {
             .appending(path: "stages/release.signoff/raw/result.json").path))
     }
 
-    @Test("tapeout adapter persists a blocked prerequisite result")
+    @Test("tapeout executor persists a blocked prerequisite result")
     func tapeoutPersistsBlockedPrerequisite() async throws {
-        let root = try makeRoot(name: "release-tapeout-adapter")
+        let root = try makeRoot(name: "release-tapeout-stage")
         defer { removeRoot(root) }
-        let runID = "release-tapeout-adapter"
-        let layout = XcircuiteFileReference(
+        let runID = "release-tapeout-stage"
+        let layout = try makeArtifact(
             path: "layout/top.gds",
             kind: .layout,
             format: .gdsii,
             sha256: String(repeating: "a", count: 64),
             byteCount: 4
         )
-        let bundle = XcircuiteFileReference(
+        let bundle = try makeArtifact(
             path: "release/signoff.json",
             kind: .release,
             format: .json,
             sha256: String(repeating: "b", count: 64),
             byteCount: 1
         )
-        let physical = PhysicalDesignReference(layoutArtifact: layout, topCell: "TOP", layoutDigest: layout.sha256 ?? "")
+        let physical = PhysicalDesignReference(layoutArtifact: layout, topCell: "TOP", layoutDigest: layout.sha256)
         let request = TapeoutRequest(
             runID: runID,
             inputs: [],
@@ -99,19 +99,19 @@ struct ReleaseFlowStageExecutorTests {
             .appending(path: "stages/release.tapeout/raw/result.json").path))
     }
 
-    @Test("qualification adapter persists a blocked retained-artifact result")
+    @Test("qualification executor persists a blocked retained-artifact result")
     func qualificationPersistsBlockedResult() async throws {
-        let root = try makeRoot(name: "release-qualification-adapter")
+        let root = try makeRoot(name: "release-qualification-stage")
         defer { removeRoot(root) }
-        let runID = "release-qualification-adapter"
-        let suiteArtifact = XcircuiteFileReference(
+        let runID = "release-qualification-stage"
+        let suiteArtifact = try makeArtifact(
             path: "qualification/suite.json",
             kind: .report,
             format: .json,
             sha256: String(repeating: "a", count: 64),
             byteCount: 1
         )
-        let reportArtifact = XcircuiteFileReference(
+        let reportArtifact = try makeArtifact(
             path: "qualification/report.json",
             kind: .report,
             format: .json,
@@ -159,12 +159,13 @@ struct ReleaseFlowStageExecutorTests {
 
         #expect(result.status == .blocked)
         #expect(result.gates.contains { $0.status == .blocked })
-        #expect(result.artifacts.count == 3)
+        #expect(result.artifacts.count == 1)
+        #expect(result.artifacts.first?.artifactID == "release-qualification-result")
         #expect(FileManager.default.fileExists(atPath: context.runDirectory
             .appending(path: "stages/release.qualification/raw/result.json").path))
     }
 
-    @Test("qualification adapter resumes through the shared approval gate")
+    @Test("qualification executor resumes through the shared approval gate")
     func qualificationParticipatesInApprovalAndResume() async throws {
         let root = try makeRoot(name: "release-qualification-resume")
         defer { removeRoot(root) }
@@ -173,8 +174,8 @@ struct ReleaseFlowStageExecutorTests {
             runID: runID,
             projectRoot: root.path,
             processProfileID: "fixture",
-            suiteArtifact: XcircuiteFileReference(path: "suite.json", kind: .report, format: .json),
-            qualificationReportArtifact: XcircuiteFileReference(path: "report.json", kind: .report, format: .json),
+            suiteArtifact: try makeArtifact(path: "suite.json", kind: .report, format: .json),
+            qualificationReportArtifact: try makeArtifact(path: "report.json", kind: .report, format: .json),
             domainReportArtifacts: [],
             evidenceArtifacts: [],
             toolEvidence: [],
@@ -264,8 +265,8 @@ struct ReleaseFlowStageExecutorTests {
             runID: runID,
             projectRoot: root.path,
             processProfileID: "sky130",
-            suiteArtifact: XcircuiteFileReference(path: "suite.json", kind: .report, format: .json),
-            qualificationReportArtifact: XcircuiteFileReference(path: "report.json", kind: .report, format: .json),
+            suiteArtifact: try makeArtifact(path: "suite.json", kind: .report, format: .json),
+            qualificationReportArtifact: try makeArtifact(path: "report.json", kind: .report, format: .json),
             domainReportArtifacts: [],
             evidenceArtifacts: [],
             toolEvidence: [],
@@ -281,13 +282,13 @@ struct ReleaseFlowStageExecutorTests {
             options: [.atomic]
         )
 
-        let tapeoutRequest = makeTapeoutRequest(runID: runID)
+        let tapeoutRequest = try makeTapeoutRequest(runID: runID)
         try encode(tapeoutRequest).write(
             to: root.appending(path: "tapeout-request.json"),
             options: [.atomic]
         )
 
-        let profileRequest = makeProfileRequest(runID: runID)
+        let profileRequest = try makeProfileRequest(runID: runID)
         try encode(profileRequest).write(
             to: root.appending(path: "profile-request.json"),
             options: [.atomic]
@@ -491,8 +492,8 @@ struct ReleaseFlowStageExecutorTests {
         )
     }
 
-    private func makeTapeoutRequest(runID: String) -> TapeoutRequest {
-        let artifact = XcircuiteFileReference(
+    private func makeTapeoutRequest(runID: String) throws -> TapeoutRequest {
+        let artifact = try makeArtifact(
             path: "release/signoff.json",
             kind: .release,
             format: .json,
@@ -502,7 +503,7 @@ struct ReleaseFlowStageExecutorTests {
         let physical = PhysicalDesignReference(
             layoutArtifact: artifact,
             topCell: "TOP",
-            layoutDigest: artifact.sha256 ?? ""
+            layoutDigest: artifact.sha256
         )
         return TapeoutRequest(
             runID: runID,
@@ -526,9 +527,9 @@ struct ReleaseFlowStageExecutorTests {
         )
     }
 
-    private func makeProfileRequest(runID: String) -> ReleaseProfileEligibilityRequest {
-        let artifact = { (id: String, digest: String) in
-            XcircuiteFileReference(
+    private func makeProfileRequest(runID: String) throws -> ReleaseProfileEligibilityRequest {
+        let artifact: (String, String) throws -> ArtifactReference = { (id: String, digest: String) in
+            try makeArtifact(
                 artifactID: id,
                 path: ".xcircuite/runs/\(runID)/\(id).json",
                 kind: .report,
@@ -537,7 +538,7 @@ struct ReleaseFlowStageExecutorTests {
                 byteCount: 1
             )
         }
-        let packet = artifact("decision-packet", String(repeating: "d", count: 64))
+        let packet = try artifact("decision-packet", String(repeating: "d", count: 64))
         return ReleaseProfileEligibilityRequest(
             runID: runID,
             profileID: "digital",
@@ -548,7 +549,7 @@ struct ReleaseFlowStageExecutorTests {
                 stageID: "release.signoff",
                 runID: runID,
                 status: .completed,
-                resultArtifact: artifact("signoff", String(repeating: "a", count: 64)),
+                resultArtifact: try artifact("signoff", String(repeating: "a", count: 64)),
                 profileID: "digital",
                 designDigest: String(repeating: "1", count: 64),
                 pdkDigest: String(repeating: "2", count: 64),
@@ -558,7 +559,7 @@ struct ReleaseFlowStageExecutorTests {
                 stageID: "release.qualification",
                 runID: runID,
                 status: .completed,
-                resultArtifact: artifact("qualification", String(repeating: "b", count: 64)),
+                resultArtifact: try artifact("qualification", String(repeating: "b", count: 64)),
                 processProfileID: "sky130",
                 qualified: true,
                 qualificationLevel: .corpusChecked,
@@ -568,37 +569,62 @@ struct ReleaseFlowStageExecutorTests {
                 stageID: "release.tapeout",
                 runID: runID,
                 status: .completed,
-                resultArtifact: artifact("tapeout", String(repeating: "c", count: 64)),
+                resultArtifact: try artifact("tapeout", String(repeating: "c", count: 64)),
                 processProfileID: "sky130",
                 designDigest: String(repeating: "1", count: 64),
                 pdkDigest: String(repeating: "2", count: 64),
                 approved: true
             ),
             decisionPacketArtifact: packet,
-            approval: XcircuiteApprovalRecord(
+            approval: ReleaseApprovalRecord(
                 runID: runID,
                 stageID: "release.profile",
                 verdict: .approved,
                 reviewer: "release-reviewer",
                 reviewerKind: .human,
                 stageResultSHA256: packet.sha256,
-                stageResultByteCount: packet.byteCount
+                stageResultByteCount: Int64(packet.byteCount)
             )
+        )
+    }
+    private func makeArtifact(
+        artifactID: String? = nil,
+        path: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        sha256: String? = nil,
+        byteCount: UInt64? = nil
+    ) throws -> ArtifactReference {
+        ArtifactReference(
+            id: try artifactID.map { try ArtifactID(rawValue: $0) },
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            digest: try ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: sha256 ?? String(repeating: "0", count: 64)
+            ),
+            byteCount: byteCount ?? 1
         )
     }
 }
 
 private struct StubSignoffEvaluator: SignoffEvaluating {
-    func execute(_ request: SignoffRequest) async throws -> XcircuiteEngineResultEnvelope<SignoffPayload> {
+    func execute(_ request: SignoffRequest) async throws -> SignoffResult {
         let now = Date()
-        return XcircuiteEngineResultEnvelope(
+        return SignoffResult(
             schemaVersion: 1,
             runID: request.runID,
             status: .completed,
-            metadata: XcircuiteEngineExecutionMetadata(
-                engineID: "release-signoff",
-                implementationID: "stub-release-signoff",
-                implementationVersion: "1.0.0",
+            metadata: try ExecutionProvenance(
+                producer: try ProducerIdentity(
+                    kind: .engine,
+                    identifier: "stub-release-signoff",
+                    version: "1.0.0"
+                ),
                 startedAt: now,
                 completedAt: now
             ),
@@ -615,16 +641,18 @@ private struct StubSignoffEvaluator: SignoffEvaluating {
 }
 
 private struct StubTapeoutPackaging: TapeoutPackaging {
-    func execute(_ request: TapeoutRequest) async throws -> XcircuiteEngineResultEnvelope<TapeoutPayload> {
+    func execute(_ request: TapeoutRequest) async throws -> TapeoutResult {
         let now = Date()
-        return XcircuiteEngineResultEnvelope(
+        return TapeoutResult(
             schemaVersion: 1,
             runID: request.runID,
             status: .completed,
-            metadata: XcircuiteEngineExecutionMetadata(
-                engineID: "release-tapeout",
-                implementationID: "stub-release-tapeout",
-                implementationVersion: "1.0.0",
+            metadata: try ExecutionProvenance(
+                producer: try ProducerIdentity(
+                    kind: .engine,
+                    identifier: "stub-release-tapeout",
+                    version: "1.0.0"
+                ),
                 startedAt: now,
                 completedAt: now
             ),
@@ -641,16 +669,18 @@ private struct StubTapeoutPackaging: TapeoutPackaging {
 }
 
 private struct StubReleaseProfileEligibilityEvaluator: ReleaseProfileEligibilityEvaluating {
-    func execute(_ request: ReleaseProfileEligibilityRequest) async throws -> ReleaseProfileEligibilityEnvelope {
+    func execute(_ request: ReleaseProfileEligibilityRequest) async throws -> ReleaseProfileEligibilityResult {
         let now = Date()
-        return ReleaseProfileEligibilityEnvelope(
+        return ReleaseProfileEligibilityResult(
             schemaVersion: 1,
             runID: request.runID,
             status: .completed,
-            metadata: XcircuiteEngineExecutionMetadata(
-                engineID: "release.profile.eligibility",
-                implementationID: "stub-release-profile",
-                implementationVersion: "1.0.0",
+            metadata: try ExecutionProvenance(
+                producer: try ProducerIdentity(
+                    kind: .engine,
+                    identifier: "stub-release-profile",
+                    version: "1.0.0"
+                ),
                 startedAt: now,
                 completedAt: now
             ),

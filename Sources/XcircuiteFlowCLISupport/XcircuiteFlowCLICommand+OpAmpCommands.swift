@@ -1,6 +1,6 @@
 import Foundation
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
     static func writeOpAmpSpec(arguments: [String]) throws -> String {

@@ -5,7 +5,7 @@ import LayoutCore
 import LayoutIO
 import LayoutTech
 import LVSEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteCandidatePlanExecutor {
     func parameterAssignments(step: XcircuiteCandidatePlanStep) throws -> [XcircuiteParameterAssignment] {

@@ -4,7 +4,7 @@ import LVSEngine
 import Testing
 import ToolQualification
 @testable import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 @Suite("LVS summary envelope builder")
 struct LVSSummaryEnvelopeBuilderTests {

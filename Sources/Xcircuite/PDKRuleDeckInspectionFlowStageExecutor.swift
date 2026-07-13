@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import PDKKit
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -9,7 +9,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
     private let manifestInput: XcircuiteFlowInputReference
     private let assetID: String
     private let engine: any PDKRuleDeckInspecting
-    private let support: PDKStageExecutionAdapterSupport
+    private let support: PDKStageExecutionSupport
 
     public init(
         stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
@@ -23,7 +23,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
         self.manifestInput = manifestInput
         self.assetID = assetID
         self.engine = engine
-        self.support = PDKStageExecutionAdapterSupport()
+        self.support = PDKStageExecutionSupport()
     }
 
     public static func local(
@@ -76,15 +76,15 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
             let request = PDKRuleDeckInspectionRequest(
                 runID: context.runID,
-                inputs: [pdk.manifest],
+                inputs: [pdk.manifest.locator],
                 pdk: pdk,
                 assetID: assetID,
                 projectRootPath: context.projectRoot.path(percentEncoded: false)
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(envelope, stageID: stageID, context: context)
-            return support.stageResult(envelope: envelope, stageID: stageID, artifact: artifact)
+            let artifact = try support.persistResult(result, stageID: stageID, context: context)
+            return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {

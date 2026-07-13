@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteFlowTechnologyCatalogInspector: XcircuiteFlowTechnologyCatalogInspecting {
     private struct PDKRootInspection: Sendable, Hashable {

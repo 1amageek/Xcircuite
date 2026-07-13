@@ -1,7 +1,8 @@
 import Foundation
+import CircuiteFoundation
 import SignoffToolSupport
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     private let packageStore: XcircuitePackageStore
@@ -1186,7 +1187,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         let evidence = ToolEvidence(
             evidenceID: "\(request.toolID)-symbolic-planner-qualification",
             kind: .corpus,
-            artifact: qualificationArtifact,
+            artifact: qualificationArtifact.flatMap(foundationArtifactReference),
             qualification: ToolEvidenceQualificationSummary(
                 qualified: status == "qualified",
                 policyID: request.policyID,

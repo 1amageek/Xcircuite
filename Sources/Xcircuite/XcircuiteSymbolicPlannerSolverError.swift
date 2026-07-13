@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatable {
     case invalidTimeout(Double)

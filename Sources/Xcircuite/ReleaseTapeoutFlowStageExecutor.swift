@@ -2,14 +2,14 @@ import DesignFlowKernel
 import Foundation
 import ReleaseCore
 import TapeoutEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let requestInput: XcircuiteFlowInputReference
     private let engine: any TapeoutPackaging
-    private let support: ReleaseStageExecutionAdapterSupport
+    private let support: ReleaseStageExecutionSupport
 
     public init(
         stageID: String = "release.tapeout",
@@ -21,7 +21,7 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.requestInput = requestInput
         self.engine = engine
-        self.support = ReleaseStageExecutionAdapterSupport()
+        self.support = ReleaseStageExecutionSupport()
     }
 
     public func execute(
@@ -51,19 +51,19 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
                 streamOut.projectRoot = context.projectRoot.path
                 request.streamOut = streamOut
             }
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let artifact = try support.persistEnvelope(
-                envelope,
+            let artifact = try support.persistResult(
+                result,
                 stageID: stageID,
                 artifactID: "release-tapeout-result",
                 context: context
             )
             return support.stageResult(
-                envelope: envelope,
+                result: result,
                 stageID: stageID,
-                artifacts: envelope.artifacts + [artifact],
-                approved: envelope.payload.approved
+                artifacts: [artifact],
+                approved: result.payload.approved
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

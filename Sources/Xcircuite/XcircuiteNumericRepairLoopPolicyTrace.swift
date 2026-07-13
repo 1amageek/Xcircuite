@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteNumericRepairLoopPolicyTrace: Codable, Sendable, Hashable {
     public var schemaVersion: Int

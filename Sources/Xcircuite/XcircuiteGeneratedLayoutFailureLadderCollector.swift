@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     private let ledgerLoader: any FlowRunLedgerLoading

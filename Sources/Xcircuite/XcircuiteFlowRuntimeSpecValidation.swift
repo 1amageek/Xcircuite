@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public extension XcircuiteFlowRuntimeSpec {
     func validate(
@@ -91,6 +91,13 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "stageID matching analysis.stageID (\(spec.analysis.stageID))"
                 )
             }
+            if let oracleTool = spec.oracleTool {
+                try validateOracleTool(
+                    oracleTool,
+                    stageID: spec.stageID,
+                    requireCompleteEvidence: false
+                )
+            }
         case .logicSynthesis(let spec):
             guard !spec.requestPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
@@ -137,10 +144,12 @@ private extension XcircuiteFlowStageExecutorSpec {
                 guard spec.qualificationCorpusPath == nil,
                       spec.qualificationObservationsPath == nil,
                       spec.qualificationEvidencePath == nil,
+                      spec.qualificationProcessEvidenceBuildPath == nil,
                       spec.releaseResultPath == nil,
                       spec.releaseQualificationPath == nil,
                       spec.releaseRequestDigest == nil,
                       spec.releaseProcessQualificationEvidencePath == nil,
+                      spec.releaseProcessQualificationEvidenceInput == nil,
                       spec.releaseDownstreamEvidencePath == nil,
                       spec.releaseApprovalPath == nil else {
                     throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
@@ -182,10 +191,18 @@ private extension XcircuiteFlowStageExecutorSpec {
                         field: "qualificationEvidencePath"
                     )
                 }
+                if let buildPath = spec.qualificationProcessEvidenceBuildPath,
+                   buildPath.isEmpty {
+                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                        stageID: spec.stageID,
+                        field: "qualificationProcessEvidenceBuildPath"
+                    )
+                }
                 guard spec.releaseResultPath == nil,
                       spec.releaseQualificationPath == nil,
                       spec.releaseRequestDigest == nil,
                       spec.releaseProcessQualificationEvidencePath == nil,
+                      spec.releaseProcessQualificationEvidenceInput == nil,
                       spec.releaseDownstreamEvidencePath == nil,
                       spec.releaseApprovalPath == nil else {
                     throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
@@ -193,7 +210,8 @@ private extension XcircuiteFlowStageExecutorSpec {
                         field: "qualification and release inputs are mutually exclusive"
                     )
                 }
-            } else if spec.qualificationEvidencePath != nil {
+            } else if spec.qualificationEvidencePath != nil
+                        || spec.qualificationProcessEvidenceBuildPath != nil {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
                     field: "qualificationCorpusPath"
@@ -225,11 +243,25 @@ private extension XcircuiteFlowStageExecutorSpec {
                         field: "releaseQualificationPath"
                     )
                 }
-                guard let processQualificationPath = spec.releaseProcessQualificationEvidencePath,
-                      !processQualificationPath.isEmpty else {
+                if let processQualificationPath = spec.releaseProcessQualificationEvidencePath,
+                   processQualificationPath.isEmpty {
                     throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                         stageID: spec.stageID,
                         field: "releaseProcessQualificationEvidencePath"
+                    )
+                }
+                if let processQualificationEvidenceInput = spec.releaseProcessQualificationEvidenceInput {
+                    try validateInput(
+                        processQualificationEvidenceInput,
+                        stageID: spec.stageID,
+                        field: "releaseProcessQualificationEvidenceInput"
+                    )
+                }
+                guard (spec.releaseProcessQualificationEvidencePath != nil)
+                        != (spec.releaseProcessQualificationEvidenceInput != nil) else {
+                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                        stageID: spec.stageID,
+                        field: "exactly one release process qualification evidence input"
                     )
                 }
                 if spec.releaseQualificationPath != nil {
@@ -251,7 +283,9 @@ private extension XcircuiteFlowStageExecutorSpec {
                         || spec.releaseApprovalPath != nil
                         || spec.releaseQualificationPath != nil
                         || spec.releaseRequestDigest != nil
-                        || spec.releaseProcessQualificationEvidencePath != nil {
+                        || spec.releaseProcessQualificationEvidencePath != nil
+                        || spec.releaseProcessQualificationEvidenceInput != nil
+                        || spec.qualificationProcessEvidenceBuildPath != nil {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
                     field: "releaseResultPath"
@@ -384,6 +418,8 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "qualificationScope"
                 )
             }
+        case .electricalSignoffProcessQualification(let spec):
+            try validateReleaseGateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
         case .electricalSignoffReleaseGate(let spec):
             try validateReleaseGateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
             try validateReleaseGateInput(spec.runResultInput, stageID: spec.stageID, field: "runResultInput")
@@ -482,6 +518,14 @@ private extension XcircuiteFlowStageExecutorSpec {
 
     func validateToolSpec(requireCompleteEvidence: Bool) throws {
         let toolSpec = toolSpec
+        if case .rtlVerification(let spec) = self,
+           let oracleTool = spec.oracleTool {
+            try validateOracleTool(
+                oracleTool,
+                stageID: spec.stageID,
+                requireCompleteEvidence: requireCompleteEvidence
+            )
+        }
         if case .mockPEX(let spec) = self,
            spec.tool.qualificationLevel != .unknown {
             throw XcircuiteFlowRuntimeSpecError.mockExecutorCannotDeclareQualifiedTool(
@@ -505,6 +549,49 @@ private extension XcircuiteFlowStageExecutorSpec {
                     stageID: stageID,
                     kind: requiredKind.rawValue,
                     level: toolSpec.qualificationLevel.rawValue
+                )
+            }
+        }
+    }
+
+    func validateOracleTool(
+        _ oracleTool: RTLVerificationOracleToolSpec,
+        stageID: String,
+        requireCompleteEvidence: Bool
+    ) throws {
+        try XcircuiteIdentifierValidator().validate(oracleTool.toolID, kind: .toolID)
+        guard !oracleTool.executablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "oracleTool.executablePath"
+            )
+        }
+        guard !oracleTool.version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "oracleTool.version"
+            )
+        }
+        guard oracleTool.timeoutSeconds.isFinite, oracleTool.timeoutSeconds > 0 else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "oracleTool.timeoutSeconds"
+            )
+        }
+        for evidence in oracleTool.tool.evidence {
+            try evidence.validateForRuntimeToolSpec(stageID: "\(stageID).oracle")
+        }
+        guard requireCompleteEvidence else {
+            return
+        }
+        for requiredKind in requiredQualifiedEvidenceKinds(for: oracleTool.tool.qualificationLevel) {
+            guard oracleTool.tool.evidence.contains(where: { evidence in
+                evidence.kind == requiredKind && evidence.hasPassingQualificationSupport
+            }) else {
+                throw XcircuiteFlowRuntimeSpecError.missingToolQualificationEvidence(
+                    stageID: stageID,
+                    kind: requiredKind.rawValue,
+                    level: oracleTool.tool.qualificationLevel.rawValue
                 )
             }
         }
@@ -565,6 +652,8 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .electricalSignoff(let spec):
             spec.tool
         case .electricalSignoffQualification(let spec):
+            spec.tool
+        case .electricalSignoffProcessQualification(let spec):
             spec.tool
         case .electricalSignoffReleaseGate(let spec):
             spec.tool

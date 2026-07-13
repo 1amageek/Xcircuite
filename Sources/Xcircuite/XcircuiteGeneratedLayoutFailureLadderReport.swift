@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Hashable {
     public var schemaVersion: Int

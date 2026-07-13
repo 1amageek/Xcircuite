@@ -4,7 +4,7 @@ import Foundation
 import LayoutCommands
 import LVSEngine
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteActionDomainSnapshotBuilder: Sendable {
     public init() {}

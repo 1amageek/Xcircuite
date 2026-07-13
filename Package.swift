@@ -9,7 +9,7 @@ let package = Package(
         .executable(name: "xcircuite-flow", targets: ["XcircuiteFlowCLI"]),
     ],
     dependencies: [
-        .package(path: "../XcircuitePackage"),
+        .package(path: "../CircuiteFoundation"),
         .package(path: "../ToolQualification"),
         .package(path: "../DesignFlowKernel"),
         .package(path: "../DRCEngine"),
@@ -32,7 +32,7 @@ let package = Package(
         .target(
             name: "Xcircuite",
             dependencies: [
-                .product(name: "XcircuitePackage", package: "XcircuitePackage"),
+                .product(name: "CircuiteFoundation", package: "CircuiteFoundation"),
                 .product(name: "ToolQualification", package: "ToolQualification"),
                 .product(name: "DesignFlowKernel", package: "DesignFlowKernel"),
                 .product(name: "DRCEngine", package: "DRCEngine"),
@@ -59,6 +59,7 @@ let package = Package(
                 .product(name: "LogicQualification", package: "LogicEngine"),
                 .product(name: "RTLVerificationEngine", package: "RTLVerificationEngine"),
                 .product(name: "RTLVerificationCore", package: "RTLVerificationEngine"),
+                .product(name: "DFTCore", package: "DFTEngine"),
                 .product(name: "DFTEngine", package: "DFTEngine"),
                 .product(name: "PhysicalDesignEngine", package: "PhysicalDesignEngine"),
                 .product(name: "PhysicalDesignCore", package: "PhysicalDesignEngine"),
@@ -93,7 +94,6 @@ let package = Package(
                 .product(name: "RTLVerificationEngine", package: "RTLVerificationEngine"),
                 .product(name: "RTLVerificationCore", package: "RTLVerificationEngine"),
                 .product(name: "LogicIR", package: "LogicDesign"),
-                .product(name: "XcircuitePackage", package: "XcircuitePackage"),
                 .product(name: "LogicEngineCore", package: "LogicEngine"),
                 .product(name: "LogicLowering", package: "LogicEngine"),
                 .product(name: "LogicSimulation", package: "LogicEngine"),

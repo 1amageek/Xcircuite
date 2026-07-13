@@ -1,7 +1,8 @@
 import DFTCore
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import ToolQualification
 
 public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -9,7 +10,9 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
     private let corpusInput: XcircuiteFlowInputReference
     private let observationsInput: XcircuiteFlowInputReference
     private let qualificationEvidenceInput: XcircuiteFlowInputReference?
-    private let support: LogicEngineStageExecutionAdapterSupport
+    private let processQualificationEvidenceBuildInput: XcircuiteFlowInputReference?
+    private let processQualificationEvidenceBuilder: any ToolProcessQualificationEvidenceBuilding
+    private let support: LogicEngineStageExecutionSupport
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
@@ -17,14 +20,18 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
         toolID: String = "dft-qualification",
         corpusInput: XcircuiteFlowInputReference,
         observationsInput: XcircuiteFlowInputReference,
-        qualificationEvidenceInput: XcircuiteFlowInputReference? = nil
+        qualificationEvidenceInput: XcircuiteFlowInputReference? = nil,
+        processQualificationEvidenceBuildInput: XcircuiteFlowInputReference? = nil,
+        processQualificationEvidenceBuilder: any ToolProcessQualificationEvidenceBuilding = ToolProcessQualificationEvidenceBuilder()
     ) {
         self.stageID = stageID
         self.toolID = toolID
         self.corpusInput = corpusInput
         self.observationsInput = observationsInput
         self.qualificationEvidenceInput = qualificationEvidenceInput
-        self.support = LogicEngineStageExecutionAdapterSupport()
+        self.processQualificationEvidenceBuildInput = processQualificationEvidenceBuildInput
+        self.processQualificationEvidenceBuilder = processQualificationEvidenceBuilder
+        self.support = LogicEngineStageExecutionSupport()
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
@@ -92,11 +99,10 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
 
             let correlationStatus = correlation.status
             let correlationDiagnostics = correlation.diagnostics.map { message in
-                XcircuiteEngineDiagnostic(
+                FlowDiagnostic(
                     severity: .error,
                     code: "DFT_ORACLE_CORRELATION_MISMATCH",
-                    message: message,
-                    suggestedActions: ["inspect_native_result", "update_design_or_oracle"]
+                    message: message
                 )
             }
 
@@ -104,15 +110,14 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
                 return try persistBlocked(
                     correlation: correlation,
                     diagnostics: correlationDiagnostics + [
-                        XcircuiteEngineDiagnostic(
+                        FlowDiagnostic(
                             severity: .error,
                             code: correlationStatus == .incomplete
                                 ? "DFT_QUALIFICATION_CORRELATION_INCOMPLETE"
                                 : "DFT_QUALIFICATION_CORRELATION_FAILED",
                             message: correlationStatus == .incomplete
                                 ? "Every retained DFT oracle case must have a native observation."
-                                : "Native DFT results do not match every retained oracle case.",
-                            suggestedActions: ["attach_complete_oracle_observations"]
+                                : "Native DFT results do not match every retained oracle case."
                         ),
                     ],
                     artifacts: artifacts,
@@ -124,11 +129,10 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
                 return try persistBlocked(
                     correlation: correlation,
                     diagnostics: [
-                        XcircuiteEngineDiagnostic(
+                        FlowDiagnostic(
                             severity: .error,
                             code: "DFT_QUALIFICATION_APPROVAL_REQUIRED",
-                            message: "Correlated DFT results require process qualification evidence and an approver.",
-                            suggestedActions: ["attach_dft_qualification_evidence", "record_human_approval"]
+                            message: "Correlated DFT results require process qualification evidence and an approver."
                         ),
                     ],
                     artifacts: artifacts,
@@ -140,11 +144,10 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
                 return try persistBlocked(
                     correlation: correlation,
                     diagnostics: [
-                        XcircuiteEngineDiagnostic(
+                        FlowDiagnostic(
                             severity: .error,
                             code: "DFT_QUALIFICATION_EVIDENCE_DIGEST_MISMATCH",
-                            message: "Qualification evidence does not identify the current oracle correlation result.",
-                            suggestedActions: ["regenerate_qualification_evidence"]
+                            message: "Qualification evidence does not identify the current oracle correlation result."
                         ),
                     ],
                     artifacts: artifacts,
@@ -167,35 +170,62 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
             )
             artifacts.append(provenanceArtifact)
 
-            let now = Date()
-            let envelope = XcircuiteEngineResultEnvelope(
-                schemaVersion: 1,
-                runID: context.runID,
-                status: .completed,
-                diagnostics: [],
-                artifacts: artifacts,
-                metadata: XcircuiteEngineExecutionMetadata(
-                    engineID: toolID,
-                    implementationID: "dft-oracle-correlation",
-                    implementationVersion: "1.0.0",
-                    startedAt: now,
-                    completedAt: now
-                ),
-                payload: correlation
-            )
-            let resultArtifact = try support.persistEnvelope(
-                envelope,
+            if let processQualificationEvidenceBuildInput {
+                let buildURL = try processQualificationEvidenceBuildInput.resolveExisting(
+                    projectRoot: context.projectRoot,
+                    runDirectory: context.runDirectory
+                )
+                let buildRequest = try decode(
+                    buildURL,
+                    as: ToolProcessQualificationEvidenceBuildRequest.self
+                )
+                let buildRequestArtifact = try reference(
+                    for: buildURL,
+                    artifactID: "dft-process-qualification-build-request",
+                    kind: .request,
+                    context: context
+                )
+                let verifier = LocalArtifactVerifier()
+                for artifact in buildRequest.evidenceArtifacts {
+                    let integrity = verifier.verify(
+                        artifact,
+                        relativeTo: context.projectRoot
+                    )
+                    guard integrity.isVerified else {
+                        throw DFTQualificationError.invalidEvidence(
+                            "process evidence artifact \(artifact.path) is not verified: \(integrity.issues)"
+                        )
+                    }
+                }
+                let processEvidence = try processQualificationEvidenceBuilder.build(
+                    buildRequest,
+                    at: Date()
+                )
+                let processEvidenceArtifact = try persist(
+                    processEvidence,
+                    fileName: "dft-process-qualification-evidence.json",
+                    artifactID: "dft-process-qualification-evidence",
+                    kind: .release,
+                    context: context
+                )
+                artifacts.append(buildRequestArtifact)
+                artifacts.append(contentsOf: FoundationFlowProjection.legacyReferences(from: buildRequest.evidenceArtifacts))
+                artifacts.append(processEvidenceArtifact)
+            }
+
+            let resultArtifact = try persist(
+                correlation,
                 fileName: "dft-qualification-result.json",
                 artifactID: "dft-qualification-result",
-                stageID: stageID,
+                kind: .report,
                 context: context
             )
-            return support.result(
-                envelope: envelope,
-                resultArtifact: resultArtifact,
+            return FlowStageResult(
                 stageID: stageID,
-                gateID: "dft-qualification",
-                context: context
+                status: .succeeded,
+                diagnostics: [],
+                gates: [FlowGateResult(gateID: "dft-qualification", status: .passed, diagnostics: [])],
+                artifacts: artifacts + [resultArtifact]
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -211,6 +241,13 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
                 stageID: stageID,
                 gateID: "dft-qualification",
                 code: "DFT_QUALIFICATION_ORACLE_ARTIFACT_INVALID",
+                message: error.localizedDescription
+            )
+        } catch let error as ToolProcessQualificationEvidenceBuildError {
+            return support.blocked(
+                stageID: stageID,
+                gateID: "dft-qualification",
+                code: "DFT_QUALIFICATION_PROCESS_EVIDENCE_INVALID",
                 message: error.localizedDescription
             )
         } catch let error as DFTQualificationError {
@@ -277,39 +314,23 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
 
     private func persistBlocked(
         correlation: DFTOracleCorrelationResult,
-        diagnostics: [XcircuiteEngineDiagnostic],
+        diagnostics: [FlowDiagnostic],
         artifacts: [XcircuiteFileReference],
         context: FlowExecutionContext
     ) throws -> FlowStageResult {
-        let now = Date()
-        let envelope = XcircuiteEngineResultEnvelope(
-            schemaVersion: 1,
-            runID: context.runID,
-            status: .blocked,
-            diagnostics: diagnostics,
-            artifacts: artifacts,
-            metadata: XcircuiteEngineExecutionMetadata(
-                engineID: toolID,
-                implementationID: "dft-oracle-correlation",
-                implementationVersion: "1.0.0",
-                startedAt: now,
-                completedAt: now
-            ),
-            payload: correlation
-        )
-        let resultArtifact = try support.persistEnvelope(
-            envelope,
+        let resultArtifact = try persist(
+            correlation,
             fileName: "dft-qualification-result.json",
             artifactID: "dft-qualification-result",
-            stageID: stageID,
+            kind: .report,
             context: context
         )
-        return support.result(
-            envelope: envelope,
-            resultArtifact: resultArtifact,
+        return FlowStageResult(
             stageID: stageID,
-            gateID: "dft-qualification",
-            context: context
+            status: .blocked,
+            diagnostics: diagnostics,
+            gates: [FlowGateResult(gateID: "dft-qualification", status: .blocked, diagnostics: diagnostics)],
+            artifacts: artifacts + [resultArtifact]
         )
     }
 }

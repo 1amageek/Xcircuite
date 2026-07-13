@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyPromotionResult: Codable, Sendable, Hashable {
     public var promotion: XcircuiteSymbolicPlannerSolverFamilyPromotion

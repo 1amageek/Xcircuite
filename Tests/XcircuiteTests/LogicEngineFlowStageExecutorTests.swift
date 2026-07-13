@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LogicEngineCore
@@ -11,7 +12,6 @@ import RTLVerificationCore
 import Testing
 import TimingCore
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("LogicEngine flow stage adapters")
@@ -51,7 +51,7 @@ struct LogicEngineFlowStageExecutorTests {
         )
         let context = try makeContext(root: root, runID: "logic-qualification-adapter")
         let result = try await LogicQualificationFlowStageExecutor(
-            reportInput: .path(reportReference.path)
+            reportInput: .path(reportReference.locator.location.value)
         ).execute(
             stage: FlowStageDefinition(stageID: "logic.qualification", displayName: "Logic qualification"),
             context: context
@@ -88,7 +88,7 @@ struct LogicEngineFlowStageExecutorTests {
         )
         let context = try makeContext(root: root, runID: "logic-qualification-forged-report")
         let result = try await LogicQualificationFlowStageExecutor(
-            reportInput: .path(reportReference.path)
+            reportInput: .path(reportReference.locator.location.value)
         ).execute(
             stage: FlowStageDefinition(stageID: "logic.qualification", displayName: "Logic qualification"),
             context: context
@@ -121,13 +121,19 @@ struct LogicEngineFlowStageExecutorTests {
             )
         ))
         let snapshotReference = try writeJSON(snapshot, name: "rtl-snapshot.json", root: root, kind: .rtl)
+        let snapshotRevision: ContentDigest?
+        if let digest = snapshot.designDigest {
+            snapshotRevision = try ContentDigest(algorithm: .sha256, hexadecimalValue: digest)
+        } else {
+            snapshotRevision = nil
+        }
         let request = LogicLoweringRequest(
             runID: "logic-lowering-adapter",
             inputs: [snapshotReference],
-            design: LogicDesignReference(
+            design: LogicFoundationDesignReference(
                 artifact: snapshotReference,
                 topDesignName: "adapter_top",
-                designDigest: snapshot.designDigest ?? ""
+                designRevision: snapshotRevision
             )
         )
         let requestPath = try writeRequest(request, name: "lowering-request.json", root: root)
@@ -196,13 +202,11 @@ struct LogicEngineFlowStageExecutorTests {
             )]
         )
         let designReference = try writeJSON(document, name: "signed-design.json", root: root, kind: .netlist)
-        guard let designDigest = designReference.sha256 else {
-            throw LogicExecutionError.artifactDigestMismatch(designReference.path)
-        }
-        let design = LogicDesignReference(
+        let designDigest = designReference.digest.hexadecimalValue
+        let design = LogicFoundationDesignReference(
             artifact: designReference,
             topDesignName: document.topDesignName,
-            designDigest: designDigest
+            designRevision: designReference.digest
         )
         let stimulus = LogicStimulusDocument(
             events: [LogicStimulusEvent(time: 0, assignments: [
@@ -260,9 +264,7 @@ struct LogicEngineFlowStageExecutorTests {
             root: root,
             kind: .technology
         )
-        guard let pdkDigest = pdk.sha256 else {
-            throw LogicExecutionError.artifactDigestMismatch(pdk.path)
-        }
+        let pdkDigest = pdk.digest.hexadecimalValue
         let request = LogicSynthesisRequest(
             runID: "logic-synthesis-adapter",
             inputs: [designReference.artifact, library, constraints, pdk],
@@ -310,9 +312,7 @@ struct LogicEngineFlowStageExecutorTests {
             root: root,
             kind: .technology
         )
-        guard let pdkDigest = pdk.sha256 else {
-            throw LogicExecutionError.artifactDigestMismatch(pdk.path)
-        }
+        let pdkDigest = pdk.digest.hexadecimalValue
         let synthesisRequest = LogicSynthesisRequest(
             runID: "logic-equivalence-adapter",
             inputs: [designReference.artifact, library, constraints, pdk],
@@ -365,7 +365,7 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(resumedResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
     }
 
-    private func writeDesign(to root: URL) throws -> LogicDesignReference {
+    private func writeDesign(to root: URL) throws -> LogicFoundationDesignReference {
         let document = LogicDesignDocument(
             topDesignName: "adapter_top",
             ports: [
@@ -377,13 +377,14 @@ struct LogicEngineFlowStageExecutorTests {
             nodes: [LogicNode(id: "and0", kind: .and, inputs: ["a", "b"], outputs: ["y"])]
         )
         let reference = try writeJSON(document, name: "design.json", root: root, kind: .netlist)
-        guard let digest = reference.sha256 else {
-            throw LogicExecutionError.artifactDigestMismatch(reference.path)
-        }
-        return LogicDesignReference(artifact: reference, topDesignName: document.topDesignName, designDigest: digest)
+        return LogicFoundationDesignReference(
+            artifact: reference,
+            topDesignName: document.topDesignName,
+            designRevision: reference.digest
+        )
     }
 
-    private func writeStimulus(to root: URL) throws -> XcircuiteFileReference {
+    private func writeStimulus(to root: URL) throws -> ArtifactReference {
         let stimulus = LogicStimulusDocument(
             events: [LogicStimulusEvent(
                 time: 0,
@@ -414,17 +415,23 @@ struct LogicEngineFlowStageExecutorTests {
         _ value: T,
         name: String,
         root: URL,
-        kind: XcircuiteFileKind
-    ) throws -> XcircuiteFileReference {
+        kind: ArtifactKind
+    ) throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
         try data.write(to: root.appending(path: name), options: .atomic)
-        return try XcircuitePackageStore().fileReference(
-            forProjectRelativePath: name,
+        let locator = try ArtifactLocator(
+            location: ArtifactLocation(workspaceRelativePath: name),
+            role: .input,
             kind: kind,
-            format: .json,
-            inProjectAt: root
+            format: .json
+        )
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: name.replacingOccurrences(of: ".json", with: "")),
+            locator: locator,
+            digest: try SHA256ContentDigester().digest(data: data),
+            byteCount: UInt64(data.count)
         )
     }
 
@@ -432,14 +439,21 @@ struct LogicEngineFlowStageExecutorTests {
         _ text: String,
         name: String,
         root: URL,
-        kind: XcircuiteFileKind
-    ) throws -> XcircuiteFileReference {
+        kind: ArtifactKind
+    ) throws -> ArtifactReference {
         try Data(text.utf8).write(to: root.appending(path: name), options: .atomic)
-        return try XcircuitePackageStore().fileReference(
-            forProjectRelativePath: name,
+        let data = Data(text.utf8)
+        let locator = try ArtifactLocator(
+            location: ArtifactLocation(workspaceRelativePath: name),
+            role: .input,
             kind: kind,
-            format: .json,
-            inProjectAt: root
+            format: .json
+        )
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: name.replacingOccurrences(of: ".json", with: "")),
+            locator: locator,
+            digest: try SHA256ContentDigester().digest(data: data),
+            byteCount: UInt64(data.count)
         )
     }
 
@@ -476,7 +490,7 @@ struct LogicEngineFlowStageExecutorTests {
 private struct UnexpectedRTLVerificationExecution: RTLVerificationExecuting {
     func execute(
         _ request: RTLVerificationRequest
-    ) async throws -> XcircuiteEngineResultEnvelope<RTLVerificationPayload> {
+    ) async throws -> RTLVerificationResult {
         throw LogicExecutionError.invalidArtifact(
             "The equivalence engine must not execute while resuming a valid persisted result."
         )

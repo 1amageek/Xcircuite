@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 struct StageArtifactReferenceBuilder: Sendable {
     private let hasher: XcircuiteHasher

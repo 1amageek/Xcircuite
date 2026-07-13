@@ -17,6 +17,7 @@ public extension XcircuiteFlowStageExecutorSpec {
         public var proofView: RTLVerificationProofView
         public var assumptions: [RTLVerificationAssumption]
         public var tool: XcircuiteFlowToolSpec
+        public var oracleTool: RTLVerificationOracleToolSpec?
 
         public init(
             stageID: String? = nil,
@@ -32,7 +33,8 @@ public extension XcircuiteFlowStageExecutorSpec {
             frontend: RTLVerificationFrontendOptions = RTLVerificationFrontendOptions(),
             proofView: RTLVerificationProofView = .rtlToRtlStructural,
             assumptions: [RTLVerificationAssumption] = [],
-            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec(),
+            oracleTool: RTLVerificationOracleToolSpec? = nil
         ) {
             self.stageID = stageID ?? analysis.stageID
             self.analysis = analysis
@@ -48,6 +50,7 @@ public extension XcircuiteFlowStageExecutorSpec {
             self.proofView = proofView
             self.assumptions = assumptions
             self.tool = tool
+            self.oracleTool = oracleTool
         }
     }
 }

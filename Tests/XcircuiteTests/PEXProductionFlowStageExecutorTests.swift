@@ -3,7 +3,7 @@ import Foundation
 import PEXEngine
 import Testing
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Production PEX flow stage executor")

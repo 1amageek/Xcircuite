@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuiteFlowCLICommand {
     public static func run(arguments: [String]) async throws -> String {

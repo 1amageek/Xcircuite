@@ -1,16 +1,32 @@
+import DFTCore
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
-import XcircuitePackage
+import QualificationEngine
+import ReleaseCore
+import ReleaseEngine
+import SignoffEngine
+import TapeoutEngine
 
-struct ReleaseStageExecutionAdapterSupport: Sendable {
+protocol ReleaseStageExecutionResult: Sendable {
+    var status: ReleaseExecutionStatus { get }
+    var diagnostics: [DesignDiagnostic] { get }
+}
+
+extension ReleaseQualificationResult: ReleaseStageExecutionResult {}
+extension ReleaseProfileEligibilityResult: ReleaseStageExecutionResult {}
+extension SignoffResult: ReleaseStageExecutionResult {}
+extension TapeoutResult: ReleaseStageExecutionResult {}
+
+struct ReleaseStageExecutionSupport: Sendable {
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     init(artifactBuilder: StageArtifactReferenceBuilder = StageArtifactReferenceBuilder()) {
         self.artifactBuilder = artifactBuilder
     }
 
-    func persistEnvelope<Payload: Sendable & Hashable & Codable>(
-        _ envelope: XcircuiteEngineResultEnvelope<Payload>,
+    func persistResult<Result: Encodable>(
+        _ result: Result,
         stageID: String,
         artifactID: String,
         context: FlowExecutionContext
@@ -24,7 +40,7 @@ struct ReleaseStageExecutionAdapterSupport: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(envelope).write(to: outputURL, options: .atomic)
+        try encoder.encode(result).write(to: outputURL, options: .atomic)
         return try artifactBuilder.reference(
             for: outputURL,
             projectRoot: context.projectRoot,
@@ -35,16 +51,42 @@ struct ReleaseStageExecutionAdapterSupport: Sendable {
         )
     }
 
-    func stageResult<Payload: Sendable & Hashable & Codable>(
-        envelope: XcircuiteEngineResultEnvelope<Payload>,
+    func persistFoundationEvidence<Evidence: Encodable>(
+        _ evidence: Evidence,
+        stageID: String,
+        artifactID: String,
+        context: FlowExecutionContext
+    ) throws -> XcircuiteFileReference {
+        let stageDirectory = context.runDirectory
+            .appending(path: "stages")
+            .appending(path: stageID)
+            .appending(path: "raw")
+        try context.packageStore.ensureDirectory(at: stageDirectory)
+        let outputURL = stageDirectory.appending(path: "foundation-evidence.json")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(evidence).write(to: outputURL, options: .atomic)
+        return try artifactBuilder.reference(
+            for: outputURL,
+            projectRoot: context.projectRoot,
+            artifactID: artifactID,
+            kind: .report,
+            format: .json,
+            producedByRunID: context.runID
+        )
+    }
+
+    func stageResult<Result: ReleaseStageExecutionResult>(
+        result: Result,
         stageID: String,
         artifacts: [XcircuiteFileReference],
         approved: Bool
     ) -> FlowStageResult {
-        let diagnostics = envelope.diagnostics.map(flowDiagnostic)
+        let diagnostics = result.diagnostics.map(flowDiagnostic)
         let gateStatus: FlowGateStatus
         let stageStatus: FlowStageStatus
-        switch envelope.status {
+        switch result.status {
         case .completed:
             gateStatus = approved ? .passed : .failed
             stageStatus = approved ? .succeeded : .failed
@@ -85,10 +127,10 @@ struct ReleaseStageExecutionAdapterSupport: Sendable {
         )
     }
 
-    private func flowDiagnostic(_ diagnostic: XcircuiteEngineDiagnostic) -> FlowDiagnostic {
+    private func flowDiagnostic(_ diagnostic: DesignDiagnostic) -> FlowDiagnostic {
         let severity: FlowDiagnosticSeverity
         switch diagnostic.severity {
-        case .info:
+        case .information:
             severity = .info
         case .warning:
             severity = .warning
@@ -97,8 +139,8 @@ struct ReleaseStageExecutionAdapterSupport: Sendable {
         }
         return FlowDiagnostic(
             severity: severity,
-            code: diagnostic.code,
-            message: diagnostic.message
+            code: diagnostic.code.rawValue,
+            message: diagnostic.summary
         )
     }
 

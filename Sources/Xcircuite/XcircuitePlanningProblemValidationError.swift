@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuitePlanningProblemValidationError: Error, LocalizedError, Equatable {
     case missingProblemReference

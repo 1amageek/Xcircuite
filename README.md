@@ -1,16 +1,29 @@
 # Xcircuite
 
+## Storage boundary
+
+`XcircuiteWorkspaceStore` is the concrete filesystem boundary for the
+project-local `.xcircuite` directory. It validates project-relative paths,
+rejects traversal and symlink escapes, and writes immutable JSON or byte
+artifacts atomically. Flow lifecycle and approval semantics belong to
+`DesignFlowKernel`; this store is intentionally limited to local persistence.
+
+`XcircuiteWorkspaceMigrationService` performs the one-time JSON migration for
+Foundation schema v2. It only adds the legacy artifact-role sentinel and
+updates artifact schema metadata; it never infers a run verdict.
+
 Xcircuite is the headless core runtime of the LSI semiconductor design
 platform. It provides the project-aware flow, CLI, artifact ledger integration,
 tool qualification, and Agent-operable planning surface used by both
 `circuit-studio` and non-UI callers.
 
-`.xcircuite` project runtime: the adapter layer between `DesignFlowKernel` and the
-engine packages. It turns engine results into `FlowStageResult`s, gates, and
-artifact references. Domain verdict logic and parsers stay in the engine
+`.xcircuite` project runtime is the composition boundary between
+`DesignFlowKernel` and the engine packages. Stage executors invoke domain
+protocols directly and project their typed results into flow records, gates,
+and persisted artifacts. Domain verdict logic and parsers stay in the engine
 packages; the explicit PDK external-inspection provider is the controlled
 process boundary, using `SignoffToolSupport` and retaining raw process evidence
-before `PDKKit` validates the returned envelope.
+before `PDKKit` validates the typed result.
 
 ## License
 
@@ -38,11 +51,12 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `LayoutCommandFlowStageExecutor` | Applies replayable `LayoutCommands` requests, writes flow-managed layout/result/manifest artifacts, and can emit DRC-compatible JSON plus standard layout exports for downstream DRC/LVS/PEX stages |
 | `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
-| `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `XcircuiteFileReference`s, and blocks unavailable infrastructure without fabricating signoff output |
+| `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `ArtifactReference`s, and blocks unavailable infrastructure without fabricating signoff output |
 | `DFTQualificationFlowStageExecutor` / `DFTReleaseFlowStageExecutor` | Correlates retained DFT oracle cases, persists request-digest-bound qualification provenance, validates independent ToolQualification process evidence, bundles equivalence/DRC/LVS/PEX artifacts, and drives immutable release eligibility or review/resume artifacts |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
 | `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
+| `ElectricalSignoffProcessQualificationFlowStageExecutor` | Re-verifies digest-bound electrical corpus/oracle/health/approval artifacts against project files, promotes them through the typed process-qualification evaluator, persists structured checks and `ToolProcessQualificationEvidence`, and blocks incomplete trust evidence |
 | `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, re-hashes reviewed artifacts on resume, and delegates approval validation to `PhysicalDesignReviewGate` |
 
 PDK external inspection is selected by adding `externalProcess` to a tagged
@@ -58,10 +72,13 @@ process qualification.
 DFT release is selected through the tagged `dft` runtime executor. A
 production release entry must provide the DFT request/result, downstream
 evidence, retained qualification provenance and a
-`releaseProcessQualificationEvidencePath`. The release adapter validates
+`releaseProcessQualificationEvidencePath` or a stage-bound
+`releaseProcessQualificationEvidenceInput`. The DFT qualification stage can
+also build that independent record from an artifact-backed
+`qualificationProcessEvidenceBuildPath`. The release adapter validates
 the independent ToolQualification record against the DFT tool, implementation,
 process profile and PDK digest before recording it in the immutable eligibility
-artifact and the immutable `dft-release-artifact-bundle.json` release packet.
+artifact and the immutable `dft-release-artifact-bundle.json` release packet. When the evidence is stage-bound, the packet also retains the qualification build request and all support-artifact references, then re-verifies every named reference before persistence.
 Missing or mismatched evidence blocks the stage and creates a review/resume
 artifact.
 
@@ -156,7 +173,7 @@ route to `structureMapping` so Agent repair planning can choose the right edit
 surface.
 
 Before DRC/LVS/PEX stage results are persisted, Xcircuite verifies every indexed
-stage output artifact with `XcircuiteFileReferenceVerifier`. The stage result
+stage output artifact with `LocalArtifactVerifier`. The stage result
 contains an `artifact-integrity` gate for project containment, symlink
 containment, SHA-256, and byte count. DRC and LVS stages also contain
 `drc-artifacts` / `lvs-artifacts` gates that decode the engine artifact manifest
@@ -381,7 +398,7 @@ candidate waveform / comparison artifacts with coverage tags.
 | Type | Responsibility |
 |---|---|
 | `SignoffToolDescriptors` | Qualification descriptors for layout commands, Native DRC/LVS backends, CoreSpice simulation, and PEX backends |
-| `StageArtifactReferenceBuilder` | Builds `XcircuiteFileReference`s for stage outputs (artifact ID, path, kind, format, digest) |
+| `StageArtifactReferenceBuilder` | Builds `ArtifactReference`s for stage outputs (artifact ID, path, kind, format, digest) |
 | `XcircuiteRuntimeError` | Typed runtime failures |
 
 ## Build & test
@@ -391,6 +408,6 @@ swift build
 perl -e 'alarm 420; exec @ARGV' swift test --parallel --num-workers 4
 ```
 
-The latest bounded full regression passed 547 test cases in 58 suites using an
-isolated SwiftPM scratch path. This is package-integration evidence, not foundry
-or process qualification.
+The latest bounded full regression passed 557 test cases in 59 suites using a
+serial SwiftPM runner. This is package-integration evidence, not foundry or
+process qualification.

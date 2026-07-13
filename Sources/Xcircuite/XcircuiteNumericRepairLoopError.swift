@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum XcircuiteNumericRepairLoopError: Error, LocalizedError, Equatable {
     case invalidMaxCandidates(Int)

@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
-import XcircuitePackage
+import DesignFlowKernel
 
 /// Simulation as a flow stage at DRC/LVS/PEX maturity: the netlist's
 /// own analysis runs in-process, the gate judges declared measurement

@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteCandidatePlanGenerator {
     func initialSymbolicState(for problem: XcircuiteCircuitPlanningProblem) -> [String] {

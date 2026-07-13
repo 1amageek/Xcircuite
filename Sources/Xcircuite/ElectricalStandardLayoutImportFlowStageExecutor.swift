@@ -4,7 +4,7 @@ import LayoutCore
 import LayoutIO
 import LayoutTech
 import PhysicalDesignCore
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor {
     public let stageID: String

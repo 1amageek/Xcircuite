@@ -1,5 +1,5 @@
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
     public struct Goal: Codable, Sendable, Hashable {

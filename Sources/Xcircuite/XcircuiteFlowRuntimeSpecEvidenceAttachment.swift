@@ -90,6 +90,8 @@ public extension XcircuiteFlowStageExecutorSpec {
             spec.stageID
         case .electricalSignoffQualification(let spec):
             spec.stageID
+        case .electricalSignoffProcessQualification(let spec):
+            spec.stageID
         case .electricalSignoffReleaseGate(let spec):
             spec.stageID
         case .electricalRepairRevision(let spec):
@@ -180,6 +182,9 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .electricalSignoffQualification(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .electricalSignoffQualification(spec)
+        case .electricalSignoffProcessQualification(var spec):
+            spec.tool = spec.tool.attachingEvidence(evidence)
+            return .electricalSignoffProcessQualification(spec)
         case .electricalSignoffReleaseGate(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .electricalSignoffReleaseGate(spec)

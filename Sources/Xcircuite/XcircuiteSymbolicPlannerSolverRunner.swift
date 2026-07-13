@@ -1,7 +1,7 @@
 import Foundation
 import DesignFlowKernel
 import SignoffToolSupport
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolving {
     private let packageStore: XcircuitePackageStore

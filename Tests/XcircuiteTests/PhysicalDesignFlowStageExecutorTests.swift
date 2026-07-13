@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import LogicIR
 import PDKCore
@@ -6,7 +7,6 @@ import PhysicalDesignCore
 import Testing
 import TimingCore
 import ToolQualification
-import XcircuitePackage
 @testable import Xcircuite
 
 @Suite("Physical design flow stage adapter")
@@ -20,16 +20,16 @@ struct PhysicalDesignFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: XcircuiteFileReference(path: "inputs/design.json", kind: .netlist, format: .json),
+                artifact: try fixtureLocator(path: "inputs/design.json", kind: .netlist, format: .json),
                 topDesignName: "adapter_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
             constraints: TimingConstraintReference(
-                artifact: XcircuiteFileReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
+                artifact: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
                 modeIDs: ["func"]
             ),
             pdk: PDKReference(
-                manifest: XcircuiteFileReference(path: "inputs/pdk.json", kind: .technology, format: .json),
+                manifest: try fixtureReference(path: "inputs/pdk.json", kind: .technology, format: .json),
                 processID: "fixture-130nm",
                 version: "1",
                 digest: String(repeating: "c", count: 64)
@@ -81,16 +81,16 @@ struct PhysicalDesignFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: XcircuiteFileReference(path: "inputs/design.json", kind: .netlist, format: .json),
+                artifact: try fixtureLocator(path: "inputs/design.json", kind: .netlist, format: .json),
                 topDesignName: "adapter_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
             constraints: TimingConstraintReference(
-                artifact: XcircuiteFileReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
+                artifact: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
                 modeIDs: ["func"]
             ),
             pdk: PDKReference(
-                manifest: XcircuiteFileReference(path: "inputs/pdk.json", kind: .technology, format: .json),
+                manifest: try fixtureReference(path: "inputs/pdk.json", kind: .technology, format: .json),
                 processID: "fixture-130nm",
                 version: "1",
                 digest: String(repeating: "c", count: 64)
@@ -132,16 +132,16 @@ struct PhysicalDesignFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: XcircuiteFileReference(path: "inputs/design.json", kind: .netlist, format: .json),
+                artifact: try fixtureLocator(path: "inputs/design.json", kind: .netlist, format: .json),
                 topDesignName: "review_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
             constraints: TimingConstraintReference(
-                artifact: XcircuiteFileReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
+                artifact: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
                 modeIDs: ["func"]
             ),
             pdk: PDKReference(
-                manifest: XcircuiteFileReference(path: "inputs/pdk.json", kind: .technology, format: .json),
+                manifest: try fixtureReference(path: "inputs/pdk.json", kind: .technology, format: .json),
                 processID: "fixture-130nm",
                 version: "1",
                 digest: String(repeating: "c", count: 64)
@@ -221,5 +221,33 @@ struct PhysicalDesignFlowStageExecutorTests {
         } catch {
             Issue.record("Failed to remove temporary root: \(error)")
         }
+    }
+
+    private func fixtureLocator(
+        path: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactLocator {
+        try ArtifactLocator(
+            location: ArtifactLocation(workspaceRelativePath: path),
+            role: .input,
+            kind: kind,
+            format: format
+        )
+    }
+
+    private func fixtureReference(
+        path: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
+        try ArtifactReference(
+            locator: fixtureLocator(path: path, kind: kind, format: format),
+            digest: ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: String(repeating: "0", count: 64)
+            ),
+            byteCount: 0
+        )
     }
 }

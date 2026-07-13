@@ -3,7 +3,7 @@ import DRCEngine
 import Foundation
 import LVSEngine
 import PEXEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private let pathBoundary = ProjectPathBoundary()

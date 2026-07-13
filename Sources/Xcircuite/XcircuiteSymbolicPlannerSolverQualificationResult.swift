@@ -1,5 +1,7 @@
+import CircuiteFoundation
+import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendable, Hashable {
     public var schemaVersion: Int
@@ -40,7 +42,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
                 return evidence
             }
             var updated = evidence
-            updated.artifact = artifact
+            updated.artifact = foundationArtifactReference(artifact)
             return updated
         }
         return result
@@ -222,5 +224,46 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
                 forKey: .diagnostics
             )
         )
+    }
+}
+
+func foundationArtifactReference(
+    _ reference: XcircuiteFileReference
+) -> ArtifactReference? {
+    guard let hexadecimalValue = reference.sha256,
+          let byteCount = reference.byteCount,
+          byteCount >= 0 else {
+        return nil
+    }
+
+    let location: ArtifactLocation
+    do {
+        if reference.path.hasPrefix("/") {
+            location = try ArtifactLocation(fileURL: URL(filePath: reference.path))
+        } else {
+            location = try ArtifactLocation(workspaceRelativePath: reference.path)
+        }
+        let artifactID: ArtifactID?
+        if let rawValue = reference.artifactID {
+            artifactID = try ArtifactID(rawValue: rawValue)
+        } else {
+            artifactID = nil
+        }
+        return try ArtifactReference(
+            id: artifactID,
+            locator: ArtifactLocator(
+                location: location,
+                role: .output,
+                kind: try ArtifactKind(rawValue: reference.kind.rawValue),
+                format: try ArtifactFormat(rawValue: reference.format.rawValue)
+            ),
+            digest: ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: hexadecimalValue
+            ),
+            byteCount: UInt64(byteCount)
+        )
+    } catch {
+        return nil
     }
 }

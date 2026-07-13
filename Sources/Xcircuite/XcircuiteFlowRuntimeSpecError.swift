@@ -22,6 +22,7 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
     case conflictingRuntimeToolDescriptor(toolID: String, stageIDs: [String])
     case conflictingRuntimeToolHealth(toolID: String, stageIDs: [String])
     case missingRuntimeExecutorForRunStage(String)
+    case electricalProcessQualificationRequiresApproval(String)
     case stageNotFound(String)
 
     public var errorDescription: String? {
@@ -68,6 +69,8 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
             "Runtime spec contains conflicting health results for tool \(toolID) across stages: \(stageIDs.joined(separator: ", "))"
         case .missingRuntimeExecutorForRunStage(let stageID):
             "Runtime spec does not contain an executor for run stage: \(stageID)"
+        case .electricalProcessQualificationRequiresApproval(let stageID):
+            "Electrical process qualification stage must require a human approval gate: \(stageID)"
         case .stageNotFound(let stageID):
             "Runtime spec does not contain an executor for stage: \(stageID)"
         }

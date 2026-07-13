@@ -1,8 +1,9 @@
 import DFTCore
 import DesignFlowKernel
 import DFTEngine
+import CircuiteFoundation
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct DFTFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -50,24 +51,36 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                     designLoader: FileSystemDFTDesignLoader(rootURL: context.projectRoot),
                     cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: context.projectRoot)
                 )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
-            let diagnostics = envelope.diagnostics.map(flowDiagnostic)
-            let gateStatus = gateStatus(for: envelope.status)
-            let resultArtifact = try ReleaseStageExecutionAdapterSupport().persistEnvelope(
-                envelope,
+            let diagnostics = result.diagnostics.map(flowDiagnostic)
+            let gateStatus = gateStatus(for: result.status)
+            let support = ReleaseStageExecutionSupport()
+            let resultArtifact = try support.persistResult(
+                result,
                 stageID: stage.stageID,
                 artifactID: "dft-result-envelope",
                 context: context
             )
-            let persistedArtifacts = envelope.artifacts + [resultArtifact]
+            let foundationEvidence = try DFTFoundationEvidence(
+                result: result,
+                provenance: try foundationProvenance(for: result, request: request)
+            )
+            let foundationArtifact = try support.persistFoundationEvidence(
+                foundationEvidence,
+                stageID: stage.stageID,
+                artifactID: "dft-foundation-evidence",
+                context: context
+            )
+            let persistedArtifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
+                + [resultArtifact, foundationArtifact]
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: persistedArtifacts,
                 projectRoot: context.projectRoot
             )
             let allDiagnostics = diagnostics + integrityGate.diagnostics
             let status: FlowStageStatus
-            switch envelope.status {
+            switch result.status {
             case .completed:
                 status = integrityGate.status == .passed ? .succeeded : .failed
             case .blocked, .cancelled:
@@ -127,15 +140,21 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func flowDiagnostic(_ diagnostic: XcircuiteEngineDiagnostic) -> FlowDiagnostic {
-        FlowDiagnostic(
-            severity: FlowDiagnosticSeverity(rawValue: diagnostic.severity.rawValue) ?? .error,
+    private func flowDiagnostic(_ diagnostic: DFTDiagnostic) -> FlowDiagnostic {
+        let severity: FlowDiagnosticSeverity
+        switch diagnostic.severity {
+        case .info: severity = .info
+        case .warning: severity = .warning
+        case .error: severity = .error
+        }
+        return FlowDiagnostic(
+            severity: severity,
             code: diagnostic.code,
-            message: diagnostic.message
+            message: diagnostic.message + (diagnostic.entity.map { " entity=\($0)" } ?? "")
         )
     }
 
-    private func gateStatus(for status: XcircuiteEngineExecutionStatus) -> FlowGateStatus {
+    private func gateStatus(for status: DFTExecutionStatus) -> FlowGateStatus {
         switch status {
         case .completed:
             return .passed
@@ -146,6 +165,27 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         case .failed:
             return .failed
         }
+    }
+
+    private func foundationProvenance(
+        for result: DFTResult,
+        request: DFTRequest
+    ) throws -> ExecutionProvenance {
+        try ExecutionProvenance(
+            producer: try ProducerIdentity(
+                kind: .engine,
+                identifier: result.metadata.engineID,
+                version: result.metadata.implementationVersion
+            ),
+            inputs: try request.inputs.map(DFTFoundationEvidence.artifactReference(from:)),
+            designRevision: try ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: request.design.designDigest
+            ),
+            randomSeed: result.metadata.seed,
+            startedAt: result.metadata.startedAt,
+            completedAt: result.metadata.completedAt
+        )
     }
 
     private func blockedResult(

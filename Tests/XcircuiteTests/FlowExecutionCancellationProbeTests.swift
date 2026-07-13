@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import DesignFlowKernel
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Flow execution cancellation probe")

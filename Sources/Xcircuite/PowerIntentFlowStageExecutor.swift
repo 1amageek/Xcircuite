@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import LogicDesign
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -11,7 +11,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     private let topDesignName: String
     private let format: PowerIntentFormat
     private let engine: any PowerIntentParsing
-    private let support: LogicDesignFlowStageAdapterSupport
+    private let support: LogicDesignFlowStageSupport
 
     public init(
         stageID: String = "logic.power-intent",
@@ -29,7 +29,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
         self.topDesignName = topDesignName
         self.format = format
         self.engine = engine
-        self.support = LogicDesignFlowStageAdapterSupport()
+        self.support = LogicDesignFlowStageSupport()
     }
 
     public func execute(
@@ -71,20 +71,24 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             )
             let request = PowerIntentParsingRequest(
                 runID: context.runID,
-                inputs: [sourceReference, designReference],
+                inputs: [
+                    try FoundationFlowProjection.locator(from: sourceReference),
+                    try FoundationFlowProjection.locator(from: designReference),
+                ],
                 design: LogicDesignReference(
-                    artifact: designReference,
+                    artifact: try FoundationFlowProjection.locator(from: designReference),
                     topDesignName: topDesignName,
                     designDigest: designDigest
                 ),
                 format: format,
                 sources: [PowerIntentSourceUnit(path: sourceReference.path, source: source, format: format)]
             )
-            let envelope = try await engine.execute(request)
+            let result = try await engine.execute(request)
             try context.checkCancellation()
 
-            var persistedEnvelope = envelope
-            if let intent = envelope.payload.intent {
+            var persistedResult = result
+            var artifacts = [sourceReference, designReference]
+            if let intent = result.payload.intent {
                 let directory = context.runDirectory
                     .appending(path: "stages")
                     .appending(path: stageID)
@@ -104,26 +108,26 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                     format: .json,
                     producedByRunID: context.runID
                 )
-                var payload = persistedEnvelope.payload
+                var payload = result.payload
                 payload.reference = PowerIntentReference(
-                    artifact: intentReference,
+                    artifact: try FoundationFlowProjection.locator(from: intentReference, role: .output),
                     designDigest: designDigest
                 )
-                persistedEnvelope.payload = payload
-                persistedEnvelope.artifacts.append(intentReference)
+                persistedResult = PowerIntentParsingResult(
+                    schemaVersion: result.schemaVersion,
+                    runID: result.runID,
+                    status: result.status,
+                    diagnostics: result.diagnostics,
+                    metadata: result.metadata,
+                    payload: payload
+                )
+                artifacts.append(intentReference)
             }
-            let resultArtifact = try support.writeEnvelope(
-                persistedEnvelope,
-                stageID: stageID,
-                context: context,
-                fileName: "power-intent-result.json"
-            )
-            return support.stageResult(
+            let resultArtifact = try persistResult(persistedResult, context: context)
+            return makeStageResult(
+                result: persistedResult,
                 resultArtifact: resultArtifact,
-                envelopeStatus: persistedEnvelope.status,
-                diagnostics: persistedEnvelope.diagnostics,
-                stageID: stageID,
-                artifacts: persistedEnvelope.artifacts,
+                artifacts: artifacts,
                 context: context
             )
         } catch let cancellationError as FlowRunCancellationError {
@@ -135,6 +139,79 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                 message: error.localizedDescription
             )
         }
+    }
+
+    private func persistResult(
+        _ result: PowerIntentParsingResult,
+        context: FlowExecutionContext
+    ) throws -> XcircuiteFileReference {
+        let directory = context.runDirectory
+            .appending(path: "stages")
+            .appending(path: stageID)
+            .appending(path: "raw")
+        try context.packageStore.ensureDirectory(at: directory)
+        let url = directory.appending(path: "power-intent-result.json")
+        try context.packageStore.writeJSON(result, to: url, forProjectAt: context.projectRoot)
+        return try support.artifactBuilder.reference(
+            for: url,
+            projectRoot: context.projectRoot,
+            artifactID: "\(stageID)-result",
+            kind: .report,
+            format: .json,
+            producedByRunID: context.runID
+        )
+    }
+
+    private func makeStageResult(
+        result: PowerIntentParsingResult,
+        resultArtifact: XcircuiteFileReference,
+        artifacts: [XcircuiteFileReference],
+        context: FlowExecutionContext
+    ) -> FlowStageResult {
+        let diagnostics = result.diagnostics.map { diagnostic in
+            let severity: FlowDiagnosticSeverity
+            switch diagnostic.severity {
+            case .information: severity = .info
+            case .warning: severity = .warning
+            case .error: severity = .error
+            }
+            return FlowDiagnostic(
+                severity: severity,
+                code: diagnostic.code,
+                message: diagnostic.message
+            )
+        }
+        let allArtifacts = artifacts + [resultArtifact]
+        let integrityGate = StageArtifactIntegrityGateBuilder().gate(
+            for: allArtifacts,
+            projectRoot: context.projectRoot
+        )
+        let gateStatus: FlowGateStatus
+        let stageStatus: FlowStageStatus
+        switch result.status {
+        case .completed:
+            gateStatus = integrityGate.status == .passed ? .passed : .failed
+            stageStatus = integrityGate.status == .passed ? .succeeded : .failed
+        case .blocked:
+            gateStatus = .blocked
+            stageStatus = .blocked
+        case .failed:
+            gateStatus = .failed
+            stageStatus = .failed
+        case .cancelled:
+            gateStatus = .incomplete
+            stageStatus = .failed
+        }
+        return FlowStageResult(
+            stageID: stageID,
+            status: stageStatus,
+            diagnostics: diagnostics + integrityGate.diagnostics,
+            gates: [
+                FlowGateResult(gateID: stageID, status: gateStatus, diagnostics: diagnostics),
+                integrityGate,
+            ],
+            artifacts: allArtifacts
+        )
     }
 
 }

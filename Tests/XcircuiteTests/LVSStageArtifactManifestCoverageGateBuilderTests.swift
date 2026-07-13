@@ -1,7 +1,7 @@
 import Foundation
 import LVSEngine
 import Testing
-import XcircuitePackage
+import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("LVS stage artifact manifest coverage", .timeLimit(.minutes(1)))

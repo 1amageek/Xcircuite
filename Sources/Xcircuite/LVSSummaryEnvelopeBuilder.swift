@@ -1,7 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import LVSEngine
-import XcircuitePackage
+import DesignFlowKernel
 
 struct LVSSummaryEnvelopeBuilder: Sendable {
     func envelopeReference(

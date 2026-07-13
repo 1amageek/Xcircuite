@@ -11,7 +11,7 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import XcircuitePackage
+import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func runtimeSpecRoundTripsRTLVerificationStageWithQualificationInput() throws {
@@ -41,6 +41,43 @@ extension XcircuiteFlowRuntimeTests {
         #expect(rtl.topModuleName == "top")
         #expect(rtl.qualificationInput == .path("qualification/rtl-input.json"))
         #expect(decoded.executors[0].makeDescriptor().toolID == "native-rtl-verification")
+    }
+
+    @Test func runtimeSpecRegistersAnIndependentRTLVerificationOracle() throws {
+        let oracleToolID = "fixture-rtl-oracle"
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .rtlVerification(
+                    XcircuiteFlowStageExecutorSpec.RTLVerification(
+                        analysis: .lint,
+                        rtlInput: .path("rtl/top.sv"),
+                        topModuleName: "top",
+                        oracleTool: RTLVerificationOracleToolSpec(
+                            toolID: oracleToolID,
+                            executablePath: "tools/rtl-oracle",
+                            version: "1.0.0",
+                            tool: QualifiedToolFixtures.toolSpec(level: .oracleChecked)
+                        )
+                    )
+                ),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(spec)
+        let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
+        try decoded.validate()
+        let runtime = try decoded.makeRuntime(
+            projectRoot: FileManager.default.temporaryDirectory
+                .appending(path: "rtl-oracle-runtime-\(UUID().uuidString)")
+        )
+
+        guard case .rtlVerification(let rtl) = try #require(decoded.executors.first) else {
+            Issue.record("Expected RTL verification executor")
+            return
+        }
+        #expect(rtl.oracleTool?.toolID == oracleToolID)
+        #expect(runtime.toolRegistry.descriptor(toolID: oracleToolID)?.version == "1.0.0")
+        #expect(runtime.healthResults[oracleToolID]?.status == .passed)
     }
 
     @Test func runtimeSpecRoundTripsElectricalRepairRevisionStage() throws {
@@ -177,6 +214,70 @@ extension XcircuiteFlowRuntimeTests {
         #expect(decoded.executors[1].makeDescriptor().toolID == "native-electrical-signoff")
         #expect(decoded.executors[2].makeDescriptor().toolID == "native-electrical-signoff-qualification")
         #expect(decoded.executors[3].makeDescriptor().toolID == "native-electrical-signoff-release-gate")
+    }
+
+    @Test func runtimeSpecRoundTripsElectricalProcessQualificationStage() throws {
+        let requestInput = digestBoundInput(
+            "electrical/process-qualification-request.json",
+            kind: .request,
+            format: .json
+        )
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .electricalSignoffProcessQualification(
+                    XcircuiteFlowStageExecutorSpec.ElectricalSignoffProcessQualification(
+                        requestInput: requestInput
+                    )
+                ),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(spec)
+        let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
+        try decoded.validate()
+
+        guard case .electricalSignoffProcessQualification(let qualification) = decoded.executors[0] else {
+            Issue.record("Expected electrical process qualification runtime executor")
+            return
+        }
+        #expect(qualification.requestInput == requestInput)
+        #expect(decoded.executors[0].makeDescriptor().toolID == "native-electrical-signoff-process-qualification")
+    }
+
+    @Test func runtimeCoverageRequiresHumanApprovalForElectricalProcessQualification() throws {
+        let runtimeSpec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .electricalSignoffProcessQualification(
+                    XcircuiteFlowStageExecutorSpec.ElectricalSignoffProcessQualification(
+                        requestInput: digestBoundInput(
+                            "electrical/process-qualification-request.json",
+                            kind: .request,
+                            format: .json
+                        )
+                    )
+                ),
+            ]
+        )
+        let runSpec = XcircuiteFlowRunSpec(
+            runID: "electrical-process-qualification-run",
+            intent: "Validate process qualification approval governance.",
+            stages: [FlowStageDefinition(
+                stageID: "electrical-signoff.process-qualification",
+                displayName: "Electrical process qualification",
+                requiresApproval: false
+            )]
+        )
+
+        do {
+            try runtimeSpec.validateCoverage(for: runSpec)
+            Issue.record("Expected human approval gate validation error")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            #expect(error == .electricalProcessQualificationRequiresApproval(
+                "electrical-signoff.process-qualification"
+            ))
+        } catch {
+            throw error
+        }
     }
 
     @Test func runtimeSpecRejectsUnboundElectricalReleaseGateInputs() throws {

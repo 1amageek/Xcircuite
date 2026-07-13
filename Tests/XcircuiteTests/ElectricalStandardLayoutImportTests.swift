@@ -7,7 +7,7 @@ import LayoutTech
 import PhysicalDesignCore
 import Testing
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Electrical standard layout import")

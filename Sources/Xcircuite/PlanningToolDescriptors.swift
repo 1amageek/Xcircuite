@@ -1,6 +1,6 @@
 import Foundation
 import ToolQualification
-import XcircuitePackage
+import DesignFlowKernel
 
 public enum PlanningToolDescriptors {
     public static func symbolicPlannerSolver(

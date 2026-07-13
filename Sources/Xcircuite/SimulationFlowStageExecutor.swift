@@ -1,6 +1,6 @@
 import DesignFlowKernel
 import Foundation
-import XcircuitePackage
+import DesignFlowKernel
 
 /// Simulation as a first-class flow stage, at the same maturity as
 /// DRC/LVS/PEX: the netlist's own analysis runs in-process (CoreSpice),

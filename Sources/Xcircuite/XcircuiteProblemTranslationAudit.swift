@@ -1,4 +1,4 @@
-import XcircuitePackage
+import DesignFlowKernel
 
 public struct XcircuiteProblemTranslationAudit: Codable, Sendable, Hashable {
     public static let currentSchemaVersion = 1
