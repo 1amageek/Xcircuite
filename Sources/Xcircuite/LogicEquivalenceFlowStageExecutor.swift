@@ -147,9 +147,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 for: requestURL,
                 projectRoot: context.projectRoot,
                 artifactID: "logic-equivalence-request",
-                kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             )
             let accepted = acceptance.state == .accepted
             let audit = try makeAuditRecord(
@@ -338,49 +337,43 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             for: resultURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-equivalence-result",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let requestArtifact = try artifactBuilder.reference(
             for: requestURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-equivalence-request",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let evidenceArtifact = try artifactBuilder.reference(
             for: evidenceURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-equivalence-evidence",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let acceptanceArtifact = try artifactBuilder.reference(
             for: acceptanceURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-synthesis-acceptance",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let reviewArtifact = try artifactBuilder.reference(
             for: reviewURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-equivalence-review",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let auditArtifact = try artifactBuilder.reference(
             for: auditURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-equivalence-audit",
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
         let accepted = acceptance.state == .accepted
         let stageStatus: FlowStageStatus
@@ -455,7 +448,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         stageID: String,
         context: FlowExecutionContext,
         directoryName: String = "raw"
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -467,9 +460,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
@@ -542,15 +534,13 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
         let url = try locator.location.resolvedFileURL(relativeTo: context.projectRoot)
-        let legacyReference = try artifactBuilder.reference(
+        return try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .rtl,
-            format: url.pathExtension.lowercased() == "json" ? .json : .text,
-            producedByRunID: context.runID
+            kind: ArtifactKind.rtl,
+            format: url.pathExtension.lowercased() == "json" ? ArtifactFormat.json : ArtifactFormat.text
         )
-        return try FoundationFlowProjection.artifactReference(from: legacyReference)
     }
 
     private func rtlDiagnostics(_ diagnostics: [DesignDiagnostic]) -> [RTLDiagnostic] {

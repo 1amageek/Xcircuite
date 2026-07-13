@@ -41,13 +41,13 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
             let sourceReference = try support.artifactBuilder.reference(
                 for: sourceURL,
                 projectRoot: context.projectRoot,
-                kind: .rtl,
-                format: sourceURL.pathExtension.lowercased() == "v" ? .verilog : .systemVerilog,
-                producedByRunID: context.runID
+                role: .input,
+                kind: ArtifactKind.rtl,
+                format: sourceURL.pathExtension.lowercased() == "v" ? ArtifactFormat.verilog : ArtifactFormat.systemVerilog
             )
             let request = LogicElaborationRequest(
                 runID: context.runID,
-                inputs: [try FoundationFlowProjection.locator(from: sourceReference)],
+                inputs: [sourceReference.locator],
                 topDesignName: topDesignName,
                 sources: [SystemVerilogSourceUnit(
                     path: sourceReference.path,
@@ -78,9 +78,8 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     for: snapshotURL,
                     projectRoot: context.projectRoot,
                     artifactID: "logic-design",
-                    kind: .rtl,
-                    format: .json,
-                    producedByRunID: context.runID
+                    kind: ArtifactKind.rtl,
+                    format: ArtifactFormat.json
                 )
                 var payload = persistedResult.payload
                 let designDigest: String
@@ -90,7 +89,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     designDigest = try LogicDesignSnapshotCodec.digest(snapshot)
                 }
                 payload.design = LogicDesignReference(
-                    artifact: try FoundationFlowProjection.locator(from: snapshotReference),
+                    artifact: snapshotReference.locator,
                     topDesignName: snapshot.rtl.topModuleName,
                     designDigest: designDigest,
                     provenance: LogicDesignProvenance(
