@@ -380,6 +380,6 @@ swift build
 perl -e 'alarm 420; exec @ARGV' swift test --parallel --num-workers 4
 ```
 
-The latest bounded full regression passed 542 test cases in 58 suites using an
+The latest bounded full regression passed 545 test cases in 58 suites using an
 isolated SwiftPM scratch path. This is package-integration evidence, not foundry
 or process qualification.
