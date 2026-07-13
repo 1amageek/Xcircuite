@@ -109,29 +109,27 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
-            let rtlLegacyReference = try artifactBuilder.reference(
+            let rtlReference = try artifactBuilder.reference(
                 for: resolvedRTL,
                 projectRoot: context.projectRoot,
                 artifactID: "rtl-input",
-                kind: .rtl,
-                format: format(for: resolvedRTL),
-                producedByRunID: context.runID
+                role: .input,
+                kind: ArtifactKind.rtl,
+                format: format(for: resolvedRTL)
             )
-            let rtlReference = try FoundationFlowProjection.artifactReference(from: rtlLegacyReference)
             let additionalRTLReferences = try additionalRTLInputs.enumerated().map { index, input in
                 let resolvedInput = try input.resolveExisting(
                     projectRoot: context.projectRoot,
                     runDirectory: context.runDirectory
                 )
-                let legacyReference = try artifactBuilder.reference(
+                return try artifactBuilder.reference(
                     for: resolvedInput,
                     projectRoot: context.projectRoot,
                     artifactID: "rtl-input-\(index + 1)",
-                    kind: .rtl,
-                    format: format(for: resolvedInput),
-                    producedByRunID: context.runID
+                    role: .input,
+                    kind: ArtifactKind.rtl,
+                    format: format(for: resolvedInput)
                 )
-                return try FoundationFlowProjection.artifactReference(from: legacyReference)
             }
             let referenceDesign: LogicDesignReference?
             if let referenceInput {
@@ -139,18 +137,18 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                     projectRoot: context.projectRoot,
                     runDirectory: context.runDirectory
                 )
-                let legacyReference = try artifactBuilder.reference(
+                let reference = try artifactBuilder.reference(
                     for: resolvedReference,
                     projectRoot: context.projectRoot,
                     artifactID: "rtl-reference",
-                    kind: .rtl,
-                    format: format(for: resolvedReference),
-                    producedByRunID: context.runID
+                    role: .input,
+                    kind: ArtifactKind.rtl,
+                    format: format(for: resolvedReference)
                 )
                 referenceDesign = LogicDesignReference(
-                    artifact: try FoundationFlowProjection.locator(from: legacyReference),
+                    artifact: reference.locator,
                     topDesignName: topModuleName,
-                    designDigest: legacyReference.sha256 ?? ""
+                    designDigest: reference.sha256
                 )
             } else {
                 referenceDesign = nil
@@ -160,18 +158,17 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                     projectRoot: context.projectRoot,
                     runDirectory: context.runDirectory
                 )
-                let legacyReference = try artifactBuilder.reference(
+                return try artifactBuilder.reference(
                     for: resolvedInput,
                     projectRoot: context.projectRoot,
                     artifactID: "rtl-reference-\(index + 1)",
-                    kind: .rtl,
-                    format: format(for: resolvedInput),
-                    producedByRunID: context.runID
+                    role: .input,
+                    kind: ArtifactKind.rtl,
+                    format: format(for: resolvedInput)
                 )
-                return try FoundationFlowProjection.artifactReference(from: legacyReference)
             }
             let constraintReference: RTLConstraintReference?
-            let constraintArtifact: XcircuiteFileReference?
+            let constraintArtifact: ArtifactReference?
             if let constraintsInput {
                 let resolvedConstraints = try constraintsInput.resolveExisting(
                     projectRoot: context.projectRoot,
@@ -181,13 +178,13 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                     for: resolvedConstraints,
                     projectRoot: context.projectRoot,
                     artifactID: "rtl-constraints",
-                    kind: .constraint,
-                    format: .sdc,
-                    producedByRunID: context.runID
+                    role: .input,
+                    kind: ArtifactKind.constraint,
+                    format: ArtifactFormat.sdc
                 )
                 constraintArtifact = artifact
                 constraintReference = RTLConstraintReference(
-                    artifact: try FoundationFlowProjection.artifactReference(from: artifact),
+                    artifact: artifact,
                     modeIDs: []
                 )
             } else {
@@ -195,7 +192,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 constraintArtifact = nil
             }
             let qualificationInputValue: RTLVerificationQualificationInput?
-            let qualificationArtifact: XcircuiteFileReference?
+            let qualificationArtifact: ArtifactReference?
             if let qualificationInput {
                 let resolvedQualification = try qualificationInput.resolveExisting(
                     projectRoot: context.projectRoot,
@@ -205,9 +202,9 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                     for: resolvedQualification,
                     projectRoot: context.projectRoot,
                     artifactID: "rtl-qualification-input",
-                    kind: .report,
-                    format: .json,
-                    producedByRunID: context.runID
+                    role: .input,
+                    kind: ArtifactKind.report,
+                    format: ArtifactFormat.json
                 )
                 let loadedQualification = try loadQualificationInput(from: resolvedQualification)
                 do {
@@ -228,18 +225,18 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             }
             var requestInputs = [rtlReference] + additionalRTLReferences
             if let constraintArtifact {
-                requestInputs.append(try FoundationFlowProjection.artifactReference(from: constraintArtifact))
+                requestInputs.append(constraintArtifact)
             }
             if let qualificationArtifact {
-                requestInputs.append(try FoundationFlowProjection.artifactReference(from: qualificationArtifact))
+                requestInputs.append(qualificationArtifact)
             }
             let request = RTLVerificationRequest(
                 runID: context.runID,
                 inputs: requestInputs,
                 design: LogicDesignReference(
-                    artifact: try FoundationFlowProjection.locator(from: rtlLegacyReference),
+                    artifact: rtlReference.locator,
                     topDesignName: topModuleName,
-                    designDigest: rtlReference.sha256 ?? ""
+                    designDigest: rtlReference.sha256
                 ),
                 referenceDesign: referenceDesign,
                 referenceInputs: additionalReferenceReferences,
@@ -820,8 +817,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         }
         if oracleToolID != nil,
            !envelope.artifacts.contains(where: { reference in
-               reference.artifactID?.hasSuffix("-evidence") == true
-                   && reference.artifactID?.hasPrefix("oracle-") == true
+               reference.artifactID.hasSuffix("-evidence")
+                   && reference.artifactID.hasPrefix("oracle-")
            }) {
             return nil
         }
@@ -986,7 +983,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func format(for url: URL) -> XcircuiteFileFormat {
+    private func format(for url: URL) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "sv", "svh": return .systemVerilog
         case "v", "vh": return .verilog
