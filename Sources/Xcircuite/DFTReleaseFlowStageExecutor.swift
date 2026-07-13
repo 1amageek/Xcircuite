@@ -72,10 +72,18 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                     context: context
                 )
             }
+            let qualifiedResultArtifact = try persist(
+                result,
+                fileName: "dft-release-result.json",
+                artifactID: "dft-release-result",
+                context: context
+            )
             let downstreamEvidence = try loadDownstreamEvidence(context: context)
             let approval = try loadApproval(context: context)
 
-            let candidateArtifacts = result.artifacts + downstreamEvidence.map(\.artifact)
+            let candidateArtifacts = result.artifacts
+                + [qualifiedResultArtifact]
+                + downstreamEvidence.map(\.artifact)
             let integrityDiagnostics = candidateArtifacts.compactMap { artifact -> FlowDiagnostic? in
                 let integrity = artifactIntegrityVerifier.verify(
                     artifact,
@@ -94,6 +102,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 return try blockedResult(
                     request: request,
                     result: result,
+                    resultArtifact: qualifiedResultArtifact,
                     diagnostics: integrityDiagnostics,
                     context: context
                 )
@@ -120,6 +129,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 let bundle = try makeReleaseArtifactBundle(
                     eligibilityArtifact: artifact,
                     result: result,
+                    resultArtifact: qualifiedResultArtifact,
                     downstreamEvidence: downstreamEvidence,
                     approval: approval,
                     context: context
@@ -139,7 +149,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                     stageID: stage.stageID,
                     status: .succeeded,
                     gates: [gate],
-                    artifacts: [artifact, bundleArtifact]
+                    artifacts: [qualifiedResultArtifact, artifact, bundleArtifact]
                 )
             } catch let error as DFTReleaseEligibilityError {
                 let diagnostic = FlowDiagnostic(
@@ -179,7 +189,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                             diagnostics: [diagnostic]
                         )
                     ] + approvalGates(for: error),
-                    artifacts: [contractArtifact]
+                    artifacts: [qualifiedResultArtifact, contractArtifact]
                 )
             }
         } catch let cancellationError as FlowRunCancellationError {
@@ -432,6 +442,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private func makeReleaseArtifactBundle(
         eligibilityArtifact: XcircuiteFileReference,
         result: XcircuiteEngineResultEnvelope<DFTPayload>,
+        resultArtifact: XcircuiteFileReference,
         downstreamEvidence: [DFTReleaseDownstreamEvidence],
         approval: DFTReleaseReviewApproval,
         context: FlowExecutionContext
@@ -440,12 +451,6 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             requestInput,
             artifactID: "dft-request",
             kind: .request,
-            context: context
-        )
-        let resultArtifact = try reference(
-            resultInput,
-            artifactID: "dft-result",
-            kind: .report,
             context: context
         )
         let downstreamBundleArtifact = try reference(
@@ -479,7 +484,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             downstreamEvidenceBundle: downstreamBundleArtifact,
             downstreamEvidence: downstreamEvidence,
             candidateArtifacts: uniqueArtifacts(
-                result.artifacts + downstreamEvidence.map(\.artifact)
+                result.artifacts + [resultArtifact] + downstreamEvidence.map(\.artifact)
             ),
             approval: approval
         )
@@ -518,6 +523,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private func blockedResult(
         request: DFTRequest,
         result: XcircuiteEngineResultEnvelope<DFTPayload>,
+        resultArtifact: XcircuiteFileReference? = nil,
         diagnostics: [FlowDiagnostic],
         context: FlowExecutionContext
     ) throws -> FlowStageResult {
@@ -553,7 +559,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                     diagnostics: diagnostics
                 )
             ],
-            artifacts: [contractArtifact]
+            artifacts: resultArtifact.map { [$0, contractArtifact] } ?? [contractArtifact]
         )
     }
 
@@ -592,6 +598,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         case .coverageEvidenceMissing: return "DFT_RELEASE_COVERAGE_MISSING"
         case .coverageIncomplete: return "DFT_RELEASE_COVERAGE_INCOMPLETE"
         case .qualificationInsufficient: return "DFT_RELEASE_QUALIFICATION_INSUFFICIENT"
+        case .qualificationProvenanceInvalid: return "DFT_RELEASE_QUALIFICATION_PROVENANCE_INVALID"
         case .processQualificationInvalid: return "DFT_RELEASE_PROCESS_QUALIFICATION_INVALID"
         case .downstreamEvidenceMissing: return "DFT_RELEASE_DOWNSTREAM_EVIDENCE_MISSING"
         case .approvalRequired: return "DFT_RELEASE_APPROVAL_REQUIRED"

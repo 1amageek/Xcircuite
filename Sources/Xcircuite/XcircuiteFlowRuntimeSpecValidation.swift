@@ -225,6 +225,13 @@ private extension XcircuiteFlowStageExecutorSpec {
                         field: "releaseQualificationPath"
                     )
                 }
+                guard let processQualificationPath = spec.releaseProcessQualificationEvidencePath,
+                      !processQualificationPath.isEmpty else {
+                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                        stageID: spec.stageID,
+                        field: "releaseProcessQualificationEvidencePath"
+                    )
+                }
                 if spec.releaseQualificationPath != nil {
                     guard let requestDigest = spec.releaseRequestDigest,
                           requestDigest.count == 64,
@@ -234,19 +241,7 @@ private extension XcircuiteFlowStageExecutorSpec {
                             field: "releaseRequestDigest"
                         )
                     }
-                    guard let processQualificationPath = spec.releaseProcessQualificationEvidencePath,
-                          !processQualificationPath.isEmpty else {
-                        throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                            stageID: spec.stageID,
-                            field: "releaseProcessQualificationEvidencePath"
-                        )
-                    }
                 } else if spec.releaseRequestDigest != nil {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseQualificationPath"
-                    )
-                } else if spec.releaseProcessQualificationEvidencePath != nil {
                     throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                         stageID: spec.stageID,
                         field: "releaseQualificationPath"

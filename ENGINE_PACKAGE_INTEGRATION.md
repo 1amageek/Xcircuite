@@ -73,7 +73,7 @@ external-oracle correlation, and process qualification.
 
 A package implementation is not platform-complete until Xcircuite can execute it headlessly, persist its artifacts, expose structured failure reasons, resume after approval or repair, and include the result in the appropriate signoff profile.
 
-The latest complete Xcircuite regression passed 545 test cases in 58 suites.
+The latest complete Xcircuite regression passed 547 test cases in 58 suites.
 This is package-integration evidence for these adapters, not foundry or process
 qualification. The regression used an isolated SwiftPM scratch path and a
 bounded parallel runner; a serial rerun remains a developer reproducibility

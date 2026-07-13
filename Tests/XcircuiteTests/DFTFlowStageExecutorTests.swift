@@ -185,6 +185,44 @@ struct DFTFlowStageExecutorTests {
         }
     }
 
+    @Test("DFT release spec requires process evidence without retained qualification provenance")
+    func releaseSpecRequiresProcessEvidenceWithoutQualificationProvenance() throws {
+        let spec = XcircuiteFlowStageExecutorSpec.dft(
+            XcircuiteFlowStageExecutorSpec.DFT(
+                stageID: "dft.release",
+                requestPath: "dft-request.json",
+                releaseResultPath: "dft-result.json",
+                releaseDownstreamEvidencePath: "dft-downstream.json"
+            )
+        )
+
+        do {
+            try XcircuiteFlowRuntimeSpec(executors: [spec]).validate(
+                requireCompleteToolEvidence: false
+            )
+            Issue.record("DFT release spec unexpectedly validated without process qualification evidence.")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            #expect(error.localizedDescription.contains("releaseProcessQualificationEvidencePath"))
+        }
+    }
+
+    @Test("DFT release spec accepts independent evidence without retained qualification provenance")
+    func releaseSpecAcceptsIndependentProcessEvidenceWithoutQualificationProvenance() throws {
+        let spec = XcircuiteFlowStageExecutorSpec.dft(
+            XcircuiteFlowStageExecutorSpec.DFT(
+                stageID: "dft.release",
+                requestPath: "dft-request.json",
+                releaseResultPath: "dft-result.json",
+                releaseProcessQualificationEvidencePath: "dft-process-qualification-evidence.json",
+                releaseDownstreamEvidencePath: "dft-downstream.json"
+            )
+        )
+
+        try XcircuiteFlowRuntimeSpec(executors: [spec]).validate(
+            requireCompleteToolEvidence: false
+        )
+    }
+
     @Test("DFT qualification stage spec round-trips its oracle inputs")
     func qualificationStageSpecRoundTrip() throws {
         let spec = XcircuiteFlowStageExecutorSpec.dft(
@@ -323,6 +361,7 @@ struct DFTFlowStageExecutorTests {
 
         #expect(result.status == .succeeded)
         #expect(result.gates.contains { $0.gateID == "dft-release" && $0.status == .passed })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-result" })
         #expect(result.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
         #expect(result.artifacts.contains { $0.artifactID == "dft-release-artifact-bundle" })
         #expect(FileManager.default.fileExists(atPath: fixture.root
@@ -335,6 +374,26 @@ struct DFTFlowStageExecutorTests {
         ) as? [String: Any]
         let requiredArtifactIDs = eligibilityJSON?["requiredArtifactIDs"] as? [String] ?? []
         #expect(requiredArtifactIDs.contains("dft-process-qualification-evidence"))
+        let bundleURL = fixture.root
+            .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-artifact-bundle.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let bundle = try decoder.decode(
+            DFTReleaseArtifactBundle.self,
+            from: Data(contentsOf: bundleURL)
+        )
+        #expect(bundle.runID == fixture.request.runID)
+        #expect(bundle.result.artifactID == "dft-release-result")
+        #expect(bundle.processQualificationEvidence.artifactID == "dft-process-qualification-evidence")
+        #expect(bundle.downstreamEvidence.count == 4)
+        #expect(bundle.candidateArtifacts.contains {
+            $0.artifactID == "dft-process-qualification-evidence"
+        })
+        let qualifiedResult = try decoder.decode(
+            XcircuiteEngineResultEnvelope<DFTPayload>.self,
+            from: Data(contentsOf: fixture.root.appending(path: bundle.result.path))
+        )
+        #expect(qualifiedResult.payload.qualification.status == .processQualified)
     }
 
     @Test("DFT release stage blocks without independent process qualification evidence")
@@ -801,6 +860,21 @@ struct DFTFlowStageExecutorTests {
         #expect(manifest.artifacts.contains { $0.artifactID == "dft-downstream-evidence-bundle" })
         #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
         #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-artifact-bundle" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-result" })
+        let bundleURL = fixture.root
+            .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-artifact-bundle.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let bundle = try decoder.decode(
+            DFTReleaseArtifactBundle.self,
+            from: Data(contentsOf: bundleURL)
+        )
+        let qualifiedResult = try decoder.decode(
+            XcircuiteEngineResultEnvelope<DFTPayload>.self,
+            from: Data(contentsOf: fixture.root.appending(path: bundle.result.path))
+        )
+        #expect(qualifiedResult.payload.qualification.status == .processQualified)
+        #expect(qualifiedResult.payload.qualification.pdkDigest == fixture.request.pdk.digest)
     }
 
     private func makeRequest(

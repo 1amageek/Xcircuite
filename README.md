@@ -61,8 +61,9 @@ evidence, retained qualification provenance and a
 `releaseProcessQualificationEvidencePath`. The release adapter validates
 the independent ToolQualification record against the DFT tool, implementation,
 process profile and PDK digest before recording it in the immutable eligibility
-artifact. Missing or mismatched evidence blocks the stage and creates a
-review/resume artifact.
+artifact and the immutable `dft-release-artifact-bundle.json` release packet.
+Missing or mismatched evidence blocks the stage and creates a review/resume
+artifact.
 
 ```mermaid
 flowchart LR
@@ -390,6 +391,6 @@ swift build
 perl -e 'alarm 420; exec @ARGV' swift test --parallel --num-workers 4
 ```
 
-The latest bounded full regression passed 545 test cases in 58 suites using an
+The latest bounded full regression passed 547 test cases in 58 suites using an
 isolated SwiftPM scratch path. This is package-integration evidence, not foundry
 or process qualification.

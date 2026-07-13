@@ -221,6 +221,12 @@ The release chain is: dft.qualification -> dft.release-evidence -> dft.release -
 
 Missing or mismatched qualification evidence is a blocked trust result with a review/resume artifact; it is not a successful execution result.
 
+Successful release stages persist `dft-release-eligibility.json` and
+`dft-release-artifact-bundle.json`. The bundle records content-addressed
+references to the request, result, eligibility, independent process evidence,
+downstream evidence bundle, candidate artifacts and human approval so a
+reviewer or Agent can inspect the exact release packet without re-running DFT.
+
 ### PDK external inspection executors
 
 `pdkStandardView` and `pdkRuleDeck` accept an optional `externalProcess` object.
