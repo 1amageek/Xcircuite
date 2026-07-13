@@ -1,7 +1,8 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
+import LogicEngineCore
 import LogicQualification
-import DesignFlowKernel
 
 public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -44,7 +45,7 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
                 from: Data(contentsOf: reportURL)
             )
             try report.validate()
-            var additionalArtifacts: [XcircuiteFileReference] = [try reference(
+            var additionalArtifacts: [ArtifactReference] = [try reference(
                 for: reportURL,
                 artifactID: "logic-qualification-report",
                 context: context
@@ -82,40 +83,41 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
                 ))
             }
             try report.validate()
-            let now = Date()
-            let status: XcircuiteEngineExecutionStatus = report.isReleaseEligible
-                ? .completed
-                : .blocked
             let diagnostics = diagnostics(for: report)
-            let envelope = XcircuiteEngineResultEnvelope(
-                schemaVersion: 1,
-                runID: context.runID,
-                status: status,
-                diagnostics: diagnostics,
-                artifacts: additionalArtifacts,
-                metadata: XcircuiteEngineExecutionMetadata(
-                    engineID: "logic-qualification",
-                    implementationID: report.implementationID,
-                    implementationVersion: report.implementationVersion,
-                    startedAt: now,
-                    completedAt: now
-                ),
-                payload: report
-            )
-            let resultArtifact = try support.persistEnvelope(
-                envelope,
+            let resultArtifact = try support.persistResult(
+                report,
                 fileName: "logic-qualification-result.json",
                 artifactID: "logic-qualification-result",
                 stageID: stageID,
                 context: context
             )
-            return try support.result(
-                envelope: envelope,
-                resultArtifact: resultArtifact,
+            let flowDiagnostics = diagnostics.map { diagnostic in
+                FlowDiagnostic(
+                    severity: .error,
+                    code: diagnostic.code.rawValue,
+                    message: diagnostic.summary
+                )
+            }
+            let allArtifacts = additionalArtifacts + [resultArtifact]
+            let integrityGate = StageArtifactIntegrityGateBuilder().gate(
+                for: allArtifacts,
+                projectRoot: context.projectRoot
+            )
+            let stageStatus: FlowStageStatus = report.isReleaseEligible
+                ? (integrityGate.status == .passed ? .succeeded : .failed)
+                : .blocked
+            let gateStatus: FlowGateStatus = report.isReleaseEligible
+                ? (integrityGate.status == .passed ? .passed : .failed)
+                : .blocked
+            return FlowStageResult(
                 stageID: stageID,
-                gateID: stageID,
-                context: context,
-                additionalArtifacts: []
+                status: stageStatus,
+                diagnostics: flowDiagnostics + integrityGate.diagnostics,
+                gates: [
+                    FlowGateResult(gateID: stageID, status: gateStatus, diagnostics: flowDiagnostics),
+                    integrityGate,
+                ],
+                artifacts: allArtifacts
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -140,20 +142,20 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
         for url: URL,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
-            kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            role: .input,
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.json
         )
     }
 
     private func diagnostics(
         for report: LogicQualificationReport
-    ) -> [XcircuiteEngineDiagnostic] {
+    ) -> [DesignDiagnostic] {
         guard !report.isReleaseEligible else {
             return []
         }
@@ -171,11 +173,10 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
             code = "LOGIC_QUALIFICATION_RELEASE_GATE_INVALID"
         }
         let message = report.blockers.sorted().joined(separator: ", ")
-        return [XcircuiteEngineDiagnostic(
+        return [DesignDiagnostic(
+            code: .trusted(code),
             severity: .error,
-            code: code,
-            message: message.isEmpty ? "Logic qualification has not reached release eligibility." : message,
-            suggestedActions: ["attach_required_qualification_artifact"]
+            summary: message.isEmpty ? "Logic qualification has not reached release eligibility." : message
         )]
     }
 }

@@ -67,15 +67,6 @@ enum FoundationFlowProjection {
         diagnostics.map { flowDiagnostic($0) }
     }
 
-    static func flowStatus(_ status: some RawRepresentable<String>) -> XcircuiteEngineExecutionStatus {
-        switch status.rawValue {
-        case "completed": .completed
-        case "blocked": .blocked
-        case "cancelled": .cancelled
-        default: .failed
-        }
-    }
-
     private static func flowSeverity(_ severity: DiagnosticSeverity) -> FlowDiagnosticSeverity {
         switch severity {
         case .information: .info
