@@ -14,6 +14,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private let approvalInput: XcircuiteFlowInputReference?
     private let processQualificationEvidenceInput: XcircuiteFlowInputReference?
     private let artifactIntegrityVerifier: XcircuiteFileReferenceVerifier
+    private let foundationArtifactIntegrityVerifier: LocalArtifactVerifier
     private let expectedQualificationRequestDigest: String?
     private let processQualificationEvidenceValidator: any DFTProcessQualificationEvidenceValidating
 
@@ -38,6 +39,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         self.downstreamEvidenceInput = downstreamEvidenceInput
         self.approvalInput = approvalInput
         self.artifactIntegrityVerifier = artifactIntegrityVerifier
+        self.foundationArtifactIntegrityVerifier = LocalArtifactVerifier()
         self.expectedQualificationRequestDigest = expectedQualificationRequestDigest
         self.processQualificationEvidenceInput = processQualificationEvidenceInput
         self.processQualificationEvidenceValidator = processQualificationEvidenceValidator
@@ -81,21 +83,21 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             let downstreamEvidence = try loadDownstreamEvidence(context: context)
             let approval = try loadApproval(context: context)
 
-            let candidateArtifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
+            let candidateArtifacts = result.artifacts
                 + [qualifiedResultArtifact]
-                + FoundationFlowProjection.legacyReferences(from: downstreamEvidence.map(\.artifact))
+                + downstreamEvidence.map(\.artifact)
             let integrityDiagnostics = candidateArtifacts.compactMap { artifact -> FlowDiagnostic? in
-                let integrity = artifactIntegrityVerifier.verify(
+                let integrity = foundationArtifactIntegrityVerifier.verify(
                     artifact,
-                    projectRoot: context.projectRoot
+                    relativeTo: context.projectRoot
                 )
-                guard integrity.status != .verified else {
+                guard integrity.isVerified else {
                     return nil
                 }
                 return FlowDiagnostic(
                     severity: .error,
-                    code: "DFT_RELEASE_\(integrity.status.rawValue.uppercased())",
-                    message: "DFT release artifact integrity verification failed for \(artifact.artifactID ?? artifact.path): \(integrity.message)"
+                    code: "DFT_RELEASE_ARTIFACT_INTEGRITY_FAILED",
+                    message: "DFT release artifact integrity verification failed for \(artifact.id.rawValue): \(integrity.issues.compactMap { $0.detail ?? $0.code.rawValue }.joined(separator: "; "))"
                 )
             }
             if !integrityDiagnostics.isEmpty {
@@ -283,13 +285,11 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 artifactID: "dft-qualification-provenance",
                 kind: .release,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             )
             result.payload.qualification = provenance
-            let qualificationReference = try FoundationFlowProjection.artifactReference(from: qualificationArtifact)
-            if !result.artifacts.contains(qualificationReference) {
-                result.artifacts.append(qualificationReference)
+            if !result.artifacts.contains(qualificationArtifact) {
+                result.artifacts.append(qualificationArtifact)
             }
         }
 
@@ -337,20 +337,18 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: "dft-process-qualification-evidence",
             kind: .release,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
-        let processQualificationReference = try FoundationFlowProjection.artifactReference(from: processQualificationArtifact)
         if let existing = result.artifacts.first(where: {
-            $0.id.rawValue == processQualificationReference.id.rawValue
+            $0.id.rawValue == processQualificationArtifact.id.rawValue
         }) {
-            guard existing == processQualificationReference else {
+            guard existing == processQualificationArtifact else {
                 throw DFTReleaseEligibilityError.processQualificationInvalid(
                     "process qualification artifact identity conflicts with the retained result artifact"
                 )
             }
         } else {
-            result.artifacts.append(processQualificationReference)
+            result.artifacts.append(processQualificationArtifact)
         }
         return result
     }
@@ -420,7 +418,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         fileName: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -436,15 +434,14 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: .release,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
     private func makeReleaseArtifactBundle(
-        eligibilityArtifact: XcircuiteFileReference,
+        eligibilityArtifact: ArtifactReference,
         result: DFTResult,
-        resultArtifact: XcircuiteFileReference,
+        resultArtifact: ArtifactReference,
         downstreamEvidence: [DFTReleaseDownstreamEvidence],
         approval: DFTReleaseReviewApproval,
         context: FlowExecutionContext
@@ -479,62 +476,61 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         let processQualificationSupportArtifacts = try processQualificationSupportArtifacts(
             context: context
         )
-        let manifestCandidates = [
+        let manifestCandidates: [ArtifactReference] = [
             eligibilityArtifact,
             requestArtifact,
             resultArtifact,
             qualificationArtifact,
-            FoundationFlowProjection.legacyReference(from: processQualificationArtifact),
+            processQualificationArtifact,
         ]
         .compactMap { $0 }
             + processQualificationSupportArtifacts
             + [downstreamBundleArtifact]
-            + FoundationFlowProjection.legacyReferences(from: downstreamEvidence.map(\.artifact))
+            + downstreamEvidence.map(\.artifact)
         try verifyReleaseManifestArtifacts(
             manifestCandidates,
             context: context
         )
         let manifestArtifacts = uniqueArtifacts(manifestCandidates)
+        let legacy = FoundationFlowProjection.legacyReference
         return DFTReleaseArtifactBundle(
             runID: context.runID,
-            eligibility: eligibilityArtifact,
-            request: requestArtifact,
-            result: resultArtifact,
-            qualificationProvenance: qualificationArtifact,
-            processQualificationEvidence: FoundationFlowProjection.legacyReference(from: processQualificationArtifact),
-            processQualificationSupportArtifacts: processQualificationSupportArtifacts,
-            downstreamEvidenceBundle: downstreamBundleArtifact,
+            eligibility: legacy(eligibilityArtifact),
+            request: legacy(requestArtifact),
+            result: legacy(resultArtifact),
+            qualificationProvenance: qualificationArtifact.map(legacy),
+            processQualificationEvidence: legacy(processQualificationArtifact),
+            processQualificationSupportArtifacts: processQualificationSupportArtifacts.map(legacy),
+            downstreamEvidenceBundle: legacy(downstreamBundleArtifact),
             downstreamEvidence: downstreamEvidence,
-            candidateArtifacts: uniqueArtifacts(
-                FoundationFlowProjection.legacyReferences(from: result.artifacts) + manifestArtifacts
+            candidateArtifacts: uniqueLegacyArtifacts(
+                FoundationFlowProjection.legacyReferences(from: result.artifacts + manifestArtifacts)
             ),
             approval: approval
         )
     }
 
     private func verifyReleaseManifestArtifacts(
-        _ artifacts: [XcircuiteFileReference],
+        _ artifacts: [ArtifactReference],
         context: FlowExecutionContext
     ) throws {
-        var artifactsByID: [String: XcircuiteFileReference] = [:]
+        var artifactsByID: [String: ArtifactReference] = [:]
         for artifact in artifacts {
-            if let artifactID = artifact.artifactID,
-               let existing = artifactsByID[artifactID],
+            let artifactID = artifact.id.rawValue
+            if let existing = artifactsByID[artifactID],
                existing != artifact {
                 throw DFTReleaseEligibilityError.invalidReviewContract(
                     "release manifest artifact ID \(artifactID) resolves to conflicting references"
                 )
             }
-            if let artifactID = artifact.artifactID {
-                artifactsByID[artifactID] = artifact
-            }
-            let integrity = artifactIntegrityVerifier.verify(
+            artifactsByID[artifactID] = artifact
+            let integrity = foundationArtifactIntegrityVerifier.verify(
                 artifact,
-                projectRoot: context.projectRoot
+                relativeTo: context.projectRoot
             )
-            guard integrity.status == .verified else {
+            guard integrity.isVerified else {
                 throw DFTReleaseEligibilityError.invalidReviewContract(
-                    "release manifest artifact \(artifact.artifactID ?? artifact.path) is not verified: \(integrity.message)"
+                    "release manifest artifact \(artifact.id.rawValue) is not verified: \(integrity.issues)"
                 )
             }
         }
@@ -542,7 +538,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
 
     private func processQualificationSupportArtifacts(
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let stageID: String
         switch processQualificationEvidenceInput {
         case .stageArtifact(let selector):
@@ -582,9 +578,9 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private func reference(
         _ input: XcircuiteFlowInputReference,
         artifactID: String,
-        kind: XcircuiteFileKind,
+        kind: ArtifactKind,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let url = try input.resolveExisting(
             projectRoot: context.projectRoot,
             runDirectory: context.runDirectory
@@ -594,12 +590,21 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: kind,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
     private func uniqueArtifacts(
+        _ artifacts: [ArtifactReference]
+    ) -> [ArtifactReference] {
+        var seen = Set<String>()
+        return artifacts.filter { artifact in
+            let key = artifact.id.rawValue
+            return seen.insert(key).inserted
+        }
+    }
+
+    private func uniqueLegacyArtifacts(
         _ artifacts: [XcircuiteFileReference]
     ) -> [XcircuiteFileReference] {
         var seen = Set<String>()
@@ -612,7 +617,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private func blockedResult(
         request: DFTRequest,
         result: DFTResult,
-        resultArtifact: XcircuiteFileReference? = nil,
+        resultArtifact: ArtifactReference? = nil,
         diagnostics: [FlowDiagnostic],
         context: FlowExecutionContext
     ) throws -> FlowStageResult {

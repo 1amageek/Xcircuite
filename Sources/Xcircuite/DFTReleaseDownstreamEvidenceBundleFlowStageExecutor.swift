@@ -40,13 +40,12 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                     projectRoot: context.projectRoot,
                     artifactID: "dft-downstream-\(source.domain.rawValue)",
                     kind: .report,
-                    format: format(for: url),
-                    producedByRunID: context.runID
+                    format: format(for: url)
                 )
                 return DFTReleaseDownstreamEvidence(
                     domain: source.domain,
                     role: source.role,
-                    artifact: try FoundationFlowProjection.artifactReference(from: artifact)
+                    artifact: artifact
                 )
             }
             let evidenceData = try encode(evidence)
@@ -62,10 +61,9 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                 projectRoot: context.projectRoot,
                 artifactID: "dft-downstream-evidence-bundle",
                 kind: .release,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             )
-            let sourceArtifacts = FoundationFlowProjection.legacyReferences(from: evidence.map(\.artifact))
+            let sourceArtifacts = evidence.map(\.artifact)
             return FlowStageResult(
                 stageID: stage.stageID,
                 status: .succeeded,
@@ -122,7 +120,7 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
         return try encoder.encode(evidence)
     }
 
-    private func format(for url: URL) -> XcircuiteFileFormat {
+    private func format(for url: URL) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "json":
             return .json
