@@ -17,6 +17,19 @@ struct XcircuiteWorkspaceStoreTests {
     }
 
     @Test
+    func writesAndReadsJSONWithIdiomaticLabels() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let value = ["count": 3]
+        try await store.writeJSON(value, to: "runs/run-1/summary.json")
+        let decoded = try await store.readJSON([String: Int].self, from: "runs/run-1/summary.json")
+
+        #expect(decoded == value)
+    }
+
+    @Test
     func rejectsTraversalAndAbsolutePaths() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

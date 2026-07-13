@@ -22,7 +22,7 @@ public actor XcircuiteRunLedgerStore: FlowRunLedgerPersisting {
         try validateRunID(runID)
         let relativePath = Self.relativePath(for: runID)
         do {
-            return try await workspace.read(FlowRunLedger.self, fromJSON: relativePath)
+            return try await workspace.readJSON(FlowRunLedger.self, from: relativePath)
         } catch XcircuiteWorkspaceStoreError.missingArtifact {
             throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
         } catch let error as XcircuiteWorkspaceStoreError {
@@ -36,7 +36,7 @@ public actor XcircuiteRunLedgerStore: FlowRunLedgerPersisting {
         try validateProjectRoot(projectRoot)
         try validateRunID(ledger.runID)
         do {
-            try await workspace.write(ledger, asJSONTo: Self.relativePath(for: ledger.runID))
+            try await workspace.writeJSON(ledger, to: Self.relativePath(for: ledger.runID))
         } catch let error as XcircuiteWorkspaceStoreError {
             throw FlowRunLedgerPersistenceError.storageFailed(error.localizedDescription)
         } catch {
