@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DRCEngine
 import LayoutCore
 import LayoutIO
@@ -11,12 +12,12 @@ extension XcircuiteCandidatePlanVerifier {
         plan: XcircuiteCandidatePlan,
         verificationMode: String,
         planningProblem: XcircuiteCircuitPlanningProblem?,
-        planningProblemValidationRef: XcircuiteFileReference?,
-        actionDomainSnapshotRef: XcircuiteFileReference?,
+        planningProblemValidationArtifact: ArtifactReference?,
+        actionDomainSnapshotArtifact: ArtifactReference?,
         stepResults: [XcircuitePlanVerificationStepResult],
         gateResults: [XcircuitePlanVerificationGateResult],
         goalCoverage: [XcircuiteSymbolicPlannerGoalCoverage],
-        artifactRefs: [XcircuiteFileReference],
+        artifactReferences: [ArtifactReference],
         diagnostics: [XcircuitePlanVerificationDiagnostic],
         accepted: Bool,
         nextActions: [String]
@@ -24,10 +25,10 @@ extension XcircuiteCandidatePlanVerifier {
         [
             problemValidationCorrectnessGate(
                 planningProblem: planningProblem,
-                planningProblemValidationRef: planningProblemValidationRef
+                planningProblemValidationArtifact: planningProblemValidationArtifact
             ),
             actionDomainBindingCorrectnessGate(
-                actionDomainSnapshotRef: actionDomainSnapshotRef,
+                actionDomainSnapshotArtifact: actionDomainSnapshotArtifact,
                 stepResults: stepResults
             ),
             plannerReplayCorrectnessGate(
@@ -38,7 +39,7 @@ extension XcircuiteCandidatePlanVerifier {
             postExecutionSignoffCorrectnessGate(
                 verificationMode: verificationMode,
                 gateResults: gateResults,
-                artifactRefs: artifactRefs
+                artifactReferences: artifactReferences
             ),
             feedbackClosureCorrectnessGate(
                 plan: plan,
@@ -53,14 +54,14 @@ extension XcircuiteCandidatePlanVerifier {
 
     func problemValidationCorrectnessGate(
         planningProblem: XcircuiteCircuitPlanningProblem?,
-        planningProblemValidationRef: XcircuiteFileReference?
+        planningProblemValidationArtifact: ArtifactReference?
     ) -> XcircuitePlanningCorrectnessGateResult {
-        if let planningProblemValidationRef {
+        if let planningProblemValidationArtifact {
             return XcircuitePlanningCorrectnessGateResult(
                 gateID: "problem-validation",
                 status: "passed",
                 summary: "Translated planning problem has a persisted validation artifact.",
-                evidenceArtifactIDs: artifactIDs([planningProblemValidationRef])
+                evidenceArtifactIDs: artifactIDs([planningProblemValidationArtifact])
             )
         }
         if planningProblem != nil {
@@ -93,7 +94,7 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     func actionDomainBindingCorrectnessGate(
-        actionDomainSnapshotRef: XcircuiteFileReference?,
+        actionDomainSnapshotArtifact: ArtifactReference?,
         stepResults: [XcircuitePlanVerificationStepResult]
     ) -> XcircuitePlanningCorrectnessGateResult {
         let bindingCodes: Set<String> = [
@@ -112,14 +113,14 @@ extension XcircuiteCandidatePlanVerifier {
                 gateID: "action-domain-binding",
                 status: "passed",
                 summary: "Candidate steps bind to declared action-domain operations.",
-                evidenceArtifactIDs: artifactIDs([actionDomainSnapshotRef].compactMap { $0 })
+                evidenceArtifactIDs: artifactIDs([actionDomainSnapshotArtifact].compactMap { $0 })
             )
         }
         return XcircuitePlanningCorrectnessGateResult(
             gateID: "action-domain-binding",
             status: "blocked",
             summary: "At least one candidate step does not bind to an implemented action-domain operation.",
-            evidenceArtifactIDs: artifactIDs([actionDomainSnapshotRef].compactMap { $0 }),
+            evidenceArtifactIDs: artifactIDs([actionDomainSnapshotArtifact].compactMap { $0 }),
             diagnostics: bindingDiagnostics,
             nextActions: unique(bindingDiagnostics.flatMap { nextActions(for: $0) })
         )
@@ -167,7 +168,7 @@ extension XcircuiteCandidatePlanVerifier {
     func postExecutionSignoffCorrectnessGate(
         verificationMode: String,
         gateResults: [XcircuitePlanVerificationGateResult],
-        artifactRefs: [XcircuiteFileReference]
+        artifactReferences: [ArtifactReference]
     ) -> XcircuitePlanningCorrectnessGateResult {
         guard verificationMode == "post-execution" else {
             let diagnostic = correctnessGateDiagnostic(
@@ -201,7 +202,7 @@ extension XcircuiteCandidatePlanVerifier {
         let status: String
         let missingEvidenceDiagnostics = missingPostExecutionSignoffEvidenceDiagnostics(
             requiredResults: requiredResults,
-            artifactRefs: artifactRefs
+            artifactReferences: artifactReferences
         )
         if requiredResults.contains(where: { $0.status == "failed" }) || !missingEvidenceDiagnostics.isEmpty {
             status = "failed"
@@ -216,7 +217,7 @@ extension XcircuiteCandidatePlanVerifier {
             gateID: "post-execution-signoff",
             status: status,
             summary: "Required post-execution gate status is \(status).",
-            evidenceArtifactIDs: signoffEvidenceArtifactIDs(from: artifactRefs),
+            evidenceArtifactIDs: signoffEvidenceArtifactIDs(from: artifactReferences),
             diagnostics: requiredResults.flatMap(\.diagnostics) + missingEvidenceDiagnostics,
             nextActions: unique(
                 requiredResults.flatMap { nextActions(for: $0) }
@@ -227,9 +228,9 @@ extension XcircuiteCandidatePlanVerifier {
 
     func missingPostExecutionSignoffEvidenceDiagnostics(
         requiredResults: [XcircuitePlanVerificationGateResult],
-        artifactRefs: [XcircuiteFileReference]
+        artifactReferences: [ArtifactReference]
     ) -> [XcircuitePlanVerificationDiagnostic] {
-        let artifactIDs = Set(artifactRefs.compactMap(\.artifactID))
+        let artifactIDs = Set(artifactReferences.map(\.id.rawValue))
         return requiredResults.compactMap { result in
             guard result.status == "passed" else {
                 return nil
@@ -328,11 +329,11 @@ extension XcircuiteCandidatePlanVerifier {
         )
     }
 
-    func artifactIDs(_ references: [XcircuiteFileReference]) -> [String] {
-        uniqueStrings(references.compactMap(\.artifactID))
+    func artifactIDs(_ references: [ArtifactReference]) -> [String] {
+        uniqueStrings(references.map(\.id.rawValue))
     }
 
-    func signoffEvidenceArtifactIDs(from artifactRefs: [XcircuiteFileReference]) -> [String] {
+    func signoffEvidenceArtifactIDs(from artifactReferences: [ArtifactReference]) -> [String] {
         let prefixes = [
             "planning-native-drc",
             "planning-native-lvs",
@@ -341,7 +342,7 @@ extension XcircuiteCandidatePlanVerifier {
             "planning-plan-execution",
         ]
         return uniqueStrings(
-            artifactRefs.compactMap(\.artifactID).filter { artifactID in
+            artifactReferences.map(\.id.rawValue).filter { artifactID in
                 prefixes.contains(where: { artifactID.hasPrefix($0) })
             }
         )
@@ -405,6 +406,8 @@ extension XcircuiteCandidatePlanVerifier {
                 .replacingOccurrences(of: "missing-input-refs:", with: "")
                 .split(separator: ",")
             return refs.map { "provide-input-ref:\($0)" }
+        case "invalid-artifact-reference":
+            return ["provide-valid-artifact-reference"]
         case "missing-goal-atom":
             let parts = diagnostic.message.split(separator: ":")
             guard parts.count >= 2 else {

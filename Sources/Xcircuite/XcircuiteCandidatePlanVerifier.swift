@@ -166,42 +166,60 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
         let missingGoalAtoms = missingGoalAtomRefs(from: goalCoverage)
         let riskReviewer = XcircuiteCandidatePlanRiskReviewer()
         let riskReviews = riskReviewer.riskReviews(for: plan, approvals: approvals)
-        let artifactRefs = uniqueArtifactRefs(
-            [candidatePlanRef] + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 }
+        let legacyArtifactCandidates = [candidatePlanRef]
+            + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 }
+        let invalidArtifactReferences = legacyArtifactCandidates.filter {
+            foundationArtifactReference($0) == nil
+        }
+        let artifactReferences = uniqueArtifactReferences(
+            legacyArtifactCandidates.compactMap(foundationArtifactReference)
         )
+        let planningProblemValidationArtifact = planningProblemValidationRef.flatMap(foundationArtifactReference)
+        let actionDomainSnapshotArtifact = actionDomainSnapshotRef.flatMap(foundationArtifactReference)
         let gateResults = makeGateResults(
             plan: plan,
             stepResults: stepResults,
             riskReviews: riskReviews,
-            artifactRefs: artifactRefs,
+            artifactRefs: legacyArtifactCandidates,
             projectRoot: projectRoot
         )
+        let artifactProjectionDiagnostics = invalidArtifactReferences.map {
+            XcircuitePlanVerificationDiagnostic(
+                severity: "error",
+                code: "invalid-artifact-reference",
+                message: "Artifact \($0.path) cannot be represented as a Foundation artifact reference."
+            )
+        }
         let diagnostics = planDiagnostics(for: plan, stepResults: stepResults)
             + riskReviewer.blockingDiagnostics(from: riskReviews)
             + goalCoverageDiagnostics(from: goalCoverage)
             + gateResults.flatMap(\.diagnostics)
-        let nextActions = makeNextActions(
-            plan: plan,
-            stepResults: stepResults,
-            gateResults: gateResults,
-            riskReviews: riskReviews,
-            goalCoverage: goalCoverage
+            + artifactProjectionDiagnostics
+        let nextActions = unique(
+            makeNextActions(
+                plan: plan,
+                stepResults: stepResults,
+                gateResults: gateResults,
+                riskReviews: riskReviews,
+                goalCoverage: goalCoverage
+            ) + artifactProjectionDiagnostics.flatMap { self.nextActions(for: $0) }
         )
         let accepted = stepResults.allSatisfy { $0.status == "preflight-passed" }
             && gateResults.filter(\.required).allSatisfy { $0.status == "passed" }
             && !riskReviewer.blocksExecution(riskReviews)
             && !goalCoverage.contains(where: { $0.status == "missing" })
+            && invalidArtifactReferences.isEmpty
             && plan.unresolvedObjectives.isEmpty
         let correctnessGateResults = makeCorrectnessGateResults(
             plan: plan,
             verificationMode: verificationMode,
             planningProblem: planningProblem,
-            planningProblemValidationRef: planningProblemValidationRef,
-            actionDomainSnapshotRef: actionDomainSnapshotRef,
+            planningProblemValidationArtifact: planningProblemValidationArtifact,
+            actionDomainSnapshotArtifact: actionDomainSnapshotArtifact,
             stepResults: stepResults,
             gateResults: gateResults,
             goalCoverage: goalCoverage,
-            artifactRefs: artifactRefs,
+            artifactReferences: artifactReferences,
             diagnostics: diagnostics,
             accepted: accepted,
             nextActions: nextActions
@@ -217,7 +235,7 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
             gateResults: gateResults,
             correctnessGateResults: correctnessGateResults,
             riskReviews: riskReviews,
-            artifactRefs: artifactRefs,
+            artifactRefs: legacyArtifactCandidates,
             initialSymbolicState: symbolicSummary.initialSymbolicState,
             finalSymbolicState: symbolicSummary.finalSymbolicState,
             goalCoverageStatus: goalCoverageStatus(from: goalCoverage),

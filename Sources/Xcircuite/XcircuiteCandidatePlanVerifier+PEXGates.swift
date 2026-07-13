@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DRCEngine
 import LayoutCore
 import LayoutIO
@@ -220,7 +221,11 @@ extension XcircuiteCandidatePlanVerifier {
                 producedByRunID: runID
             ))
         }
-        return uniqueArtifactRefs(artifacts)
+        let foundationArtifacts = try foundationArtifactReferences(
+            artifacts,
+            field: "pex-summary"
+        )
+        return legacyArtifactReferences(uniqueArtifactReferences(foundationArtifacts))
     }
 
     func pexExecutionSpec(

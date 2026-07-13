@@ -23,6 +23,8 @@ extension XcircuiteCandidatePlanVerifier {
             [candidatePlanRef] + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 },
             field: "post-execution.base-artifacts"
         ))
+        let planningProblemValidationArtifact = planningProblemValidationRef.flatMap(foundationArtifactReference)
+        let actionDomainSnapshotArtifact = actionDomainSnapshotRef.flatMap(foundationArtifactReference)
         let symbolicSummary = symbolicVerificationSummary(
             for: plan,
             actionDomainSnapshot: actionDomainSnapshot,
@@ -58,12 +60,12 @@ extension XcircuiteCandidatePlanVerifier {
                 plan: plan,
                 verificationMode: "post-execution",
                 planningProblem: planningProblem,
-                planningProblemValidationRef: planningProblemValidationRef,
-                actionDomainSnapshotRef: actionDomainSnapshotRef,
+                planningProblemValidationArtifact: planningProblemValidationArtifact,
+                actionDomainSnapshotArtifact: actionDomainSnapshotArtifact,
                 stepResults: symbolicSummary.stepResults,
                 gateResults: gateResults,
                 goalCoverage: preExecutionGoalCoverage,
-                artifactRefs: legacyArtifactReferences(baseArtifactRefs),
+                artifactReferences: baseArtifactRefs,
                 diagnostics: diagnostics,
                 accepted: false,
                 nextActions: nextActions
@@ -127,7 +129,7 @@ extension XcircuiteCandidatePlanVerifier {
         let requiredGateResults = gateEvaluation.gateResults.filter(\.required)
         let signoffEvidenceDiagnostics = missingPostExecutionSignoffEvidenceDiagnostics(
             requiredResults: requiredGateResults,
-            artifactRefs: legacyArtifactReferences(artifactReferences)
+            artifactReferences: artifactReferences
         )
         let diagnostics = planDiagnostics(for: plan, stepResults: stepResults)
             + riskReviewer.blockingDiagnostics(from: riskReviews)
@@ -154,12 +156,12 @@ extension XcircuiteCandidatePlanVerifier {
             plan: plan,
             verificationMode: "post-execution",
             planningProblem: planningProblem,
-            planningProblemValidationRef: planningProblemValidationRef,
-            actionDomainSnapshotRef: actionDomainSnapshotRef,
+            planningProblemValidationArtifact: planningProblemValidationArtifact,
+            actionDomainSnapshotArtifact: actionDomainSnapshotArtifact,
             stepResults: stepResults,
             gateResults: gateEvaluation.gateResults,
             goalCoverage: goalCoverage,
-            artifactRefs: legacyArtifactReferences(artifactReferences),
+            artifactReferences: artifactReferences,
             diagnostics: diagnostics,
             accepted: accepted,
             nextActions: nextActions

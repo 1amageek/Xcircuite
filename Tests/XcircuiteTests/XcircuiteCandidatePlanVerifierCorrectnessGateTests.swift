@@ -1,9 +1,32 @@
 import Testing
 @testable import Xcircuite
+import CircuiteFoundation
 import DesignFlowKernel
 
 @Suite("Xcircuite candidate plan verifier correctness gates")
 struct XcircuiteCandidatePlanVerifierCorrectnessGateTests {
+    @Test func foundationArtifactReferencesPreserveIdentityAndIntegrityMetadata() throws {
+        let legacyReference = XcircuiteFileReference(
+            artifactID: "planning-native-drc-result",
+            path: ".xcircuite/runs/run-evidence/planning/native-drc/result.json",
+            kind: .report,
+            format: .json,
+            sha256: String(repeating: "a", count: 64),
+            byteCount: 7,
+            producedByRunID: "run-evidence"
+        )
+
+        let artifact = try #require(
+            foundationArtifactReferences([legacyReference], field: "correctness-gate-test").first
+        )
+
+        #expect(artifact.id.rawValue == "planning-native-drc-result")
+        #expect(artifact.locator.role == .output)
+        #expect(artifact.digest.hexadecimalValue == String(repeating: "a", count: 64))
+        #expect(artifact.byteCount == 7)
+        #expect(uniqueArtifactReferences([artifact, artifact]) == [artifact])
+    }
+
     @Test func postExecutionSignoffRejectsPassedNativeGateWithoutEvidenceArtifact() throws {
         let gate = XcircuiteCandidatePlanVerifier().postExecutionSignoffCorrectnessGate(
             verificationMode: "post-execution",
@@ -15,7 +38,7 @@ struct XcircuiteCandidatePlanVerifierCorrectnessGateTests {
                     sourceStepIDs: ["step-1"]
                 ),
             ],
-            artifactRefs: [
+            artifactReferences: try foundationArtifactReferences([
                 XcircuiteFileReference(
                     artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                     path: ".xcircuite/runs/run-evidence/planning/candidate-plan.json",
@@ -25,7 +48,7 @@ struct XcircuiteCandidatePlanVerifierCorrectnessGateTests {
                     byteCount: 2,
                     producedByRunID: "run-evidence"
                 ),
-            ]
+            ], field: "correctness-gate-test")
         )
 
         #expect(gate.status == "failed")

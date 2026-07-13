@@ -67,17 +67,4 @@ extension XcircuiteCandidatePlanVerifier {
         return value
     }
 
-    func uniqueArtifactRefs(
-        _ references: [XcircuiteFileReference]
-    ) -> [XcircuiteFileReference] {
-        var seen: Set<String> = []
-        return references.filter { reference in
-            let key = reference.artifactID ?? reference.path
-            guard !seen.contains(key) else {
-                return false
-            }
-            seen.insert(key)
-            return true
-        }
-    }
 }

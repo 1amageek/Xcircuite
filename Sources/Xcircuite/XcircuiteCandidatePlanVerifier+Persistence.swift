@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DRCEngine
 import LayoutCore
 import LayoutIO
@@ -17,6 +18,10 @@ extension XcircuiteCandidatePlanVerifier {
         guard status == "rejected" || status == "blocked" else {
             return nil
         }
+        let artifactReferences = try foundationArtifactReferences(
+            verification.artifactRefs,
+            field: "rejected-plan.verification-artifacts"
+        )
         let record = XcircuiteRejectedPlanRecord(
             rejectionID: rejectedPlanIdentifier(verification: verification, status: status),
             runID: verification.runID,
@@ -36,7 +41,7 @@ extension XcircuiteCandidatePlanVerifier {
                 .map(\.gateID),
             candidatePlanRef: candidatePlanRef,
             planVerificationRef: verificationRef,
-            artifactRefs: verification.artifactRefs,
+            artifactRefs: legacyArtifactReferences(artifactReferences),
             diagnostics: verification.diagnostics,
             diagnosticClassifications: XcircuiteRejectedPlanDiagnosticClassifier().classify(
                 verification: verification,
@@ -62,14 +67,19 @@ extension XcircuiteCandidatePlanVerifier {
         from verification: XcircuitePlanVerification,
         projectRoot: URL
     ) throws -> [String] {
+        let artifactReferences = try foundationArtifactReferences(
+            verification.artifactRefs,
+            field: "rejected-plan.source-parameter-artifacts"
+        )
         var ids: [String] = []
-        for reference in verification.artifactRefs {
-            guard reference.artifactID?.hasSuffix("-netlist-parameter-edit-report") == true else {
+        for reference in artifactReferences {
+            guard reference.id.rawValue.hasSuffix("-netlist-parameter-edit-report") else {
                 continue
             }
+            let storageReference = legacyArtifactReference(reference)
             let report = try packageStore.readJSON(
                 XcircuiteNetlistParameterEditReport.self,
-                from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+                from: packageStore.url(forProjectRelativePath: storageReference.path, inProjectAt: projectRoot)
             )
             if let sourceParameterCandidateID = report.sourceParameterCandidateID {
                 ids.append(sourceParameterCandidateID)
