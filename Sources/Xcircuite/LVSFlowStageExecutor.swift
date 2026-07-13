@@ -1,7 +1,7 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LVSEngine
-import DesignFlowKernel
 
 public struct LVSFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -365,15 +365,14 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         from executionResult: LVSExecutionResult,
         summaryURL: URL,
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
-        var artifacts: [XcircuiteFileReference] = []
+    ) throws -> [ArtifactReference] {
+        var artifacts: [ArtifactReference] = []
         if let reportURL = executionResult.reportURL {
             artifacts.append(try artifactBuilder.reference(
                 for: reportURL,
                 projectRoot: context.projectRoot,
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         if let manifestURL = executionResult.artifactManifestURL {
@@ -381,8 +380,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 for: manifestURL,
                 projectRoot: context.projectRoot,
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         artifacts.append(try artifactBuilder.reference(
@@ -390,8 +388,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: "lvs-summary",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         ))
         if let devicePolicyReport = try persistDevicePolicyReportArtifact(
             from: executionResult,
@@ -404,8 +401,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             for: executionResult.result.logPath,
             projectRoot: context.projectRoot,
             kind: .report,
-            format: .text,
-            producedByRunID: context.runID
+            format: .text
         ) {
             artifacts.append(log)
         }
@@ -414,8 +410,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 for: extracted,
                 projectRoot: context.projectRoot,
                 kind: .netlist,
-                format: .spice,
-                producedByRunID: context.runID
+                format: .spice
             ))
         }
         if let correspondenceURL = executionResult.correspondenceURL {
@@ -424,8 +419,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 artifactID: "lvs-correspondence",
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         if let extractionReportURL = executionResult.extractionReportURL {
@@ -434,8 +428,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 artifactID: "lvs-extraction-report",
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         if let transformLedgerURL = executionResult.transformLedgerURL {
@@ -444,8 +437,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 artifactID: "lvs-transform-ledger",
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         return artifacts
@@ -474,7 +466,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         from executionResult: LVSExecutionResult,
         summaryURL: URL,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         guard let report = executionResult.devicePolicyReport else {
             return nil
         }
@@ -490,8 +482,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: "lvs-device-policy-application-report",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 

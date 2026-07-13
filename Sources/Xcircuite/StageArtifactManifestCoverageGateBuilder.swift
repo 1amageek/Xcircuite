@@ -1,12 +1,48 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import DRCEngine
 import Foundation
 import LVSEngine
 import PEXEngine
-import DesignFlowKernel
 
 struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private let pathBoundary = ProjectPathBoundary()
+
+    func drcGate(
+        manifestURL: URL?,
+        artifacts: [ArtifactReference],
+        projectRoot: URL
+    ) -> FlowGateResult {
+        drcGate(
+            manifestURL: manifestURL,
+            artifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+            projectRoot: projectRoot
+        )
+    }
+
+    func lvsGate(
+        manifestURL: URL?,
+        artifacts: [ArtifactReference],
+        projectRoot: URL
+    ) -> FlowGateResult {
+        lvsGate(
+            manifestURL: manifestURL,
+            artifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+            projectRoot: projectRoot
+        )
+    }
+
+    func pexGate(
+        manifestURL: URL,
+        artifacts: [ArtifactReference],
+        projectRoot: URL
+    ) -> FlowGateResult {
+        pexGate(
+            manifestURL: manifestURL,
+            artifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+            projectRoot: projectRoot
+        )
+    }
 
     func drcGate(
         manifestURL: URL?,

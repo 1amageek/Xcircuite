@@ -1,7 +1,7 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import PEXEngine
-import DesignFlowKernel
 
 public struct PEXFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -550,15 +550,14 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         from result: PEXRunResult,
         summaryURL: URL?,
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let pexRunDirectory = result.manifestURL.deletingLastPathComponent()
         var artifacts = [
             try artifactBuilder.reference(
                 for: result.manifestURL,
                 projectRoot: context.projectRoot,
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ),
         ]
         if let summaryURL {
@@ -567,8 +566,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 projectRoot: context.projectRoot,
                 artifactID: "pex-summary",
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
 
@@ -590,15 +588,14 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         for artifact: PEXArtifactRecord,
         url: URL,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         do {
             return try artifactBuilder.reference(
                 for: url,
                 projectRoot: context.projectRoot,
                 artifactID: artifact.id,
                 kind: fileKind(for: artifact.kind),
-                format: fileFormat(for: artifact, url: url),
-                producedByRunID: context.runID
+                format: fileFormat(for: artifact, url: url)
             )
         } catch let error as XcircuiteRuntimeError {
             switch error {
@@ -618,20 +615,27 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         for artifact: PEXArtifactRecord,
         url: URL,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(artifact.id, kind: .artifactID)
+    ) throws -> ArtifactReference {
+        let artifactID = try ArtifactID(rawValue: artifact.id)
         let relativePath = try lexicalProjectRelativePath(
             for: url,
             projectRoot: context.projectRoot
         )
-        return XcircuiteFileReference(
-            artifactID: artifact.id,
-            path: relativePath,
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: relativePath),
+            role: .output,
             kind: fileKind(for: artifact.kind),
-            format: fileFormat(for: artifact, url: url),
-            sha256: artifact.sha256,
-            byteCount: artifact.byteCount.map(Int64.init),
-            producedByRunID: context.runID
+            format: fileFormat(for: artifact, url: url)
+        )
+        let digest = try ContentDigest(
+            algorithm: .sha256,
+            hexadecimalValue: artifact.sha256 ?? ""
+        )
+        return ArtifactReference(
+            id: artifactID,
+            locator: locator,
+            digest: digest,
+            byteCount: UInt64(artifact.byteCount ?? 0)
         )
     }
 
@@ -781,7 +785,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         return parts.joined(separator: " ")
     }
 
-    private func fileKind(for kind: PEXArtifactKind) -> XcircuiteFileKind {
+    private func fileKind(for kind: PEXArtifactKind) -> ArtifactKind {
         switch kind {
         case .layoutInput:
             .layout
@@ -792,11 +796,11 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         case .request, .log, .report, .sourceConnectivityReport:
             .report
         case .rawOutput, .spefRoundTrip, .spiceBackannotation, .parasiticIR:
-            .parasitic
+            .parasitics
         }
     }
 
-    private func fileFormat(for artifact: PEXArtifactRecord, url: URL) -> XcircuiteFileFormat {
+    private func fileFormat(for artifact: PEXArtifactRecord, url: URL) -> ArtifactFormat {
         switch artifact.kind {
         case .rawOutput, .spefRoundTrip:
             .spef
@@ -813,7 +817,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func layoutFormat(from url: URL) -> XcircuiteFileFormat {
+    private func layoutFormat(from url: URL) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "oas", "oasis":
             .oasis
@@ -824,7 +828,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func netlistFormat(from url: URL) -> XcircuiteFileFormat {
+    private func netlistFormat(from url: URL) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "sp", "spi", "cir", "net", "spice":
             .spice

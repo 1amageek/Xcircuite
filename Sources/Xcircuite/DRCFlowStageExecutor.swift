@@ -1,7 +1,7 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import DRCEngine
 import Foundation
-import DesignFlowKernel
 
 public struct DRCFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -281,15 +281,14 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         from executionResult: DRCExecutionResult,
         summaryURL: URL,
         context: FlowExecutionContext
-    ) throws -> [XcircuiteFileReference] {
-        var artifacts: [XcircuiteFileReference] = []
+    ) throws -> [ArtifactReference] {
+        var artifacts: [ArtifactReference] = []
         if let reportURL = executionResult.reportURL {
             artifacts.append(try artifactBuilder.reference(
                 for: reportURL,
                 projectRoot: context.projectRoot,
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         if let manifestURL = executionResult.artifactManifestURL {
@@ -297,8 +296,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
                 for: manifestURL,
                 projectRoot: context.projectRoot,
                 kind: .report,
-                format: .json,
-                producedByRunID: context.runID
+                format: .json
             ))
         }
         artifacts.append(try artifactBuilder.reference(
@@ -306,8 +304,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: "drc-summary",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         ))
         artifacts.append(try persistRepairHintArtifact(
             from: executionResult,
@@ -318,8 +315,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             for: executionResult.result.logPath,
             projectRoot: context.projectRoot,
             kind: .report,
-            format: .text,
-            producedByRunID: context.runID
+            format: .text
         ) {
             artifacts.append(log)
         }
@@ -349,7 +345,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         from executionResult: DRCExecutionResult,
         summaryURL: URL,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let report = DRCRepairHintBuilder().build(
             result: executionResult,
             reportURL: executionResult.reportURL
@@ -366,8 +362,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: "drc-repair-hints",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 

@@ -1,7 +1,7 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import PEXEngine
-import DesignFlowKernel
 
 struct PEXSummaryEnvelopeBuilder: Sendable {
     private struct AggregateMetrics: Sendable, Hashable {
@@ -15,6 +15,32 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         let totalResistanceOhm: Double
         let summaryDiagnosticCount: Int
         let summaryErrorDiagnosticCount: Int
+    }
+
+    /// Projects the canonical stage artifacts through the legacy envelope
+    /// record until DesignFlowKernel adopts Foundation references natively.
+    func envelopeReference(
+        summary: PEXRunSummaryReport,
+        summaryArtifactID: String,
+        stageArtifacts: [ArtifactReference],
+        gateStatus: FlowGateStatus,
+        diagnostics: [FlowDiagnostic],
+        stageID: String,
+        toolID: String,
+        context: FlowExecutionContext
+    ) throws -> ArtifactReference {
+        let legacyArtifacts = FoundationFlowProjection.legacyReferences(from: stageArtifacts)
+        let legacyEnvelope = try envelopeReference(
+            summary: summary,
+            summaryArtifactID: summaryArtifactID,
+            stageArtifacts: legacyArtifacts,
+            gateStatus: gateStatus,
+            diagnostics: diagnostics,
+            stageID: stageID,
+            toolID: toolID,
+            context: context
+        )
+        return try FoundationFlowProjection.artifactReference(from: legacyEnvelope, role: .output)
     }
 
     func envelopeReference(

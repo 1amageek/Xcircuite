@@ -1,9 +1,35 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import DRCEngine
 import Foundation
-import DesignFlowKernel
 
 struct DRCSummaryEnvelopeBuilder: Sendable {
+    /// Projects the canonical stage artifacts through the legacy envelope
+    /// record until DesignFlowKernel adopts Foundation references natively.
+    func envelopeReference(
+        summary: DRCRunSummaryReport,
+        summaryArtifactID: String,
+        stageArtifacts: [ArtifactReference],
+        gateStatus: FlowGateStatus,
+        diagnostics: [FlowDiagnostic],
+        stageID: String,
+        toolID: String,
+        context: FlowExecutionContext
+    ) throws -> ArtifactReference {
+        let legacyArtifacts = FoundationFlowProjection.legacyReferences(from: stageArtifacts)
+        let legacyEnvelope = try envelopeReference(
+            summary: summary,
+            summaryArtifactID: summaryArtifactID,
+            stageArtifacts: legacyArtifacts,
+            gateStatus: gateStatus,
+            diagnostics: diagnostics,
+            stageID: stageID,
+            toolID: toolID,
+            context: context
+        )
+        return try FoundationFlowProjection.artifactReference(from: legacyEnvelope, role: .output)
+    }
+
     func envelopeReference(
         summary: DRCRunSummaryReport,
         summaryArtifactID: String,
