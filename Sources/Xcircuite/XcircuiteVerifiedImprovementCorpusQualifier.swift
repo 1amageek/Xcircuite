@@ -2,16 +2,16 @@ import Foundation
 import DesignFlowKernel
 
 public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let storage: any XcircuiteVerifiedImprovementCorpusStoring
     private let identifierValidator: XcircuiteIdentifierValidator
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        storage: any XcircuiteVerifiedImprovementCorpusStoring = XcircuitePackageStore(),
         identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.storage = storage
         self.identifierValidator = identifierValidator
         self.fileReferenceVerifier = fileReferenceVerifier
     }
@@ -38,19 +38,21 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     ) throws -> XcircuiteVerifiedImprovementCorpusReport {
         try validate(suiteSpec)
         let suiteDirectory = try suiteDirectoryURL(suiteID: suiteSpec.suiteID, projectRoot: projectRoot)
-        try packageStore.ensureDirectory(at: suiteDirectory)
+        try storage.ensureDirectory(at: suiteDirectory)
 
         let suiteSpecPath = suiteProjectRelativePath(suiteID: suiteSpec.suiteID, fileName: "corpus-suite.json")
-        let suiteSpecURL = try packageStore.url(forProjectRelativePath: suiteSpecPath, inProjectAt: projectRoot)
-        try packageStore.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
-        let suiteSpecArtifact = try packageStore.fileReference(
+        let suiteSpecURL = try storage.url(forProjectRelativePath: suiteSpecPath, inProjectAt: projectRoot)
+        try storage.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
+        let suiteSpecArtifact = try storage.fileReference(
             forProjectRelativePath: suiteSpecPath,
             artifactID: "verified-improvement-corpus-suite",
             kind: .report,
             format: .json,
-            inProjectAt: projectRoot
+            inProjectAt: projectRoot,
+            producedByRunID: nil,
+            verifiedByRunID: nil
         )
-        try packageStore.upsertFileReference(suiteSpecArtifact, forProjectAt: projectRoot)
+        try storage.upsertFileReference(suiteSpecArtifact, forProjectAt: projectRoot)
 
         let caseResults = suiteSpec.cases.map { caseSpec in
             qualifyCase(caseSpec, projectRoot: projectRoot)
@@ -63,16 +65,18 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         )
 
         let reportPath = suiteProjectRelativePath(suiteID: suiteSpec.suiteID, fileName: "corpus-report.json")
-        let reportURL = try packageStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
-        try packageStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try packageStore.fileReference(
+        let reportURL = try storage.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
+        try storage.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
+        let reportArtifact = try storage.fileReference(
             forProjectRelativePath: reportPath,
             artifactID: "verified-improvement-corpus-report",
             kind: .report,
             format: .json,
-            inProjectAt: projectRoot
+            inProjectAt: projectRoot,
+            producedByRunID: nil,
+            verifiedByRunID: nil
         )
-        try packageStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
+        try storage.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var report = reportWithoutSelfRef
         report.reportArtifact = reportArtifact
@@ -303,7 +307,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
     ) -> XcircuiteRunManifest? {
         do {
-            return try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+            return try storage.loadRunManifest(runID: runID, inProjectAt: projectRoot)
         } catch {
             diagnostics.append(
                 diagnostic(
@@ -416,7 +420,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
     ) -> T? {
         do {
-            return try packageStore.readJSON(type, from: url)
+            return try storage.readJSON(type, from: url)
         } catch {
             diagnostics.append(
                 diagnostic(
@@ -625,7 +629,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     }
 
     private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try packageStore.url(
+        try storage.url(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/verified-improvement/\(suiteID)",
             inProjectAt: projectRoot
         )
