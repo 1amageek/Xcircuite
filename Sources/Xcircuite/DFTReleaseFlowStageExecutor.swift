@@ -13,7 +13,6 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private let downstreamEvidenceInput: XcircuiteFlowInputReference
     private let approvalInput: XcircuiteFlowInputReference?
     private let processQualificationEvidenceInput: XcircuiteFlowInputReference?
-    private let artifactIntegrityVerifier: XcircuiteFileReferenceVerifier
     private let foundationArtifactIntegrityVerifier: LocalArtifactVerifier
     private let expectedQualificationRequestDigest: String?
     private let processQualificationEvidenceValidator: any DFTProcessQualificationEvidenceValidating
@@ -25,7 +24,6 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         downstreamEvidenceInput: XcircuiteFlowInputReference,
         approvalInput: XcircuiteFlowInputReference? = nil,
         toolID: String = "dft-release-gate",
-        artifactIntegrityVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier(),
         qualificationInput: XcircuiteFlowInputReference? = nil,
         expectedQualificationRequestDigest: String? = nil,
         processQualificationEvidenceInput: XcircuiteFlowInputReference? = nil,
@@ -38,7 +36,6 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         self.qualificationInput = qualificationInput
         self.downstreamEvidenceInput = downstreamEvidenceInput
         self.approvalInput = approvalInput
-        self.artifactIntegrityVerifier = artifactIntegrityVerifier
         self.foundationArtifactIntegrityVerifier = LocalArtifactVerifier()
         self.expectedQualificationRequestDigest = expectedQualificationRequestDigest
         self.processQualificationEvidenceInput = processQualificationEvidenceInput
@@ -492,20 +489,17 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             context: context
         )
         let manifestArtifacts = uniqueArtifacts(manifestCandidates)
-        let legacy = FoundationFlowProjection.legacyReference
         return DFTReleaseArtifactBundle(
             runID: context.runID,
-            eligibility: legacy(eligibilityArtifact),
-            request: legacy(requestArtifact),
-            result: legacy(resultArtifact),
-            qualificationProvenance: qualificationArtifact.map(legacy),
-            processQualificationEvidence: legacy(processQualificationArtifact),
-            processQualificationSupportArtifacts: processQualificationSupportArtifacts.map(legacy),
-            downstreamEvidenceBundle: legacy(downstreamBundleArtifact),
+            eligibility: eligibilityArtifact,
+            request: requestArtifact,
+            result: resultArtifact,
+            qualificationProvenance: qualificationArtifact,
+            processQualificationEvidence: processQualificationArtifact,
+            processQualificationSupportArtifacts: processQualificationSupportArtifacts,
+            downstreamEvidenceBundle: downstreamBundleArtifact,
             downstreamEvidence: downstreamEvidence,
-            candidateArtifacts: uniqueLegacyArtifacts(
-                FoundationFlowProjection.legacyReferences(from: result.artifacts + manifestArtifacts)
-            ),
+            candidateArtifacts: uniqueArtifacts(result.artifacts + manifestArtifacts),
             approval: approval
         )
     }
@@ -569,7 +563,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         // The primary process-qualification artifact is materialized from the
         // stage-bound input above. Keep only the supporting artifacts from the
         // source stage result so the same artifact ID cannot be registered with
-        // a legacy projection that differs only in producer metadata.
+        // a duplicate identity that differs only in producer metadata.
         return uniqueArtifacts(result.artifacts).filter {
             $0.artifactID != "dft-process-qualification-evidence"
         }
@@ -600,16 +594,6 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         var seen = Set<String>()
         return artifacts.filter { artifact in
             let key = artifact.id.rawValue
-            return seen.insert(key).inserted
-        }
-    }
-
-    private func uniqueLegacyArtifacts(
-        _ artifacts: [XcircuiteFileReference]
-    ) -> [XcircuiteFileReference] {
-        var seen = Set<String>()
-        return artifacts.filter { artifact in
-            let key = artifact.artifactID ?? artifact.path
             return seen.insert(key).inserted
         }
     }

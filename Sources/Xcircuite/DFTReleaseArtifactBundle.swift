@@ -1,5 +1,6 @@
 import Foundation
 import DFTCore
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct DFTReleaseArtifactBundle: Sendable, Hashable, Codable {
@@ -8,29 +9,29 @@ public struct DFTReleaseArtifactBundle: Sendable, Hashable, Codable {
     public var schemaVersion: Int
     public var runID: String
     public var createdAt: Date
-    public var eligibility: XcircuiteFileReference
-    public var request: XcircuiteFileReference
-    public var result: XcircuiteFileReference
-    public var qualificationProvenance: XcircuiteFileReference?
-    public var processQualificationEvidence: XcircuiteFileReference
-    public var processQualificationSupportArtifacts: [XcircuiteFileReference]
-    public var downstreamEvidenceBundle: XcircuiteFileReference
+    public var eligibility: ArtifactReference
+    public var request: ArtifactReference
+    public var result: ArtifactReference
+    public var qualificationProvenance: ArtifactReference?
+    public var processQualificationEvidence: ArtifactReference
+    public var processQualificationSupportArtifacts: [ArtifactReference]
+    public var downstreamEvidenceBundle: ArtifactReference
     public var downstreamEvidence: [DFTReleaseDownstreamEvidence]
-    public var candidateArtifacts: [XcircuiteFileReference]
+    public var candidateArtifacts: [ArtifactReference]
     public var approval: DFTReleaseReviewApproval
 
     public init(
         runID: String,
         createdAt: Date = Date(),
-        eligibility: XcircuiteFileReference,
-        request: XcircuiteFileReference,
-        result: XcircuiteFileReference,
-        qualificationProvenance: XcircuiteFileReference?,
-        processQualificationEvidence: XcircuiteFileReference,
-        processQualificationSupportArtifacts: [XcircuiteFileReference],
-        downstreamEvidenceBundle: XcircuiteFileReference,
+        eligibility: ArtifactReference,
+        request: ArtifactReference,
+        result: ArtifactReference,
+        qualificationProvenance: ArtifactReference?,
+        processQualificationEvidence: ArtifactReference,
+        processQualificationSupportArtifacts: [ArtifactReference],
+        downstreamEvidenceBundle: ArtifactReference,
         downstreamEvidence: [DFTReleaseDownstreamEvidence],
-        candidateArtifacts: [XcircuiteFileReference],
+        candidateArtifacts: [ArtifactReference],
         approval: DFTReleaseReviewApproval,
         schemaVersion: Int = Self.currentSchemaVersion
     ) {
