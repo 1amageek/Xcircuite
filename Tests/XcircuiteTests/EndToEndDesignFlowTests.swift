@@ -1,10 +1,13 @@
 import DesignFlowKernel
+import DRCEngine
 import Foundation
+import LVSEngine
 import LogicEngineCore
 import LogicIR
 import LogicLowering
 import LogicSimulation
 import PDKCore
+import PEXEngine
 import PhysicalDesignCore
 import Testing
 import TimingCore
@@ -170,6 +173,57 @@ struct EndToEndDesignFlowTests {
             kind: .other
         ).path
 
+        let drcLayoutURL = root.appending(path: "drc-layout.json")
+        _ = try writeJSON(
+            NativeDRCLayout(
+                technologyID: "e2e-technology",
+                topCell: "TOP",
+                rectangles: [
+                    NativeDRCRectangle(
+                        id: "m1-a",
+                        layer: "met1",
+                        xMin: 0,
+                        yMin: 0,
+                        xMax: 1,
+                        yMax: 1
+                    ),
+                    NativeDRCRectangle(
+                        id: "m1-b",
+                        layer: "met1",
+                        xMin: 2,
+                        yMin: 0,
+                        xMax: 3,
+                        yMax: 1
+                    ),
+                ],
+                rules: [
+                    NativeDRCRule(
+                        id: "met1-width",
+                        kind: .minimumWidth,
+                        layer: "met1",
+                        value: 0.5
+                    ),
+                    NativeDRCRule(
+                        id: "met1-spacing",
+                        kind: .minimumSpacing,
+                        layer: "met1",
+                        value: 0.5
+                    ),
+                ]
+            ),
+            name: "drc-layout.json",
+            root: root,
+            kind: .layout
+        )
+        let schematicNetlistURL = root.appending(path: "schematic.spice")
+        let layoutNetlistURL = root.appending(path: "layout.spice")
+        try writeText(matchingNetlist(), name: "schematic.spice", root: root)
+        try writeText(matchingNetlist(), name: "layout.spice", root: root)
+        let pexLayoutURL = root.appending(path: "pex-layout.gds")
+        let pexNetlistURL = root.appending(path: "pex-source.spice")
+        try writeText("layout", name: "pex-layout.gds", root: root)
+        try writeText(".subckt TESTCELL\n.ends TESTCELL\n", name: "pex-source.spice", root: root)
+
         let staInputs = TimingSTAFlowInputs(
             design: .path("sta-design.json"),
             libraries: [.path("library.lib")],
@@ -192,6 +246,30 @@ struct EndToEndDesignFlowTests {
                 stageID: "physical.floorplan",
                 requestInput: .path(physicalRequestPath)
             ),
+            DRCFlowStageExecutor.native(
+                stageID: "signoff.drc",
+                layoutURL: drcLayoutURL,
+                topCell: "TOP"
+            ),
+            LVSFlowStageExecutor.native(
+                stageID: "signoff.lvs",
+                layoutNetlistURL: layoutNetlistURL,
+                schematicNetlistURL: schematicNetlistURL,
+                topCell: "TOP"
+            ),
+            PEXFlowStageExecutor.mock(
+                stageID: "signoff.pex",
+                layoutURL: pexLayoutURL,
+                layoutFormat: .gds,
+                sourceNetlistURL: pexNetlistURL,
+                topCell: "TESTCELL",
+                corners: [
+                    PEXCorner(id: PEXCornerID("tt"), name: "tt", temperature: 25),
+                    PEXCorner(id: PEXCornerID("ss"), name: "ss", temperature: 125),
+                ],
+                technology: .inline(makeTestTechnology()),
+                technologyByCorner: ["ss": .inline(makeTestTechnology())]
+            ),
             PhysicalDesignReviewFlowStageExecutor(manifestInput: .path(reviewManifestPath)),
         ]
         let stages = [
@@ -199,6 +277,9 @@ struct EndToEndDesignFlowTests {
             FlowStageDefinition(stageID: "logic.simulate", displayName: "Logic simulation"),
             FlowStageDefinition(stageID: "timing.sta", displayName: "Timing STA"),
             FlowStageDefinition(stageID: "physical.floorplan", displayName: "Physical floorplan"),
+            FlowStageDefinition(stageID: "signoff.drc", displayName: "DRC"),
+            FlowStageDefinition(stageID: "signoff.lvs", displayName: "LVS"),
+            FlowStageDefinition(stageID: "signoff.pex", displayName: "PEX"),
             FlowStageDefinition(
                 stageID: "physical.review",
                 displayName: "Physical design review",
@@ -242,6 +323,9 @@ struct EndToEndDesignFlowTests {
         #expect(reviewBundle.artifacts.contains { $0.stageID == "logic.lower" })
         #expect(reviewBundle.artifacts.contains { $0.stageID == "logic.simulate" })
         #expect(reviewBundle.artifacts.contains { $0.stageID == "timing.sta" })
+        #expect(reviewBundle.artifacts.contains { $0.stageID == "signoff.drc" && $0.artifactID == "drc-summary" })
+        #expect(reviewBundle.artifacts.contains { $0.stageID == "signoff.lvs" && $0.artifactID == "lvs-summary" })
+        #expect(reviewBundle.artifacts.contains { $0.stageID == "signoff.pex" && $0.artifactID == "pex-summary" })
         #expect(reviewBundle.artifacts.contains {
             $0.stageID == "physical.review"
                 && $0.artifactID == "physical-design-review-packet"
@@ -330,6 +414,34 @@ struct EndToEndDesignFlowTests {
             """,
             name: "constraints.sdc",
             root: root
+        )
+    }
+
+    private func matchingNetlist() -> String {
+        """
+        .subckt TOP in out vdd vss
+        M1 out in vdd vdd pmos
+        M2 out in vss vss nmos
+        .ends TOP
+        """
+    }
+
+    private func makeTestTechnology() -> TechnologyIR {
+        TechnologyIR(
+            processName: "e2e-process",
+            stack: [
+                TechnologyLayer(
+                    name: "M1",
+                    order: 0,
+                    thickness: 0.1,
+                    material: "copper",
+                    resistivity: 1.7e-8
+                ),
+            ],
+            logicalToPhysicalLayerMap: [:],
+            vias: [],
+            defaultExtractionRules: .default,
+            backendHints: [:]
         )
     }
 

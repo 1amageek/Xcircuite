@@ -191,10 +191,11 @@ through `PhysicalDesignFlowStageExecutorTests/physicalReviewApprovalResumesFlow`
 
 The retained `EndToEndDesignFlowTests/retainedMultiEngineRunResumesAfterReview`
 test additionally executes one run through LogicDesign lowering, logic
-simulation, timing STA, physical floorplanning, review-packet integrity,
-human approval and same-run resume. This is integration evidence for the
-current handoff path; it does not promote local results to external-oracle or
-foundry/process qualification.
+simulation, timing STA, physical floorplanning, native DRC/LVS, deterministic
+mock PEX, review-packet integrity, human approval and same-run resume. This is
+integration evidence for the current handoff path; mock PEX is contract
+evidence rather than physical signoff and the run does not promote local
+results to external-oracle or foundry/process qualification.
 
 Qualified evidence is passed as `ToolEvidence.qualification`. A run stage can
 require it through `ToolTrustRequirement.requiredQualifiedEvidenceKinds`. When the
@@ -359,4 +360,4 @@ perl -e 'alarm 900; exec @ARGV' xcodebuild test -scheme Xcircuite-Package -desti
 ```
 
 The current full regression passes with 523 test cases in 55 suites, including
-the retained multi-engine review and same-run resume flow.
+the retained multi-engine signoff-artifact, review and same-run resume flow.
