@@ -205,6 +205,22 @@ valid Xcircuite stage identifier, and executor stage IDs must be unique. Duplica
 stage IDs are rejected before `attach-evidence` so evidence cannot be attached to
 an ambiguous stage.
 
+### DFT qualification and release executor
+
+The dft executor has three mutually exclusive modes:
+
+| Mode | Required fields | Responsibility |
+|---|---|---|
+| qualification | stageID, requestPath, qualificationCorpusPath, qualificationObservationsPath | Correlate retained DFT oracle cases and persist qualification provenance |
+| downstream evidence | stageID, releaseEvidenceSources | Resolve and hash exactly one equivalence, DRC, LVS and PEX artifact |
+| release | stageID, requestPath, releaseResultPath, releaseDownstreamEvidencePath, releaseProcessQualificationEvidencePath | Validate DFT provenance, independent ToolQualification process evidence, downstream signoff and approval/resume |
+
+Release mode also accepts releaseQualificationPath and releaseRequestDigest when the retained qualification provenance is produced by a prior qualification stage. releaseProcessQualificationEvidencePath is mandatory in release mode and must point to a project-rooted ToolProcessQualificationEvidence JSON artifact. The adapter checks evidence freshness, PDK scope, process profile, tool identity, implementation identity, independence, corpus/oracle/health/approval references and blocker state. It persists the validated evidence reference in the immutable eligibility artifact.
+
+The release chain is: dft.qualification -> dft.release-evidence -> dft.release -> approval gate -> resume and re-evaluate dft.release.
+
+Missing or mismatched qualification evidence is a blocked trust result with a review/resume artifact; it is not a successful execution result.
+
 ### PDK external inspection executors
 
 `pdkStandardView` and `pdkRuleDeck` accept an optional `externalProcess` object.
@@ -382,6 +398,7 @@ Supported `kind` values:
 | `mockPEX` | `PEXFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `layoutFormat`, `sourceNetlistPath` or `sourceNetlistInput`, `topCell`, `corners`, `tool`, plus `technology` or `toolchainProfile.pexTechnology` |
 | `coreSpiceSimulation` | `SimulationFlowStageExecutor` | `stageID`, `netlistPath`, `tool` |
 | `postLayoutComparison` | `PostLayoutComparisonFlowStageExecutor` | `stageID`, `preLayoutWaveformPath`, `postLayoutWaveformPath`, `options`, `tool` |
+| `dft` | DFT qualification, downstream evidence bundle or DFT release executor | `stageID`, `requestPath`, and executor-specific qualification/release inputs |
 
 Common executor value fields:
 

@@ -324,6 +324,7 @@ struct DFTFlowStageExecutorTests {
         #expect(result.status == .succeeded)
         #expect(result.gates.contains { $0.gateID == "dft-release" && $0.status == .passed })
         #expect(result.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
+        #expect(result.artifacts.contains { $0.artifactID == "dft-release-artifact-bundle" })
         #expect(FileManager.default.fileExists(atPath: fixture.root
             .appending(path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-eligibility.json")
             .path))
@@ -799,6 +800,7 @@ struct DFTFlowStageExecutorTests {
         #expect(manifest.artifacts.contains { $0.artifactID == "dft-qualification-provenance" })
         #expect(manifest.artifacts.contains { $0.artifactID == "dft-downstream-evidence-bundle" })
         #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-eligibility" })
+        #expect(manifest.artifacts.contains { $0.artifactID == "dft-release-artifact-bundle" })
     }
 
     private func makeRequest(

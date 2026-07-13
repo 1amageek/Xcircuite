@@ -180,7 +180,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 artifactRoot: artifactRoot,
                 context: context
             )
-            let artifacts = oraclePreparation?.executionArtifacts ?? []
+            let artifacts = (oraclePreparation?.executionArtifacts ?? [])
                 + [inputManifestReference, specReference, reportReference, evidenceReference]
                 + (oracleReference.map { [$0] } ?? [])
                 + retainedArtifacts
@@ -205,10 +205,27 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
+            var oracleEvidence = [XcircuiteFileReference]()
+            var oracleEvidenceError: String?
+            do {
+                oracleEvidence = try externalOracleEvidenceReferences(context: context)
+            } catch {
+                oracleEvidenceError = error.localizedDescription
+            }
+            let message = [error.localizedDescription, oracleEvidenceError.map { "Oracle evidence retention also failed: \($0)" }]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            let code: String
+            if let flowError = error as? ElectricalSignoffQualificationFlowError {
+                code = flowError.failureCode
+            } else {
+                code = "ELECTRICAL_SIGNOFF_QUALIFICATION_EXECUTION_ERROR"
+            }
             return failureResult(
                 stageID: stage.stageID,
-                code: "ELECTRICAL_SIGNOFF_QUALIFICATION_EXECUTION_ERROR",
-                message: error.localizedDescription
+                code: code,
+                message: message,
+                artifacts: oracleEvidence
             )
         }
     }
@@ -500,7 +517,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             context.packageStore.fileReference(
                 forProjectRelativePath: stdoutPath,
                 artifactID: "electrical-signoff-oracle-stdout",
-                kind: .log,
+                kind: .report,
                 format: .text,
                 inProjectAt: context.projectRoot,
                 producedByRunID: context.runID,
@@ -509,7 +526,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             context.packageStore.fileReference(
                 forProjectRelativePath: stderrPath,
                 artifactID: "electrical-signoff-oracle-stderr",
-                kind: .log,
+                kind: .report,
                 format: .text,
                 inProjectAt: context.projectRoot,
                 producedByRunID: context.runID,
@@ -551,13 +568,50 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         return formatter.string(from: date)
     }
 
-    private func failureResult(stageID: String, code: String, message: String) -> FlowStageResult {
+    private func externalOracleEvidenceReferences(context: FlowExecutionContext) throws -> [XcircuiteFileReference] {
+        guard oracleProcessConfiguration != nil else { return [] }
+        let artifactRoot = ".xcircuite/runs/\(context.runID)/qualification/oracle"
+        let descriptors: [(String, String, XcircuiteFileFormat)] = [
+            ("stdout.txt", "electrical-signoff-oracle-stdout", .text),
+            ("stderr.txt", "electrical-signoff-oracle-stderr", .text),
+            ("execution.json", "electrical-signoff-oracle-execution", .json),
+        ]
+        var references: [XcircuiteFileReference] = []
+        for (fileName, artifactID, format) in descriptors {
+            let relativePath = "\(artifactRoot)/\(fileName)"
+            let url = try context.packageStore.url(
+                forProjectRelativePath: relativePath,
+                inProjectAt: context.projectRoot
+            )
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+                continue
+            }
+            references.append(try context.packageStore.fileReference(
+                forProjectRelativePath: relativePath,
+                artifactID: artifactID,
+                kind: .report,
+                format: format,
+                inProjectAt: context.projectRoot,
+                producedByRunID: context.runID,
+                verifiedByRunID: context.runID
+            ))
+        }
+        return references
+    }
+
+    private func failureResult(
+        stageID: String,
+        code: String,
+        message: String,
+        artifacts: [XcircuiteFileReference] = []
+    ) -> FlowStageResult {
         let diagnostic = FlowDiagnostic(severity: .error, code: code, message: message)
         return FlowStageResult(
             stageID: stageID,
             status: .failed,
             diagnostics: [diagnostic],
-            gates: [FlowGateResult(gateID: "qualification", status: .failed, diagnostics: [diagnostic])]
+            gates: [FlowGateResult(gateID: "qualification", status: .failed, diagnostics: [diagnostic])],
+            artifacts: artifacts
         )
     }
 
@@ -577,6 +631,21 @@ private enum ElectricalSignoffQualificationFlowError: Error, LocalizedError {
     case externalOracleProcessFailed(String)
     case externalOracleOutputMissing(String)
     case oracleOutsideProject(String)
+
+    var failureCode: String {
+        switch self {
+        case .externalOracleProcessFailed:
+            return "ELECTRICAL_SIGNOFF_EXTERNAL_ORACLE_PROCESS_FAILED"
+        case .externalOracleOutputMissing:
+            return "ELECTRICAL_SIGNOFF_EXTERNAL_ORACLE_OUTPUT_MISSING"
+        case .conflictingOracleSources:
+            return "ELECTRICAL_SIGNOFF_ORACLE_SOURCE_CONFLICT"
+        case .oracleOutsideProject:
+            return "ELECTRICAL_SIGNOFF_ORACLE_OUTSIDE_PROJECT"
+        case .stageMismatch, .invalidRunID, .incompleteScope, .missingOracleArtifact:
+            return "ELECTRICAL_SIGNOFF_QUALIFICATION_EXECUTION_ERROR"
+        }
+    }
 
     var errorDescription: String? {
         switch self {

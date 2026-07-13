@@ -39,6 +39,7 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `XcircuiteFileReference`s, and blocks unavailable infrastructure without fabricating signoff output |
+| `DFTQualificationFlowStageExecutor` / `DFTReleaseFlowStageExecutor` | Correlates retained DFT oracle cases, persists request-digest-bound qualification provenance, validates independent ToolQualification process evidence, bundles equivalence/DRC/LVS/PEX artifacts, and drives immutable release eligibility or review/resume artifacts |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
 | `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
@@ -53,6 +54,15 @@ request, result, stdout, stderr and execution record. The process result is
 still subject to `PDKKit` schema, run, asset, format, source-reference and
 digest-bound validation; process completion alone never promotes tool trust or
 process qualification.
+
+DFT release is selected through the tagged `dft` runtime executor. A
+production release entry must provide the DFT request/result, downstream
+evidence, retained qualification provenance and a
+`releaseProcessQualificationEvidencePath`. The release adapter validates
+the independent ToolQualification record against the DFT tool, implementation,
+process profile and PDK digest before recording it in the immutable eligibility
+artifact. Missing or mismatched evidence blocks the stage and creates a
+review/resume artifact.
 
 ```mermaid
 flowchart LR

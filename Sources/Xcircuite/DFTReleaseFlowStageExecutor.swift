@@ -114,6 +114,22 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                     artifactID: "dft-release-eligibility",
                     context: context
                 )
+                guard let approval else {
+                    throw DFTReleaseEligibilityError.approvalRequired
+                }
+                let bundle = try makeReleaseArtifactBundle(
+                    eligibilityArtifact: artifact,
+                    result: result,
+                    downstreamEvidence: downstreamEvidence,
+                    approval: approval,
+                    context: context
+                )
+                let bundleArtifact = try persist(
+                    bundle,
+                    fileName: "dft-release-artifact-bundle.json",
+                    artifactID: "dft-release-artifact-bundle",
+                    context: context
+                )
                 let gate = FlowGateResult(
                     gateID: "dft-release",
                     status: .passed,
@@ -123,7 +139,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                     stageID: stage.stageID,
                     status: .succeeded,
                     gates: [gate],
-                    artifacts: [artifact]
+                    artifacts: [artifact, bundleArtifact]
                 )
             } catch let error as DFTReleaseEligibilityError {
                 let diagnostic = FlowDiagnostic(
@@ -411,6 +427,92 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             format: .json,
             producedByRunID: context.runID
         )
+    }
+
+    private func makeReleaseArtifactBundle(
+        eligibilityArtifact: XcircuiteFileReference,
+        result: XcircuiteEngineResultEnvelope<DFTPayload>,
+        downstreamEvidence: [DFTReleaseDownstreamEvidence],
+        approval: DFTReleaseReviewApproval,
+        context: FlowExecutionContext
+    ) throws -> DFTReleaseArtifactBundle {
+        let requestArtifact = try reference(
+            requestInput,
+            artifactID: "dft-request",
+            kind: .request,
+            context: context
+        )
+        let resultArtifact = try reference(
+            resultInput,
+            artifactID: "dft-result",
+            kind: .report,
+            context: context
+        )
+        let downstreamBundleArtifact = try reference(
+            downstreamEvidenceInput,
+            artifactID: "dft-downstream-evidence",
+            kind: .release,
+            context: context
+        )
+        let qualificationArtifact = try qualificationInput.map {
+            try reference(
+                $0,
+                artifactID: "dft-qualification-provenance",
+                kind: .release,
+                context: context
+            )
+        }
+        guard let processQualificationArtifact = result.artifacts.first(where: {
+            $0.artifactID == "dft-process-qualification-evidence"
+        }) else {
+            throw DFTReleaseEligibilityError.processQualificationInvalid(
+                "validated process qualification artifact is missing from the release candidate"
+            )
+        }
+        return DFTReleaseArtifactBundle(
+            runID: context.runID,
+            eligibility: eligibilityArtifact,
+            request: requestArtifact,
+            result: resultArtifact,
+            qualificationProvenance: qualificationArtifact,
+            processQualificationEvidence: processQualificationArtifact,
+            downstreamEvidenceBundle: downstreamBundleArtifact,
+            downstreamEvidence: downstreamEvidence,
+            candidateArtifacts: uniqueArtifacts(
+                result.artifacts + downstreamEvidence.map(\.artifact)
+            ),
+            approval: approval
+        )
+    }
+
+    private func reference(
+        _ input: XcircuiteFlowInputReference,
+        artifactID: String,
+        kind: XcircuiteFileKind,
+        context: FlowExecutionContext
+    ) throws -> XcircuiteFileReference {
+        let url = try input.resolveExisting(
+            projectRoot: context.projectRoot,
+            runDirectory: context.runDirectory
+        )
+        return try StageArtifactReferenceBuilder().reference(
+            for: url,
+            projectRoot: context.projectRoot,
+            artifactID: artifactID,
+            kind: kind,
+            format: .json,
+            producedByRunID: context.runID
+        )
+    }
+
+    private func uniqueArtifacts(
+        _ artifacts: [XcircuiteFileReference]
+    ) -> [XcircuiteFileReference] {
+        var seen = Set<String>()
+        return artifacts.filter { artifact in
+            let key = artifact.artifactID ?? artifact.path
+            return seen.insert(key).inserted
+        }
     }
 
     private func blockedResult(

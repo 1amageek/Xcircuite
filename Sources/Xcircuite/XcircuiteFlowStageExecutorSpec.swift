@@ -334,6 +334,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var stageID: String
         public var specPath: String
         public var oraclePath: String?
+        public var oracleProcess: ElectricalSignoffOracleProcessConfiguration?
         public var qualificationScope: ToolQualificationScope
         public var tool: XcircuiteFlowToolSpec
 
@@ -341,12 +342,14 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             stageID: String = "electrical-signoff.qualification",
             specPath: String,
             oraclePath: String? = nil,
+            oracleProcess: ElectricalSignoffOracleProcessConfiguration? = nil,
             qualificationScope: ToolQualificationScope,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
             self.specPath = specPath
             self.oraclePath = oraclePath
+            self.oracleProcess = oracleProcess
             self.qualificationScope = qualificationScope
             self.tool = tool
         }
@@ -1322,6 +1325,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 toolID: "native-electrical-signoff-qualification",
                 requestInput: .path(spec.specPath),
                 oracleInput: spec.oraclePath.map { .path($0) },
+                oracleProcessConfiguration: spec.oracleProcess,
                 qualificationScope: spec.qualificationScope,
                 runner: ElectricalSignoffQualificationRunner(
                     engine: ElectricalSignoffEngine(

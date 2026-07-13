@@ -376,6 +376,13 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "oraclePath"
                 )
             }
+            if spec.oraclePath != nil, spec.oracleProcess != nil {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "oraclePath and oracleProcess are mutually exclusive"
+                )
+            }
+            try spec.oracleProcess?.validate()
             guard spec.qualificationScope.isComplete else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,

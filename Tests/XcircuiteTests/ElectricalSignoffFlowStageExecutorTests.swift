@@ -248,6 +248,175 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(requirements.requireExternalOracles)
     }
 
+    @Test("qualification stage executes an external oracle process and retains process evidence", .timeLimit(.minutes(1)))
+    func qualificationStageExecutesExternalOracleProcess() async throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-external-oracle-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let runID = "electrical-qualification-external-oracle-run"
+        let request = makeRequest(runID: runID)
+        let caseID = "clean-erc-external-oracle"
+        let specification = ElectricalSignoffQualificationSpec(
+            corpusID: "electrical-external-oracle-corpus",
+            corpusVersion: "1",
+            pdkDigest: request.pdk.digest,
+            requireIndependentOracle: true,
+            cases: [ElectricalSignoffQualificationCase(
+                caseID: caseID,
+                kind: .positive,
+                axis: .erc,
+                request: request,
+                expected: ElectricalSignoffExpectedObservation(status: .completed, violationCount: 0)
+            )]
+        )
+        let oracleObservation = ElectricalSignoffOracleObservation(
+            oracleID: "external-electrical-oracle",
+            toolVersion: "fixture-1",
+            pdkDigest: request.pdk.digest,
+            status: .completed,
+            violationCount: 0
+        )
+        let oracleSet = ElectricalSignoffOracleObservationSet(
+            oracleID: oracleObservation.oracleID,
+            toolVersion: oracleObservation.toolVersion,
+            pdkDigest: oracleObservation.pdkDigest,
+            observations: [
+                ElectricalSignoffOracleObservationSet.Entry(
+                    caseID: caseID,
+                    observation: oracleObservation
+                ),
+            ]
+        )
+        let specURL = root.appending(path: "qualification.json")
+        let sourceOracleURL = root.appending(path: "external-oracle-source.json")
+        try JSONEncoder().encode(specification).write(to: specURL)
+        try JSONEncoder().encode(oracleSet).write(to: sourceOracleURL)
+        let scope = ToolQualificationScope(
+            implementationID: "native-electrical-signoff",
+            binaryDigest: "binary",
+            algorithmVersion: "1",
+            processProfileID: "fixture",
+            deckDigest: request.pdk.digest
+        )
+        let configuration = ElectricalSignoffOracleProcessConfiguration(
+            executablePath: "/bin/sh",
+            arguments: [
+                "-c",
+                "test -f \"{{specPath}}\" && cp \"$0\" \"$1\" && echo oracle-complete",
+                sourceOracleURL.path(percentEncoded: false),
+                "{{outputPath}}",
+            ],
+            workingDirectoryPath: ".",
+            timeoutSeconds: 10
+        )
+        let executor = ElectricalSignoffQualificationFlowStageExecutor(
+            requestInput: .path("qualification.json"),
+            oracleProcessConfiguration: configuration,
+            qualificationScope: scope,
+            runner: ElectricalSignoffQualificationRunner(engine: StubElectricalSignoffEngine())
+        )
+        let context = FlowExecutionContext(
+            projectRoot: root,
+            runID: runID,
+            runDirectory: root.appending(path: "run"),
+            packageStore: XcircuitePackageStore(),
+            toolRegistry: ToolRegistry(),
+            healthResults: [:]
+        )
+
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(stageID: "electrical-signoff.qualification", displayName: "Electrical qualification"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stdout" })
+        #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stderr" })
+        let executionReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-execution" })
+        let executionURL = try XcircuitePackageStore().url(forProjectRelativePath: executionReference.path, inProjectAt: root)
+        let execution = try JSONDecoder().decode(ElectricalSignoffOracleProcessExecution.self, from: Data(contentsOf: executionURL))
+        #expect(execution.status == "completed")
+        #expect(execution.exitCode == 0)
+        #expect(execution.arguments.contains { $0.contains("oracle-complete") })
+
+        let oracleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-observations" })
+        let oracleURL = try XcircuitePackageStore().url(forProjectRelativePath: oracleReference.path, inProjectAt: root)
+        #expect(FileManager.default.fileExists(atPath: oracleURL.path(percentEncoded: false)))
+        let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
+        let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
+        let suite = try JSONDecoder().decode(RetainedCorpusSuite.self, from: Data(contentsOf: suiteURL))
+        let requirements = try #require(suite.requirements)
+        #expect(requirements.requiredArtifacts.contains(executionReference.path))
+        #expect(requirements.requiredArtifacts.contains(oracleReference.path))
+        #expect(requirements.requireExternalOracles)
+    }
+
+    @Test("qualification stage reports external oracle process failures with retained evidence", .timeLimit(.minutes(1)))
+    func qualificationStageReportsExternalOracleProcessFailure() async throws {
+        let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-external-oracle-failure-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let runID = "electrical-qualification-external-oracle-failure-run"
+        let request = makeRequest(runID: runID)
+        let specification = ElectricalSignoffQualificationSpec(
+            corpusID: "electrical-external-oracle-failure-corpus",
+            corpusVersion: "1",
+            pdkDigest: request.pdk.digest,
+            requireIndependentOracle: true,
+            cases: [ElectricalSignoffQualificationCase(
+                caseID: "clean-erc-external-oracle-failure",
+                kind: .positive,
+                axis: .erc,
+                request: request,
+                expected: ElectricalSignoffExpectedObservation(status: .completed, violationCount: 0)
+            )]
+        )
+        try JSONEncoder().encode(specification).write(to: root.appending(path: "qualification.json"))
+        let configuration = ElectricalSignoffOracleProcessConfiguration(
+            executablePath: "/bin/sh",
+            arguments: [
+                "-c",
+                "echo oracle-failed >&2; exit 7 # {{specPath}} {{outputPath}}",
+            ],
+            workingDirectoryPath: ".",
+            timeoutSeconds: 10
+        )
+        let scope = ToolQualificationScope(
+            implementationID: "native-electrical-signoff",
+            binaryDigest: "binary",
+            algorithmVersion: "1",
+            processProfileID: "fixture",
+            deckDigest: request.pdk.digest
+        )
+        let executor = ElectricalSignoffQualificationFlowStageExecutor(
+            requestInput: .path("qualification.json"),
+            oracleProcessConfiguration: configuration,
+            qualificationScope: scope,
+            runner: ElectricalSignoffQualificationRunner(engine: StubElectricalSignoffEngine())
+        )
+        let context = FlowExecutionContext(
+            projectRoot: root,
+            runID: runID,
+            runDirectory: root.appending(path: "run"),
+            packageStore: XcircuitePackageStore(),
+            toolRegistry: ToolRegistry(),
+            healthResults: [:]
+        )
+
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(stageID: "electrical-signoff.qualification", displayName: "Electrical qualification"),
+            context: context
+        )
+
+        #expect(result.status == .failed)
+        #expect(result.diagnostics.first?.code == "ELECTRICAL_SIGNOFF_EXTERNAL_ORACLE_PROCESS_FAILED")
+        #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stdout" })
+        #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stderr" })
+        let executionReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-execution" })
+        let executionURL = try XcircuitePackageStore().url(forProjectRelativePath: executionReference.path, inProjectAt: root)
+        let execution = try JSONDecoder().decode(ElectricalSignoffOracleProcessExecution.self, from: Data(contentsOf: executionURL))
+        #expect(execution.status == "failed")
+        #expect(execution.exitCode == 7)
+    }
+
     @Test("qualification stage participates in approval and resume without changing the run ID", .timeLimit(.minutes(1)))
     func qualificationStageApprovalAndResume() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-qualification-resume-\(UUID().uuidString)")
