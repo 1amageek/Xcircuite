@@ -36,12 +36,13 @@ separate written Commercial License Agreement with 1amageek.
 See [the licensing model](docs/licensing.md) for the rights matrix and the
 distinction between Xcircuite code and Third-Party Components.
 
-## Development checkout
+## Development
 
-The package manifest currently resolves the LSI engine packages through sibling
-path dependencies (`../CoreSpice`, `../DRCEngine`, `../LVSEngine`, and related
-packages). Build and test the package from the LSI workspace until those
-dependencies have public versioned SwiftPM repositories. Xcircuite itself is
+Xcircuite is distributed as a Swift Package Manager library and exposes the
+`Xcircuite` library together with the `xcircuite-flow` command-line tool. Use
+the package manifest as the source of truth for dependency resolution, then
+run `swift build` and `swift test` from the repository root. The package does
+not require a UI session or a project-specific checkout layout. Xcircuite is
 publicly available at <https://github.com/1amageek/Xcircuite>.
 
 ## Stage executors
