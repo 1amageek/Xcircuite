@@ -1,14 +1,15 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverArtifactSet: Codable, Sendable, Hashable {
-    public var runArtifact: XcircuiteFileReference
-    public var standardOutputArtifact: XcircuiteFileReference
-    public var standardErrorArtifact: XcircuiteFileReference
+    public var runArtifact: ArtifactReference
+    public var standardOutputArtifact: ArtifactReference
+    public var standardErrorArtifact: ArtifactReference
 
     public init(
-        runArtifact: XcircuiteFileReference,
-        standardOutputArtifact: XcircuiteFileReference,
-        standardErrorArtifact: XcircuiteFileReference
+        runArtifact: ArtifactReference,
+        standardOutputArtifact: ArtifactReference,
+        standardErrorArtifact: ArtifactReference
     ) {
         self.runArtifact = runArtifact
         self.standardOutputArtifact = standardOutputArtifact

@@ -667,8 +667,14 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
         var persistedValidation = validation
-        persistedValidation.standardOutputArtifact = stdoutArtifact
-        persistedValidation.standardErrorArtifact = stderrArtifact
+        persistedValidation.standardOutputArtifact = try requireFoundationArtifactReference(
+            stdoutArtifact,
+            field: "proofValidation.standardOutputArtifact"
+        )
+        persistedValidation.standardErrorArtifact = try requireFoundationArtifactReference(
+            stderrArtifact,
+            field: "proofValidation.standardErrorArtifact"
+        )
         try packageStore.writeJSON(persistedValidation, to: validationURL, forProjectAt: projectRoot)
 
         let validationArtifact = try packageStore.fileReference(
@@ -684,9 +690,18 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try packageStore.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
         try packageStore.upsertRunArtifact(validationArtifact, runID: runID, inProjectAt: projectRoot)
         return XcircuiteSymbolicPlannerProofValidationArtifactSet(
-            validationArtifact: validationArtifact,
-            standardOutputArtifact: stdoutArtifact,
-            standardErrorArtifact: stderrArtifact
+            validationArtifact: try requireFoundationArtifactReference(
+                validationArtifact,
+                field: "proofValidation.validationArtifact"
+            ),
+            standardOutputArtifact: try requireFoundationArtifactReference(
+                stdoutArtifact,
+                field: "proofValidation.standardOutputArtifact"
+            ),
+            standardErrorArtifact: try requireFoundationArtifactReference(
+                stderrArtifact,
+                field: "proofValidation.standardErrorArtifact"
+            )
         )
     }
 
@@ -744,9 +759,18 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try packageStore.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
         try packageStore.upsertRunArtifact(runArtifact, runID: runID, inProjectAt: projectRoot)
         return XcircuiteSymbolicPlannerSolverArtifactSet(
-            runArtifact: runArtifact,
-            standardOutputArtifact: stdoutArtifact,
-            standardErrorArtifact: stderrArtifact
+            runArtifact: try requireFoundationArtifactReference(
+                runArtifact,
+                field: "solver.runArtifact"
+            ),
+            standardOutputArtifact: try requireFoundationArtifactReference(
+                stdoutArtifact,
+                field: "solver.standardOutputArtifact"
+            ),
+            standardErrorArtifact: try requireFoundationArtifactReference(
+                stderrArtifact,
+                field: "solver.standardErrorArtifact"
+            )
         )
     }
 

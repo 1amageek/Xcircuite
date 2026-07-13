@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, Hashable {
@@ -8,7 +9,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
     public var selectedCandidateIndex: Int
     public var selectedToolID: String
     public var sourceComparisonArtifact: XcircuiteFileReference?
-    public var sourceQualificationArtifact: XcircuiteFileReference?
+    public var sourceQualificationArtifact: ArtifactReference?
     public var promotedCandidatePlanArtifact: XcircuiteFileReference
     public var promotedSolverPlanArtifact: XcircuiteFileReference?
     public var promotedPlanReplayValidationArtifact: XcircuiteFileReference?
@@ -25,7 +26,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
         selectedCandidateIndex: Int,
         selectedToolID: String,
         sourceComparisonArtifact: XcircuiteFileReference?,
-        sourceQualificationArtifact: XcircuiteFileReference?,
+        sourceQualificationArtifact: ArtifactReference?,
         promotedCandidatePlanArtifact: XcircuiteFileReference,
         promotedSolverPlanArtifact: XcircuiteFileReference?,
         promotedPlanReplayValidationArtifact: XcircuiteFileReference?,

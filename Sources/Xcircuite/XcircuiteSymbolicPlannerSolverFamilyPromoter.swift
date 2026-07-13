@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
@@ -190,20 +191,13 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     }
 
     private func loadQualification(
-        artifact: XcircuiteFileReference,
+        artifact: ArtifactReference,
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
-        let reference = try verifiedArtifactReference(
-            artifact,
-            field: "qualificationArtifact",
-            expectedFormat: .json,
-            runID: runID,
-            projectRoot: projectRoot
-        )
         return try packageStore.readJSON(
             XcircuiteSymbolicPlannerSolverQualificationResult.self,
-            from: url(for: reference.path, projectRoot: projectRoot)
+            from: url(for: artifact.path, projectRoot: projectRoot)
         )
     }
 
@@ -213,8 +207,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         projectRoot: URL,
         diagnostics: inout [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) throws -> XcircuiteFileReference? {
-        guard let solverPlanArtifact = qualification.solverResult.solverPlanArtifact
-            ?? qualification.solverResult.importResult?.solverPlanArtifact else {
+        let solverPlanArtifact: ArtifactReference
+        if let artifact = qualification.solverResult.solverPlanArtifact {
+            solverPlanArtifact = artifact
+        } else if let legacyArtifact = qualification.solverResult.importResult?.solverPlanArtifact {
+            solverPlanArtifact = try requireFoundationArtifactReference(
+                legacyArtifact,
+                field: "promotion.solverPlanArtifact"
+            )
+        } else {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "warning",
@@ -224,14 +225,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             )
             return nil
         }
-        let reference = try verifiedArtifactReference(
-            solverPlanArtifact,
-            field: "solverPlanArtifact",
-            expectedFormat: .text,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-        let solverPlanURL = try url(for: reference.path, projectRoot: projectRoot)
+        let solverPlanURL = try url(for: solverPlanArtifact.path, projectRoot: projectRoot)
         let solverPlanText: String
         do {
             solverPlanText = try String(contentsOf: solverPlanURL, encoding: .utf8)

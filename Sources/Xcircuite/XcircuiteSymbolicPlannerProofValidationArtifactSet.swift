@@ -1,14 +1,15 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerProofValidationArtifactSet: Codable, Sendable, Hashable {
-    public var validationArtifact: XcircuiteFileReference
-    public var standardOutputArtifact: XcircuiteFileReference
-    public var standardErrorArtifact: XcircuiteFileReference
+    public var validationArtifact: ArtifactReference
+    public var standardOutputArtifact: ArtifactReference
+    public var standardErrorArtifact: ArtifactReference
 
     public init(
-        validationArtifact: XcircuiteFileReference,
-        standardOutputArtifact: XcircuiteFileReference,
-        standardErrorArtifact: XcircuiteFileReference
+        validationArtifact: ArtifactReference,
+        standardOutputArtifact: ArtifactReference,
+        standardErrorArtifact: ArtifactReference
     ) {
         self.validationArtifact = validationArtifact
         self.standardOutputArtifact = standardOutputArtifact

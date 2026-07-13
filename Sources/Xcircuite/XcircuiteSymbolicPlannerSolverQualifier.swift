@@ -69,10 +69,13 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             projectRoot: projectRoot
         )
         let planReplayValidationArtifact = try solverResult.planReplayValidationArtifact ?? planReplayValidation.map {
-            try artifactStore.persistSymbolicPlannerPlanReplayValidation(
+            try requireFoundationArtifactReference(
+                artifactStore.persistSymbolicPlannerPlanReplayValidation(
                 $0,
                 runID: request.runID,
                 projectRoot: projectRoot
+                ),
+                field: "qualification.planReplayValidationArtifact"
             )
         }
         let nativeCertificateResult = try nativeCertificate(
@@ -108,7 +111,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             diagnostics: &diagnostics
         )
 
-        var planVerificationArtifact: XcircuiteFileReference?
+        var planVerificationArtifact: ArtifactReference?
         var goalCoverageStatus: String?
         var missingGoalAtoms: [String] = []
         if solverResult.importResult != nil {
@@ -116,12 +119,15 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 request: XcircuiteCandidatePlanVerificationRequest(runID: request.runID),
                 projectRoot: projectRoot
             )
-            planVerificationArtifact = try artifactReferenceResolver.verifiedArtifactReference(
+            planVerificationArtifact = try requireFoundationArtifactReference(
+                artifactReferenceResolver.verifiedArtifactReference(
                 verifierResult.planVerificationArtifact,
                 field: "planVerificationArtifact",
                 expectedFormat: .json,
                 runID: request.runID,
                 projectRoot: projectRoot
+                ),
+                field: "qualification.planVerificationArtifact"
             )
             let verification = try packageStore.readJSON(
                 XcircuitePlanVerification.self,
@@ -194,7 +200,12 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        return result.attachingQualificationArtifact(qualificationArtifact)
+        return result.attachingQualificationArtifact(
+            try requireFoundationArtifactReference(
+                qualificationArtifact,
+                field: "qualification.qualificationArtifact"
+            )
+        )
     }
 
     private func validateQualificationRequest(
@@ -502,10 +513,13 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             certificate: parsed.certificate,
             diagnostics: parsed.diagnostics
         )
-        let artifact = try artifactStore.persistSymbolicPlannerSolverCertificate(
+        let artifact = try requireFoundationArtifactReference(
+            artifactStore.persistSymbolicPlannerSolverCertificate(
             parseResult,
             runID: request.runID,
             projectRoot: projectRoot
+            ),
+            field: "nativeCertificate.artifact"
         )
         var diagnostics = parsed.diagnostics
         if request.requireNativeCertificate, parsed.status != "parsed" {
@@ -538,7 +552,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         manifest: XcircuiteRunManifest,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         let artifactID = request.certificateArtifactID
             ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverCertificateArtifactID
         if let certificatePath = request.certificatePath {
@@ -549,31 +563,36 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             guard FileManager.default.fileExists(atPath: certificateURL.path(percentEncoded: false)) else {
                 return nil
             }
-            return try artifactReferenceResolver.projectFileReference(
-                path: certificatePath,
-                artifactID: artifactID,
-                field: "nativeCertificateArtifact",
-                expectedFormat: .text,
-                runID: request.runID,
-                projectRoot: projectRoot
+            return try requireFoundationArtifactReference(
+                artifactReferenceResolver.projectFileReference(
+                    path: certificatePath,
+                    artifactID: artifactID,
+                    field: "nativeCertificateArtifact",
+                    expectedFormat: .text,
+                    runID: request.runID,
+                    projectRoot: projectRoot
+                ),
+                field: "nativeCertificateArtifact"
             )
         }
         if request.certificateArtifactID == nil {
-            return try artifactReferenceResolver.verifiedArtifactReference(
+            return try verifiedFoundationArtifactReference(
                 solverResult.standardOutputArtifact,
                 field: "nativeCertificateStandardOutputArtifact",
                 expectedFormat: .text,
-                runID: request.runID,
                 projectRoot: projectRoot
             )
         }
-        return try artifactReferenceResolver.uniqueManifestArtifact(
-            artifactID: artifactID,
-            field: "nativeCertificateArtifact",
-            expectedFormat: .text,
-            manifest: manifest,
-            runID: request.runID,
-            projectRoot: projectRoot
+        return try requireFoundationArtifactReference(
+            artifactReferenceResolver.uniqueManifestArtifact(
+                artifactID: artifactID,
+                field: "nativeCertificateArtifact",
+                expectedFormat: .text,
+                manifest: manifest,
+                runID: request.runID,
+                projectRoot: projectRoot
+            ),
+            field: "nativeCertificateArtifact"
         )
     }
 
@@ -752,35 +771,31 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             )
         }
 
-        let domainArtifact = try artifactReferenceResolver.verifiedArtifactReference(
+        let domainArtifact = try verifiedFoundationArtifactReference(
             solverResult.domainArtifact,
             field: "proofValidationDomainArtifact",
             expectedFormat: .text,
-            runID: request.runID,
             projectRoot: projectRoot
         )
-        let problemArtifact = try artifactReferenceResolver.verifiedArtifactReference(
+        let problemArtifact = try verifiedFoundationArtifactReference(
             solverResult.problemArtifact,
             field: "proofValidationProblemArtifact",
             expectedFormat: .text,
-            runID: request.runID,
             projectRoot: projectRoot
         )
         let pddlExportArtifact = try solverResult.pddlExportArtifact.map {
-            try artifactReferenceResolver.verifiedArtifactReference(
+            try verifiedFoundationArtifactReference(
                 $0,
                 field: "proofValidationPDDLExportArtifact",
                 expectedFormat: .json,
-                runID: request.runID,
                 projectRoot: projectRoot
             )
         }
         let solverPlanArtifact = try solverResult.solverPlanArtifact.map {
-            try artifactReferenceResolver.verifiedArtifactReference(
+            try verifiedFoundationArtifactReference(
                 $0,
                 field: "proofValidationSolverPlanArtifact",
                 expectedFormat: .text,
-                runID: request.runID,
                 projectRoot: projectRoot
             )
         }
@@ -859,7 +874,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         request: XcircuiteSymbolicPlannerSolverQualificationRequest,
         manifest: XcircuiteRunManifest,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         let artifactID = request.proofArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverProofArtifactID
         if let proofPath = request.proofPath {
             let proofURL = try packageStore.url(forProjectRelativePath: proofPath, inProjectAt: projectRoot)
@@ -883,16 +898,19 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                         manifestPath: manifestReference.path
                     )
                 }
-                return try artifactReferenceResolver.uniqueManifestArtifact(
-                    artifactID: artifactID,
-                    field: "proofArtifact",
-                    expectedFormat: .text,
-                    manifest: manifest,
-                    runID: request.runID,
-                    projectRoot: projectRoot
+                return try requireFoundationArtifactReference(
+                    artifactReferenceResolver.uniqueManifestArtifact(
+                        artifactID: artifactID,
+                        field: "proofArtifact",
+                        expectedFormat: .text,
+                        manifest: manifest,
+                        runID: request.runID,
+                        projectRoot: projectRoot
+                    ),
+                    field: "proofArtifact"
                 )
             }
-            let reference = try artifactReferenceResolver.projectFileReference(
+            let legacyReference = try artifactReferenceResolver.projectFileReference(
                 path: proofPath,
                 artifactID: artifactID,
                 field: "proofArtifact",
@@ -900,16 +918,19 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            try packageStore.upsertRunArtifact(reference, runID: request.runID, inProjectAt: projectRoot)
-            return reference
+            try packageStore.upsertRunArtifact(legacyReference, runID: request.runID, inProjectAt: projectRoot)
+            return try requireFoundationArtifactReference(legacyReference, field: "proofArtifact")
         }
-        return try artifactReferenceResolver.uniqueManifestArtifact(
-            artifactID: artifactID,
-            field: "proofArtifact",
-            expectedFormat: .text,
-            manifest: manifest,
-            runID: request.runID,
-            projectRoot: projectRoot
+        return try requireFoundationArtifactReference(
+            artifactReferenceResolver.uniqueManifestArtifact(
+                artifactID: artifactID,
+                field: "proofArtifact",
+                expectedFormat: .text,
+                manifest: manifest,
+                runID: request.runID,
+                projectRoot: projectRoot
+            ),
+            field: "proofArtifact"
         )
     }
 
@@ -1118,11 +1139,11 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         planReplayValidation: XcircuiteSymbolicPlannerPlanReplayValidation?,
         nativeCertificate: XcircuiteSymbolicPlannerSolverCertificateParseResult?,
         proofValidation: XcircuiteSymbolicPlannerProofValidation?,
-        planReplayValidationArtifact: XcircuiteFileReference?,
-        nativeCertificateArtifact: XcircuiteFileReference?,
-        proofValidationArtifact: XcircuiteFileReference?,
-        planVerificationArtifact: XcircuiteFileReference?,
-        qualificationArtifact: XcircuiteFileReference?,
+        planReplayValidationArtifact: ArtifactReference?,
+        nativeCertificateArtifact: ArtifactReference?,
+        proofValidationArtifact: ArtifactReference?,
+        planVerificationArtifact: ArtifactReference?,
+        qualificationArtifact: ArtifactReference?,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) -> XcircuiteSymbolicPlannerSolverQualificationResult {
         let failureCodes = diagnostics
@@ -1187,7 +1208,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         let evidence = ToolEvidence(
             evidenceID: "\(request.toolID)-symbolic-planner-qualification",
             kind: .corpus,
-            artifact: qualificationArtifact.flatMap(foundationArtifactReference),
+            artifact: qualificationArtifact,
             qualification: ToolEvidenceQualificationSummary(
                 qualified: status == "qualified",
                 policyID: request.policyID,
@@ -1243,19 +1264,53 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         try artifactReferenceResolver.runManifest(runID: runID, projectRoot: projectRoot)
     }
 
+    private func verifiedFoundationArtifactReference(
+        _ reference: ArtifactReference,
+        field: String,
+        expectedFormat: ArtifactFormat,
+        projectRoot: URL
+    ) throws -> ArtifactReference {
+        guard reference.locator.kind == .other else {
+            throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
+                field: field,
+                path: reference.path,
+                reason: "expected artifact kind (ArtifactKind.other.rawValue), got (reference.locator.kind.rawValue)"
+            )
+        }
+        guard reference.locator.format == expectedFormat else {
+            throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
+                field: field,
+                path: reference.path,
+                reason: "expected format (expectedFormat.rawValue), got (reference.locator.format.rawValue)"
+            )
+        }
+        let integrity = LocalArtifactVerifier().verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
+            let reason = integrity.issues.map { issue in
+                issue.detail ?? issue.location ?? issue.code.rawValue
+            }.joined(separator: "; ")
+            throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
+                field: field,
+                path: reference.path,
+                reason: "artifact integrity verification failed: (reason)"
+            )
+        }
+        return reference
+    }
+
     private static func currentTimestamp() -> String {
         ISO8601DateFormatter().string(from: Date())
     }
 
     private struct ProofValidationRunResult: Sendable, Hashable {
         var validation: XcircuiteSymbolicPlannerProofValidation?
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
     }
 
     private struct NativeCertificateRunResult: Sendable, Hashable {
         var certificate: XcircuiteSymbolicPlannerSolverCertificateParseResult?
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
     }
 

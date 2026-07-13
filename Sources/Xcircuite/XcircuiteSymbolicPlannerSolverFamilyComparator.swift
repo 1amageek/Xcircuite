@@ -119,7 +119,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
                 from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
             )
-            inputs.append(QualificationInput(reference: reference, qualification: qualification))
+            inputs.append(
+                QualificationInput(
+                    reference: try requireFoundationArtifactReference(
+                        reference,
+                        field: "comparison.qualificationArtifact"
+                    ),
+                    qualification: qualification
+                )
+            )
         }
         for path in request.qualificationPaths {
             let reference = try artifactReferenceResolver.projectFileReference(
@@ -133,7 +141,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
                 from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
             )
-            inputs.append(QualificationInput(reference: reference, qualification: qualification))
+            inputs.append(
+                QualificationInput(
+                    reference: try requireFoundationArtifactReference(
+                        reference,
+                        field: "comparison.qualificationArtifact"
+                    ),
+                    qualification: qualification
+                )
+            )
         }
         return inputs
     }
@@ -141,7 +157,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     private func makeCandidate(
         index: Int,
         qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
-        fallbackQualificationArtifact: XcircuiteFileReference?
+        fallbackQualificationArtifact: ArtifactReference?
     ) -> XcircuiteSymbolicPlannerSolverFamilyCandidateResult {
         let missingExpectedActionIDs = missingExpectedActions(qualification)
         let evaluatedCost = evaluatedCost(qualification)
@@ -429,7 +445,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     }
 
     private struct QualificationInput {
-        var reference: XcircuiteFileReference?
+        var reference: ArtifactReference?
         var qualification: XcircuiteSymbolicPlannerSolverQualificationResult
     }
 }

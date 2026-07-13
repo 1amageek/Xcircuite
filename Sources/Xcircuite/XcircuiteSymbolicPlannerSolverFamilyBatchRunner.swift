@@ -57,12 +57,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
                 candidateID: candidateID,
                 projectRoot: projectRoot
             )
-            let qualificationArtifact = try artifactStore.persistSymbolicPlannerSolverFamilyQualification(
+            let qualificationArtifact = try requireFoundationArtifactReference(
+                artifactStore.persistSymbolicPlannerSolverFamilyQualification(
                 qualification,
                 runID: request.runID,
                 comparisonID: request.comparisonID,
                 candidateID: candidateID,
                 projectRoot: projectRoot
+                ),
+                field: "solverFamily.qualificationArtifact"
             )
             qualification = qualification.attachingQualificationArtifact(qualificationArtifact)
             candidateResults.append(
@@ -129,9 +132,16 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         comparisonID: String,
         candidateID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
-        guard let solverPlanArtifact = qualification.solverResult.solverPlanArtifact
-            ?? qualification.solverResult.importResult?.solverPlanArtifact else {
+    ) throws -> ArtifactReference? {
+        let solverPlanArtifact: ArtifactReference
+        if let artifact = qualification.solverResult.solverPlanArtifact {
+            solverPlanArtifact = artifact
+        } else if let legacyArtifact = qualification.solverResult.importResult?.solverPlanArtifact {
+            solverPlanArtifact = try requireFoundationArtifactReference(
+                legacyArtifact,
+                field: "solverFamily.solverPlanArtifact"
+            )
+        } else {
             return nil
         }
         let solverPlanURL = try url(for: solverPlanArtifact.path, projectRoot: projectRoot)
@@ -143,12 +153,16 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
             candidateID: candidateID,
             projectRoot: projectRoot
         )
-        qualification.solverResult.solverPlanArtifact = snapshot
+        let foundationSnapshot = try requireFoundationArtifactReference(
+            snapshot,
+            field: "solverFamily.solverPlanArtifact"
+        )
+        qualification.solverResult.solverPlanArtifact = foundationSnapshot
         if var importResult = qualification.solverResult.importResult {
             importResult.solverPlanArtifact = snapshot
             qualification.solverResult.importResult = importResult
         }
-        return snapshot
+        return foundationSnapshot
     }
 
     private func snapshotNativeCertificateIfAvailable(
@@ -156,7 +170,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         comparisonID: String,
         candidateID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         guard let nativeCertificate = qualification.nativeCertificate else {
             return nil
         }
@@ -167,8 +181,12 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
             candidateID: candidateID,
             projectRoot: projectRoot
         )
-        qualification.nativeCertificateArtifact = snapshot
-        return snapshot
+        let foundationSnapshot = try requireFoundationArtifactReference(
+            snapshot,
+            field: "solverFamily.nativeCertificateArtifact"
+        )
+        qualification.nativeCertificateArtifact = foundationSnapshot
+        return foundationSnapshot
     }
 
     private func promoteIfRequested(

@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverCertificateParseResult: Codable, Sendable, Hashable {
@@ -7,7 +8,7 @@ public struct XcircuiteSymbolicPlannerSolverCertificateParseResult: Codable, Sen
     public var toolID: String
     public var requestedFormat: String
     public var detectedFormat: String?
-    public var sourceArtifact: XcircuiteFileReference
+    public var sourceArtifact: ArtifactReference
     public var certificate: XcircuiteSymbolicPlannerSolverCertificate?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
 
@@ -18,7 +19,7 @@ public struct XcircuiteSymbolicPlannerSolverCertificateParseResult: Codable, Sen
         toolID: String,
         requestedFormat: String,
         detectedFormat: String? = nil,
-        sourceArtifact: XcircuiteFileReference,
+        sourceArtifact: ArtifactReference,
         certificate: XcircuiteSymbolicPlannerSolverCertificate? = nil,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
     ) {

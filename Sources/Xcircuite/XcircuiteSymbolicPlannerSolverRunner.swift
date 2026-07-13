@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 import SignoffToolSupport
 import DesignFlowKernel
@@ -235,14 +236,26 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             exitCode: processOutcome.exitCode,
             didTimeout: processOutcome.didTimeout,
             didCancel: processOutcome.didCancel,
-            domainArtifact: domainArtifact,
-            problemArtifact: problemArtifact,
-            pddlExportArtifact: pddlExportArtifact,
+            domainArtifact: try requireFoundationArtifactReference(
+                domainArtifact,
+                field: "solver.domainArtifact"
+            ),
+            problemArtifact: try requireFoundationArtifactReference(
+                problemArtifact,
+                field: "solver.problemArtifact"
+            ),
+            pddlExportArtifact: try pddlExportArtifact.map {
+                try requireFoundationArtifactReference($0, field: "solver.pddlExportArtifact")
+            },
             runArtifact: solverArtifacts.runArtifact,
             standardOutputArtifact: solverArtifacts.standardOutputArtifact,
             standardErrorArtifact: solverArtifacts.standardErrorArtifact,
-            solverPlanArtifact: solverPlanArtifact,
-            planReplayValidationArtifact: planReplayValidationArtifact,
+            solverPlanArtifact: try solverPlanArtifact.map {
+                try requireFoundationArtifactReference($0, field: "solver.solverPlanArtifact")
+            },
+            planReplayValidationArtifact: try planReplayValidationArtifact.map {
+                try requireFoundationArtifactReference($0, field: "solver.planReplayValidationArtifact")
+            },
             solverMetadata: solverMetadata,
             importResult: importResult,
             planReplayValidation: planReplayValidation,

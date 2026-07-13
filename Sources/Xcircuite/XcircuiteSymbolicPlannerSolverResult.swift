@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverResult: Codable, Sendable, Hashable {
@@ -7,14 +8,14 @@ public struct XcircuiteSymbolicPlannerSolverResult: Codable, Sendable, Hashable 
     public var exitCode: Int32?
     public var didTimeout: Bool
     public var didCancel: Bool
-    public var domainArtifact: XcircuiteFileReference
-    public var problemArtifact: XcircuiteFileReference
-    public var pddlExportArtifact: XcircuiteFileReference?
-    public var runArtifact: XcircuiteFileReference
-    public var standardOutputArtifact: XcircuiteFileReference
-    public var standardErrorArtifact: XcircuiteFileReference
-    public var solverPlanArtifact: XcircuiteFileReference?
-    public var planReplayValidationArtifact: XcircuiteFileReference?
+    public var domainArtifact: ArtifactReference
+    public var problemArtifact: ArtifactReference
+    public var pddlExportArtifact: ArtifactReference?
+    public var runArtifact: ArtifactReference
+    public var standardOutputArtifact: ArtifactReference
+    public var standardErrorArtifact: ArtifactReference
+    public var solverPlanArtifact: ArtifactReference?
+    public var planReplayValidationArtifact: ArtifactReference?
     public var solverMetadata: XcircuiteSymbolicPlannerSolverMetadata?
     public var importResult: XcircuiteSymbolicPlannerPlanImportResult?
     public var planReplayValidation: XcircuiteSymbolicPlannerPlanReplayValidation?
@@ -27,14 +28,14 @@ public struct XcircuiteSymbolicPlannerSolverResult: Codable, Sendable, Hashable 
         exitCode: Int32?,
         didTimeout: Bool,
         didCancel: Bool,
-        domainArtifact: XcircuiteFileReference,
-        problemArtifact: XcircuiteFileReference,
-        pddlExportArtifact: XcircuiteFileReference?,
-        runArtifact: XcircuiteFileReference,
-        standardOutputArtifact: XcircuiteFileReference,
-        standardErrorArtifact: XcircuiteFileReference,
-        solverPlanArtifact: XcircuiteFileReference?,
-        planReplayValidationArtifact: XcircuiteFileReference? = nil,
+        domainArtifact: ArtifactReference,
+        problemArtifact: ArtifactReference,
+        pddlExportArtifact: ArtifactReference?,
+        runArtifact: ArtifactReference,
+        standardOutputArtifact: ArtifactReference,
+        standardErrorArtifact: ArtifactReference,
+        solverPlanArtifact: ArtifactReference?,
+        planReplayValidationArtifact: ArtifactReference? = nil,
         solverMetadata: XcircuiteSymbolicPlannerSolverMetadata? = nil,
         importResult: XcircuiteSymbolicPlannerPlanImportResult?,
         planReplayValidation: XcircuiteSymbolicPlannerPlanReplayValidation? = nil,

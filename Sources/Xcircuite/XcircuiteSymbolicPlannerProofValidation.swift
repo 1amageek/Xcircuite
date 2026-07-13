@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerProofValidation: Codable, Sendable, Hashable {
@@ -5,17 +6,17 @@ public struct XcircuiteSymbolicPlannerProofValidation: Codable, Sendable, Hashab
     public var status: String
     public var runID: String
     public var toolID: String
-    public var proofArtifact: XcircuiteFileReference
-    public var domainArtifact: XcircuiteFileReference?
-    public var problemArtifact: XcircuiteFileReference?
-    public var pddlExportArtifact: XcircuiteFileReference?
-    public var solverPlanArtifact: XcircuiteFileReference?
+    public var proofArtifact: ArtifactReference
+    public var domainArtifact: ArtifactReference?
+    public var problemArtifact: ArtifactReference?
+    public var pddlExportArtifact: ArtifactReference?
+    public var solverPlanArtifact: ArtifactReference?
     public var proofCheckerExecutablePath: String
     public var proofCheckerArguments: [String]
     public var proofCheckerTimeoutSeconds: Double
     public var workingDirectoryPath: String
-    public var standardOutputArtifact: XcircuiteFileReference?
-    public var standardErrorArtifact: XcircuiteFileReference?
+    public var standardOutputArtifact: ArtifactReference?
+    public var standardErrorArtifact: ArtifactReference?
     public var exitCode: Int32?
     public var didTimeout: Bool
     public var didCancel: Bool
@@ -28,17 +29,17 @@ public struct XcircuiteSymbolicPlannerProofValidation: Codable, Sendable, Hashab
         status: String,
         runID: String,
         toolID: String,
-        proofArtifact: XcircuiteFileReference,
-        domainArtifact: XcircuiteFileReference? = nil,
-        problemArtifact: XcircuiteFileReference? = nil,
-        pddlExportArtifact: XcircuiteFileReference? = nil,
-        solverPlanArtifact: XcircuiteFileReference? = nil,
+        proofArtifact: ArtifactReference,
+        domainArtifact: ArtifactReference? = nil,
+        problemArtifact: ArtifactReference? = nil,
+        pddlExportArtifact: ArtifactReference? = nil,
+        solverPlanArtifact: ArtifactReference? = nil,
         proofCheckerExecutablePath: String,
         proofCheckerArguments: [String],
         proofCheckerTimeoutSeconds: Double,
         workingDirectoryPath: String,
-        standardOutputArtifact: XcircuiteFileReference? = nil,
-        standardErrorArtifact: XcircuiteFileReference? = nil,
+        standardOutputArtifact: ArtifactReference? = nil,
+        standardErrorArtifact: ArtifactReference? = nil,
         exitCode: Int32?,
         didTimeout: Bool,
         didCancel: Bool,

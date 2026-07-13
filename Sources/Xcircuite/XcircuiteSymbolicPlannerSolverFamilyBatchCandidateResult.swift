@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult: Codable, Sendable, Hashable {
@@ -5,9 +6,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult: Codable,
     public var candidateID: String
     public var toolID: String
     public var qualificationStatus: String
-    public var qualificationArtifact: XcircuiteFileReference
-    public var solverPlanArtifact: XcircuiteFileReference?
-    public var nativeCertificateArtifact: XcircuiteFileReference?
+    public var qualificationArtifact: ArtifactReference
+    public var solverPlanArtifact: ArtifactReference?
+    public var nativeCertificateArtifact: ArtifactReference?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
 
     public init(
@@ -15,9 +16,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult: Codable,
         candidateID: String,
         toolID: String,
         qualificationStatus: String,
-        qualificationArtifact: XcircuiteFileReference,
-        solverPlanArtifact: XcircuiteFileReference?,
-        nativeCertificateArtifact: XcircuiteFileReference? = nil,
+        qualificationArtifact: ArtifactReference,
+        solverPlanArtifact: ArtifactReference?,
+        nativeCertificateArtifact: ArtifactReference? = nil,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
     ) {
         self.candidateIndex = candidateIndex

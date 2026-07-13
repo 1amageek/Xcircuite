@@ -24,16 +24,16 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
     public var planReplayValidation: XcircuiteSymbolicPlannerPlanReplayValidation?
     public var proofValidation: XcircuiteSymbolicPlannerProofValidation?
     public var solverResult: XcircuiteSymbolicPlannerSolverResult
-    public var planReplayValidationArtifact: XcircuiteFileReference?
-    public var proofValidationArtifact: XcircuiteFileReference?
-    public var nativeCertificateArtifact: XcircuiteFileReference?
-    public var planVerificationArtifact: XcircuiteFileReference?
-    public var qualificationArtifact: XcircuiteFileReference?
+    public var planReplayValidationArtifact: ArtifactReference?
+    public var proofValidationArtifact: ArtifactReference?
+    public var nativeCertificateArtifact: ArtifactReference?
+    public var planVerificationArtifact: ArtifactReference?
+    public var qualificationArtifact: ArtifactReference?
     public var toolHealth: ToolHealthCheckResult
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
 
     func attachingQualificationArtifact(
-        _ artifact: XcircuiteFileReference
+        _ artifact: ArtifactReference
     ) -> XcircuiteSymbolicPlannerSolverQualificationResult {
         var result = self
         result.qualificationArtifact = artifact
@@ -42,7 +42,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
                 return evidence
             }
             var updated = evidence
-            updated.artifact = foundationArtifactReference(artifact)
+            updated.artifact = artifact
             return updated
         }
         return result
@@ -115,11 +115,11 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
         planReplayValidation: XcircuiteSymbolicPlannerPlanReplayValidation? = nil,
         proofValidation: XcircuiteSymbolicPlannerProofValidation? = nil,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
-        planReplayValidationArtifact: XcircuiteFileReference? = nil,
-        proofValidationArtifact: XcircuiteFileReference? = nil,
-        nativeCertificateArtifact: XcircuiteFileReference? = nil,
-        planVerificationArtifact: XcircuiteFileReference?,
-        qualificationArtifact: XcircuiteFileReference? = nil,
+        planReplayValidationArtifact: ArtifactReference? = nil,
+        proofValidationArtifact: ArtifactReference? = nil,
+        nativeCertificateArtifact: ArtifactReference? = nil,
+        planVerificationArtifact: ArtifactReference?,
+        qualificationArtifact: ArtifactReference? = nil,
         toolHealth: ToolHealthCheckResult,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) {
@@ -199,23 +199,23 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
             ),
             solverResult: try container.decode(XcircuiteSymbolicPlannerSolverResult.self, forKey: .solverResult),
             planReplayValidationArtifact: try container.decodeIfPresent(
-                XcircuiteFileReference.self,
+                ArtifactReference.self,
                 forKey: .planReplayValidationArtifact
             ),
             proofValidationArtifact: try container.decodeIfPresent(
-                XcircuiteFileReference.self,
+                ArtifactReference.self,
                 forKey: .proofValidationArtifact
             ),
             nativeCertificateArtifact: try container.decodeIfPresent(
-                XcircuiteFileReference.self,
+                ArtifactReference.self,
                 forKey: .nativeCertificateArtifact
             ),
             planVerificationArtifact: try container.decodeIfPresent(
-                XcircuiteFileReference.self,
+                ArtifactReference.self,
                 forKey: .planVerificationArtifact
             ),
             qualificationArtifact: try container.decodeIfPresent(
-                XcircuiteFileReference.self,
+                ArtifactReference.self,
                 forKey: .qualificationArtifact
             ),
             toolHealth: try container.decode(ToolHealthCheckResult.self, forKey: .toolHealth),
@@ -266,4 +266,18 @@ func foundationArtifactReference(
     } catch {
         return nil
     }
+}
+
+func requireFoundationArtifactReference(
+    _ reference: XcircuiteFileReference,
+    field: String
+) throws -> ArtifactReference {
+    guard let foundationReference = foundationArtifactReference(reference) else {
+        throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
+            field: field,
+            path: reference.path,
+            reason: "The legacy artifact reference cannot be represented as a Foundation artifact reference."
+        )
+    }
+    return foundationReference
 }

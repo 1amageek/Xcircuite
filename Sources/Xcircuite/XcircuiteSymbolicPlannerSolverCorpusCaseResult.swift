@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverCorpusCaseResult: Codable, Sendable, Hashable {
@@ -10,8 +11,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusCaseResult: Codable, Sendable,
     public var goalCoverageStatus: String?
     public var missingGoalAtoms: [String]
     public var failureCodes: [String]
-    public var qualificationArtifact: XcircuiteFileReference?
-    public var planVerificationArtifact: XcircuiteFileReference?
+    public var qualificationArtifact: ArtifactReference?
+    public var planVerificationArtifact: ArtifactReference?
 
     public init(
         caseID: String,
@@ -23,8 +24,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusCaseResult: Codable, Sendable,
         goalCoverageStatus: String?,
         missingGoalAtoms: [String],
         failureCodes: [String],
-        qualificationArtifact: XcircuiteFileReference?,
-        planVerificationArtifact: XcircuiteFileReference?
+        qualificationArtifact: ArtifactReference?,
+        planVerificationArtifact: ArtifactReference?
     ) {
         self.caseID = caseID
         self.runID = runID
