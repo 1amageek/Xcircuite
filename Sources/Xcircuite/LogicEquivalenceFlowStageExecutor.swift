@@ -147,6 +147,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 for: requestURL,
                 projectRoot: context.projectRoot,
                 artifactID: "logic-equivalence-request",
+                role: .input,
                 kind: ArtifactKind.report,
                 format: ArtifactFormat.json
             )
@@ -344,6 +345,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             for: requestURL,
             projectRoot: context.projectRoot,
             artifactID: "logic-equivalence-request",
+            role: .input,
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )
@@ -538,6 +540,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
+            role: .input,
             kind: ArtifactKind.rtl,
             format: url.pathExtension.lowercased() == "json" ? ArtifactFormat.json : ArtifactFormat.text
         )
