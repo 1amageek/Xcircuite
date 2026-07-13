@@ -66,7 +66,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
         gateID: String,
         context: FlowExecutionContext
     ) -> FlowStageResult {
-        let flowDiagnostics = diagnostics.map(FoundationFlowProjection.flowDiagnostic)
+        let flowDiagnostics = diagnostics.map(Self.flowDiagnostic)
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts + [resultArtifact],
             projectRoot: context.projectRoot
@@ -118,7 +118,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
             case .error: severity = .error
             }
             return FlowDiagnostic(severity: severity, code: diagnostic.code, message: diagnostic.message)
-        } + additionalDiagnostics.map(FoundationFlowProjection.flowDiagnostic)
+        } + additionalDiagnostics.map(Self.flowDiagnostic)
         let artifacts = result.artifacts + [resultArtifact] + additionalArtifacts
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts,
@@ -242,5 +242,20 @@ struct LogicEngineStageExecutionSupport: Sendable {
         }
         try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
         try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+    }
+
+    private static func flowDiagnostic(_ diagnostic: DesignDiagnostic) -> FlowDiagnostic {
+        let severity: FlowDiagnosticSeverity
+        switch diagnostic.severity {
+        case .information: severity = .info
+        case .warning: severity = .warning
+        case .error: severity = .error
+        }
+        let detail = diagnostic.detail.map { value in " (\(value))" } ?? ""
+        return FlowDiagnostic(
+            severity: severity,
+            code: diagnostic.code.rawValue,
+            message: diagnostic.summary + detail
+        )
     }
 }
