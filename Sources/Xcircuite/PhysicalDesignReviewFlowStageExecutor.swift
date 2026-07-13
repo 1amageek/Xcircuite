@@ -163,21 +163,49 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         let hasher = XcircuiteHasher()
         do {
             let manifestURL = try package.url(forProjectRelativePath: packet.manifestReference.path)
-            let manifestDigest = try hasher.sha256(fileAt: manifestURL)
-            if manifestDigest != packet.manifestDigest {
+            let manifestData = try Data(contentsOf: manifestURL)
+            let manifestDigest = hasher.sha256(data: manifestData)
+            if manifestDigest != packet.manifestDigest || packet.manifestReference.sha256 != manifestDigest {
                 diagnostics.append(diagnostic(
                     code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_TAMPERED",
                     message: "The reviewed physical-design manifest changed after packet creation.",
                     actions: ["prepare_a_new_physical_design_review_packet"]
                 ))
             }
+            if let expectedByteCount = packet.manifestReference.byteCount,
+               Int64(manifestData.count) != expectedByteCount {
+                diagnostics.append(diagnostic(
+                    code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_SIZE_MISMATCH",
+                    message: "The reviewed physical-design manifest byte count changed after packet creation.",
+                    actions: ["prepare_a_new_physical_design_review_packet"]
+                ))
+            }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let currentManifest = try decoder.decode(PhysicalDesignRunManifest.self, from: manifestData)
+            if currentManifest != packet.manifest {
+                diagnostics.append(diagnostic(
+                    code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_PACKET_MISMATCH",
+                    message: "The embedded physical-design manifest in the review packet does not match the current manifest artifact.",
+                    actions: ["prepare_a_new_physical_design_review_packet"]
+                ))
+            }
             for (path, expectedDigest) in packet.artifactDigests {
                 let artifactURL = try package.url(forProjectRelativePath: path)
-                let actualDigest = try hasher.sha256(fileAt: artifactURL)
+                let artifactData = try Data(contentsOf: artifactURL)
+                let actualDigest = hasher.sha256(data: artifactData)
                 if actualDigest != expectedDigest {
                     diagnostics.append(diagnostic(
                         code: "PHYSICAL_DESIGN_REVIEW_ARTIFACT_TAMPERED",
                         message: "Reviewed artifact \(path) changed after packet creation.",
+                        actions: ["prepare_a_new_physical_design_review_packet"]
+                    ))
+                }
+                if let expectedByteCount = packet.manifest.artifacts.first(where: { $0.path == path })?.byteCount,
+                   Int64(artifactData.count) != expectedByteCount {
+                    diagnostics.append(diagnostic(
+                        code: "PHYSICAL_DESIGN_REVIEW_ARTIFACT_SIZE_MISMATCH",
+                        message: "Reviewed artifact (path) byte count changed after packet creation.",
                         actions: ["prepare_a_new_physical_design_review_packet"]
                     ))
                 }
