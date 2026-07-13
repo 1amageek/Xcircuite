@@ -86,6 +86,7 @@ let package = Package(
             dependencies: [
                 "Xcircuite",
                 "XcircuiteFlowCLISupport",
+                .product(name: "CircuiteFoundation", package: "CircuiteFoundation"),
                 .product(name: "DRCEngine", package: "DRCEngine"),
                 .product(name: "LVSEngine", package: "LVSEngine"),
                 .product(name: "PEXEngine", package: "PEXEngine"),

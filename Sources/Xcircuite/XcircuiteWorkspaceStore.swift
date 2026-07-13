@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 
 /// Concrete persistence boundary for the project-local `.xcircuite` directory.
 ///
@@ -65,6 +66,31 @@ public actor XcircuiteWorkspaceStore {
         }
     }
 
+    /// Re-verifies a Foundation artifact reference against the workspace.
+    ///
+    /// Both the recorded byte count and content digest are checked on every
+    /// invocation. Artifact locations are constrained to the `.xcircuite`
+    /// boundary before verification so an absolute location or symlink cannot
+    /// bypass project-local persistence.
+    @discardableResult
+    public func verify(_ reference: ArtifactReference) throws -> ArtifactIntegrity {
+        let relativePath = try validatedArtifactPath(for: reference)
+        let integrity = LocalArtifactVerifier().verify(
+            reference,
+            relativeTo: workspaceRoot
+        )
+        guard !integrity.issues.contains(where: { $0.code == .missingFile }) else {
+            throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
+        }
+        guard integrity.isVerified else {
+            throw XcircuiteWorkspaceStoreError.artifactIntegrityFailed(
+                path: relativePath,
+                issues: integrity.issues
+            )
+        }
+        return integrity
+    }
+
     public func write<Value: Encodable & Sendable>(_ value: Value, asJSONTo relativePath: String) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -98,5 +124,24 @@ public actor XcircuiteWorkspaceStore {
             throw XcircuiteWorkspaceStoreError.invalidRelativePath(relativePath)
         }
         return workspaceRoot.appending(path: components.joined(separator: "/"))
+    }
+
+    private func validatedArtifactPath(for reference: ArtifactReference) throws -> String {
+        switch reference.locator.location.storage {
+        case .workspaceRelative:
+            let relativePath = reference.locator.location.value
+            _ = try url(for: relativePath)
+            return relativePath
+        case .absoluteFileURL:
+            let value = reference.locator.location.value
+            guard let absoluteURL = URL(string: value), absoluteURL.isFileURL,
+                  absoluteURL.path(percentEncoded: false).hasPrefix("/") else {
+                throw XcircuiteWorkspaceStoreError.invalidArtifactLocation(value)
+            }
+            guard pathBoundary.contains(absoluteURL, projectRoot: workspaceRoot) else {
+                throw XcircuiteWorkspaceStoreError.pathOutsideWorkspace(value)
+            }
+            return try pathBoundary.relativePath(for: absoluteURL, projectRoot: workspaceRoot)
+        }
     }
 }

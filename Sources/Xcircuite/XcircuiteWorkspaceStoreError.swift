@@ -1,11 +1,14 @@
 import Foundation
+import CircuiteFoundation
 
 public enum XcircuiteWorkspaceStoreError: Error, Sendable, Equatable, LocalizedError {
     case projectRootIsNotAbsolute
     case projectRootIsNotDirectory
     case invalidRelativePath(String)
     case pathOutsideWorkspace(String)
+    case invalidArtifactLocation(String)
     case missingArtifact(String)
+    case artifactIntegrityFailed(path: String, issues: [ArtifactIntegrityIssue])
     case readFailed(String)
     case writeFailed(String)
     case encodeFailed(String)
@@ -14,23 +17,28 @@ public enum XcircuiteWorkspaceStoreError: Error, Sendable, Equatable, LocalizedE
     public var errorDescription: String? {
         switch self {
         case .projectRootIsNotAbsolute:
-            "Project root must be an absolute file URL."
+            return "Project root must be an absolute file URL."
         case .projectRootIsNotDirectory:
-            "Project root must identify a directory."
+            return "Project root must identify a directory."
         case .invalidRelativePath(let path):
-            "Workspace path is not relative: \(path)"
+            return "Workspace path is not relative: \(path)"
         case .pathOutsideWorkspace(let path):
-            "Workspace path escapes the .xcircuite boundary: \(path)"
+            return "Workspace path escapes the .xcircuite boundary: \(path)"
+        case .invalidArtifactLocation(let location):
+            return "Artifact location is invalid: \(location)"
         case .missingArtifact(let path):
-            "Workspace artifact does not exist: \(path)"
+            return "Workspace artifact does not exist: \(path)"
+        case .artifactIntegrityFailed(let path, let issues):
+            let codes = issues.map { $0.code.rawValue }.joined(separator: ", ")
+            return "Workspace artifact integrity verification failed for \(path): \(codes)"
         case .readFailed(let message):
-            "Workspace read failed: \(message)"
+            return "Workspace read failed: \(message)"
         case .writeFailed(let message):
-            "Workspace write failed: \(message)"
+            return "Workspace write failed: \(message)"
         case .encodeFailed(let message):
-            "Workspace encoding failed: \(message)"
+            return "Workspace encoding failed: \(message)"
         case .decodeFailed(let message):
-            "Workspace decoding failed: \(message)"
+            return "Workspace decoding failed: \(message)"
         }
     }
 }
