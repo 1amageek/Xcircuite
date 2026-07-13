@@ -47,7 +47,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     message: "pex-summary-gate requires a readable source planning problem reference."
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         let hint = try pexInputHint(from: plan)
@@ -62,7 +62,7 @@ extension XcircuiteCandidatePlanVerifier {
         ) {
             return GateExecutionEvaluation(
                 gateResult: backendPolicyGate,
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         guard let spec = try pexExecutionSpec(from: plan, problem: problem) else {
@@ -71,7 +71,7 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         let executionSpec = try pexExecutionSpecByApplyingExecutionArtifacts(
@@ -87,7 +87,7 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
 
@@ -158,7 +158,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
-                artifactRefs: artifacts
+                artifactReferences: try foundationArtifactReferences(artifacts, field: "pex-summary")
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
@@ -175,7 +175,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: [diagnostic]
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
     }

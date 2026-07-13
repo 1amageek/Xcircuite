@@ -320,7 +320,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: [diagnostic]
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         guard let layoutRef = latestLayoutDocumentRef(from: execution) else {
@@ -338,7 +338,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: [diagnostic]
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
 
@@ -394,7 +394,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
-                artifactRefs: artifacts
+                artifactReferences: try foundationArtifactReferences(artifacts, field: "native-drc")
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
@@ -411,7 +411,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: [diagnostic]
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
     }
@@ -456,7 +456,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     message: "native-lvs requires a readable source planning problem reference."
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         guard let spec = try nativeLVSExecutionSpec(from: plan, problem: problem) else {
@@ -465,7 +465,7 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         let executionSpec = try nativeLVSExecutionSpecByApplyingExecutionArtifacts(
@@ -480,7 +480,7 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         guard executionSpec.layoutNetlistRef != nil || executionSpec.technologyRef != nil else {
@@ -490,7 +490,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     message: "native-lvs requires a technology reference when using a standard layout artifact."
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
 
@@ -568,7 +568,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
-                artifactRefs: artifacts
+                artifactReferences: try foundationArtifactReferences(artifacts, field: "native-lvs")
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
@@ -585,7 +585,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: [diagnostic]
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
     }
@@ -725,7 +725,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     message: "simulation-metric-gate requires a readable source planning problem reference."
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
         guard let spec = try simulationMetricExecutionSpec(from: plan, problem: problem) else {
@@ -734,7 +734,7 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
 
@@ -780,7 +780,7 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
@@ -797,7 +797,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: [diagnostic]
                 ),
-                artifactRefs: []
+                artifactReferences: []
             )
         }
     }

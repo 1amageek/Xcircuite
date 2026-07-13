@@ -59,7 +59,7 @@ extension XcircuiteCandidatePlanVerifier {
                 sourceStepIDs: sourceStepIDs,
                 diagnostics: diagnostics
             ),
-            artifactRefs: artifacts
+            artifactReferences: try foundationArtifactReferences(artifacts, field: "simulation-metric")
         )
     }
 
@@ -102,7 +102,7 @@ extension XcircuiteCandidatePlanVerifier {
                 sourceStepIDs: sourceStepIDs,
                 diagnostics: diagnostics
             ),
-            artifactRefs: artifacts
+            artifactReferences: try foundationArtifactReferences(artifacts, field: "simulation-metric")
         )
     }
 

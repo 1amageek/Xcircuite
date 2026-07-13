@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import LVSEngine
 import PEXEngine
 import DesignFlowKernel
@@ -16,12 +17,36 @@ struct SymbolicVerificationSummary: Sendable, Hashable {
 
 struct PostExecutionGateEvaluation: Sendable, Hashable {
     var gateResults: [XcircuitePlanVerificationGateResult]
-    var artifactRefs: [XcircuiteFileReference]
+    var artifactReferences: [ArtifactReference]
 }
 
 struct GateExecutionEvaluation: Sendable, Hashable {
     var gateResult: XcircuitePlanVerificationGateResult
-    var artifactRefs: [XcircuiteFileReference]
+    var artifactReferences: [ArtifactReference]
+}
+
+func foundationArtifactReferences(
+    _ references: [XcircuiteFileReference],
+    field: String
+) throws -> [ArtifactReference] {
+    try references.map { reference in
+        guard let artifact = foundationArtifactReference(reference) else {
+            throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
+                path: reference.path,
+                reason: "\(field) contains an artifact without a valid digest or byte count."
+            )
+        }
+        return artifact
+    }
+}
+
+func uniqueArtifactReferences(_ references: [ArtifactReference]) -> [ArtifactReference] {
+    var seen: Set<ArtifactID> = []
+    return references.filter { seen.insert($0.id).inserted }
+}
+
+func legacyArtifactReferences(_ references: [ArtifactReference]) -> [XcircuiteFileReference] {
+    references.map(legacyArtifactReference)
 }
 
 enum StandardLayoutSupport: Sendable, Hashable {

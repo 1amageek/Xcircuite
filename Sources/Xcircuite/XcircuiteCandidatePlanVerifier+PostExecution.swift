@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DRCEngine
 import LayoutCore
 import LayoutIO
@@ -18,9 +19,10 @@ extension XcircuiteCandidatePlanVerifier {
         manifest: XcircuiteRunManifest,
         projectRoot: URL
     ) async throws -> XcircuitePlanVerification {
-        let baseArtifactRefs = uniqueArtifactRefs(
-            [candidatePlanRef] + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 }
-        )
+        let baseArtifactRefs = uniqueArtifactReferences(try foundationArtifactReferences(
+            [candidatePlanRef] + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 },
+            field: "post-execution.base-artifacts"
+        ))
         let symbolicSummary = symbolicVerificationSummary(
             for: plan,
             actionDomainSnapshot: actionDomainSnapshot,
@@ -61,7 +63,7 @@ extension XcircuiteCandidatePlanVerifier {
                 stepResults: symbolicSummary.stepResults,
                 gateResults: gateResults,
                 goalCoverage: preExecutionGoalCoverage,
-                artifactRefs: baseArtifactRefs,
+                artifactRefs: legacyArtifactReferences(baseArtifactRefs),
                 diagnostics: diagnostics,
                 accepted: false,
                 nextActions: nextActions
@@ -76,7 +78,7 @@ extension XcircuiteCandidatePlanVerifier {
                 gateResults: gateResults,
                 correctnessGateResults: correctnessGateResults,
                 riskReviews: riskReviews,
-                artifactRefs: baseArtifactRefs,
+                artifactRefs: legacyArtifactReferences(baseArtifactRefs),
                 initialSymbolicState: symbolicSummary.initialSymbolicState,
                 finalSymbolicState: symbolicSummary.finalSymbolicState,
                 goalCoverageStatus: goalCoverageStatus(from: preExecutionGoalCoverage),
@@ -103,25 +105,29 @@ extension XcircuiteCandidatePlanVerifier {
             finalSymbolicState: postExecutionSymbolicSummary.finalSymbolicState
         )
         let missingGoalAtoms = missingGoalAtomRefs(from: goalCoverage)
-        var artifactRefs = uniqueArtifactRefs(
-            baseArtifactRefs + [executionRef]
+        var artifactReferences = uniqueArtifactReferences(try foundationArtifactReferences(
+            legacyArtifactReferences(baseArtifactRefs)
+                + [executionRef]
                 + execution.artifactRefs
-                + [execution.designDiffRef].compactMap { $0 }
-        )
+                + [execution.designDiffRef].compactMap { $0 },
+            field: "post-execution.execution-artifacts"
+        ))
         let gateEvaluation = try await makePostExecutionGateResults(
             plan: plan,
             execution: execution,
             stepResults: stepResults,
             riskReviews: riskReviews,
-            artifactRefs: artifactRefs,
+            artifactReferences: artifactReferences,
             manifest: manifest,
             projectRoot: projectRoot
         )
-        artifactRefs = uniqueArtifactRefs(artifactRefs + gateEvaluation.artifactRefs)
+        artifactReferences = uniqueArtifactReferences(
+            artifactReferences + gateEvaluation.artifactReferences
+        )
         let requiredGateResults = gateEvaluation.gateResults.filter(\.required)
         let signoffEvidenceDiagnostics = missingPostExecutionSignoffEvidenceDiagnostics(
             requiredResults: requiredGateResults,
-            artifactRefs: artifactRefs
+            artifactRefs: legacyArtifactReferences(artifactReferences)
         )
         let diagnostics = planDiagnostics(for: plan, stepResults: stepResults)
             + riskReviewer.blockingDiagnostics(from: riskReviews)
@@ -153,7 +159,7 @@ extension XcircuiteCandidatePlanVerifier {
             stepResults: stepResults,
             gateResults: gateEvaluation.gateResults,
             goalCoverage: goalCoverage,
-            artifactRefs: artifactRefs,
+            artifactRefs: legacyArtifactReferences(artifactReferences),
             diagnostics: diagnostics,
             accepted: accepted,
             nextActions: nextActions
@@ -169,7 +175,7 @@ extension XcircuiteCandidatePlanVerifier {
             gateResults: gateEvaluation.gateResults,
             correctnessGateResults: correctnessGateResults,
             riskReviews: riskReviews,
-            artifactRefs: artifactRefs,
+            artifactRefs: legacyArtifactReferences(artifactReferences),
             initialSymbolicState: postExecutionSymbolicSummary.initialSymbolicState,
             finalSymbolicState: postExecutionSymbolicSummary.finalSymbolicState,
             goalCoverageStatus: goalCoverageStatus(from: goalCoverage),
@@ -247,12 +253,12 @@ extension XcircuiteCandidatePlanVerifier {
         execution: XcircuiteCandidatePlanExecution,
         stepResults: [XcircuitePlanVerificationStepResult],
         riskReviews: [XcircuitePlanRiskReview],
-        artifactRefs: [XcircuiteFileReference],
+        artifactReferences: [ArtifactReference],
         manifest: XcircuiteRunManifest,
         projectRoot: URL
     ) async throws -> PostExecutionGateEvaluation {
         var gateResults: [XcircuitePlanVerificationGateResult] = []
-        var producedArtifacts: [XcircuiteFileReference] = []
+        var producedArtifactReferences: [ArtifactReference] = []
         for gate in gateSpecifications(plan: plan, stepResults: stepResults, riskReviews: riskReviews) {
             let sourceStepIDs = stepResults.filter { $0.gateIDs.contains(gate.gateID) }.map(\.stepID)
             if stepResults.contains(where: { $0.status != "executed" && $0.gateIDs.contains(gate.gateID) }) {
@@ -278,7 +284,7 @@ extension XcircuiteCandidatePlanVerifier {
                     gateID: gate.gateID,
                     required: gate.required,
                     sourceStepIDs: sourceStepIDs,
-                    artifactRefs: artifactRefs,
+                    artifactRefs: legacyArtifactReferences(artifactReferences),
                     projectRoot: projectRoot
                 ))
             case "native-drc":
@@ -290,7 +296,7 @@ extension XcircuiteCandidatePlanVerifier {
                     projectRoot: projectRoot
                 )
                 gateResults.append(result.gateResult)
-                producedArtifacts.append(contentsOf: result.artifactRefs)
+                producedArtifactReferences.append(contentsOf: result.artifactReferences)
             case "native-lvs":
                 let result = try await nativeLVSGateResult(
                     required: gate.required,
@@ -301,7 +307,7 @@ extension XcircuiteCandidatePlanVerifier {
                     projectRoot: projectRoot
                 )
                 gateResults.append(result.gateResult)
-                producedArtifacts.append(contentsOf: result.artifactRefs)
+                producedArtifactReferences.append(contentsOf: result.artifactReferences)
             case "pex-summary-gate":
                 let result = try await pexSummaryGateResult(
                     required: gate.required,
@@ -312,7 +318,7 @@ extension XcircuiteCandidatePlanVerifier {
                     projectRoot: projectRoot
                 )
                 gateResults.append(result.gateResult)
-                producedArtifacts.append(contentsOf: result.artifactRefs)
+                producedArtifactReferences.append(contentsOf: result.artifactReferences)
             case "simulation-metric-gate":
                 let result = try await simulationMetricGateResult(
                     required: gate.required,
@@ -323,7 +329,7 @@ extension XcircuiteCandidatePlanVerifier {
                     projectRoot: projectRoot
                 )
                 gateResults.append(result.gateResult)
-                producedArtifacts.append(contentsOf: result.artifactRefs)
+                producedArtifactReferences.append(contentsOf: result.artifactReferences)
             case "approval-gate":
                 gateResults.append(approvalGateResult(
                     gateID: gate.gateID,
@@ -348,6 +354,10 @@ extension XcircuiteCandidatePlanVerifier {
                 ))
             }
         }
-        return PostExecutionGateEvaluation(gateResults: gateResults, artifactRefs: producedArtifacts)
+        return PostExecutionGateEvaluation(
+            gateResults: gateResults,
+            artifactReferences: producedArtifactReferences
+        )
     }
+
 }
