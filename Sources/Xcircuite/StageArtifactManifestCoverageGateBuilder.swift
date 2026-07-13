@@ -13,11 +13,23 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> FlowGateResult {
-        drcGate(
+        foundationManifestGate(
+            gateID: "drc-artifacts",
             manifestURL: manifestURL,
-            artifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+            artifacts: artifacts,
             projectRoot: projectRoot
-        )
+        ) { data in
+            let manifest = try JSONDecoder().decode(DRCArtifactManifest.self, from: data)
+            return manifest.outputs.map { record in
+                ManifestOutputRecord(
+                    id: record.id,
+                    kind: record.kind.rawValue,
+                    path: record.path,
+                    byteCount: record.byteCount.map(Int64.init),
+                    sha256: record.sha256
+                )
+            }
+        }
     }
 
     func lvsGate(
@@ -25,11 +37,23 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> FlowGateResult {
-        lvsGate(
+        foundationManifestGate(
+            gateID: "lvs-artifacts",
             manifestURL: manifestURL,
-            artifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+            artifacts: artifacts,
             projectRoot: projectRoot
-        )
+        ) { data in
+            let manifest = try JSONDecoder().decode(LVSArtifactManifest.self, from: data)
+            return manifest.outputs.map { record in
+                ManifestOutputRecord(
+                    id: record.id,
+                    kind: record.kind.rawValue,
+                    path: record.path,
+                    byteCount: record.byteCount.map(Int64.init),
+                    sha256: record.sha256
+                )
+            }
+        }
     }
 
     func pexGate(
@@ -37,11 +61,27 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> FlowGateResult {
-        pexGate(
+        foundationManifestGate(
+            gateID: "pex-flow-artifacts",
             manifestURL: manifestURL,
-            artifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+            artifacts: artifacts,
             projectRoot: projectRoot
-        )
+        ) { data in
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(PEXArtifactManifest.self, from: data)
+            return manifest.artifacts
+                .filter { $0.status == .available }
+                .map { record in
+                    ManifestOutputRecord(
+                        id: record.id,
+                        kind: record.kind.rawValue,
+                        path: record.relativePath.value,
+                        byteCount: record.byteCount.map(Int64.init),
+                        sha256: record.sha256
+                    )
+                }
+        }
     }
 
     func drcGate(
@@ -144,6 +184,95 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
                     )
                 }
         }
+    }
+
+    private func foundationManifestGate(
+        gateID: String,
+        manifestURL: URL?,
+        artifacts: [ArtifactReference],
+        projectRoot: URL,
+        decodeOutputs: (Data) throws -> [ManifestOutputRecord]
+    ) -> FlowGateResult {
+        guard let manifestURL else {
+            return failedGate(
+                gateID: gateID,
+                code: "ARTIFACT_MANIFEST_MISSING",
+                message: "Stage did not provide an artifact manifest URL."
+            )
+        }
+        guard pathBoundary.contains(manifestURL, projectRoot: projectRoot) else {
+            return failedGate(
+                gateID: gateID,
+                code: "ARTIFACT_MANIFEST_INVALID_PATH",
+                message: "Stage artifact manifest path escapes the project root."
+            )
+        }
+
+        let outputs: [ManifestOutputRecord]
+        do {
+            outputs = try decodeOutputs(Data(contentsOf: manifestURL))
+        } catch {
+            return failedGate(
+                gateID: gateID,
+                code: "ARTIFACT_MANIFEST_UNREADABLE",
+                message: "Stage artifact manifest could not be decoded: \(error.localizedDescription)"
+            )
+        }
+
+        let artifactsByPath = Dictionary(grouping: artifacts, by: \.path)
+        let duplicateDiagnostics = artifactsByPath.keys.sorted().compactMap { path -> FlowDiagnostic? in
+            guard let matches = artifactsByPath[path], matches.count > 1 else {
+                return nil
+            }
+            let artifactIDs = matches.map(\.artifactID).sorted().joined(separator: ",")
+            return FlowDiagnostic(
+                severity: .error,
+                code: "ARTIFACT_MANIFEST_DUPLICATE_FLOW_ARTIFACT_PATH",
+                message: "FlowStageResult.artifacts contains duplicate artifact paths. path=\(path) artifactIDs=\(artifactIDs)"
+            )
+        }
+        let outputDiagnostics = outputs.compactMap { output -> FlowDiagnostic? in
+            guard let expectedPath = projectRelativePath(
+                for: output,
+                manifestURL: manifestURL,
+                projectRoot: projectRoot
+            ) else {
+                return FlowDiagnostic(
+                    severity: .error,
+                    code: "ARTIFACT_MANIFEST_INVALID_PATH",
+                    message: "Artifact manifest output path escapes the project. id=\(output.id) path=\(output.path)"
+                )
+            }
+            guard let artifact = artifactsByPath[expectedPath]?.first else {
+                return FlowDiagnostic(
+                    severity: .error,
+                    code: "ARTIFACT_MANIFEST_OUTPUT_NOT_INDEXED",
+                    message: "Artifact manifest output is not indexed in FlowStageResult.artifacts. id=\(output.id) kind=\(output.kind) path=\(expectedPath)"
+                )
+            }
+            if let byteCount = output.byteCount,
+               byteCount < 0 || artifact.byteCount != UInt64(byteCount) {
+                return FlowDiagnostic(
+                    severity: .error,
+                    code: "ARTIFACT_MANIFEST_BYTE_COUNT_MISMATCH",
+                    message: "Artifact byte count differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestByteCount=\(byteCount) flowByteCount=\(artifact.byteCount)"
+                )
+            }
+            if let sha256 = output.sha256, artifact.sha256 != sha256 {
+                return FlowDiagnostic(
+                    severity: .error,
+                    code: "ARTIFACT_MANIFEST_SHA256_MISMATCH",
+                    message: "Artifact SHA-256 differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestSHA256=\(sha256) flowSHA256=\(artifact.sha256)"
+                )
+            }
+            return nil
+        }
+        let diagnostics = duplicateDiagnostics + outputDiagnostics
+        return FlowGateResult(
+            gateID: gateID,
+            status: diagnostics.isEmpty ? .passed : .failed,
+            diagnostics: diagnostics
+        )
     }
 
     private func manifestGate(
