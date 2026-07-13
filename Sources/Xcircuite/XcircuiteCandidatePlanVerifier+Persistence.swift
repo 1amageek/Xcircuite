@@ -41,7 +41,9 @@ extension XcircuiteCandidatePlanVerifier {
                 .map(\.gateID),
             candidatePlanRef: candidatePlanRef,
             planVerificationRef: verificationRef,
-            artifactRefs: legacyArtifactReferences(artifactReferences),
+            // Keep the persisted legacy record lossless while Foundation validates
+            // the artifact identity and integrity before this storage boundary.
+            artifactRefs: verification.artifactRefs,
             diagnostics: verification.diagnostics,
             diagnosticClassifications: XcircuiteRejectedPlanDiagnosticClassifier().classify(
                 verification: verification,
