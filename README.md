@@ -189,6 +189,13 @@ and same-run resume; it does not claim DRC, LVS, PEX, timing, foundry, or
 process qualification. The retained Xcircuite regression covers this boundary
 through `PhysicalDesignFlowStageExecutorTests/physicalReviewApprovalResumesFlow`.
 
+The retained `EndToEndDesignFlowTests/retainedMultiEngineRunResumesAfterReview`
+test additionally executes one run through LogicDesign lowering, logic
+simulation, timing STA, physical floorplanning, review-packet integrity,
+human approval and same-run resume. This is integration evidence for the
+current handoff path; it does not promote local results to external-oracle or
+foundry/process qualification.
+
 Qualified evidence is passed as `ToolEvidence.qualification`. A run stage can
 require it through `ToolTrustRequirement.requiredQualifiedEvidenceKinds`. When the
 evidence is missing or failed, `DesignFlowKernel` blocks at the `tool-trust` gate
@@ -351,4 +358,5 @@ swift build
 perl -e 'alarm 900; exec @ARGV' xcodebuild test -scheme Xcircuite-Package -destination 'platform=macOS'
 ```
 
-The current full regression passes with 520 test cases in 55 suites.
+The current full regression passes with 523 test cases in 55 suites, including
+the retained multi-engine review and same-run resume flow.
