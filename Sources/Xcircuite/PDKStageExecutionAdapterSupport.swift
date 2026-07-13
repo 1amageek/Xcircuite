@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import PDKCore
 import PDKDiscovery
@@ -30,7 +31,7 @@ struct PDKStageExecutionSupport: Sendable {
         _ result: Result,
         stageID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let stageDirectory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -45,8 +46,7 @@ struct PDKStageExecutionSupport: Sendable {
             projectRoot: context.projectRoot,
             artifactID: "pdk-result",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
@@ -54,16 +54,16 @@ struct PDKStageExecutionSupport: Sendable {
         for url: URL,
         context: FlowExecutionContext,
         artifactID: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat
-    ) throws -> XcircuiteFileReference {
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
         try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,
             artifactID: artifactID,
+            role: .input,
             kind: kind,
-            format: format,
-            producedByRunID: context.runID
+            format: format
         )
     }
 
@@ -71,80 +71,22 @@ struct PDKStageExecutionSupport: Sendable {
         for url: URL,
         context: FlowExecutionContext,
         artifactID: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat
+        kind: ArtifactKind,
+        format: ArtifactFormat
     ) throws -> ArtifactLocator {
-        let reference = try inputReference(
+        try inputReference(
             for: url,
             context: context,
             artifactID: artifactID,
             kind: kind,
             format: format
-        )
-        let location: ArtifactLocation
-        if reference.path.hasPrefix("/") {
-            location = try ArtifactLocation(fileURL: URL(filePath: reference.path))
-        } else {
-            location = try ArtifactLocation(workspaceRelativePath: reference.path)
-        }
-        return ArtifactLocator(
-            location: location,
-            role: .input,
-            kind: try ArtifactKind(rawValue: reference.kind.rawValue),
-            format: try ArtifactFormat(rawValue: reference.format.rawValue)
-        )
-    }
-
-    func foundationInputReference(
-        for url: URL,
-        context: FlowExecutionContext,
-        artifactID: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat
-    ) throws -> ArtifactReference {
-        let legacy = try inputReference(
-            for: url,
-            context: context,
-            artifactID: artifactID,
-            kind: kind,
-            format: format
-        )
-        guard let hexadecimalValue = legacy.sha256,
-              let byteCount = legacy.byteCount,
-              byteCount >= 0 else {
-            throw XcircuiteRuntimeError.invalidInputReference(
-                "PDK input artifact digest metadata is incomplete."
-            )
-        }
-        let artifactIDValue: ArtifactID?
-        if let rawValue = legacy.artifactID {
-            artifactIDValue = try ArtifactID(rawValue: rawValue)
-        } else {
-            artifactIDValue = nil
-        }
-        let location: ArtifactLocation
-        if legacy.path.hasPrefix("/") {
-            location = try ArtifactLocation(fileURL: URL(filePath: legacy.path))
-        } else {
-            location = try ArtifactLocation(workspaceRelativePath: legacy.path)
-        }
-        return try ArtifactReference(
-            id: artifactIDValue,
-            locator: ArtifactLocator(
-                location: location,
-                role: .input,
-                kind: try ArtifactKind(rawValue: legacy.kind.rawValue),
-                format: try ArtifactFormat(rawValue: legacy.format.rawValue)
-            ),
-            digest: ContentDigest(algorithm: .sha256, hexadecimalValue: hexadecimalValue),
-            byteCount: UInt64(byteCount)
-        )
+        ).locator
     }
 
     func stageResult<Result: PDKStageExecutionResult>(
         result: Result,
         stageID: String,
-        artifact: XcircuiteFileReference
+        artifact: ArtifactReference
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map(flowDiagnostic)
         let gateStatus = gateStatus(for: result.status)

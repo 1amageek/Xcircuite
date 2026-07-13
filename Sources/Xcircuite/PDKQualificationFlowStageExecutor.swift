@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import PDKKit
 import DesignFlowKernel
@@ -64,14 +65,14 @@ public struct PDKQualificationFlowStageExecutor: FlowStageExecutor {
                 runDirectory: context.runDirectory
             )
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
-            let corpus = try support.foundationInputReference(
+            let corpus = try support.inputReference(
                 for: corpusURL,
                 context: context,
                 artifactID: "pdk-corpus-report",
                 kind: .report,
                 format: .json
             )
-            let oracle = try support.foundationInputReference(
+            let oracle = try support.inputReference(
                 for: oracleURL,
                 context: context,
                 artifactID: "pdk-oracle-report",

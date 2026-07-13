@@ -109,7 +109,7 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
                 stageID: stageID,
                 context: context
             )
-            return support.result(
+            return try support.result(
                 envelope: envelope,
                 resultArtifact: resultArtifact,
                 stageID: stageID,

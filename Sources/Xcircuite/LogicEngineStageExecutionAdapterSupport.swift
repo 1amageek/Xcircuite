@@ -17,7 +17,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
         artifactID: String,
         stageID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let outputDirectory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -30,8 +30,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
             projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
@@ -41,7 +40,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
         artifactID: String,
         stageID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let outputDirectory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -54,8 +53,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
             projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
@@ -63,15 +61,14 @@ struct LogicEngineStageExecutionSupport: Sendable {
         status: LogicExecutionStatus,
         diagnostics: [DesignDiagnostic],
         artifacts: [ArtifactReference],
-        resultArtifact: XcircuiteFileReference,
+        resultArtifact: ArtifactReference,
         stageID: String,
         gateID: String,
         context: FlowExecutionContext
     ) -> FlowStageResult {
-        let legacyArtifacts = FoundationFlowProjection.legacyReferences(from: artifacts) + [resultArtifact]
         let flowDiagnostics = diagnostics.map(FoundationFlowProjection.flowDiagnostic)
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
-            for: legacyArtifacts,
+            for: artifacts + [resultArtifact],
             projectRoot: context.projectRoot
         )
         let gateStatus: FlowGateStatus
@@ -98,17 +95,17 @@ struct LogicEngineStageExecutionSupport: Sendable {
                 FlowGateResult(gateID: gateID, status: gateStatus, diagnostics: flowDiagnostics),
                 integrityGate,
             ],
-            artifacts: legacyArtifacts
+            artifacts: artifacts + [resultArtifact]
         )
     }
 
     func rtlResult(
         _ result: RTLVerificationResult,
-        resultArtifact: XcircuiteFileReference,
+        resultArtifact: ArtifactReference,
         stageID: String,
         gateID: String,
         context: FlowExecutionContext,
-        additionalArtifacts: [XcircuiteFileReference] = [],
+        additionalArtifacts: [ArtifactReference] = [],
         additionalDiagnostics: [DesignDiagnostic] = [],
         stageStatusOverride: FlowStageStatus? = nil,
         gateStatusOverride: FlowGateStatus? = nil
@@ -122,9 +119,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
             }
             return FlowDiagnostic(severity: severity, code: diagnostic.code, message: diagnostic.message)
         } + additionalDiagnostics.map(FoundationFlowProjection.flowDiagnostic)
-        let artifacts = FoundationFlowProjection.legacyReferences(from: result.artifacts)
-            + [resultArtifact]
-            + additionalArtifacts
+        let artifacts = result.artifacts + [resultArtifact] + additionalArtifacts
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts,
             projectRoot: context.projectRoot
@@ -159,15 +154,15 @@ struct LogicEngineStageExecutionSupport: Sendable {
 
     func result<Payload: Sendable & Hashable & Codable>(
         envelope: XcircuiteEngineResultEnvelope<Payload>,
-        resultArtifact: XcircuiteFileReference,
+        resultArtifact: ArtifactReference,
         stageID: String,
         gateID: String,
         context: FlowExecutionContext,
-        additionalArtifacts: [XcircuiteFileReference] = [],
+        additionalArtifacts: [ArtifactReference] = [],
         additionalDiagnostics: [XcircuiteEngineDiagnostic] = [],
         stageStatusOverride: FlowStageStatus? = nil,
         gateStatusOverride: FlowGateStatus? = nil
-    ) -> FlowStageResult {
+    ) throws -> FlowStageResult {
         let diagnostics = (envelope.diagnostics + additionalDiagnostics).map { diagnostic in
             FlowDiagnostic(
                 severity: FlowDiagnosticSeverity(rawValue: diagnostic.severity.rawValue) ?? .error,
@@ -175,7 +170,9 @@ struct LogicEngineStageExecutionSupport: Sendable {
                 message: diagnostic.message
             )
         }
-        let artifacts = envelope.artifacts + [resultArtifact] + additionalArtifacts
+        let artifacts = try envelope.artifacts.map {
+            try FoundationFlowProjection.artifactReference(from: $0)
+        } + [resultArtifact] + additionalArtifacts
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts,
             projectRoot: context.projectRoot

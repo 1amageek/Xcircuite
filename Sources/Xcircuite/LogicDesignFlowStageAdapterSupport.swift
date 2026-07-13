@@ -24,7 +24,7 @@ struct LogicDesignFlowStageSupport: Sendable {
         stageID: String,
         context: FlowExecutionContext,
         fileName: String
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -41,8 +41,7 @@ struct LogicDesignFlowStageSupport: Sendable {
             projectRoot: context.projectRoot,
             artifactID: "\(stageID)-result",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
@@ -51,7 +50,7 @@ struct LogicDesignFlowStageSupport: Sendable {
         stageID: String,
         context: FlowExecutionContext,
         fileName: String
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let directory = context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -64,17 +63,16 @@ struct LogicDesignFlowStageSupport: Sendable {
             projectRoot: context.projectRoot,
             artifactID: "\(stageID)-result",
             kind: .report,
-            format: .json,
-            producedByRunID: context.runID
+            format: .json
         )
     }
 
     func stageResult(
-        resultArtifact: XcircuiteFileReference,
+        resultArtifact: ArtifactReference,
         status: LogicExecutionStatus,
         diagnostics: [LogicDiagnostic],
         stageID: String,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         context: FlowExecutionContext
     ) -> FlowStageResult {
         let flowDiagnostics = diagnostics.map { diagnostic in
@@ -124,11 +122,11 @@ struct LogicDesignFlowStageSupport: Sendable {
     }
 
     func stageResult(
-        resultArtifact: XcircuiteFileReference,
+        resultArtifact: ArtifactReference,
         envelopeStatus: XcircuiteEngineExecutionStatus,
         diagnostics: [XcircuiteEngineDiagnostic],
         stageID: String,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         context: FlowExecutionContext
     ) -> FlowStageResult {
         let flowDiagnostics = diagnostics.map(flowDiagnostic)
