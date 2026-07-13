@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteImprovementPlanningArtifactGenerationResult: Codable, Sendable, Hashable {
@@ -9,11 +10,11 @@ public struct XcircuiteImprovementPlanningArtifactGenerationResult: Codable, Sen
     public var accepted: Bool
     public var iterationCount: Int
     public var selectedCandidateID: String?
-    public var thresholdProfileArtifact: XcircuiteFileReference
-    public var costCalibrationArtifact: XcircuiteFileReference
-    public var paretoCandidatesArtifact: XcircuiteFileReference
-    public var improvementLoopArtifact: XcircuiteFileReference
-    public var rejectedFeedbackLearningReportArtifact: XcircuiteFileReference?
+    public var thresholdProfileArtifact: ArtifactReference
+    public var costCalibrationArtifact: ArtifactReference
+    public var paretoCandidatesArtifact: ArtifactReference
+    public var improvementLoopArtifact: ArtifactReference
+    public var rejectedFeedbackLearningReportArtifact: ArtifactReference?
     public var diagnostics: [String]
 
     public init(
@@ -24,11 +25,11 @@ public struct XcircuiteImprovementPlanningArtifactGenerationResult: Codable, Sen
         accepted: Bool,
         iterationCount: Int,
         selectedCandidateID: String? = nil,
-        thresholdProfileArtifact: XcircuiteFileReference,
-        costCalibrationArtifact: XcircuiteFileReference,
-        paretoCandidatesArtifact: XcircuiteFileReference,
-        improvementLoopArtifact: XcircuiteFileReference,
-        rejectedFeedbackLearningReportArtifact: XcircuiteFileReference? = nil,
+        thresholdProfileArtifact: ArtifactReference,
+        costCalibrationArtifact: ArtifactReference,
+        paretoCandidatesArtifact: ArtifactReference,
+        improvementLoopArtifact: ArtifactReference,
+        rejectedFeedbackLearningReportArtifact: ArtifactReference? = nil,
         diagnostics: [String] = []
     ) {
         self.status = status

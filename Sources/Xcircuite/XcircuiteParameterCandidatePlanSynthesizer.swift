@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
@@ -120,8 +121,14 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
                 ? nil
                 : selection.skippedRejectedCandidateIDs,
             selectionTrace: selection.trace,
-            selectionTraceArtifact: selectionTraceReference,
-            candidatePlanArtifact: reference
+            selectionTraceArtifact: try requireFoundationArtifactReference(
+                selectionTraceReference,
+                field: "parameter-candidate-selection-trace"
+            ),
+            candidatePlanArtifact: try requireFoundationArtifactReference(
+                reference,
+                field: "candidate-plan"
+            )
         )
     }
 

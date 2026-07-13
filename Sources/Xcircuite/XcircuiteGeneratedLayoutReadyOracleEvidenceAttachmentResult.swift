@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult: Codable, Sendable, Hashable {
@@ -7,7 +8,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult: Codab
     public var status: Status
     public var summary: Summary
     public var updatedReport: XcircuiteGeneratedLayoutSignoffCorpusReport
-    public var reportArtifact: XcircuiteFileReference?
+    public var reportArtifact: ArtifactReference?
     public var diagnostics: [Diagnostic]
 
     public init(
@@ -16,7 +17,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult: Codab
         status: Status,
         summary: Summary,
         updatedReport: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        reportArtifact: XcircuiteFileReference? = nil,
+        reportArtifact: ArtifactReference? = nil,
         diagnostics: [Diagnostic]
     ) {
         self.schemaVersion = schemaVersion

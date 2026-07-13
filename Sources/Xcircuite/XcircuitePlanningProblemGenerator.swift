@@ -3,6 +3,7 @@ import Foundation
 import LVSEngine
 import PEXEngine
 import DesignFlowKernel
+import CircuiteFoundation
 
 public struct XcircuitePlanningProblemGenerator: Sendable {
     private let packageStore: XcircuitePackageStore
@@ -147,7 +148,10 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
             metricReportPath: request.metricReportPath,
             repairHintPath: repairHintPath,
             actionDomainPath: actionDomainPath,
-            problemArtifact: problemArtifact
+            problemArtifact: try requireFoundationArtifactReference(
+                problemArtifact,
+                field: "planning-problem"
+            )
         )
     }
 

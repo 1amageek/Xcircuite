@@ -119,16 +119,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 request: XcircuiteCandidatePlanVerificationRequest(runID: request.runID),
                 projectRoot: projectRoot
             )
-            planVerificationArtifact = try requireFoundationArtifactReference(
-                artifactReferenceResolver.verifiedArtifactReference(
-                verifierResult.planVerificationArtifact,
-                field: "planVerificationArtifact",
-                expectedFormat: .json,
-                runID: request.runID,
-                projectRoot: projectRoot
-                ),
-                field: "qualification.planVerificationArtifact"
-            )
+            planVerificationArtifact = verifierResult.planVerificationArtifact
             let verification = try packageStore.readJSON(
                 XcircuitePlanVerification.self,
                 from: packageStore.url(

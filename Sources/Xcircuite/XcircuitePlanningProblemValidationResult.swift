@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuitePlanningProblemValidationResult: Codable, Sendable, Hashable {
@@ -7,9 +8,9 @@ public struct XcircuitePlanningProblemValidationResult: Codable, Sendable, Hasha
     public var problemID: String
     public var problemPath: String
     public var validation: XcircuitePlanningProblemValidation
-    public var validationArtifact: XcircuiteFileReference
-    public var problemTranslationAuditArtifact: XcircuiteFileReference?
-    public var actionDomainSnapshotArtifact: XcircuiteFileReference?
+    public var validationArtifact: ArtifactReference
+    public var problemTranslationAuditArtifact: ArtifactReference?
+    public var actionDomainSnapshotArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -18,9 +19,9 @@ public struct XcircuitePlanningProblemValidationResult: Codable, Sendable, Hasha
         problemID: String,
         problemPath: String,
         validation: XcircuitePlanningProblemValidation,
-        validationArtifact: XcircuiteFileReference,
-        problemTranslationAuditArtifact: XcircuiteFileReference? = nil,
-        actionDomainSnapshotArtifact: XcircuiteFileReference? = nil
+        validationArtifact: ArtifactReference,
+        problemTranslationAuditArtifact: ArtifactReference? = nil,
+        actionDomainSnapshotArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.status = status

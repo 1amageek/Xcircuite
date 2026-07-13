@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteParameterCandidateGenerationResult: Codable, Sendable, Hashable {
@@ -9,9 +10,9 @@ public struct XcircuiteParameterCandidateGenerationResult: Codable, Sendable, Ha
     public var strategy: String
     public var candidateCount: Int
     public var problemPath: String
-    public var parameterCandidatesArtifact: XcircuiteFileReference?
+    public var parameterCandidatesArtifact: ArtifactReference?
     public var searchTrace: XcircuiteParameterCandidateSearchTrace?
-    public var searchTraceArtifact: XcircuiteFileReference?
+    public var searchTraceArtifact: ArtifactReference?
     public var diagnostics: [XcircuiteParameterCandidateDiagnostic]
 
     public init(
@@ -22,9 +23,9 @@ public struct XcircuiteParameterCandidateGenerationResult: Codable, Sendable, Ha
         strategy: String,
         candidateCount: Int,
         problemPath: String,
-        parameterCandidatesArtifact: XcircuiteFileReference?,
+        parameterCandidatesArtifact: ArtifactReference?,
         searchTrace: XcircuiteParameterCandidateSearchTrace? = nil,
-        searchTraceArtifact: XcircuiteFileReference? = nil,
+        searchTraceArtifact: ArtifactReference? = nil,
         diagnostics: [XcircuiteParameterCandidateDiagnostic]
     ) {
         self.schemaVersion = schemaVersion

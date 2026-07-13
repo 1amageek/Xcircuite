@@ -134,7 +134,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             promotedCandidatePlanArtifact: promotedCandidatePlanArtifact,
             promotedSolverPlanArtifact: promotedSolverPlanArtifact,
             promotedPlanReplayValidationArtifact: promotedPlanReplayValidationArtifact,
-            promotedPlanVerificationArtifact: verificationResult?.planVerificationArtifact,
+            promotedPlanVerificationArtifact: (verificationResult?.planVerificationArtifact).map(legacyArtifactReference),
             verificationStatus: verificationResult?.status,
             verificationAccepted: verificationResult?.accepted,
             diagnostics: diagnostics

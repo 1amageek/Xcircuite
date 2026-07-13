@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanGenerationResult: Codable, Sendable, Hashable {
@@ -9,11 +10,11 @@ public struct XcircuiteCandidatePlanGenerationResult: Codable, Sendable, Hashabl
     public var planID: String
     public var executionReadiness: String
     public var problemPath: String
-    public var candidatePlanArtifact: XcircuiteFileReference
-    public var problemTranslationAuditArtifact: XcircuiteFileReference?
-    public var actionDomainSnapshotArtifact: XcircuiteFileReference?
+    public var candidatePlanArtifact: ArtifactReference
+    public var problemTranslationAuditArtifact: ArtifactReference?
+    public var actionDomainSnapshotArtifact: ArtifactReference?
     public var symbolicPlannerTrace: XcircuiteSymbolicPlannerTrace?
-    public var symbolicPlannerTraceArtifact: XcircuiteFileReference?
+    public var symbolicPlannerTraceArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -23,11 +24,11 @@ public struct XcircuiteCandidatePlanGenerationResult: Codable, Sendable, Hashabl
         planID: String,
         executionReadiness: String,
         problemPath: String,
-        candidatePlanArtifact: XcircuiteFileReference,
-        problemTranslationAuditArtifact: XcircuiteFileReference? = nil,
-        actionDomainSnapshotArtifact: XcircuiteFileReference? = nil,
+        candidatePlanArtifact: ArtifactReference,
+        problemTranslationAuditArtifact: ArtifactReference? = nil,
+        actionDomainSnapshotArtifact: ArtifactReference? = nil,
         symbolicPlannerTrace: XcircuiteSymbolicPlannerTrace? = nil,
-        symbolicPlannerTraceArtifact: XcircuiteFileReference? = nil
+        symbolicPlannerTraceArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.status = status

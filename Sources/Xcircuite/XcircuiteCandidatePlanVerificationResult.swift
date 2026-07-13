@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanVerificationResult: Codable, Sendable, Hashable {
@@ -9,8 +10,8 @@ public struct XcircuiteCandidatePlanVerificationResult: Codable, Sendable, Hasha
     public var planID: String
     public var accepted: Bool
     public var candidatePlanPath: String
-    public var planVerificationArtifact: XcircuiteFileReference
-    public var rejectedPlansArtifact: XcircuiteFileReference?
+    public var planVerificationArtifact: ArtifactReference
+    public var rejectedPlansArtifact: ArtifactReference?
     public var nextActions: [String]
 
     public init(
@@ -21,8 +22,8 @@ public struct XcircuiteCandidatePlanVerificationResult: Codable, Sendable, Hasha
         planID: String,
         accepted: Bool,
         candidatePlanPath: String,
-        planVerificationArtifact: XcircuiteFileReference,
-        rejectedPlansArtifact: XcircuiteFileReference? = nil,
+        planVerificationArtifact: ArtifactReference,
+        rejectedPlansArtifact: ArtifactReference? = nil,
         nextActions: [String]
     ) {
         self.schemaVersion = schemaVersion

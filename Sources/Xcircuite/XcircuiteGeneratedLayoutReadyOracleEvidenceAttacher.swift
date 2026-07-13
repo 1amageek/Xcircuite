@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
@@ -72,7 +73,10 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
             status: resultWithoutSelfRef.status,
             summary: resultWithoutSelfRef.summary,
             updatedReport: updatedReport,
-            reportArtifact: reportArtifact,
+            reportArtifact: try requireFoundationArtifactReference(
+                reportArtifact,
+                field: "generated-layout-signoff-ready-oracle-corpus-report"
+            ),
             diagnostics: resultWithoutSelfRef.diagnostics
         )
     }
@@ -107,7 +111,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
         retainedSignoffReport: XcircuiteRetainedSignoffReport,
         evidenceByDomain: [XcircuiteGeneratedLayoutSignoffStageFamily: DomainEvidence],
-        reportArtifact: XcircuiteFileReference?
+        reportArtifact: ArtifactReference?
     ) -> XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult {
         var updatedReadinessCount = 0
         var diagnostics: [XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult.Diagnostic] = []

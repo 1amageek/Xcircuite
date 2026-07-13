@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteNumericRepairLoopPolicyTrace: Codable, Sendable, Hashable {
@@ -9,10 +10,10 @@ public struct XcircuiteNumericRepairLoopPolicyTrace: Codable, Sendable, Hashable
     public var selectedCandidateStrategy: String
     public var usesCalibrationArtifacts: Bool
     public var sourceIterationIndexes: [Int]
-    public var metricThresholdProfileArtifact: XcircuiteFileReference?
-    public var costCalibrationArtifact: XcircuiteFileReference?
-    public var paretoCandidatesArtifact: XcircuiteFileReference?
-    public var improvementLoopArtifact: XcircuiteFileReference?
+    public var metricThresholdProfileArtifact: ArtifactReference?
+    public var costCalibrationArtifact: ArtifactReference?
+    public var paretoCandidatesArtifact: ArtifactReference?
+    public var improvementLoopArtifact: ArtifactReference?
     public var reasonCodes: [String]
     public var diagnostics: [String]
 
@@ -24,10 +25,10 @@ public struct XcircuiteNumericRepairLoopPolicyTrace: Codable, Sendable, Hashable
         selectedCandidateStrategy: String,
         usesCalibrationArtifacts: Bool,
         sourceIterationIndexes: [Int] = [],
-        metricThresholdProfileArtifact: XcircuiteFileReference? = nil,
-        costCalibrationArtifact: XcircuiteFileReference? = nil,
-        paretoCandidatesArtifact: XcircuiteFileReference? = nil,
-        improvementLoopArtifact: XcircuiteFileReference? = nil,
+        metricThresholdProfileArtifact: ArtifactReference? = nil,
+        costCalibrationArtifact: ArtifactReference? = nil,
+        paretoCandidatesArtifact: ArtifactReference? = nil,
+        improvementLoopArtifact: ArtifactReference? = nil,
         reasonCodes: [String] = [],
         diagnostics: [String] = []
     ) {

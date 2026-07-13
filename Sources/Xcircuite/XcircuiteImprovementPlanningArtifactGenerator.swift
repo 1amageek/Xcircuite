@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
@@ -140,11 +141,26 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             accepted: loop.accepted,
             iterationCount: loop.iterationCount,
             selectedCandidateID: paretoSet.selectedCandidateID,
-            thresholdProfileArtifact: profileRef,
-            costCalibrationArtifact: calibrationRef,
-            paretoCandidatesArtifact: paretoRef,
-            improvementLoopArtifact: loopRef,
-            rejectedFeedbackLearningReportArtifact: learningRef,
+            thresholdProfileArtifact: try requireFoundationArtifactReference(
+                profileRef,
+                field: "metric-threshold-profile"
+            ),
+            costCalibrationArtifact: try requireFoundationArtifactReference(
+                calibrationRef,
+                field: "cost-calibration"
+            ),
+            paretoCandidatesArtifact: try requireFoundationArtifactReference(
+                paretoRef,
+                field: "pareto-candidates"
+            ),
+            improvementLoopArtifact: try requireFoundationArtifactReference(
+                loopRef,
+                field: "improvement-loop"
+            ),
+            rejectedFeedbackLearningReportArtifact: try requireFoundationArtifactReference(
+                learningRef,
+                field: "rejected-feedback-learning-report"
+            ),
             diagnostics: diagnostics(problem: problem, loop: loop, evidence: evidence)
         )
     }
@@ -552,10 +568,10 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     ) throws -> IterationEvidence {
         let selectionTrace = try optionalJSON(
             XcircuiteParameterCandidateSelectionTrace.self,
-            from: archivedReference(
-                role: "selection-trace",
-                iteration: iteration
-            ) ?? iteration.selectionTraceArtifact,
+                from: archivedReference(
+                    role: "selection-trace",
+                    iteration: iteration
+                ) ?? iteration.selectionTraceArtifact,
             projectRoot: projectRoot
         )
         if let selectionTrace {
@@ -568,10 +584,10 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         }
         let verification = try optionalJSON(
             XcircuitePlanVerification.self,
-            from: archivedReference(
-                role: "plan-verification",
-                iteration: iteration
-            ) ?? iteration.planVerificationArtifact,
+                from: archivedReference(
+                    role: "plan-verification",
+                    iteration: iteration
+                ) ?? iteration.planVerificationArtifact,
             projectRoot: projectRoot
         )
         if let verification {
@@ -592,15 +608,15 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     private func archivedReference(
         role: String,
         iteration: XcircuiteNumericRepairLoopIteration
-    ) -> XcircuiteFileReference? {
+    ) -> ArtifactReference? {
         iteration.archivedArtifactRefs.first {
-            $0.artifactID == "planning-numeric-repair-loop-iteration-\(iteration.iterationIndex)-\(role)"
+            $0.id.rawValue == "planning-numeric-repair-loop-iteration-\(iteration.iterationIndex)-\(role)"
         }
     }
 
     private func optionalJSON<T: Decodable>(
         _ type: T.Type,
-        from reference: XcircuiteFileReference?,
+        from reference: ArtifactReference?,
         projectRoot: URL
     ) throws -> T? {
         guard let reference else {
@@ -608,7 +624,7 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         }
         return try packageStore.readJSON(
             T.self,
-            from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            from: try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
         )
     }
 

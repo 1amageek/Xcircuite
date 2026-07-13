@@ -292,3 +292,39 @@ func requireFoundationArtifactReference(
     }
     return foundationReference
 }
+
+func legacyArtifactReference(_ reference: ArtifactReference) -> XcircuiteFileReference {
+    let kind: XcircuiteFileKind
+    switch reference.locator.kind.rawValue {
+    case "parasitics":
+        kind = .parasitic
+    case "power-intent":
+        kind = .powerIntent
+    case "timing.library":
+        kind = .timingLibrary
+    default:
+        kind = XcircuiteFileKind(rawValue: reference.locator.kind.rawValue) ?? .other
+    }
+    let format: XcircuiteFileFormat
+    switch reference.locator.format.rawValue {
+    case "system-verilog":
+        format = .systemVerilog
+    default:
+        format = XcircuiteFileFormat(rawValue: reference.locator.format.rawValue.uppercased()) ?? .unknown
+    }
+    let path: String
+    switch reference.locator.location.storage {
+    case .workspaceRelative:
+        path = reference.locator.location.value
+    case .absoluteFileURL:
+        path = URL(string: reference.locator.location.value)?.path ?? reference.locator.location.value
+    }
+    return XcircuiteFileReference(
+        artifactID: reference.id.rawValue,
+        path: path,
+        kind: kind,
+        format: format,
+        sha256: reference.digest.hexadecimalValue,
+        byteCount: Int64(reference.byteCount)
+    )
+}

@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteNumericRepairLoopIteration: Codable, Sendable, Hashable {
@@ -17,16 +18,16 @@ public struct XcircuiteNumericRepairLoopIteration: Codable, Sendable, Hashable {
     public var verificationStatus: String?
     public var accepted: Bool
     public var policyTrace: XcircuiteNumericRepairLoopPolicyTrace?
-    public var parameterCandidatesArtifact: XcircuiteFileReference?
-    public var searchTraceArtifact: XcircuiteFileReference?
-    public var selectionTraceArtifact: XcircuiteFileReference?
-    public var candidatePlanArtifact: XcircuiteFileReference?
-    public var planExecutionArtifact: XcircuiteFileReference?
-    public var designDiffArtifact: XcircuiteFileReference?
-    public var producedArtifacts: [XcircuiteFileReference]
-    public var planVerificationArtifact: XcircuiteFileReference?
-    public var rejectedPlansArtifact: XcircuiteFileReference?
-    public var archivedArtifactRefs: [XcircuiteFileReference]
+    public var parameterCandidatesArtifact: ArtifactReference?
+    public var searchTraceArtifact: ArtifactReference?
+    public var selectionTraceArtifact: ArtifactReference?
+    public var candidatePlanArtifact: ArtifactReference?
+    public var planExecutionArtifact: ArtifactReference?
+    public var designDiffArtifact: ArtifactReference?
+    public var producedArtifacts: [ArtifactReference]
+    public var planVerificationArtifact: ArtifactReference?
+    public var rejectedPlansArtifact: ArtifactReference?
+    public var archivedArtifactRefs: [ArtifactReference]
     public var diagnostics: [XcircuiteNumericRepairLoopDiagnostic]
     public var nextActions: [String]
 
@@ -46,16 +47,16 @@ public struct XcircuiteNumericRepairLoopIteration: Codable, Sendable, Hashable {
         verificationStatus: String? = nil,
         accepted: Bool = false,
         policyTrace: XcircuiteNumericRepairLoopPolicyTrace? = nil,
-        parameterCandidatesArtifact: XcircuiteFileReference? = nil,
-        searchTraceArtifact: XcircuiteFileReference? = nil,
-        selectionTraceArtifact: XcircuiteFileReference? = nil,
-        candidatePlanArtifact: XcircuiteFileReference? = nil,
-        planExecutionArtifact: XcircuiteFileReference? = nil,
-        designDiffArtifact: XcircuiteFileReference? = nil,
-        producedArtifacts: [XcircuiteFileReference] = [],
-        planVerificationArtifact: XcircuiteFileReference? = nil,
-        rejectedPlansArtifact: XcircuiteFileReference? = nil,
-        archivedArtifactRefs: [XcircuiteFileReference] = [],
+        parameterCandidatesArtifact: ArtifactReference? = nil,
+        searchTraceArtifact: ArtifactReference? = nil,
+        selectionTraceArtifact: ArtifactReference? = nil,
+        candidatePlanArtifact: ArtifactReference? = nil,
+        planExecutionArtifact: ArtifactReference? = nil,
+        designDiffArtifact: ArtifactReference? = nil,
+        producedArtifacts: [ArtifactReference] = [],
+        planVerificationArtifact: ArtifactReference? = nil,
+        rejectedPlansArtifact: ArtifactReference? = nil,
+        archivedArtifactRefs: [ArtifactReference] = [],
         diagnostics: [XcircuiteNumericRepairLoopDiagnostic] = [],
         nextActions: [String] = []
     ) {

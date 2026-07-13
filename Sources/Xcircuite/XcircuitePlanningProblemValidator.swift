@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuitePlanningProblemValidator: Sendable {
@@ -70,9 +71,18 @@ public struct XcircuitePlanningProblemValidator: Sendable {
             problemID: problem.problemID,
             problemPath: problemPath,
             validation: validation,
-            validationArtifact: validationRef,
-            problemTranslationAuditArtifact: translationAuditResult.auditArtifact,
-            actionDomainSnapshotArtifact: actionDomainContext.reference
+            validationArtifact: try requireFoundationArtifactReference(
+                validationRef,
+                field: "planning-problem-validation"
+            ),
+            problemTranslationAuditArtifact: try requireFoundationArtifactReference(
+                translationAuditResult.auditArtifact,
+                field: "problem-translation-audit"
+            ),
+            actionDomainSnapshotArtifact: try requireFoundationArtifactReference(
+                actionDomainContext.reference,
+                field: "action-domain-snapshot"
+            )
         )
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanGenerator: Sendable {
@@ -40,11 +41,23 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             planID: build.draft.plan.planID,
             executionReadiness: build.draft.plan.executionReadiness,
             problemPath: build.problemPath,
-            candidatePlanArtifact: reference,
-            problemTranslationAuditArtifact: build.problemTranslationAuditArtifact,
-            actionDomainSnapshotArtifact: build.actionDomainSnapshotArtifact,
+            candidatePlanArtifact: try requireFoundationArtifactReference(
+                reference,
+                field: "candidate-plan"
+            ),
+            problemTranslationAuditArtifact: try requireFoundationArtifactReference(
+                build.problemTranslationAuditArtifact,
+                field: "problem-translation-audit"
+            ),
+            actionDomainSnapshotArtifact: try requireFoundationArtifactReference(
+                build.actionDomainSnapshotArtifact,
+                field: "action-domain-snapshot"
+            ),
             symbolicPlannerTrace: build.draft.trace,
-            symbolicPlannerTraceArtifact: traceReference
+            symbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
+                traceReference,
+                field: "symbolic-planner-trace"
+            )
         )
     }
 
@@ -112,8 +125,8 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let candidateResults = candidates.map { candidate in
-            familyCandidateResult(from: candidate, selectedCandidateIndex: selected.candidateIndex)
+        let candidateResults = try candidates.map { candidate in
+            try familyCandidateResult(from: candidate, selectedCandidateIndex: selected.candidateIndex)
         }
         let familyRun = XcircuiteSymbolicPlannerFamilyRun(
             status: "generated",

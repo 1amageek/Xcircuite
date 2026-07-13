@@ -5,6 +5,7 @@ import LayoutCore
 import LayoutIO
 import LayoutTech
 import LVSEngine
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanExecutor: Sendable {
@@ -102,7 +103,10 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 problemID: plan.problemID,
                 planID: plan.planID,
                 candidatePlanPath: candidatePlanRef.path,
-                planExecutionArtifact: executionRef,
+                planExecutionArtifact: try requireFoundationArtifactReference(
+                    executionRef,
+                    field: "plan-execution"
+                ),
                 producedArtifacts: [],
                 nextActions: execution.nextActions
             )
@@ -167,9 +171,16 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             problemID: plan.problemID,
             planID: plan.planID,
             candidatePlanPath: candidatePlanRef.path,
-            planExecutionArtifact: executionRef,
-            designDiffArtifact: designDiffRef,
-            producedArtifacts: producedArtifacts,
+            planExecutionArtifact: try requireFoundationArtifactReference(
+                executionRef,
+                field: "plan-execution"
+            ),
+            designDiffArtifact: try designDiffRef.map {
+                try requireFoundationArtifactReference($0, field: "design-diff")
+            },
+            producedArtifacts: try producedArtifacts.map {
+                try requireFoundationArtifactReference($0, field: "produced-artifact")
+            },
             nextActions: nextActions
         )
     }

@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuitePlanningProblemGenerationResult: Codable, Sendable, Hashable {
@@ -16,7 +17,7 @@ public struct XcircuitePlanningProblemGenerationResult: Codable, Sendable, Hasha
     public var metricReportPath: String?
     public var repairHintPath: String?
     public var actionDomainPath: String?
-    public var problemArtifact: XcircuiteFileReference
+    public var problemArtifact: ArtifactReference
 
     public init(
         schemaVersion: Int = 1,
@@ -33,7 +34,7 @@ public struct XcircuitePlanningProblemGenerationResult: Codable, Sendable, Hasha
         metricReportPath: String?,
         repairHintPath: String? = nil,
         actionDomainPath: String?,
-        problemArtifact: XcircuiteFileReference
+        problemArtifact: ArtifactReference
     ) {
         self.schemaVersion = schemaVersion
         self.status = status

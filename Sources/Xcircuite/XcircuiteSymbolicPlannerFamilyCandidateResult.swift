@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerFamilyCandidateResult: Codable, Sendable, Hashable {
@@ -16,8 +17,8 @@ public struct XcircuiteSymbolicPlannerFamilyCandidateResult: Codable, Sendable, 
     public var unresolvedObjectiveIDs: [String]
     public var missingGoalAtoms: [String]
     public var blockers: [String]
-    public var candidatePlanArtifact: XcircuiteFileReference
-    public var symbolicPlannerTraceArtifact: XcircuiteFileReference
+    public var candidatePlanArtifact: ArtifactReference
+    public var symbolicPlannerTraceArtifact: ArtifactReference
     public var policyTrace: XcircuiteSymbolicPlannerPolicyTrace?
     public var calibrationTrace: XcircuiteSymbolicPlannerCalibrationTrace?
 
@@ -36,8 +37,8 @@ public struct XcircuiteSymbolicPlannerFamilyCandidateResult: Codable, Sendable, 
         unresolvedObjectiveIDs: [String],
         missingGoalAtoms: [String],
         blockers: [String],
-        candidatePlanArtifact: XcircuiteFileReference,
-        symbolicPlannerTraceArtifact: XcircuiteFileReference,
+        candidatePlanArtifact: ArtifactReference,
+        symbolicPlannerTraceArtifact: ArtifactReference,
         policyTrace: XcircuiteSymbolicPlannerPolicyTrace? = nil,
         calibrationTrace: XcircuiteSymbolicPlannerCalibrationTrace? = nil
     ) {

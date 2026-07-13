@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanRiskApprovalResult: Codable, Sendable, Hashable {
@@ -8,7 +9,7 @@ public struct XcircuiteCandidatePlanRiskApprovalResult: Codable, Sendable, Hasha
     public var approvalID: String
     public var approvalPath: String
     public var approval: XcircuiteApprovalRecord
-    public var approvalArtifact: XcircuiteFileReference
+    public var approvalArtifact: ArtifactReference
     public var nextActions: [String]
 
     public init(
@@ -18,7 +19,7 @@ public struct XcircuiteCandidatePlanRiskApprovalResult: Codable, Sendable, Hasha
         approvalID: String,
         approvalPath: String,
         approval: XcircuiteApprovalRecord,
-        approvalArtifact: XcircuiteFileReference,
+        approvalArtifact: ArtifactReference,
         nextActions: [String]
     ) {
         self.schemaVersion = schemaVersion

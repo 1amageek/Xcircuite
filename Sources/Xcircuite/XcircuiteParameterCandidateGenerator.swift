@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteParameterCandidateGenerator: Sendable {
@@ -82,9 +83,14 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
             strategy: request.strategy,
             candidateCount: generated.candidates.count,
             problemPath: problemPath,
-            parameterCandidatesArtifact: reference,
+            parameterCandidatesArtifact: try reference.map {
+                try requireFoundationArtifactReference($0, field: "parameter-candidates")
+            },
             searchTrace: generated.searchTrace,
-            searchTraceArtifact: searchTraceReference,
+            searchTraceArtifact: try requireFoundationArtifactReference(
+                searchTraceReference,
+                field: "parameter-candidate-search-trace"
+            ),
             diagnostics: generated.diagnostics
         )
     }

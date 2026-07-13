@@ -5,6 +5,7 @@ import LayoutIO
 import LVSEngine
 import PEXEngine
 import DesignFlowKernel
+import CircuiteFoundation
 
 public struct XcircuiteCandidatePlanVerifier: Sendable {
     let packageStore: XcircuitePackageStore
@@ -130,8 +131,13 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
             planID: plan.planID,
             accepted: verification.accepted,
             candidatePlanPath: candidatePlanRef.path,
-            planVerificationArtifact: verificationRef,
-            rejectedPlansArtifact: rejectedPlansRef,
+            planVerificationArtifact: try requireFoundationArtifactReference(
+                verificationRef,
+                field: "plan-verification"
+            ),
+            rejectedPlansArtifact: try rejectedPlansRef.map {
+                try requireFoundationArtifactReference($0, field: "rejected-plans")
+            },
             nextActions: verification.nextActions
         )
     }

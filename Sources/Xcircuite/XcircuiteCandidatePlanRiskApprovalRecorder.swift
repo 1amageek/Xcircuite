@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
@@ -61,7 +62,10 @@ public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
             approvalID: request.approvalID,
             approvalPath: approvalPath,
             approval: approval,
-            approvalArtifact: approvalArtifact,
+            approvalArtifact: try requireFoundationArtifactReference(
+                approvalArtifact,
+                field: "risk-approval"
+            ),
             nextActions: ["verify-candidate-plan", "execute-candidate-plan"]
         )
     }

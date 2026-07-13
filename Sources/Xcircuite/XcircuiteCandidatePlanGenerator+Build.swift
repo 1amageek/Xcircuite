@@ -307,7 +307,7 @@ extension XcircuiteCandidatePlanGenerator {
     func familyCandidateResult(
         from candidate: FamilyCandidateBuild,
         selectedCandidateIndex: Int
-    ) -> XcircuiteSymbolicPlannerFamilyCandidateResult {
+    ) throws -> XcircuiteSymbolicPlannerFamilyCandidateResult {
         XcircuiteSymbolicPlannerFamilyCandidateResult(
             candidateIndex: candidate.candidateIndex,
             requestedStrategy: candidate.requestedStrategy,
@@ -323,8 +323,14 @@ extension XcircuiteCandidatePlanGenerator {
             unresolvedObjectiveIDs: candidate.build.draft.trace.unresolvedObjectiveIDs,
             missingGoalAtoms: candidate.build.draft.trace.missingGoalAtoms,
             blockers: candidate.build.draft.plan.blockers,
-            candidatePlanArtifact: candidate.candidatePlanArtifact,
-            symbolicPlannerTraceArtifact: candidate.symbolicPlannerTraceArtifact,
+            candidatePlanArtifact: try requireFoundationArtifactReference(
+                candidate.candidatePlanArtifact,
+                field: "family-candidate-plan"
+            ),
+            symbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
+                candidate.symbolicPlannerTraceArtifact,
+                field: "family-symbolic-planner-trace"
+            ),
             policyTrace: candidate.build.draft.trace.policyTrace,
             calibrationTrace: candidate.build.draft.trace.calibrationTrace
         )

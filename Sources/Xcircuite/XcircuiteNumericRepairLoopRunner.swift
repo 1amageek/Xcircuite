@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteNumericRepairLoopRunner: Sendable {
@@ -67,12 +68,12 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                     runID: request.runID,
                     problemArtifactID: request.problemArtifactID,
                     problemPath: request.problemPath,
-                    metricThresholdProfileArtifactID: policySelection.trace.metricThresholdProfileArtifact?.artifactID,
-                    metricThresholdProfilePath: policySelection.trace.metricThresholdProfileArtifact?.path,
-                    costCalibrationArtifactID: policySelection.trace.costCalibrationArtifact?.artifactID,
-                    costCalibrationPath: policySelection.trace.costCalibrationArtifact?.path,
-                    paretoCandidatesArtifactID: policySelection.trace.paretoCandidatesArtifact?.artifactID,
-                    paretoCandidatesPath: policySelection.trace.paretoCandidatesArtifact?.path,
+                    metricThresholdProfileArtifactID: policySelection.trace.metricThresholdProfileArtifact.map { $0.id.rawValue },
+                    metricThresholdProfilePath: policySelection.trace.metricThresholdProfileArtifact.map { $0.locator.location.value },
+                    costCalibrationArtifactID: policySelection.trace.costCalibrationArtifact.map { $0.id.rawValue },
+                    costCalibrationPath: policySelection.trace.costCalibrationArtifact.map { $0.locator.location.value },
+                    paretoCandidatesArtifactID: policySelection.trace.paretoCandidatesArtifact.map { $0.id.rawValue },
+                    paretoCandidatesPath: policySelection.trace.paretoCandidatesArtifact.map { $0.locator.location.value },
                     strategy: candidateStrategy,
                     maxCandidates: request.maxCandidates
                 ),
@@ -115,8 +116,8 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                         runID: request.runID,
                         problemArtifactID: request.problemArtifactID,
                         problemPath: request.problemPath,
-                        parameterCandidatesArtifactID: generation.parameterCandidatesArtifact?.artifactID,
-                        parameterCandidatesPath: generation.parameterCandidatesArtifact?.path,
+                        parameterCandidatesArtifactID: generation.parameterCandidatesArtifact.map { $0.id.rawValue },
+                        parameterCandidatesPath: generation.parameterCandidatesArtifact.map { $0.locator.location.value },
                         strategy: request.synthesisStrategy
                     ),
                     projectRoot: projectRoot
@@ -158,8 +159,8 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
             let execution = try await planExecutor.executeCandidatePlan(
                 request: XcircuiteCandidatePlanExecutionRequest(
                     runID: request.runID,
-                    candidatePlanArtifactID: synthesis.candidatePlanArtifact.artifactID,
-                    candidatePlanPath: synthesis.candidatePlanArtifact.path,
+                    candidatePlanArtifactID: synthesis.candidatePlanArtifact.id.rawValue,
+                    candidatePlanPath: synthesis.candidatePlanArtifact.locator.location.value,
                     actor: request.actor
                 ),
                 projectRoot: projectRoot
@@ -167,8 +168,8 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
             let verification = try await planVerifier.verifyCandidatePlan(
                 request: XcircuiteCandidatePlanVerificationRequest(
                     runID: request.runID,
-                    candidatePlanArtifactID: synthesis.candidatePlanArtifact.artifactID,
-                    candidatePlanPath: synthesis.candidatePlanArtifact.path,
+                    candidatePlanArtifactID: synthesis.candidatePlanArtifact.id.rawValue,
+                    candidatePlanPath: synthesis.candidatePlanArtifact.locator.location.value,
                     verificationMode: request.verificationMode
                 ),
                 projectRoot: projectRoot
@@ -396,13 +397,13 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
     }
 
     private func planVerificationDiagnostics(
-        from reference: XcircuiteFileReference,
+        from reference: ArtifactReference,
         projectRoot: URL,
         iterationIndex: Int
     ) throws -> [XcircuiteNumericRepairLoopDiagnostic] {
         let verification = try packageStore.readJSON(
             XcircuitePlanVerification.self,
-            from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            from: try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
         )
         return verification.diagnostics.map {
             XcircuiteNumericRepairLoopDiagnostic(
@@ -431,19 +432,24 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
     private func archiveIterationArtifacts(
         iterationIndex: Int,
         runID: String,
-        refs: [(String, XcircuiteFileReference?)],
+        refs: [(String, ArtifactReference?)],
         projectRoot: URL
-    ) throws -> [XcircuiteFileReference] {
-        var archived: [XcircuiteFileReference] = []
+    ) throws -> [ArtifactReference] {
+        var archived: [ArtifactReference] = []
         for (role, maybeRef) in refs {
             guard let sourceRef = maybeRef else {
                 continue
             }
-            try validateSourceArtifact(sourceRef, projectRoot: projectRoot)
-            let sourceURL = try packageStore.url(
-                forProjectRelativePath: sourceRef.path,
-                inProjectAt: projectRoot
-            )
+            let sourceIntegrity = LocalArtifactVerifier().verify(sourceRef, relativeTo: projectRoot)
+            guard sourceIntegrity.isVerified else {
+                throw XcircuiteNumericRepairLoopError.sourceArtifactIntegrityFailed(
+                    artifactID: sourceRef.id.rawValue,
+                    path: sourceRef.locator.location.value,
+                    status: .unreadableArtifact,
+                    message: sourceIntegrity.issues.map { String(describing: $0) }.joined(separator: "; ")
+                )
+            }
+            let sourceURL = try sourceRef.locator.location.resolvedFileURL(relativeTo: projectRoot)
             let archiveRelativePath = ".xcircuite/runs/\(runID)/planning/numeric-repair-loop/iterations/\(iterationIndex)/\(role)-\(sourceURL.lastPathComponent)"
             let archiveURL = try packageStore.url(
                 forProjectRelativePath: archiveRelativePath,
@@ -463,32 +469,42 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                 try removeTemporaryArchiveFile(temporaryURL)
                 throw error
             }
-            let archivedRef = try packageStore.fileReference(
+            let archivedLegacyRef = try packageStore.fileReference(
                 forProjectRelativePath: archiveRelativePath,
                 artifactID: "planning-numeric-repair-loop-iteration-\(iterationIndex)-\(role)",
-                kind: sourceRef.kind,
-                format: sourceRef.format,
+                kind: legacyFileKind(for: sourceRef.locator.kind),
+                format: legacyFileFormat(for: sourceRef.locator.format),
                 inProjectAt: projectRoot,
                 producedByRunID: runID
             )
-            try packageStore.upsertRunArtifact(archivedRef, runID: runID, inProjectAt: projectRoot)
-            archived.append(archivedRef)
+            try packageStore.upsertRunArtifact(archivedLegacyRef, runID: runID, inProjectAt: projectRoot)
+            archived.append(try requireFoundationArtifactReference(
+                archivedLegacyRef,
+                field: "numeric-repair-loop-iteration-\(iterationIndex)-\(role)"
+            ))
         }
         return archived
     }
 
-    private func validateSourceArtifact(
-        _ reference: XcircuiteFileReference,
-        projectRoot: URL
-    ) throws {
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
-            throw XcircuiteNumericRepairLoopError.sourceArtifactIntegrityFailed(
-                artifactID: reference.artifactID,
-                path: reference.path,
-                status: integrity.status,
-                message: integrity.message
-            )
+    private func legacyFileKind(for kind: ArtifactKind) -> XcircuiteFileKind {
+        switch kind.rawValue {
+        case "parasitics":
+            return .parasitic
+        case "power-intent":
+            return .powerIntent
+        case "timing.library":
+            return .timingLibrary
+        default:
+            return XcircuiteFileKind(rawValue: kind.rawValue) ?? .other
+        }
+    }
+
+    private func legacyFileFormat(for format: ArtifactFormat) -> XcircuiteFileFormat {
+        switch format.rawValue {
+        case "system-verilog":
+            return .systemVerilog
+        default:
+            return XcircuiteFileFormat(rawValue: format.rawValue.uppercased()) ?? .unknown
         }
     }
 

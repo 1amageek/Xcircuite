@@ -531,16 +531,16 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
                 iteration.designDiffArtifact,
                 iteration.planVerificationArtifact,
                 iteration.rejectedPlansArtifact
-            ].compactMap { $0 }
-                + iteration.producedArtifacts
-                + iteration.archivedArtifactRefs
+            ].compactMap { $0 }.map(legacyArtifactReference)
+                + iteration.producedArtifacts.map(legacyArtifactReference)
+                + iteration.archivedArtifactRefs.map(legacyArtifactReference)
         }
     }
 
     private func collectPlanVerificationRefs(
         _ loop: XcircuiteNumericRepairLoopResult
     ) -> [XcircuiteFileReference] {
-        stableUniqueArtifactRefs(loop.iterations.compactMap(\.planVerificationArtifact))
+        stableUniqueArtifactRefs(loop.iterations.compactMap(\.planVerificationArtifact).map(legacyArtifactReference))
     }
 
     private func collectNumericDiagnostics(
