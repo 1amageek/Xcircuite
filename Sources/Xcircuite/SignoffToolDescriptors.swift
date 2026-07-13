@@ -170,4 +170,109 @@ public enum SignoffToolDescriptors {
             )
         )
     }
+
+    public static func nativeElectricalStandardLayoutImport(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "native-electrical-standard-layout-import",
+            displayName: "Native Electrical Standard Layout Import",
+            kind: .maskIO,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "import-standard-layout",
+                    inputFormats: [.def, .gdsii, .oasis, .lef, .json],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func nativeElectricalSignoff(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "native-electrical-signoff",
+            displayName: "Native Electrical Signoff",
+            kind: .reporting,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "run-electrical-signoff",
+                    inputFormats: [.json, .spef, .def, .gdsii, .oasis],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func nativeElectricalQualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "native-electrical-signoff-qualification",
+            displayName: "Native Electrical Signoff Qualification",
+            kind: .reporting,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "qualify-electrical-signoff",
+                    inputFormats: [.json],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func nativeElectricalReleaseGate(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "native-electrical-signoff-release-gate",
+            displayName: "Native Electrical Signoff Release Gate",
+            kind: .reporting,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "evaluate-electrical-release-gate",
+                    inputFormats: [.json],
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+
+    public static func nativeElectricalRepairRevision(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: "native-electrical-signoff-repair-revision",
+            displayName: "Native Electrical Signoff Repair Revision",
+            kind: .layout,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: "apply-electrical-repair-revision",
+                    inputFormats: [.json],
+                    outputFormats: [.json, .def]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
 }

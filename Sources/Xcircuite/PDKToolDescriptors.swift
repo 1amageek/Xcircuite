@@ -1,0 +1,92 @@
+import Foundation
+import ToolQualification
+import XcircuitePackage
+
+public enum PDKToolDescriptors {
+    public static func discovery(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-discovery",
+            displayName: "PDK discovery",
+            operationID: "pdk-discover",
+            inputFormats: [.json, .text],
+            level: level
+        )
+    }
+
+    public static func validation(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-validation",
+            displayName: "PDK validation",
+            operationID: "pdk-validate",
+            inputFormats: [.json, .text],
+            level: level
+        )
+    }
+
+    public static func corpus(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-corpus-validation",
+            displayName: "PDK retained corpus validation",
+            operationID: "pdk-validate-corpus",
+            inputFormats: [.json, .text],
+            level: level
+        )
+    }
+
+    public static func standardView(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-standard-view-inspection",
+            displayName: "PDK standard-view inspection",
+            operationID: "pdk-inspect-standard-view",
+            inputFormats: [.json, .lef, .gdsii, .oasis, .spice, .liberty],
+            level: level
+        )
+    }
+
+    public static func oracle(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-oracle-comparison",
+            displayName: "PDK immutable oracle comparison",
+            operationID: "pdk-compare-oracle",
+            inputFormats: [.json, .lef, .gdsii, .oasis, .spice, .liberty],
+            level: level
+        )
+    }
+
+    public static func qualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-qualification",
+            displayName: "PDK local qualification",
+            operationID: "pdk-qualify",
+            inputFormats: [.json],
+            level: level
+        )
+    }
+
+    private static func descriptor(
+        toolID: String,
+        displayName: String,
+        operationID: String,
+        inputFormats: [XcircuiteFileFormat],
+        level: ToolQualificationLevel
+    ) -> ToolDescriptor {
+        ToolDescriptor(
+            toolID: toolID,
+            displayName: displayName,
+            kind: .reporting,
+            version: "1.0.0",
+            capabilities: [
+                ToolCapability(
+                    operationID: operationID,
+                    inputFormats: inputFormats,
+                    outputFormats: [.json]
+                ),
+            ],
+            trustProfile: ToolTrustProfile(level: level),
+            environment: ToolEnvironment(
+                executablePath: "in-process",
+                platform: "macOS"
+            )
+        )
+    }
+}

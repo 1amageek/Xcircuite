@@ -1,0 +1,418 @@
+import DesignFlowKernel
+import Foundation
+import LogicEngineCore
+import LogicIR
+import LogicLowering
+import LogicQualification
+import LogicSimulation
+import LogicSynthesis
+import PDKCore
+import RTLVerificationCore
+import Testing
+import TimingCore
+import ToolQualification
+import XcircuitePackage
+@testable import Xcircuite
+
+@Suite("LogicEngine flow stage adapters")
+struct LogicEngineFlowStageExecutorTests {
+    @Test("qualification adapter blocks release without process evidence", .timeLimit(.minutes(1)))
+    func qualificationAdapterRequiresProcessEvidence() async throws {
+        let root = try makeRoot(name: "logic-qualification-adapter")
+        defer { removeRoot(root) }
+        let report = LogicQualificationReport(
+            suiteID: "qualification-suite",
+            implementationID: "native-logic-engine",
+            implementationVersion: "1",
+            state: .oracleCorrelated,
+            evaluations: [LogicQualificationCaseEvaluation(
+                caseID: "case",
+                matched: true,
+                observedStatus: .completed,
+                observedDiagnosticCodes: [],
+                observedArtifactIDs: ["logic-report"],
+                mismatches: []
+            )],
+            blockers: ["process_qualification_required"],
+            oracleCorrelation: LogicQualificationOracleCorrelationReport(
+                suiteID: "qualification-suite",
+                nativeImplementationID: "native-logic-engine",
+                oracleImplementationID: "reference-oracle",
+                matched: true,
+                independenceVerified: true,
+                matchedCaseIDs: ["case"]
+            )
+        )
+        let reportReference = try writeJSON(
+            report,
+            name: "logic-qualification-report.json",
+            root: root,
+            kind: .report
+        )
+        let context = try makeContext(root: root, runID: "logic-qualification-adapter")
+        let result = try await LogicQualificationFlowStageExecutor(
+            reportInput: .path(reportReference.path)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.qualification", displayName: "Logic qualification"),
+            context: context
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_PROCESS_REQUIRED" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-qualification-result" })
+    }
+
+    @Test("qualification adapter rejects a forged release report", .timeLimit(.minutes(1)))
+    func qualificationAdapterRejectsForgedReleaseReport() async throws {
+        let root = try makeRoot(name: "logic-qualification-forged-report")
+        defer { removeRoot(root) }
+        let report = LogicQualificationReport(
+            suiteID: "qualification-suite",
+            implementationID: "native-logic-engine",
+            implementationVersion: "1",
+            state: .releaseEligible,
+            evaluations: [LogicQualificationCaseEvaluation(
+                caseID: "case",
+                matched: true,
+                observedStatus: .completed,
+                observedDiagnosticCodes: [],
+                observedArtifactIDs: ["logic-report"],
+                mismatches: []
+            )]
+        )
+        let reportReference = try writeJSON(
+            report,
+            name: "forged-logic-qualification-report.json",
+            root: root,
+            kind: .report
+        )
+        let context = try makeContext(root: root, runID: "logic-qualification-forged-report")
+        let result = try await LogicQualificationFlowStageExecutor(
+            reportInput: .path(reportReference.path)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.qualification", displayName: "Logic qualification"),
+            context: context
+        )
+
+        #expect(result.status == .failed)
+        #expect(result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_ARTIFACT_INVALID" })
+    }
+
+    @Test("lowering adapter converts a canonical RTL snapshot into an execution artifact", .timeLimit(.minutes(1)))
+    func loweringAdapter() async throws {
+        let root = try makeRoot(name: "logic-lowering-adapter")
+        defer { removeRoot(root) }
+        let snapshot = try LogicDesignSnapshotCodec.finalized(LogicDesignSnapshot(
+            rtl: RTLDesign(
+                topModuleName: "adapter_top",
+                modules: [RTLModule(
+                    id: "module-top",
+                    name: "adapter_top",
+                    ports: [
+                        RTLPort(id: "a", name: "a", direction: .input),
+                        RTLPort(id: "y", name: "y", direction: .output),
+                    ],
+                    assignments: [RTLAssignment(
+                        id: "assignment-y",
+                        target: .identifier("y"),
+                        value: .identifier("a")
+                    )]
+                )]
+            )
+        ))
+        let snapshotReference = try writeJSON(snapshot, name: "rtl-snapshot.json", root: root, kind: .rtl)
+        let request = LogicLoweringRequest(
+            runID: "logic-lowering-adapter",
+            inputs: [snapshotReference],
+            design: LogicDesignReference(
+                artifact: snapshotReference,
+                topDesignName: "adapter_top",
+                designDigest: snapshot.designDigest ?? ""
+            )
+        )
+        let requestPath = try writeRequest(request, name: "lowering-request.json", root: root)
+        let context = try makeContext(root: root, runID: request.runID)
+        let result = try await LogicLoweringFlowStageExecutor(
+            requestInput: .path(requestPath)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.lower", displayName: "Logic lowering"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        #expect(result.artifacts.contains { $0.artifactID == "logic-execution-design" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-lowering-result" })
+    }
+
+    @Test("simulation adapter executes the native engine and persists artifacts", .timeLimit(.minutes(1)))
+    func simulationAdapter() async throws {
+        let root = try makeRoot(name: "logic-simulation-adapter")
+        defer { removeRoot(root) }
+        let designReference = try writeDesign(to: root)
+        let stimulusReference = try writeStimulus(to: root)
+        let request = LogicSimulationRequest(
+            runID: "logic-simulation-adapter",
+            inputs: [designReference.artifact, stimulusReference],
+            design: designReference,
+            stimulus: stimulusReference
+        )
+        let requestPath = try writeRequest(request, name: "simulation-request.json", root: root)
+        let context = try makeContext(root: root, runID: request.runID)
+        let result = try await LogicSimulationFlowStageExecutor(
+            requestInput: .path(requestPath)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.simulate", displayName: "Logic simulation"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        #expect(result.gates.contains { $0.status == .passed })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-waveform" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-simulation-result" })
+    }
+
+    @Test("synthesis adapter preserves equivalence-required provenance", .timeLimit(.minutes(1)))
+    func synthesisAdapter() async throws {
+        let root = try makeRoot(name: "logic-synthesis-adapter")
+        defer { removeRoot(root) }
+        let designReference = try writeDesign(to: root)
+        let library = try writeTextJSON(
+            "{\"schemaVersion\":1,\"libraryName\":\"adapter\",\"cells\":[{\"name\":\"AND2_X1\",\"kind\":\"and\",\"inputCount\":2,\"area\":1.0,\"power\":0.1,\"driveStrength\":1,\"qualified\":true}]}",
+            name: "logic-cells.json",
+            root: root,
+            kind: .timingLibrary
+        )
+        let constraints = try writeTextJSON(
+            "{\"schemaVersion\":1,\"maximumArea\":2.0}",
+            name: "logic-constraints.json",
+            root: root,
+            kind: .constraint
+        )
+        let pdk = try writeTextJSON(
+            "{\"processID\":\"adapter\",\"version\":\"1\"}",
+            name: "pdk.json",
+            root: root,
+            kind: .technology
+        )
+        guard let pdkDigest = pdk.sha256 else {
+            throw LogicExecutionError.artifactDigestMismatch(pdk.path)
+        }
+        let request = LogicSynthesisRequest(
+            runID: "logic-synthesis-adapter",
+            inputs: [designReference.artifact, library, constraints, pdk],
+            design: designReference,
+            libraries: [TimingLibraryReference(artifact: library, cornerIDs: ["typical"])],
+            constraints: TimingConstraintReference(artifact: constraints, modeIDs: ["default"]),
+            pdk: PDKReference(manifest: pdk, processID: "adapter", version: "1", digest: pdkDigest)
+        )
+        let requestPath = try writeRequest(request, name: "synthesis-request.json", root: root)
+        let context = try makeContext(root: root, runID: request.runID)
+        let result = try await LogicSynthesisFlowStageExecutor(
+            requestInput: .path(requestPath)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.synthesize", displayName: "Logic synthesis"),
+            context: context
+        )
+
+        #expect(result.status == .succeeded)
+        #expect(result.artifacts.contains { $0.artifactID == "mapped-design" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-synthesis-provenance" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-equivalence-request" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-synthesis-result" })
+    }
+
+    @Test("equivalence adapter proves mapped synthesis and emits acceptance evidence", .timeLimit(.minutes(1)))
+    func equivalenceAdapter() async throws {
+        let root = try makeRoot(name: "logic-equivalence-adapter")
+        defer { removeRoot(root) }
+        let designReference = try writeDesign(to: root)
+        let library = try writeTextJSON(
+            "{\"schemaVersion\":1,\"libraryName\":\"adapter\",\"cells\":[{\"name\":\"AND2_X1\",\"kind\":\"and\",\"inputCount\":2,\"area\":1.0,\"power\":0.1,\"driveStrength\":1,\"qualified\":true}]}",
+            name: "equivalence-cells.json",
+            root: root,
+            kind: .timingLibrary
+        )
+        let constraints = try writeTextJSON(
+            "{\"schemaVersion\":1,\"maximumArea\":2.0}",
+            name: "equivalence-constraints.json",
+            root: root,
+            kind: .constraint
+        )
+        let pdk = try writeTextJSON(
+            "{\"processID\":\"adapter\",\"version\":\"1\"}",
+            name: "equivalence-pdk.json",
+            root: root,
+            kind: .technology
+        )
+        guard let pdkDigest = pdk.sha256 else {
+            throw LogicExecutionError.artifactDigestMismatch(pdk.path)
+        }
+        let synthesisRequest = LogicSynthesisRequest(
+            runID: "logic-equivalence-adapter",
+            inputs: [designReference.artifact, library, constraints, pdk],
+            design: designReference,
+            libraries: [TimingLibraryReference(artifact: library, cornerIDs: ["typical"])],
+            constraints: TimingConstraintReference(artifact: constraints, modeIDs: ["default"]),
+            pdk: PDKReference(manifest: pdk, processID: "adapter", version: "1", digest: pdkDigest)
+        )
+        let synthesisRequestPath = try writeRequest(
+            synthesisRequest,
+            name: "equivalence-synthesis-request.json",
+            root: root
+        )
+        let context = try makeContext(root: root, runID: synthesisRequest.runID)
+        let synthesisResult = try await LogicSynthesisFlowStageExecutor(
+            requestInput: .path(synthesisRequestPath)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.synthesize", displayName: "Logic synthesis"),
+            context: context
+        )
+        let equivalenceRequestReference = try #require(
+            synthesisResult.artifacts.first { $0.artifactID == "logic-equivalence-request" }
+        )
+
+        let equivalenceResult = try await LogicEquivalenceFlowStageExecutor(
+            requestInput: .path(equivalenceRequestReference.path)
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.equivalence", displayName: "Logic equivalence"),
+            context: context
+        )
+
+        #expect(equivalenceResult.status == .succeeded)
+        #expect(equivalenceResult.gates.contains { $0.gateID == "logic.equivalence" && $0.status == .passed })
+        #expect(equivalenceResult.artifacts.contains { $0.artifactID == "rtl-verification-report" })
+        #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-evidence" })
+        #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-synthesis-acceptance" })
+        #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-review" })
+        #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
+
+        let resumedResult = try await LogicEquivalenceFlowStageExecutor(
+            requestInput: .path(equivalenceRequestReference.path),
+            engine: UnexpectedRTLVerificationExecution()
+        ).execute(
+            stage: FlowStageDefinition(stageID: "logic.equivalence", displayName: "Logic equivalence"),
+            context: context
+        )
+
+        #expect(resumedResult.status == .succeeded)
+        #expect(resumedResult.gates.contains { $0.gateID == "logic.equivalence" && $0.status == .passed })
+        #expect(resumedResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
+    }
+
+    private func writeDesign(to root: URL) throws -> LogicDesignReference {
+        let document = LogicDesignDocument(
+            topDesignName: "adapter_top",
+            ports: [
+                LogicPort(name: "a", direction: .input),
+                LogicPort(name: "b", direction: .input),
+                LogicPort(name: "y", direction: .output),
+            ],
+            signals: [LogicSignal(name: "a"), LogicSignal(name: "b"), LogicSignal(name: "y")],
+            nodes: [LogicNode(id: "and0", kind: .and, inputs: ["a", "b"], outputs: ["y"])]
+        )
+        let reference = try writeJSON(document, name: "design.json", root: root, kind: .netlist)
+        guard let digest = reference.sha256 else {
+            throw LogicExecutionError.artifactDigestMismatch(reference.path)
+        }
+        return LogicDesignReference(artifact: reference, topDesignName: document.topDesignName, designDigest: digest)
+    }
+
+    private func writeStimulus(to root: URL) throws -> XcircuiteFileReference {
+        let stimulus = LogicStimulusDocument(
+            events: [LogicStimulusEvent(
+                time: 0,
+                assignments: [
+                    "a": try LogicVector(string: "1"),
+                    "b": try LogicVector(string: "1"),
+                ]
+            )],
+            assertions: [LogicAssertion(
+                id: "y",
+                time: 0,
+                signal: "y",
+                expected: try LogicVector(string: "1")
+            )]
+        )
+        return try writeJSON(stimulus, name: "stimulus.json", root: root, kind: .testPattern)
+    }
+
+    private func writeRequest<T: Encodable>(_ request: T, name: String, root: URL) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(request)
+        try data.write(to: root.appending(path: name), options: .atomic)
+        return name
+    }
+
+    private func writeJSON<T: Encodable>(
+        _ value: T,
+        name: String,
+        root: URL,
+        kind: XcircuiteFileKind
+    ) throws -> XcircuiteFileReference {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(value)
+        try data.write(to: root.appending(path: name), options: .atomic)
+        return try XcircuitePackageStore().fileReference(
+            forProjectRelativePath: name,
+            kind: kind,
+            format: .json,
+            inProjectAt: root
+        )
+    }
+
+    private func writeTextJSON(
+        _ text: String,
+        name: String,
+        root: URL,
+        kind: XcircuiteFileKind
+    ) throws -> XcircuiteFileReference {
+        try Data(text.utf8).write(to: root.appending(path: name), options: .atomic)
+        return try XcircuitePackageStore().fileReference(
+            forProjectRelativePath: name,
+            kind: kind,
+            format: .json,
+            inProjectAt: root
+        )
+    }
+
+    private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
+        let packageStore = XcircuitePackageStore()
+        try packageStore.ensurePackageDirectory(forProjectAt: root)
+        let runDirectory = root.appending(path: ".xcircuite/runs/(runID)")
+        try packageStore.ensureDirectory(at: runDirectory)
+        return FlowExecutionContext(
+            projectRoot: root,
+            runID: runID,
+            runDirectory: runDirectory,
+            packageStore: packageStore,
+            toolRegistry: ToolRegistry(),
+            healthResults: [:]
+        )
+    }
+
+    private func makeRoot(name: String) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appending(path: "\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private func removeRoot(_ root: URL) {
+        do {
+            try FileManager.default.removeItem(at: root)
+        } catch {
+            Issue.record("Failed to remove temporary root: \(error)")
+        }
+    }
+}
+
+private struct UnexpectedRTLVerificationExecution: RTLVerificationExecuting {
+    func execute(
+        _ request: RTLVerificationRequest
+    ) async throws -> XcircuiteEngineResultEnvelope<RTLVerificationPayload> {
+        throw LogicExecutionError.invalidArtifact(
+            "The equivalence engine must not execute while resuming a valid persisted result."
+        )
+    }
+}

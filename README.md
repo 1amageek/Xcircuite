@@ -39,6 +39,7 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, indexes extraction artifacts and `pex-summary` as `XcircuiteFileReference`s, and verifies output artifact references before stage success |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
+| `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, re-hashes reviewed artifacts on resume, and delegates approval validation to `PhysicalDesignReviewGate` |
 
 ```mermaid
 flowchart LR
@@ -181,6 +182,12 @@ under a local PDK root. Relative required files resolve from the catalog
 directory first, then from declared PDK roots, so Agent callers can compare a
 runtime profile against the broader local PDK inventory before selecting a
 signoff profile.
+
+The physical-design review boundary is intentionally narrower than signoff. It
+proves immutable-manifest review, human approval binding, artifact re-hashing,
+and same-run resume; it does not claim DRC, LVS, PEX, timing, foundry, or
+process qualification. The retained Xcircuite regression covers this boundary
+through `PhysicalDesignFlowStageExecutorTests/physicalReviewApprovalResumesFlow`.
 
 Qualified evidence is passed as `ToolEvidence.qualification`. A run stage can
 require it through `ToolTrustRequirement.requiredQualifiedEvidenceKinds`. When the
@@ -341,5 +348,7 @@ candidate waveform / comparison artifacts with coverage tags.
 
 ```bash
 swift build
-swift test
+perl -e 'alarm 900; exec @ARGV' xcodebuild test -scheme Xcircuite-Package -destination 'platform=macOS'
 ```
+
+The current full regression passes with 520 test cases in 55 suites.

@@ -1,9 +1,17 @@
 import DesignFlowKernel
+import DFTCore
 import DRCEngine
+import ElectricalSignoffCore
+import ElectricalSignoffEngine
+import ElectricalSignoffQualification
 import Foundation
 import LayoutCommands
+import LayoutCore
+import LayoutIO
 import LVSEngine
+import PDKKit
 import PEXEngine
+import PhysicalDesignCore
 import ToolQualification
 
 public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
@@ -14,6 +22,376 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case mockPEX(MockPEX)
     case coreSpiceSimulation(CoreSpiceSimulation)
     case postLayoutComparison(PostLayoutComparison)
+    case rtlVerification(RTLVerification)
+    case logicSynthesis(LogicSynthesis)
+    case logicEquivalence(LogicEquivalence)
+    case logicQualification(LogicQualification)
+    case dft(DFT)
+    case physicalReview(PhysicalReview)
+    case pdkDiscovery(PDKDiscovery)
+    case pdkValidation(PDKValidation)
+    case pdkCorpus(PDKCorpus)
+    case pdkStandardView(PDKStandardView)
+    case pdkOracle(PDKOracle)
+    case pdkQualification(PDKQualification)
+    case releaseQualification(ReleaseQualification)
+    case releaseSignoff(ReleaseSignoff)
+    case releaseTapeout(ReleaseTapeout)
+    case releaseProfile(ReleaseProfile)
+    case electricalStandardLayoutImport(ElectricalStandardLayoutImport)
+    case electricalSignoff(ElectricalSignoff)
+    case electricalSignoffQualification(ElectricalSignoffQualification)
+    case electricalSignoffReleaseGate(ElectricalSignoffReleaseGate)
+    case electricalRepairRevision(ElectricalRepairRevision)
+
+    public struct PDKDiscovery: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var searchRoots: [XcircuiteFlowInputReference]
+        public var requiredProcessID: String?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.discoveryStageID,
+            searchRoots: [XcircuiteFlowInputReference],
+            requiredProcessID: String? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.searchRoots = searchRoots
+            self.requiredProcessID = requiredProcessID
+            self.tool = tool
+        }
+    }
+
+    public struct PDKValidation: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var manifestInput: XcircuiteFlowInputReference
+        public var requiredAssetRoles: [PDKAssetRole]
+        public var validateCrossViews: Bool
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.validationStageID,
+            manifestInput: XcircuiteFlowInputReference,
+            requiredAssetRoles: [PDKAssetRole] = [],
+            validateCrossViews: Bool = true,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.manifestInput = manifestInput
+            self.requiredAssetRoles = requiredAssetRoles
+            self.validateCrossViews = validateCrossViews
+            self.tool = tool
+        }
+    }
+
+    public struct PDKCorpus: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var suiteInput: XcircuiteFlowInputReference
+        public var rootInput: XcircuiteFlowInputReference
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.corpusValidationStageID,
+            suiteInput: XcircuiteFlowInputReference,
+            rootInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.suiteInput = suiteInput
+            self.rootInput = rootInput
+            self.tool = tool
+        }
+    }
+
+    public struct PDKStandardView: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var manifestInput: XcircuiteFlowInputReference
+        public var assetID: String
+        public var format: PDKStandardViewFormat
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.standardViewInspectionStageID,
+            manifestInput: XcircuiteFlowInputReference,
+            assetID: String,
+            format: PDKStandardViewFormat,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.manifestInput = manifestInput
+            self.assetID = assetID
+            self.format = format
+            self.tool = tool
+        }
+    }
+
+    public struct PDKOracle: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var manifestInput: XcircuiteFlowInputReference
+        public var oracleInput: XcircuiteFlowInputReference
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.oracleComparisonStageID,
+            manifestInput: XcircuiteFlowInputReference,
+            oracleInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.manifestInput = manifestInput
+            self.oracleInput = oracleInput
+            self.tool = tool
+        }
+    }
+
+    public struct PDKQualification: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var manifestInput: XcircuiteFlowInputReference
+        public var corpusInput: XcircuiteFlowInputReference
+        public var oracleInput: XcircuiteFlowInputReference
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.qualificationStageID,
+            manifestInput: XcircuiteFlowInputReference,
+            corpusInput: XcircuiteFlowInputReference,
+            oracleInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.manifestInput = manifestInput
+            self.corpusInput = corpusInput
+            self.oracleInput = oracleInput
+            self.tool = tool
+        }
+    }
+
+    public struct DFT: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestPath: String
+        public var qualificationCorpusPath: String?
+        public var qualificationObservationsPath: String?
+        public var qualificationEvidencePath: String?
+        public var releaseResultPath: String?
+        public var releaseDownstreamEvidencePath: String?
+        public var releaseApprovalPath: String?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String,
+            requestPath: String,
+            qualificationCorpusPath: String? = nil,
+            qualificationObservationsPath: String? = nil,
+            qualificationEvidencePath: String? = nil,
+            releaseResultPath: String? = nil,
+            releaseDownstreamEvidencePath: String? = nil,
+            releaseApprovalPath: String? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestPath = requestPath
+            self.qualificationCorpusPath = qualificationCorpusPath
+            self.qualificationObservationsPath = qualificationObservationsPath
+            self.qualificationEvidencePath = qualificationEvidencePath
+            self.releaseResultPath = releaseResultPath
+            self.releaseDownstreamEvidencePath = releaseDownstreamEvidencePath
+            self.releaseApprovalPath = releaseApprovalPath
+            self.tool = tool
+        }
+    }
+
+    public struct PhysicalReview: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var manifestInput: XcircuiteFlowInputReference
+        public var decisionScope: [String]
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "physical.review",
+            manifestInput: XcircuiteFlowInputReference,
+            decisionScope: [String] = ["proposed_layout", "design_diff", "implementation_configuration"],
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.manifestInput = manifestInput
+            self.decisionScope = decisionScope
+            self.tool = tool
+        }
+    }
+
+    public struct ElectricalRepairRevision: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestPath: String
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "electrical-signoff.repair-revision",
+            requestPath: String,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestPath = requestPath
+            self.tool = tool
+        }
+    }
+
+    public struct ElectricalStandardLayoutImport: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var layoutInput: XcircuiteFlowInputReference
+        public var layoutFormat: LayoutFileFormat
+        public var technologyInput: XcircuiteFlowInputReference
+        public var technologyFormat: LayoutFileFormat
+        public var connectivityInput: XcircuiteFlowInputReference?
+        public var connectivityFormat: LayoutFileFormat
+        public var topCellName: String?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "electrical-signoff.standard-layout-import",
+            layoutInput: XcircuiteFlowInputReference,
+            layoutFormat: LayoutFileFormat,
+            technologyInput: XcircuiteFlowInputReference,
+            technologyFormat: LayoutFileFormat = .lef,
+            connectivityInput: XcircuiteFlowInputReference? = nil,
+            connectivityFormat: LayoutFileFormat = .def,
+            topCellName: String? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.layoutInput = layoutInput
+            self.layoutFormat = layoutFormat
+            self.technologyInput = technologyInput
+            self.technologyFormat = technologyFormat
+            self.connectivityInput = connectivityInput
+            self.connectivityFormat = connectivityFormat
+            self.topCellName = topCellName
+            self.tool = tool
+        }
+    }
+
+    public struct ElectricalSignoff: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestPath: String
+        public var axes: [ElectricalSignoffAnalysisAxis]
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "electrical-signoff",
+            requestPath: String,
+            axes: [ElectricalSignoffAnalysisAxis] = ElectricalSignoffEngineAPI.supportedAxes,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestPath = requestPath
+            self.axes = axes
+            self.tool = tool
+        }
+    }
+
+    public struct ElectricalSignoffQualification: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var specPath: String
+        public var oraclePath: String?
+        public var qualificationScope: ToolQualificationScope
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "electrical-signoff.qualification",
+            specPath: String,
+            oraclePath: String? = nil,
+            qualificationScope: ToolQualificationScope,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.specPath = specPath
+            self.oraclePath = oraclePath
+            self.qualificationScope = qualificationScope
+            self.tool = tool
+        }
+    }
+
+    public struct ElectricalSignoffReleaseGate: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestInput: XcircuiteFlowInputReference
+        public var runResultInput: XcircuiteFlowInputReference
+        public var qualificationSpecInput: XcircuiteFlowInputReference
+        public var qualificationReportInput: XcircuiteFlowInputReference
+        public var policyInput: XcircuiteFlowInputReference
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "electrical-signoff.release-gate",
+            requestInput: XcircuiteFlowInputReference,
+            runResultInput: XcircuiteFlowInputReference,
+            qualificationSpecInput: XcircuiteFlowInputReference,
+            qualificationReportInput: XcircuiteFlowInputReference,
+            policyInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestInput = requestInput
+            self.runResultInput = runResultInput
+            self.qualificationSpecInput = qualificationSpecInput
+            self.qualificationReportInput = qualificationReportInput
+            self.policyInput = policyInput
+            self.tool = tool
+        }
+    }
+
+    public struct LogicSynthesis: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestPath: String
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.synthesize",
+            requestPath: String,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestPath = requestPath
+            self.tool = tool
+        }
+    }
+
+    public struct LogicEquivalence: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestPath: String
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.equivalence",
+            requestPath: String,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestPath = requestPath
+            self.tool = tool
+        }
+    }
+
+    public struct LogicQualification: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var reportPath: String
+        public var processEvidencePath: String?
+        public var releaseApprovalPath: String?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.qualification",
+            reportPath: String,
+            processEvidencePath: String? = nil,
+            releaseApprovalPath: String? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.reportPath = reportPath
+            self.processEvidencePath = processEvidencePath
+            self.releaseApprovalPath = releaseApprovalPath
+            self.tool = tool
+        }
+    }
 
     public struct LayoutCommand: Sendable, Hashable, Codable {
         public var stageID: String
@@ -434,6 +812,27 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case mockPEX
         case coreSpiceSimulation
         case postLayoutComparison
+        case rtlVerification
+        case logicSynthesis
+        case logicEquivalence
+        case logicQualification
+        case dft
+        case physicalReview
+        case pdkDiscovery
+        case pdkValidation
+        case pdkCorpus
+        case pdkStandardView
+        case pdkOracle
+        case pdkQualification
+        case releaseQualification
+        case releaseSignoff
+        case releaseTapeout
+        case releaseProfile
+        case electricalStandardLayoutImport
+        case electricalSignoff
+        case electricalSignoffQualification
+        case electricalSignoffReleaseGate
+        case electricalRepairRevision
     }
 
     public init(from decoder: Decoder) throws {
@@ -454,6 +853,48 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .coreSpiceSimulation(try container.decode(CoreSpiceSimulation.self, forKey: .value))
         case .postLayoutComparison:
             self = .postLayoutComparison(try container.decode(PostLayoutComparison.self, forKey: .value))
+        case .rtlVerification:
+            self = .rtlVerification(try container.decode(RTLVerification.self, forKey: .value))
+        case .logicSynthesis:
+            self = .logicSynthesis(try container.decode(LogicSynthesis.self, forKey: .value))
+        case .logicEquivalence:
+            self = .logicEquivalence(try container.decode(LogicEquivalence.self, forKey: .value))
+        case .logicQualification:
+            self = .logicQualification(try container.decode(LogicQualification.self, forKey: .value))
+        case .dft:
+            self = .dft(try container.decode(DFT.self, forKey: .value))
+        case .physicalReview:
+            self = .physicalReview(try container.decode(PhysicalReview.self, forKey: .value))
+        case .pdkDiscovery:
+            self = .pdkDiscovery(try container.decode(PDKDiscovery.self, forKey: .value))
+        case .pdkValidation:
+            self = .pdkValidation(try container.decode(PDKValidation.self, forKey: .value))
+        case .pdkCorpus:
+            self = .pdkCorpus(try container.decode(PDKCorpus.self, forKey: .value))
+        case .pdkStandardView:
+            self = .pdkStandardView(try container.decode(PDKStandardView.self, forKey: .value))
+        case .pdkOracle:
+            self = .pdkOracle(try container.decode(PDKOracle.self, forKey: .value))
+        case .pdkQualification:
+            self = .pdkQualification(try container.decode(PDKQualification.self, forKey: .value))
+        case .releaseQualification:
+            self = .releaseQualification(try container.decode(ReleaseQualification.self, forKey: .value))
+        case .releaseSignoff:
+            self = .releaseSignoff(try container.decode(ReleaseSignoff.self, forKey: .value))
+        case .releaseTapeout:
+            self = .releaseTapeout(try container.decode(ReleaseTapeout.self, forKey: .value))
+        case .releaseProfile:
+            self = .releaseProfile(try container.decode(ReleaseProfile.self, forKey: .value))
+        case .electricalStandardLayoutImport:
+            self = .electricalStandardLayoutImport(try container.decode(ElectricalStandardLayoutImport.self, forKey: .value))
+        case .electricalSignoff:
+            self = .electricalSignoff(try container.decode(ElectricalSignoff.self, forKey: .value))
+        case .electricalSignoffQualification:
+            self = .electricalSignoffQualification(try container.decode(ElectricalSignoffQualification.self, forKey: .value))
+        case .electricalSignoffReleaseGate:
+            self = .electricalSignoffReleaseGate(try container.decode(ElectricalSignoffReleaseGate.self, forKey: .value))
+        case .electricalRepairRevision:
+            self = .electricalRepairRevision(try container.decode(ElectricalRepairRevision.self, forKey: .value))
         }
     }
 
@@ -480,6 +921,69 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             try container.encode(value, forKey: .value)
         case .postLayoutComparison(let value):
             try container.encode(Kind.postLayoutComparison, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .rtlVerification(let value):
+            try container.encode(Kind.rtlVerification, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .logicSynthesis(let value):
+            try container.encode(Kind.logicSynthesis, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .logicEquivalence(let value):
+            try container.encode(Kind.logicEquivalence, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .logicQualification(let value):
+            try container.encode(Kind.logicQualification, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .dft(let value):
+            try container.encode(Kind.dft, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .physicalReview(let value):
+            try container.encode(Kind.physicalReview, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkDiscovery(let value):
+            try container.encode(Kind.pdkDiscovery, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkValidation(let value):
+            try container.encode(Kind.pdkValidation, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkCorpus(let value):
+            try container.encode(Kind.pdkCorpus, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkStandardView(let value):
+            try container.encode(Kind.pdkStandardView, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkOracle(let value):
+            try container.encode(Kind.pdkOracle, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkQualification(let value):
+            try container.encode(Kind.pdkQualification, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .releaseQualification(let value):
+            try container.encode(Kind.releaseQualification, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .releaseSignoff(let value):
+            try container.encode(Kind.releaseSignoff, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .releaseTapeout(let value):
+            try container.encode(Kind.releaseTapeout, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .releaseProfile(let value):
+            try container.encode(Kind.releaseProfile, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .electricalStandardLayoutImport(let value):
+            try container.encode(Kind.electricalStandardLayoutImport, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .electricalSignoff(let value):
+            try container.encode(Kind.electricalSignoff, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .electricalSignoffQualification(let value):
+            try container.encode(Kind.electricalSignoffQualification, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .electricalSignoffReleaseGate(let value):
+            try container.encode(Kind.electricalSignoffReleaseGate, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .electricalRepairRevision(let value):
+            try container.encode(Kind.electricalRepairRevision, forKey: .kind)
             try container.encode(value, forKey: .value)
         }
     }
@@ -561,10 +1065,247 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 postLayoutWaveformInput: try spec.resolvedPostLayoutWaveformInput(),
                 options: spec.options
             )
+        case .rtlVerification(let spec):
+            return RTLVerificationFlowStageExecutor(
+                stageID: spec.stageID,
+                analysis: spec.analysis,
+                rtlInput: spec.rtlInput,
+                additionalRTLInputs: spec.additionalRTLInputs,
+                referenceInput: spec.referenceInput,
+                additionalReferenceInputs: spec.additionalReferenceInputs,
+                constraintsInput: spec.constraintsInput,
+                qualificationInput: spec.qualificationInput,
+                topModuleName: spec.topModuleName,
+                policy: spec.policy,
+                frontend: spec.frontend,
+                proofView: spec.proofView,
+                assumptions: spec.assumptions
+            )
+        case .logicSynthesis(let spec):
+            return LogicSynthesisFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: .path(spec.requestPath)
+            )
+        case .logicEquivalence(let spec):
+            return LogicEquivalenceFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: .path(spec.requestPath)
+            )
+        case .logicQualification(let spec):
+            return LogicQualificationFlowStageExecutor(
+                stageID: spec.stageID,
+                reportInput: .path(spec.reportPath),
+                processEvidenceInput: spec.processEvidencePath.map { .path($0) },
+                releaseApprovalInput: spec.releaseApprovalPath.map { .path($0) }
+            )
+        case .dft(let spec):
+            if let corpusPath = spec.qualificationCorpusPath {
+                guard let observationsPath = spec.qualificationObservationsPath else {
+                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                        stageID: spec.stageID,
+                        field: "qualificationObservationsPath"
+                    )
+                }
+                return DFTQualificationFlowStageExecutor(
+                    stageID: spec.stageID,
+                    corpusInput: .path(corpusPath),
+                    observationsInput: .path(observationsPath),
+                    qualificationEvidenceInput: spec.qualificationEvidencePath.map { .path($0) }
+                )
+            }
+            if let resultPath = spec.releaseResultPath {
+                guard let downstreamEvidencePath = spec.releaseDownstreamEvidencePath else {
+                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                        stageID: spec.stageID,
+                        field: "releaseDownstreamEvidencePath"
+                    )
+                }
+                return DFTReleaseFlowStageExecutor(
+                    stageID: spec.stageID,
+                    requestInput: .path(spec.requestPath),
+                    resultInput: .path(resultPath),
+                    downstreamEvidenceInput: .path(downstreamEvidencePath),
+                    approvalInput: spec.releaseApprovalPath.map { .path($0) }
+                )
+            }
+            return DFTFlowStageExecutor(
+                stageID: spec.stageID,
+                toolID: "dft-engine",
+                requestInput: .path(spec.requestPath)
+            )
+        case .physicalReview(let spec):
+            return PhysicalDesignReviewFlowStageExecutor(
+                stageID: spec.stageID,
+                manifestInput: spec.manifestInput,
+                decisionScope: spec.decisionScope
+            )
+        case .pdkDiscovery(let spec):
+            return PDKDiscoveryFlowStageExecutor.local(
+                stageID: spec.stageID,
+                searchRoots: spec.searchRoots,
+                requiredProcessID: spec.requiredProcessID
+            )
+        case .pdkValidation(let spec):
+            return PDKValidationFlowStageExecutor.local(
+                stageID: spec.stageID,
+                manifestInput: spec.manifestInput,
+                requiredAssetRoles: spec.requiredAssetRoles,
+                validateCrossViews: spec.validateCrossViews
+            )
+        case .pdkCorpus(let spec):
+            return PDKCorpusValidationFlowStageExecutor.local(
+                stageID: spec.stageID,
+                suiteInput: spec.suiteInput,
+                rootInput: spec.rootInput
+            )
+        case .pdkStandardView(let spec):
+            return PDKStandardViewInspectionFlowStageExecutor.local(
+                stageID: spec.stageID,
+                manifestInput: spec.manifestInput,
+                assetID: spec.assetID,
+                format: spec.format
+            )
+        case .pdkOracle(let spec):
+            return PDKOracleFlowStageExecutor.local(
+                stageID: spec.stageID,
+                manifestInput: spec.manifestInput,
+                oracleInput: spec.oracleInput
+            )
+        case .pdkQualification(let spec):
+            return PDKQualificationFlowStageExecutor.local(
+                stageID: spec.stageID,
+                manifestInput: spec.manifestInput,
+                corpusInput: spec.corpusInput,
+                oracleInput: spec.oracleInput
+            )
+        case .releaseQualification(let spec):
+            return ReleaseQualificationFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: .path(spec.requestPath)
+            )
+        case .releaseSignoff(let spec):
+            return ReleaseSignoffFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: .path(spec.requestPath)
+            )
+        case .releaseTapeout(let spec):
+            return ReleaseTapeoutFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: .path(spec.requestPath)
+            )
+        case .releaseProfile(let spec):
+            return ReleaseProfileEligibilityFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: .path(spec.requestPath)
+            )
+        case .electricalStandardLayoutImport(let spec):
+            return ElectricalStandardLayoutImportFlowStageExecutor(
+                stageID: spec.stageID,
+                toolID: "native-electrical-standard-layout-import",
+                layoutInput: spec.layoutInput,
+                layoutFormat: spec.layoutFormat,
+                technologyInput: spec.technologyInput,
+                technologyFormat: spec.technologyFormat,
+                connectivityInput: spec.connectivityInput,
+                connectivityFormat: spec.connectivityFormat,
+                topCellName: spec.topCellName
+            )
+        case .electricalSignoff(let spec):
+            let request: ElectricalSignoffRequest = try loadJSON(
+                ElectricalSignoffRequest.self,
+                path: spec.requestPath,
+                projectRoot: projectRoot,
+                stageID: spec.stageID
+            )
+            return ElectricalSignoffFlowStageExecutor(
+                stageID: spec.stageID,
+                toolID: "native-electrical-signoff",
+                request: request,
+                axes: spec.axes,
+                engine: ElectricalSignoffEngine(
+                    support: ElectricalSignoffExecutionSupport(projectRoot: projectRoot)
+                )
+            )
+        case .electricalSignoffQualification(let spec):
+            let oracle: (any ElectricalSignoffQualificationOracle)?
+            if let oraclePath = spec.oraclePath {
+                let oracleURL = try XcircuiteFlowRuntimeSpec.resolvePath(oraclePath, projectRoot: projectRoot)
+                oracle = try LocalElectricalSignoffQualificationOracle(contentsOf: oracleURL)
+            } else {
+                oracle = nil
+            }
+            return ElectricalSignoffQualificationFlowStageExecutor(
+                stageID: spec.stageID,
+                toolID: "native-electrical-signoff-qualification",
+                requestInput: .path(spec.specPath),
+                qualificationScope: spec.qualificationScope,
+                runner: ElectricalSignoffQualificationRunner(
+                    engine: ElectricalSignoffEngine(
+                        support: ElectricalSignoffExecutionSupport(projectRoot: projectRoot)
+                    ),
+                    oracle: oracle
+                )
+            )
+        case .electricalSignoffReleaseGate(let spec):
+            return ElectricalSignoffReleaseGateFlowStageExecutor(
+                stageID: spec.stageID,
+                toolID: "native-electrical-signoff-release-gate",
+                requestInput: spec.requestInput,
+                runResultInput: spec.runResultInput,
+                qualificationSpecInput: spec.qualificationSpecInput,
+                qualificationReportInput: spec.qualificationReportInput,
+                policyInput: spec.policyInput
+            )
+        case .electricalRepairRevision(let spec):
+            let requestURL = try XcircuiteFlowRuntimeSpec.resolvePath(spec.requestPath, projectRoot: projectRoot)
+            let data: Data
+            do {
+                data = try Data(contentsOf: requestURL)
+            } catch {
+                throw XcircuiteFlowRuntimeSpecError.invalidPath(
+                    "\(spec.stageID).requestPath: \(error.localizedDescription)"
+                )
+            }
+            let request: XcircuiteElectricalRepairRevisionRequest
+            do {
+                request = try JSONDecoder().decode(XcircuiteElectricalRepairRevisionRequest.self, from: data)
+            } catch {
+                throw XcircuiteFlowRuntimeSpecError.invalidPath(
+                    "\(spec.stageID).requestPath: \(error.localizedDescription)"
+                )
+            }
+            return ElectricalSignoffRepairRevisionFlowStageExecutor(
+                stageID: spec.stageID,
+                toolID: "native-electrical-signoff-repair-revision",
+                request: request
+            )
         }
     }
 
-    func makeDescriptor() -> ToolDescriptor {
+    private func loadJSON<Value: Decodable>(
+        _ type: Value.Type,
+        path: String,
+        projectRoot: URL,
+        stageID: String
+    ) throws -> Value {
+        let url: URL
+        do {
+            url = try XcircuiteFlowRuntimeSpec.resolvePath(path, projectRoot: projectRoot)
+        } catch {
+            throw XcircuiteFlowRuntimeSpecError.invalidPath(
+                "(stageID).requestPath: (error.localizedDescription)"
+            )
+        }
+        do {
+            return try JSONDecoder().decode(Value.self, from: Data(contentsOf: url))
+        } catch {
+            throw XcircuiteFlowRuntimeSpecError.invalidPath(
+                "(stageID).requestPath: (error.localizedDescription)"
+            )
+        }
+    }
+
+    public func makeDescriptor() -> ToolDescriptor {
         switch self {
         case .layoutCommand(let spec):
             SignoffToolDescriptors.layoutCommand(level: spec.tool.qualificationLevel)
@@ -583,6 +1324,52 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             SignoffToolDescriptors.coreSpiceSimulation(level: spec.tool.qualificationLevel)
         case .postLayoutComparison(let spec):
             SignoffToolDescriptors.postLayoutComparison(level: spec.tool.qualificationLevel)
+        case .rtlVerification(let spec):
+            RTLToolDescriptors.native(level: spec.tool.qualificationLevel)
+        case .logicSynthesis(let spec):
+            LogicToolDescriptors.synthesis(level: spec.tool.qualificationLevel)
+        case .logicEquivalence(let spec):
+            LogicToolDescriptors.equivalence(level: spec.tool.qualificationLevel)
+        case .logicQualification(let spec):
+            LogicToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+        case .dft(let spec):
+            if spec.qualificationCorpusPath != nil || spec.qualificationObservationsPath != nil {
+                DFTToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+            } else {
+                DFTToolDescriptors.engine(level: spec.tool.qualificationLevel)
+            }
+        case .physicalReview(let spec):
+            PhysicalDesignToolDescriptors.review(level: spec.tool.qualificationLevel)
+        case .pdkDiscovery(let spec):
+            PDKToolDescriptors.discovery(level: spec.tool.qualificationLevel)
+        case .pdkValidation(let spec):
+            PDKToolDescriptors.validation(level: spec.tool.qualificationLevel)
+        case .pdkCorpus(let spec):
+            PDKToolDescriptors.corpus(level: spec.tool.qualificationLevel)
+        case .pdkStandardView(let spec):
+            PDKToolDescriptors.standardView(level: spec.tool.qualificationLevel)
+        case .pdkOracle(let spec):
+            PDKToolDescriptors.oracle(level: spec.tool.qualificationLevel)
+        case .pdkQualification(let spec):
+            PDKToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+        case .releaseQualification(let spec):
+            ReleaseToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+        case .releaseSignoff(let spec):
+            ReleaseToolDescriptors.signoff(level: spec.tool.qualificationLevel)
+        case .releaseTapeout(let spec):
+            ReleaseToolDescriptors.tapeout(level: spec.tool.qualificationLevel)
+        case .releaseProfile(let spec):
+            ReleaseToolDescriptors.profile(level: spec.tool.qualificationLevel)
+        case .electricalStandardLayoutImport(let spec):
+            SignoffToolDescriptors.nativeElectricalStandardLayoutImport(level: spec.tool.qualificationLevel)
+        case .electricalSignoff(let spec):
+            SignoffToolDescriptors.nativeElectricalSignoff(level: spec.tool.qualificationLevel)
+        case .electricalSignoffQualification(let spec):
+            SignoffToolDescriptors.nativeElectricalQualification(level: spec.tool.qualificationLevel)
+        case .electricalSignoffReleaseGate(let spec):
+            SignoffToolDescriptors.nativeElectricalReleaseGate(level: spec.tool.qualificationLevel)
+        case .electricalRepairRevision(let spec):
+            SignoffToolDescriptors.nativeElectricalRepairRevision(level: spec.tool.qualificationLevel)
         }
     }
 
@@ -610,6 +1397,48 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .coreSpiceSimulation(let spec):
             spec.tool
         case .postLayoutComparison(let spec):
+            spec.tool
+        case .rtlVerification(let spec):
+            spec.tool
+        case .logicSynthesis(let spec):
+            spec.tool
+        case .logicEquivalence(let spec):
+            spec.tool
+        case .logicQualification(let spec):
+            spec.tool
+        case .dft(let spec):
+            spec.tool
+        case .physicalReview(let spec):
+            spec.tool
+        case .pdkDiscovery(let spec):
+            spec.tool
+        case .pdkValidation(let spec):
+            spec.tool
+        case .pdkCorpus(let spec):
+            spec.tool
+        case .pdkStandardView(let spec):
+            spec.tool
+        case .pdkOracle(let spec):
+            spec.tool
+        case .pdkQualification(let spec):
+            spec.tool
+        case .releaseQualification(let spec):
+            spec.tool
+        case .releaseSignoff(let spec):
+            spec.tool
+        case .releaseTapeout(let spec):
+            spec.tool
+        case .releaseProfile(let spec):
+            spec.tool
+        case .electricalStandardLayoutImport(let spec):
+            spec.tool
+        case .electricalSignoff(let spec):
+            spec.tool
+        case .electricalSignoffQualification(let spec):
+            spec.tool
+        case .electricalSignoffReleaseGate(let spec):
+            spec.tool
+        case .electricalRepairRevision(let spec):
             spec.tool
         }
     }
