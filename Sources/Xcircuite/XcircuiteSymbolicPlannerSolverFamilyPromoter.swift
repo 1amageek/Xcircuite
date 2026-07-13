@@ -195,9 +195,31 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
-        return try packageStore.readJSON(
-            XcircuiteSymbolicPlannerSolverQualificationResult.self,
-            from: url(for: artifact.path, projectRoot: projectRoot)
+        let integrity = LocalArtifactVerifier().verify(artifact, relativeTo: projectRoot)
+        guard !integrity.isVerified else {
+            return try packageStore.readJSON(
+                XcircuiteSymbolicPlannerSolverQualificationResult.self,
+                from: url(for: artifact.path, projectRoot: projectRoot)
+            )
+        }
+        let status: XcircuiteFileReferenceIntegrityStatus = switch integrity.issues.first?.code {
+        case .missingFile: .missingArtifact
+        case .notRegularFile, .unreadableFile: .unreadableArtifact
+        case .byteCountMismatch: .byteCountMismatch
+        case .digestMismatch: .sha256Mismatch
+        case .invalidLocation: .invalidPath
+        case .unsupportedDigestAlgorithm: .invalidDigest
+        case nil: .unreadableArtifact
+        }
+        let message = integrity.issues.map { issue in
+            issue.detail ?? issue.location ?? issue.code.rawValue
+        }.joined(separator: "; ")
+        throw XcircuiteSymbolicPlannerSolverError.artifactIntegrityFailed(
+            field: "qualificationArtifact",
+            artifactID: artifact.id.rawValue,
+            path: artifact.path,
+            status: status,
+            message: message
         )
     }
 

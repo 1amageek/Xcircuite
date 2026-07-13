@@ -8,9 +8,50 @@ import LVSEngine
 import PEXEngine
 import Testing
 import ToolQualification
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
+
+/// Converts a legacy fixture reference at test boundaries while the workspace
+/// stores are migrated. Production APIs consume `ArtifactReference` directly.
+func foundationReference(
+    _ reference: XcircuiteFileReference,
+    role: ArtifactRole = .input
+) throws -> ArtifactReference {
+    let kindRawValue: String = switch reference.kind {
+    case .powerIntent: "power-intent"
+    case .timingLibrary: "timing-library"
+    case .testPattern: "test-pattern"
+    case .ruleDeck: "rule-deck"
+    case .designDiff: "design-diff"
+    case .parasitic: "parasitics"
+    default: reference.kind.rawValue
+    }
+    let formatRawValue: String = switch reference.format {
+    case .systemVerilog: "system-verilog"
+    default: reference.format.rawValue.lowercased()
+    }
+    let location: ArtifactLocation
+    if reference.path.hasPrefix("/") {
+        location = try ArtifactLocation(fileURL: URL(filePath: reference.path))
+    } else {
+        location = try ArtifactLocation(workspaceRelativePath: reference.path)
+    }
+    return ArtifactReference(
+        id: try reference.artifactID.map { try ArtifactID(rawValue: $0) },
+        locator: ArtifactLocator(
+            location: location,
+            role: role,
+            kind: try ArtifactKind(rawValue: kindRawValue),
+            format: try ArtifactFormat(rawValue: formatRawValue)
+        ),
+        digest: try ContentDigest(
+            algorithm: .sha256,
+            hexadecimalValue: reference.sha256 ?? String(repeating: "0", count: 64)
+        ),
+        byteCount: UInt64(max(reference.byteCount ?? 0, 0))
+    )
+}
 
 extension XcircuiteFlowRuntimeTests {
     struct NoopDRCEngine: DRCExecuting {
@@ -120,7 +161,7 @@ extension XcircuiteFlowRuntimeTests {
                 gates: [
                     FlowGateResult(gateID: "waveform-artifact", status: .passed),
                 ],
-                artifacts: [reference]
+                artifacts: [try foundationReference(reference)]
             )
         }
     }

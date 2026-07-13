@@ -353,16 +353,17 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         withIntermediateDirectories: true
     )
     try store.writeText("0.000: (a-fix-m1-width) [1.000]\n", to: root.appending(path: qualifiedSolverPlanPath))
-    let qualifiedSolverPlanRef = try store.fileReference(
+    let qualifiedSolverPlanLegacyRef = try store.fileReference(
         forProjectRelativePath: qualifiedSolverPlanPath,
         kind: .other,
         format: .text,
         inProjectAt: root,
         producedByRunID: "run-pddl"
     )
+    let qualifiedSolverPlanRef = try foundationReference(qualifiedSolverPlanLegacyRef)
     qualified.solverResult.solverPlanArtifact = qualifiedSolverPlanRef
     if var importResult = qualified.solverResult.importResult {
-        importResult.solverPlanArtifact = qualifiedSolverPlanRef
+        importResult.solverPlanArtifact = qualifiedSolverPlanLegacyRef
         qualified.solverResult.importResult = importResult
     }
 
@@ -1019,13 +1020,14 @@ private func preparePromotionFixture(
         withIntermediateDirectories: true
     )
     try store.writeText("0.000: (a-fix-m1-width) [1.000]\n", to: root.appending(path: solverPlanPath))
-    let solverPlanReference = try store.fileReference(
+    let solverPlanLegacyReference = try store.fileReference(
         forProjectRelativePath: solverPlanPath,
         kind: .other,
         format: .text,
         inProjectAt: root,
         producedByRunID: runID
     )
+    let solverPlanReference = try foundationReference(solverPlanLegacyReference)
     let candidatePlan = XcircuiteCandidatePlan(
         planID: "fixture-plan",
         problemID: "\(runID)-problem",
@@ -1066,9 +1068,9 @@ private func preparePromotionFixture(
         problemID: "\(runID)-problem",
         planID: "fixture-plan",
         importedActionCount: 1,
-        solverPlanArtifact: solverPlanReference,
-        pddlExportArtifact: solverPlanReference,
-        candidatePlanArtifact: solverPlanReference,
+        solverPlanArtifact: solverPlanLegacyReference,
+        pddlExportArtifact: solverPlanLegacyReference,
+        candidatePlanArtifact: solverPlanLegacyReference,
         candidatePlan: candidatePlan,
         diagnostics: []
     )
@@ -1134,7 +1136,7 @@ private func preparePromotionFixture(
         solverExitCode: 0,
         didTimeout: false,
         didCancel: false,
-        qualificationArtifact: qualificationArtifact,
+        qualificationArtifact: try foundationReference(qualificationArtifact),
         planVerificationArtifact: nil,
         diagnostics: []
     )
@@ -1147,7 +1149,7 @@ private func preparePromotionFixture(
         requestedQualificationPaths: [],
         selectedCandidateIndex: 0,
         selectedToolID: "fixture-symbolic-planner",
-        selectedQualificationArtifact: qualificationArtifact,
+        selectedQualificationArtifact: try foundationReference(qualificationArtifact),
         candidateCount: 1,
         qualifiedCandidateCount: 1,
         failedCandidateCount: 0,

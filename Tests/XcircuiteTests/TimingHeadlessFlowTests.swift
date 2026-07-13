@@ -84,7 +84,7 @@ struct TimingHeadlessFlowTests {
         })
         #expect(timingArtifact.integrity?.status == .verified)
         #expect(timingArtifact.sha256 != nil)
-        #expect(timingArtifact.byteCount ?? 0 > 0)
+        #expect((timingArtifact.byteCount ?? 0) > 0)
 
         let approval = try DefaultFlowGateApprovalRecorder().recordApproval(
             FlowGateApprovalRequest(
@@ -212,7 +212,7 @@ struct TimingHeadlessFlowTests {
         try "{}".write(to: projectRoot.appending(path: "pdk.json"), atomically: true, encoding: .utf8)
     }
 
-    private func fileExists(_ reference: XcircuiteFileReference, projectRoot: URL) -> Bool {
+    private func fileExists(_ reference: ArtifactReference, projectRoot: URL) -> Bool {
         let url = reference.path.hasPrefix("/") ? URL(filePath: reference.path) : projectRoot.appending(path: reference.path)
         return FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
     }

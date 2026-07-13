@@ -43,14 +43,14 @@ struct DFTFlowStageExecutorTests {
             byteCount: Int64(libraryData.count)
         )
         let libraryReference = DFTCellLibraryReference(
-            artifact: try FoundationFlowProjection.artifactReference(from: libraryArtifact),
+            artifact: try foundationReference(libraryArtifact),
             processID: libraryManifest.processID,
             version: libraryManifest.version,
             manifestDigest: try DFTCellLibraryManifestCodec.digest(libraryManifest)
         )
         let request = try makeRequest(
             runID: runID,
-            designArtifact: try FoundationFlowProjection.artifactReference(from: designArtifact),
+            designArtifact: try foundationReference(designArtifact),
             designDigest: designDigest,
             cellLibraryReference: libraryReference
         )
@@ -307,7 +307,7 @@ struct DFTFlowStageExecutorTests {
                     operation: .scanInsertion,
                     requestDigest: requestDigest,
                     expectation: expectation,
-                    oracleArtifact: try FoundationFlowProjection.artifactReference(from: oracleArtifact)
+                    oracleArtifact: try foundationReference(oracleArtifact)
                 ),
             ]
         )
@@ -359,7 +359,7 @@ struct DFTFlowStageExecutorTests {
             ("health", "qualification/health.json"),
             ("approval", "qualification/approval.json"),
         ].map { id, path in
-            try FoundationFlowProjection.artifactReference(from: writeArtifact(
+            try foundationReference(writeArtifact(
                 root: root,
                 path: path,
                 artifactID: "process-\(id)",
@@ -735,7 +735,7 @@ struct DFTFlowStageExecutorTests {
 
         #expect(result.status == .blocked)
         #expect(result.diagnostics.contains {
-            $0.code == "DFT_RELEASE_SHA256MISMATCH" || $0.code == "DFT_RELEASE_BYTECOUNTMISMATCH"
+            $0.code == "DFT_RELEASE_ARTIFACT_INTEGRITY_FAILED"
         })
         #expect(result.artifacts.contains { $0.artifactID == "dft-release-review-resume" })
     }
@@ -863,7 +863,7 @@ struct DFTFlowStageExecutorTests {
                     operation: .scanInsertion,
                     requestDigest: requestDigest,
                     expectation: expectation,
-                    oracleArtifact: try FoundationFlowProjection.artifactReference(from: oracleArtifact)
+                    oracleArtifact: try foundationReference(oracleArtifact)
                 ),
             ]
         )
@@ -1072,7 +1072,7 @@ struct DFTFlowStageExecutorTests {
             ("health", "qualification-build/health.json"),
             ("approval", "qualification-build/approval.json"),
         ].map { id, path in
-            try FoundationFlowProjection.artifactReference(from: writeArtifact(
+            try foundationReference(writeArtifact(
                 root: root,
                 path: path,
                 artifactID: "build-\(id)",
@@ -1130,7 +1130,7 @@ struct DFTFlowStageExecutorTests {
         designDigest: String = String(repeating: "b", count: 64),
         cellLibraryReference: DFTCellLibraryReference? = nil
     ) throws -> DFTRequest {
-        let design = try designArtifact ?? FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
+        let design = try designArtifact ?? foundationReference(XcircuiteFileReference(
             artifactID: "design",
             path: "design.json",
             kind: .netlist,
@@ -1151,7 +1151,7 @@ struct DFTFlowStageExecutorTests {
                 designDigest: designDigest
             ),
             constraints: DFTConstraintReference(
-                artifact: try FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
+                artifact: try foundationReference(XcircuiteFileReference(
                     artifactID: "constraints",
                     path: "constraints.sdc",
                     kind: .constraint,
@@ -1162,7 +1162,7 @@ struct DFTFlowStageExecutorTests {
                 modeIDs: ["test"]
             ),
             pdk: PDKReference(
-                manifest: try FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
+                manifest: try foundationReference(XcircuiteFileReference(
                     artifactID: "pdk",
                     path: "pdk.json",
                     kind: .technology,
@@ -1200,7 +1200,7 @@ struct DFTFlowStageExecutorTests {
         )
         let request = try makeRequest(
             runID: runID,
-            designArtifact: try FoundationFlowProjection.artifactReference(from: designArtifact),
+            designArtifact: try foundationReference(designArtifact),
             designDigest: String(repeating: "a", count: 64)
         )
         let transformedArtifact = try writeArtifact(
@@ -1215,9 +1215,9 @@ struct DFTFlowStageExecutorTests {
             artifactID: "design-diff",
             contents: "{\"kind\":\"design-diff\"}"
         )
-        let designReference = try FoundationFlowProjection.artifactReference(from: designArtifact)
-        let transformedReference = try FoundationFlowProjection.artifactReference(from: transformedArtifact)
-        let diffReference = try FoundationFlowProjection.artifactReference(from: diffArtifact)
+        let designReference = try foundationReference(designArtifact)
+        let transformedReference = try foundationReference(transformedArtifact)
+        let diffReference = try foundationReference(diffArtifact)
         let payload = DFTPayload(
             transformedDesign: LogicDesignReference(
                 artifact: transformedReference.locator,
@@ -1306,7 +1306,7 @@ struct DFTFlowStageExecutorTests {
             return DFTReleaseDownstreamEvidence(
                 domain: domain,
                 role: "\(domain.rawValue)-signoff",
-                artifact: try FoundationFlowProjection.artifactReference(from: artifact)
+                artifact: try foundationReference(artifact)
             )
         }
         let downstreamData = try DFTArtifactJSONEncoder().encode(downstreamEvidence)

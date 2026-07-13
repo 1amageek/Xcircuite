@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import DRCEngine
 import ElectricalSignoffCore
 import Foundation
@@ -113,29 +114,29 @@ extension XcircuiteFlowRuntimeTests {
             processProfileID: "fixture",
             deckDigest: String(repeating: "b", count: 64)
         )
-        let releaseRequestInput = digestBoundInput("electrical/signoff-request.json")
-        let releasePolicyInput = digestBoundInput("electrical/release-policy.json")
+        let releaseRequestInput = try digestBoundInput("electrical/signoff-request.json")
+        let releasePolicyInput = try digestBoundInput("electrical/release-policy.json")
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .electricalStandardLayoutImport(
                     XcircuiteFlowStageExecutorSpec.ElectricalStandardLayoutImport(
-                        layoutInput: digestBoundInput(
+                        layoutInput: try digestBoundInput(
                             "layout/top.def",
                             kind: .layout,
                             format: .def
                         ),
                         layoutFormat: .def,
-                        technologyInput: digestBoundInput(
+                        technologyInput: try digestBoundInput(
                             "tech/process.lef",
                             kind: .technology,
                             format: .lef
                         ),
-                        technologyLayerMappingInput: digestBoundInput(
+                        technologyLayerMappingInput: try digestBoundInput(
                             "tech/process-layer-map.json",
                             kind: .technology,
                             format: .json
                         ),
-                        connectivityInput: digestBoundInput(
+                        connectivityInput: try digestBoundInput(
                             "layout/top.def",
                             kind: .layout,
                             format: .def
@@ -184,7 +185,7 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         policyInput: releasePolicyInput,
-                        processQualificationEvidenceInput: digestBoundInput(
+                        processQualificationEvidenceInput: try digestBoundInput(
                             "electrical/process-qualification.json"
                         )
                     )
@@ -209,7 +210,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(qualification.oraclePath == "electrical/oracle.json")
         #expect(releaseGate.requestInput == releaseRequestInput)
         #expect(releaseGate.policyInput == releasePolicyInput)
-        #expect(releaseGate.processQualificationEvidenceInput == digestBoundInput("electrical/process-qualification.json"))
+        #expect(releaseGate.processQualificationEvidenceInput == (try digestBoundInput("electrical/process-qualification.json")))
         #expect(decoded.executors[0].makeDescriptor().toolID == "native-electrical-standard-layout-import")
         #expect(decoded.executors[1].makeDescriptor().toolID == "native-electrical-signoff")
         #expect(decoded.executors[2].makeDescriptor().toolID == "native-electrical-signoff-qualification")
@@ -217,7 +218,7 @@ extension XcircuiteFlowRuntimeTests {
     }
 
     @Test func runtimeSpecRoundTripsElectricalProcessQualificationStage() throws {
-        let requestInput = digestBoundInput(
+        let requestInput = try digestBoundInput(
             "electrical/process-qualification-request.json",
             kind: .request,
             format: .json
@@ -249,7 +250,7 @@ extension XcircuiteFlowRuntimeTests {
             executors: [
                 .electricalSignoffProcessQualification(
                     XcircuiteFlowStageExecutorSpec.ElectricalSignoffProcessQualification(
-                        requestInput: digestBoundInput(
+                        requestInput: try digestBoundInput(
                             "electrical/process-qualification-request.json",
                             kind: .request,
                             format: .json
@@ -922,7 +923,7 @@ extension XcircuiteFlowRuntimeTests {
                 stageID: "006-layout",
                 status: .succeeded,
                 artifacts: [
-                    XcircuiteFileReference(
+                    try foundationReference(XcircuiteFileReference(
                         artifactID: "drc-layout",
                         path: layoutPath,
                         kind: .layout,
@@ -930,7 +931,7 @@ extension XcircuiteFlowRuntimeTests {
                         sha256: String(repeating: "0", count: 64),
                         byteCount: Int64(Data("tampered".utf8).count),
                         producedByRunID: "run-1"
-                    ),
+                    )),
                 ]
             ),
             to: layoutStageDirectory.appending(path: "result.json"),
@@ -993,7 +994,7 @@ extension XcircuiteFlowRuntimeTests {
                 stageID: "006-layout",
                 status: .succeeded,
                 artifacts: [
-                    XcircuiteFileReference(
+                    try foundationReference(XcircuiteFileReference(
                         artifactID: "drc-layout",
                         path: layoutPath,
                         kind: .layout,
@@ -1001,7 +1002,7 @@ extension XcircuiteFlowRuntimeTests {
                         sha256: XcircuiteHasher().sha256(data: layoutData),
                         byteCount: 1,
                         producedByRunID: "run-1"
-                    ),
+                    )),
                 ]
             ),
             to: layoutStageDirectory.appending(path: "result.json"),
@@ -1120,7 +1121,7 @@ extension XcircuiteFlowRuntimeTests {
                 stageID: "006-layout",
                 status: .succeeded,
                 artifacts: [
-                    XcircuiteFileReference(
+                    try foundationReference(XcircuiteFileReference(
                         artifactID: "drc-layout",
                         path: layoutPath,
                         kind: .layout,
@@ -1128,7 +1129,7 @@ extension XcircuiteFlowRuntimeTests {
                         sha256: XcircuiteHasher().sha256(data: layoutData),
                         byteCount: Int64(layoutData.count),
                         producedByRunID: "run-1"
-                    ),
+                    )),
                 ]
             ),
             to: outsideRoot.appending(path: "result.json")
@@ -1199,7 +1200,7 @@ extension XcircuiteFlowRuntimeTests {
                 stageID: "006-layout",
                 status: .succeeded,
                 artifacts: [
-                    XcircuiteFileReference(
+                    try foundationReference(XcircuiteFileReference(
                         artifactID: "not-drc-layout",
                         path: layoutPath,
                         kind: .layout,
@@ -1207,7 +1208,7 @@ extension XcircuiteFlowRuntimeTests {
                         sha256: XcircuiteHasher().sha256(data: layoutData),
                         byteCount: Int64(layoutData.count),
                         producedByRunID: "run-1"
-                    ),
+                    )),
                 ]
             ),
             to: layoutStageDirectory.appending(path: "result.json"),
@@ -1559,14 +1560,18 @@ extension XcircuiteFlowRuntimeTests {
 
     private func digestBoundInput(
         _ path: String,
-        kind: XcircuiteFileKind = .report,
-        format: XcircuiteFileFormat = .json
-    ) -> XcircuiteFlowInputReference {
-        .artifact(XcircuiteFileReference(
-            path: path,
-            kind: kind,
-            format: format,
-            sha256: String(repeating: "a", count: 64),
+        kind: ArtifactKind = .report,
+        format: ArtifactFormat = .json
+    ) throws -> XcircuiteFlowInputReference {
+        .artifact(ArtifactReference(
+            id: try ArtifactID(rawValue: "input-\(path.replacingOccurrences(of: "/", with: "-"))"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            digest: try ContentDigest(algorithm: .sha256, hexadecimalValue: String(repeating: "a", count: 64)),
             byteCount: 0
         ))
     }

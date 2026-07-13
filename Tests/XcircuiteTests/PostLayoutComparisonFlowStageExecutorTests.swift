@@ -87,8 +87,8 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(stage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         let reportArtifact = try #require(stage.artifacts.first { $0.kind == .report && $0.format == .json })
         #expect(reportArtifact.artifactID == "post-layout-comparison")
-        #expect(reportArtifact.sha256?.isEmpty == false)
-        #expect((reportArtifact.byteCount ?? 0) > 0)
+        #expect(reportArtifact.sha256.isEmpty == false)
+        #expect(reportArtifact.byteCount > 0)
         #expect(reportArtifact.path.contains(".xcircuite/runs/run-comparison/stages/030-compare/raw"))
         let reportURL = root.appending(path: reportArtifact.path)
         let report = try JSONDecoder().decode(
@@ -148,8 +148,8 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(stage.diagnostics.contains { $0.code == "POST_LAYOUT_COMPARISON_GATE_VIOLATION" })
         #expect(stage.artifacts.contains {
             $0.artifactID == "post-layout-comparison"
-                && $0.sha256?.isEmpty == false
-                && ($0.byteCount ?? 0) > 0
+                && $0.sha256.isEmpty == false
+                && $0.byteCount > 0
         })
     }
 

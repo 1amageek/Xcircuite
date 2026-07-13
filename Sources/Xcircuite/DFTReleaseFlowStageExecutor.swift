@@ -88,7 +88,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                     artifact,
                     relativeTo: context.projectRoot
                 )
-                guard integrity.isVerified else {
+                guard !integrity.isVerified else {
                     return nil
                 }
                 return FlowDiagnostic(

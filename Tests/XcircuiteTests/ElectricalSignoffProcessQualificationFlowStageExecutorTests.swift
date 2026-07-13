@@ -39,7 +39,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             verifiedByRunID: runID
         )
         let executor = ElectricalSignoffProcessQualificationFlowStageExecutor(
-            requestInput: .artifact(requestReference)
+            requestInput: .artifact(try foundationReference(requestReference))
         )
         let context = FlowExecutionContext(
             projectRoot: root,
@@ -68,7 +68,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let evidence = try decoder.decode(ToolProcessQualificationEvidence.self, from: Data(contentsOf: evidenceURL))
-        #expect(evidence.status == .qualified)
+        #expect(evidence.status == ToolProcessQualificationStatus.qualified)
         #expect(evidence.scope.isCompleteForPDK)
         #expect(evidence.independenceVerified)
     }
@@ -103,7 +103,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             requiresApproval: true
         )
         let executor = ElectricalSignoffProcessQualificationFlowStageExecutor(
-            requestInput: .artifact(requestReference)
+            requestInput: .artifact(try foundationReference(requestReference))
         )
         let operation = FlowOperationRequest(
             projectRoot: root,
@@ -173,7 +173,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             healthResults: [:]
         )
         let result = try await ElectricalSignoffProcessQualificationFlowStageExecutor(
-            requestInput: .artifact(requestReference)
+            requestInput: .artifact(try foundationReference(requestReference))
         ).execute(
             stage: FlowStageDefinition(
                 stageID: "electrical-signoff.process-qualification",
@@ -219,9 +219,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             producedByRunID: runID,
             verifiedByRunID: runID
         )
-        let updatedApprovalReference = try FoundationFlowProjection.artifactReference(
-            from: updatedApprovalLegacyReference
-        )
+        let updatedApprovalReference = try foundationReference(updatedApprovalLegacyReference)
         var processEvidence = processRequest.processEvidence
         processEvidence.evidenceArtifacts = processEvidence.evidenceArtifacts.map {
             $0.artifactID == "human-approval" ? updatedApprovalReference : $0
@@ -265,7 +263,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             healthResults: [:]
         )
         let result = try await ElectricalSignoffProcessQualificationFlowStageExecutor(
-            requestInput: .artifact(requestReference)
+            requestInput: .artifact(try foundationReference(requestReference))
         ).execute(
             stage: FlowStageDefinition(
                 stageID: "electrical-signoff.process-qualification",
@@ -595,10 +593,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
                 producedByRunID: runID,
                 verifiedByRunID: runID
             )
-            return try FoundationFlowProjection.artifactReference(
-                from: legacyReference,
-                role: reference.locator.role
-            )
+            return try foundationReference(legacyReference, role: reference.locator.role)
         }
     }
 }

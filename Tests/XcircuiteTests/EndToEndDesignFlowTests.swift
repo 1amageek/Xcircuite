@@ -148,9 +148,7 @@ struct EndToEndDesignFlowTests {
             format: .sdc,
             inProjectAt: root
         )
-        let constraintsReference = try FoundationFlowProjection.artifactReference(
-            from: constraintsLegacyReference
-        )
+        let constraintsReference = try foundationReference(constraintsLegacyReference)
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [logicDesignReference, constraintsReference, pdkReference],

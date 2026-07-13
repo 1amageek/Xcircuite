@@ -31,7 +31,7 @@ struct LogicDesignFlowStageExecutorTests {
         #expect(result.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.artifacts.contains { $0.artifactID == "logic-design" })
         #expect(result.artifacts.allSatisfy {
-            XcircuiteFileReferenceVerifier().verify($0, projectRoot: root).status == .verified
+            LocalArtifactVerifier().verify($0, relativeTo: root).isVerified
         })
         #expect(FileManager.default.fileExists(atPath: context.runDirectory
             .appending(path: "stages/logic.elaborate/raw/logic-design.json").path))
@@ -101,7 +101,7 @@ struct LogicDesignFlowStageExecutorTests {
         #expect(result.artifacts.count == 4)
         #expect(result.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.artifacts.allSatisfy {
-            XcircuiteFileReferenceVerifier().verify($0, projectRoot: root).status == .verified
+            LocalArtifactVerifier().verify($0, relativeTo: root).isVerified
         })
         #expect(FileManager.default.fileExists(atPath: context.runDirectory
             .appending(path: "stages/logic.power-intent/raw/power-intent.json").path))

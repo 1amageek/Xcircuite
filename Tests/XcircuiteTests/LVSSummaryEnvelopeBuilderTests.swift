@@ -60,14 +60,14 @@ struct LVSSummaryEnvelopeBuilderTests {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(summary).write(to: summaryURL, options: .atomic)
-        let summaryReference = try packageStore.fileReference(
+        let summaryReference = try foundationReference(packageStore.fileReference(
             forProjectRelativePath: ".xcircuite/runs/\(runID)/stages/008-lvs/raw/lvs-summary.json",
             artifactID: "lvs-summary",
             kind: .report,
             format: .json,
             inProjectAt: root,
             producedByRunID: runID
-        )
+        ))
 
         let envelopeReference = try LVSSummaryEnvelopeBuilder().envelopeReference(
             summary: summary,
@@ -95,8 +95,8 @@ struct LVSSummaryEnvelopeBuilderTests {
         let repairSignals = feedbackSignals.filter { $0.signalID.hasSuffix("-repair-feedback") }
 
         #expect(repairSignals.count == 2)
-        #expect(Set(repairSignals.map(\.signalID)).count == 2)
-        #expect(Set(repairSignals.compactMap(\.channelID)).count == 2)
+        #expect(Set(repairSignals.map { $0.signalID }).count == 2)
+        #expect(Set(repairSignals.compactMap { $0.channelID }).count == 2)
         #expect(repairSignals.contains { $0.channelID == "lvs-mismatch-0-lvs-model-mismatch-active-count" })
         #expect(repairSignals.contains { $0.channelID == "lvs-mismatch-1-lvs-model-mismatch-active-count" })
     }

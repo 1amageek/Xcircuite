@@ -141,8 +141,8 @@ struct PEXFlowStageExecutorTests {
         })
         #expect(artifacts.contains { $0.format == .spef })
         #expect(artifacts.contains { $0.kind == .technology && $0.path.contains("process-profile-decks") })
-        #expect(artifacts.contains { $0.kind == .parasitic && $0.format == .json })
-        #expect(artifacts.contains { $0.kind == .parasitic && $0.format == .spice })
+        #expect(artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .json }))
+        #expect(artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .spice }))
         #expect(artifacts.allSatisfy { !$0.path.hasPrefix("/") })
         #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
             $0.path.contains(".xcircuite/runs/run-pex/stages/009-pex/raw")
@@ -785,7 +785,7 @@ struct PEXFlowStageExecutorTests {
     }
 
     private func decodeArtifactEnvelope(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> XcircuiteArtifactEnvelope {
         try JSONDecoder().decode(

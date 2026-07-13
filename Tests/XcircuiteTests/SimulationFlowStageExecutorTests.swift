@@ -124,7 +124,7 @@ struct SimulationFlowStageExecutorTests {
         #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
             $0.path.contains(".xcircuite/runs/run-sim/stages/010-sim/raw")
         })
-        #expect(artifacts.allSatisfy { $0.sha256?.isEmpty == false })
+        #expect(artifacts.allSatisfy { $0.sha256.isEmpty == false })
     }
 
     @Test func missingAnalysisDirectiveFailsWithoutOperatingPointFallback() async throws {
@@ -370,7 +370,7 @@ struct SimulationFlowStageExecutorTests {
                 stageID: "005-netlist",
                 status: .succeeded,
                 artifacts: [
-                    XcircuiteFileReference(
+                    try foundationReference(XcircuiteFileReference(
                         artifactID: "source-netlist",
                         path: netlistPath,
                         kind: .netlist,
@@ -378,7 +378,7 @@ struct SimulationFlowStageExecutorTests {
                         sha256: String(repeating: "0", count: 64),
                         byteCount: Int64(netlistData.count),
                         producedByRunID: "run-sim-input-digest"
-                    ),
+                    )),
                 ]
             ),
             to: producerStageDirectory.appending(path: "result.json"),
@@ -1025,7 +1025,7 @@ struct SimulationFlowStageExecutorTests {
     }
 
     private func decodeSimulationSummary(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> SimulationRunSummaryReport {
         try JSONDecoder().decode(
@@ -1035,7 +1035,7 @@ struct SimulationFlowStageExecutorTests {
     }
 
     private func decodeArtifactEnvelope(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> XcircuiteArtifactEnvelope {
         try JSONDecoder().decode(

@@ -123,7 +123,7 @@ struct XcircuiteAgentLoopCLITests {
         let envelope = XcircuiteArtifactEnvelope(
             artifactID: "simulation-summary",
             role: "simulation-summary",
-            reference: reference,
+            reference: try foundationReference(reference),
             evaluationResult: XcircuiteEvaluationResult(
                 evaluationID: "simulation-evaluation",
                 specID: "opamp-spec",

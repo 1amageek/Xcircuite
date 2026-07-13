@@ -81,7 +81,7 @@ extension XcircuiteFlowRuntimeTests {
         })
         #expect(drcInputArtifact.kind == .layout)
         #expect(drcInputArtifact.format == .json)
-        #expect(drcInputArtifact.sha256?.isEmpty == false)
+        #expect(drcInputArtifact.sha256.isEmpty == false)
         #expect(drcStage.gates.contains { $0.gateID == "drc" && $0.status == .passed })
 
         let drcInputURL = root.appending(path: drcInputArtifact.path)
@@ -547,7 +547,7 @@ extension XcircuiteFlowRuntimeTests {
                                     stageID: "006-layout",
                                     artifactID: layoutCase.artifactID,
                                     kind: .layout,
-                                    format: layoutCase.artifactFormat
+                                    format: artifactFormat
                                 )
                             ),
                             layoutFormat: layoutCase.lvsFormat,
@@ -581,15 +581,15 @@ extension XcircuiteFlowRuntimeTests {
                 )
             )
 
-            #expect(result.status == .succeeded)
+            #expect(result.status == FlowRunStatus.succeeded)
             let layoutStage = try #require(result.stages.first { $0.stageID == "006-layout" })
             let lvsStage = try #require(result.stages.first { $0.stageID == "008-lvs" })
             let layoutArtifact = try #require(layoutStage.artifacts.first { $0.artifactID == layoutCase.artifactID })
             #expect(layoutArtifact.kind == .layout)
             #expect(layoutArtifact.format.rawValue.lowercased() == artifactFormat.rawValue.lowercased())
             #expect(layoutArtifact.path.hasSuffix(layoutCase.fileSuffix))
-            #expect(layoutArtifact.sha256 != nil)
-            #expect(layoutArtifact.byteCount != nil)
+            #expect(layoutArtifact.sha256.isEmpty == false)
+            #expect(layoutArtifact.byteCount > 0)
             #expect(lvsStage.gates.contains { $0.gateID == "lvs" && $0.status == .passed })
             #expect(lvsStage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
             #expect(lvsStage.artifacts.contains { $0.artifactID == "lvs-summary" })
@@ -733,9 +733,9 @@ extension XcircuiteFlowRuntimeTests {
         )
         #expect(summary.summary.corners.first?.cornerID == "tt")
         #expect(summary.summary.corners.first?.topNets.isEmpty == false)
-        #expect(pexStage.artifacts.contains { $0.kind == .parasitic && $0.format == .spef })
-        #expect(pexStage.artifacts.contains { $0.kind == .parasitic && $0.format == .json })
-        #expect(pexStage.artifacts.contains { $0.kind == .parasitic && $0.format == .spice })
+        #expect(pexStage.artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .spef }))
+        #expect(pexStage.artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .json }))
+        #expect(pexStage.artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .spice }))
     }
 
     @Test func runtimeFeedsLayoutCommandOASISExportIntoPEXStage() async throws {

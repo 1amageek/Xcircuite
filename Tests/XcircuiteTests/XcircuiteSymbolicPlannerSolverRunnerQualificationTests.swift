@@ -586,13 +586,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let proofArtifact = try #require(manifest.artifacts.first {
         $0.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverProofArtifactID
     })
+    let foundationProofArtifact = try foundationReference(proofArtifact, role: .output)
     #expect(proofArtifact.path == proofPath)
-    #expect(result.proofValidation?.proofArtifact == proofArtifact)
+    #expect(result.proofValidation?.proofArtifact == foundationProofArtifact)
     let persistedValidation = try store.readJSON(
         XcircuiteSymbolicPlannerProofValidation.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/proof-validation.json")
     )
-    #expect(persistedValidation.proofArtifact == proofArtifact)
+    #expect(persistedValidation.proofArtifact == foundationProofArtifact)
 }
 
 @Test func qualifySymbolicPlannerSolverRejectsExplicitProofPathThatConflictsWithRunManifest() async throws {

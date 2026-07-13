@@ -338,7 +338,7 @@ struct LogicEngineFlowStageExecutorTests {
         )
 
         let equivalenceResult = try await LogicEquivalenceFlowStageExecutor(
-            requestInput: .path(equivalenceRequestReference.path)
+            requestInput: .path(equivalenceRequestReference.locator.location.value)
         ).execute(
             stage: FlowStageDefinition(stageID: "logic.equivalence", displayName: "Logic equivalence"),
             context: context
@@ -353,7 +353,7 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
 
         let resumedResult = try await LogicEquivalenceFlowStageExecutor(
-            requestInput: .path(equivalenceRequestReference.path),
+            requestInput: .path(equivalenceRequestReference.locator.location.value),
             engine: UnexpectedRTLVerificationExecution()
         ).execute(
             stage: FlowStageDefinition(stageID: "logic.equivalence", displayName: "Logic equivalence"),

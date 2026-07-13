@@ -459,7 +459,7 @@ private func makeProcessEvidence(
         qualificationID: qualification.qualificationID,
         qualification: qualification,
         artifactIDs: [artifact.artifactID].compactMap { $0 },
-        artifacts: [try FoundationFlowProjection.artifactReference(from: artifact)],
+        artifacts: [try foundationReference(artifact)],
         provenance: "fixture",
         recordedAt: recordedAt
     )

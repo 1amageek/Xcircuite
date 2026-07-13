@@ -69,8 +69,8 @@ struct ElectricalStandardLayoutImportTests {
         )
         try manifest.validate()
         #expect(manifest.inputArtifacts.count == 3)
-        #expect(manifest.inputArtifacts.contains { $0.format == .def && $0.sha256?.count == 64 })
-        #expect(manifest.inputArtifacts.contains { $0.format == .lef && $0.sha256?.count == 64 })
+        #expect(manifest.inputArtifacts.contains { $0.format == .def && $0.sha256.count == 64 })
+        #expect(manifest.inputArtifacts.contains { $0.format == .lef && $0.sha256.count == 64 })
         #expect(manifest.inputArtifacts.contains { $0.path == "layer-map.json" && $0.format == .json })
 
         let snapshotReference = try #require(result.artifacts.first {
@@ -174,8 +174,8 @@ struct ElectricalStandardLayoutImportTests {
         try manifest.validate()
         #expect(manifest.inputArtifacts.count == 1)
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-standard-physical-snapshot" })
-        #expect(reference.sha256?.count == 64)
-        #expect((reference.byteCount ?? 0) > 0)
+        #expect(reference.sha256.count == 64)
+        #expect(reference.byteCount > 0)
         let url = try XcircuitePackageStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
         let snapshot = try PhysicalDesignJSONCodec().decode(PhysicalDesignSnapshot.self, from: Data(contentsOf: url))
         #expect(snapshot.topCell == "top")

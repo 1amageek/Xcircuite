@@ -249,13 +249,24 @@ func foundationArtifactReference(
         } else {
             artifactID = nil
         }
+        let kindRawValue: String = switch reference.kind.rawValue.lowercased() {
+        case "powerintent", "power-intent": "power-intent"
+        case "timinglibrary", "timing-library": "timing-library"
+        case "testpattern", "test-pattern": "test-pattern"
+        case "ruledeck", "rule-deck": "rule-deck"
+        default: reference.kind.rawValue.lowercased()
+        }
+        let formatRawValue: String = switch reference.format.rawValue.lowercased() {
+        case "system_verilog", "system-verilog": "system-verilog"
+        default: reference.format.rawValue.lowercased()
+        }
         return try ArtifactReference(
             id: artifactID,
             locator: ArtifactLocator(
                 location: location,
                 role: .output,
-                kind: try ArtifactKind(rawValue: reference.kind.rawValue),
-                format: try ArtifactFormat(rawValue: reference.format.rawValue)
+                kind: try ArtifactKind(rawValue: kindRawValue),
+                format: try ArtifactFormat(rawValue: formatRawValue)
             ),
             digest: ContentDigest(
                 algorithm: .sha256,

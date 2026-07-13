@@ -1274,14 +1274,14 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
                 field: field,
                 path: reference.path,
-                reason: "expected artifact kind (ArtifactKind.other.rawValue), got (reference.locator.kind.rawValue)"
+                reason: "expected artifact kind \(ArtifactKind.other.rawValue), got \(reference.locator.kind.rawValue)"
             )
         }
         guard reference.locator.format == expectedFormat else {
             throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
                 field: field,
                 path: reference.path,
-                reason: "expected format (expectedFormat.rawValue), got (reference.locator.format.rawValue)"
+                reason: "expected format \(expectedFormat.rawValue), got \(reference.locator.format.rawValue)"
             )
         }
         let integrity = LocalArtifactVerifier().verify(reference, relativeTo: projectRoot)
@@ -1292,7 +1292,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
                 field: field,
                 path: reference.path,
-                reason: "artifact integrity verification failed: (reason)"
+                reason: "artifact integrity verification failed: \(reason)"
             )
         }
         return reference

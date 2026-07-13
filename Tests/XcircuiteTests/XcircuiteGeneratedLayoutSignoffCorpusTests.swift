@@ -157,7 +157,7 @@ extension XcircuiteFlowRuntimeTests {
                                     stageID: "006-layout",
                                     artifactID: exportedLayoutArtifactID,
                                     kind: .layout,
-                                    format: artifactFormat
+                                    format: canonicalArtifactFormat
                                 )
                             ),
                             layoutFormat: lvsFormat,
@@ -175,7 +175,7 @@ extension XcircuiteFlowRuntimeTests {
                                     stageID: "006-layout",
                                     artifactID: exportedLayoutArtifactID,
                                     kind: .layout,
-                                    format: artifactFormat
+                                    format: canonicalArtifactFormat
                                 )
                             ),
                             layoutFormat: pexFormat,
@@ -218,7 +218,7 @@ extension XcircuiteFlowRuntimeTests {
                     ]
                 )
             )
-            #expect(result.status == .succeeded)
+            #expect(result.status == FlowRunStatus.succeeded)
         }
 
         try await runGeneratedLayoutSignoffCase(

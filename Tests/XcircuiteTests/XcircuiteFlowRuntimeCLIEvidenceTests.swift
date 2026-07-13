@@ -452,7 +452,7 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-failed",
                     kind: .corpus,
-                    artifact: try FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
+                    artifact: try foundationReference(XcircuiteFileReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,
@@ -522,7 +522,7 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-mismatch",
                     kind: .corpus,
-                    artifact: try FoundationFlowProjection.artifactReference(from: XcircuiteFileReference(
+                    artifact: try foundationReference(XcircuiteFileReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,

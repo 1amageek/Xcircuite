@@ -8,6 +8,7 @@ import LogicIR
 import PDKCore
 import PhysicalDesignCore
 import QualificationEngine
+import ReleaseCore
 import Testing
 import ToolQualification
 @testable import Xcircuite
@@ -35,7 +36,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let foundationReference = try #require(
             result.artifacts.first { $0.artifactID == "electrical-signoff-foundation-evidence" }
         )
-        #expect(foundationReference.sha256?.count == 64)
+        #expect(foundationReference.sha256.count == 64)
         let foundationURL = try XcircuitePackageStore().url(
             forProjectRelativePath: foundationReference.path,
             inProjectAt: context.projectRoot
@@ -157,15 +158,15 @@ struct ElectricalSignoffFlowStageExecutorTests {
             runID: request.runID,
             projectRoot: root.path,
             processProfileID: "fixture",
-            suiteArtifact: try FoundationFlowProjection.artifactReference(from: suiteReference),
-            qualificationReportArtifact: try FoundationFlowProjection.artifactReference(from: retainedReportReference),
-            domainReportArtifacts: [try FoundationFlowProjection.artifactReference(from: qualificationReportReference)],
-            evidenceArtifacts: [try FoundationFlowProjection.artifactReference(from: evidenceReference)],
+            suiteArtifact: suiteReference,
+            qualificationReportArtifact: retainedReportReference,
+            domainReportArtifacts: [qualificationReportReference],
+            evidenceArtifacts: [evidenceReference],
             toolEvidence: [toolEvidence],
             policy: policy
         )
         let releaseEnvelope = try await DefaultRetainedQualificationEvaluator().execute(qualificationRequest)
-        #expect(releaseEnvelope.status == .completed)
+        #expect(releaseEnvelope.status == ReleaseExecutionStatus.completed)
         #expect(releaseEnvelope.payload.qualified)
     }
 
@@ -253,7 +254,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         try inputManifest.validate()
         #expect(inputManifest.inputArtifacts.count == 2)
         let oracleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-observations" })
-        #expect(oracleReference.sha256?.count == 64)
+        #expect(oracleReference.sha256.count == 64)
         let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
         let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
         let suite = try JSONDecoder().decode(RetainedCorpusSuite.self, from: Data(contentsOf: suiteURL))
@@ -615,12 +616,12 @@ struct ElectricalSignoffFlowStageExecutorTests {
         )
 
         let executor = ElectricalSignoffReleaseGateFlowStageExecutor(
-            requestInput: .artifact(requestReference),
-            runResultInput: .artifact(runResultReference),
-            qualificationSpecInput: .artifact(qualificationSpecReference),
-            qualificationReportInput: .artifact(qualificationReportReference),
-            policyInput: .artifact(policyReference),
-            processQualificationEvidenceInput: .artifact(processQualificationEvidenceReference)
+            requestInput: .artifact(try foundationReference(requestReference)),
+            runResultInput: .artifact(try foundationReference(runResultReference)),
+            qualificationSpecInput: .artifact(try foundationReference(qualificationSpecReference)),
+            qualificationReportInput: .artifact(try foundationReference(qualificationReportReference)),
+            policyInput: .artifact(try foundationReference(policyReference)),
+            processQualificationEvidenceInput: .artifact(try foundationReference(processQualificationEvidenceReference))
         )
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "electrical-signoff.release-gate", displayName: "Electrical release gate"),

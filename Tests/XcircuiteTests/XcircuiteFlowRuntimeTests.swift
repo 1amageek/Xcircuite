@@ -133,8 +133,8 @@ extension XcircuiteFlowRuntimeTests {
         let reportArtifact = try #require(comparisonStage.artifacts.first {
             $0.artifactID == "post-layout-comparison" && $0.kind == .report && $0.format == .json
         })
-        #expect(reportArtifact.sha256?.isEmpty == false)
-        #expect((reportArtifact.byteCount ?? 0) > 0)
+        #expect(reportArtifact.sha256.isEmpty == false)
+        #expect(reportArtifact.byteCount > 0)
         let report = try XcircuitePackageStore().readJSON(
             PostLayoutComparisonReport.self,
             from: root.appending(path: reportArtifact.path)

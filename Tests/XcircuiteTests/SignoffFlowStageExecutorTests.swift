@@ -1221,7 +1221,7 @@ struct SignoffFlowStageExecutorTests {
     }
 
     private func decodeDRCSummary(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> DRCRunSummaryReport {
         try JSONDecoder().decode(
@@ -1231,7 +1231,7 @@ struct SignoffFlowStageExecutorTests {
     }
 
     private func decodeDRCRepairHints(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> DRCRepairHintReport {
         try JSONDecoder().decode(
@@ -1241,7 +1241,7 @@ struct SignoffFlowStageExecutorTests {
     }
 
     private func decodeLVSSummary(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> LVSRunSummaryReport {
         try JSONDecoder().decode(
@@ -1251,7 +1251,7 @@ struct SignoffFlowStageExecutorTests {
     }
 
     private func decodeLVSDevicePolicyReport(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> LVSDevicePolicyApplicationReport {
         try JSONDecoder().decode(
@@ -1261,7 +1261,7 @@ struct SignoffFlowStageExecutorTests {
     }
 
     private func decodeArtifactEnvelope(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         root: URL
     ) throws -> XcircuiteArtifactEnvelope {
         try JSONDecoder().decode(
