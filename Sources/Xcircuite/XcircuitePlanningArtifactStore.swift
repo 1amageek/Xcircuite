@@ -86,15 +86,27 @@ public struct XcircuitePlanningArtifactStore: Sendable {
     public static let rejectedFeedbackLearningReportArtifactID = "planning-rejected-feedback-learning-report"
     public static let rejectedFeedbackLearningReportRelativePath = "planning/rejected-feedback-learning-report.json"
 
-    private let packageStore: XcircuitePackageStore
+    private let storage: any FlowExecutionStorage
     private let snapshotBuilder: XcircuiteActionDomainSnapshotBuilder
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        storage: any FlowExecutionStorage = DesignFlowStorageDefaults.makeExecutionStorage(),
         snapshotBuilder: XcircuiteActionDomainSnapshotBuilder = XcircuiteActionDomainSnapshotBuilder()
     ) {
-        self.packageStore = packageStore
+        self.storage = storage
         self.snapshotBuilder = snapshotBuilder
+    }
+
+    /// Source-compatible entry point for callers that still construct the
+    /// deprecated filesystem store directly. New callers inject
+    /// `FlowExecutionStorage` instead so planning logic does not depend on the
+    /// concrete `.xcircuite` implementation.
+    @available(*, deprecated, message: "Use init(storage:snapshotBuilder:) instead.")
+    public init(
+        packageStore: XcircuitePackageStore,
+        snapshotBuilder: XcircuiteActionDomainSnapshotBuilder = XcircuiteActionDomainSnapshotBuilder()
+    ) {
+        self.init(storage: packageStore, snapshotBuilder: snapshotBuilder)
     }
 
     @discardableResult
@@ -115,16 +127,16 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL,
         generatedAt: String
     ) throws -> XcircuiteFileReference {
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let snapshot = try snapshotBuilder.snapshot(runID: runID, generatedAt: generatedAt)
         let snapshotURL = planningDirectory.appending(path: "action-domain-snapshot.json")
-        try packageStore.writeJSON(snapshot, to: snapshotURL, forProjectAt: projectRoot)
+        try storage.writeJSON(snapshot, to: snapshotURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.actionDomainRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.actionDomainArtifactID,
             kind: .other,
@@ -132,7 +144,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -146,15 +158,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard formulation.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: formulation.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let formulationURL = planningDirectory.appending(path: "repair-formulation.json")
-        try packageStore.writeJSON(formulation, to: formulationURL, forProjectAt: projectRoot)
+        try storage.writeJSON(formulation, to: formulationURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.repairPlanFormulationRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.repairPlanFormulationArtifactID,
             kind: .other,
@@ -162,7 +174,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -176,15 +188,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard problem.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: problem.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let problemURL = planningDirectory.appending(path: "problem.json")
-        try packageStore.writeJSON(problem, to: problemURL, forProjectAt: projectRoot)
+        try storage.writeJSON(problem, to: problemURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.problemRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.problemArtifactID,
             kind: .other,
@@ -192,7 +204,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -206,15 +218,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard validation.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: validation.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let validationURL = planningDirectory.appending(path: "problem-validation.json")
-        try packageStore.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
+        try storage.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.planningProblemValidationRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.planningProblemValidationArtifactID,
             kind: .other,
@@ -222,7 +234,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -236,15 +248,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard audit.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: audit.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let auditURL = planningDirectory.appending(path: "problem-translation-audit.json")
-        try packageStore.writeJSON(audit, to: auditURL, forProjectAt: projectRoot)
+        try storage.writeJSON(audit, to: auditURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.problemTranslationAuditRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.problemTranslationAuditArtifactID,
             kind: .other,
@@ -252,7 +264,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -266,15 +278,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         if let mismatched = candidates.first(where: { $0.runID != runID }) {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: mismatched.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let candidatesURL = planningDirectory.appending(path: "parameter-candidates.jsonl")
-        try packageStore.writeText(try jsonLines(for: candidates), to: candidatesURL)
+        try storage.writeText(try jsonLines(for: candidates), to: candidatesURL)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.parameterCandidatesRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.parameterCandidatesArtifactID,
             kind: .other,
@@ -282,7 +294,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -296,9 +308,9 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard record.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: record.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let rejectedPlansURL = planningDirectory.appending(path: "rejected-plans.jsonl")
         let encoder = JSONEncoder()
@@ -313,10 +325,10 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         }
         let existingText = try rejectedPlanLedgerText(from: rejectedPlansURL)
         let prefix = existingText.isEmpty || existingText.hasSuffix("\n") ? existingText : "\(existingText)\n"
-        try packageStore.writeText("\(prefix)\(line)\n", to: rejectedPlansURL)
+        try storage.writeText("\(prefix)\(line)\n", to: rejectedPlansURL)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.rejectedPlansRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.rejectedPlansArtifactID,
             kind: .other,
@@ -324,7 +336,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -338,15 +350,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard trace.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: trace.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let traceURL = planningDirectory.appending(path: "parameter-candidate-search-trace.json")
-        try packageStore.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
+        try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.parameterCandidateSearchTraceRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.parameterCandidateSearchTraceArtifactID,
             kind: .other,
@@ -354,7 +366,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -365,15 +377,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
         try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let traceURL = planningDirectory.appending(path: "parameter-candidate-selection-trace.json")
-        try packageStore.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
+        try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.parameterCandidateSelectionTraceRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.parameterCandidateSelectionTraceArtifactID,
             kind: .other,
@@ -381,7 +393,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -395,15 +407,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard plan.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: plan.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let candidatePlanURL = planningDirectory.appending(path: "candidate-plan.json")
-        try packageStore.writeJSON(plan, to: candidatePlanURL, forProjectAt: projectRoot)
+        try storage.writeJSON(plan, to: candidatePlanURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.candidatePlanRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.candidatePlanArtifactID,
             kind: .other,
@@ -411,7 +423,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -425,15 +437,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard trace.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: trace.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let traceURL = planningDirectory.appending(path: "symbolic-planner-trace.json")
-        try packageStore.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
+        try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerTraceRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.symbolicPlannerTraceArtifactID,
             kind: .other,
@@ -441,7 +453,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -456,20 +468,20 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard familyRun.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: familyRun.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let familyDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
             .appending(path: "family")
             .appending(path: familyRun.familyRunID)
-        try packageStore.ensureDirectory(at: familyDirectory)
+        try storage.ensureDirectory(at: familyDirectory)
 
         let familyRunURL = familyDirectory.appending(path: "family-run.json")
-        try packageStore.writeJSON(familyRun, to: familyRunURL, forProjectAt: projectRoot)
+        try storage.writeJSON(familyRun, to: familyRunURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRun.familyRunID)/family-run.json"
         let familyArtifactID = "\(Self.symbolicPlannerFamilyRunArtifactID)-\(String(familyRun.familyRunID.prefix(80)))"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: familyArtifactID,
             kind: .other,
@@ -477,7 +489,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -491,18 +503,18 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard export.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: export.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let domainURL = exportDirectory.appending(path: "domain.pddl")
         let problemURL = exportDirectory.appending(path: "problem.pddl")
         let exportURL = exportDirectory.appending(path: "pddl-export.json")
-        try packageStore.writeText(export.domainPDDL, to: domainURL)
-        try packageStore.writeText(export.problemPDDL, to: problemURL)
-        try packageStore.writeJSON(export, to: exportURL, forProjectAt: projectRoot)
+        try storage.writeText(export.domainPDDL, to: domainURL)
+        try storage.writeText(export.problemPDDL, to: problemURL)
+        try storage.writeJSON(export, to: exportURL, forProjectAt: projectRoot)
 
         let domainArtifact = try pddlFileReference(
             relativePath: Self.symbolicPlannerPDDLDomainRelativePath,
@@ -516,7 +528,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             runID: runID,
             projectRoot: projectRoot
         )
-        let exportArtifact = try packageStore.fileReference(
+        let exportArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPDDLExportRelativePath)",
             artifactID: Self.symbolicPlannerPDDLExportArtifactID,
             kind: .other,
@@ -525,9 +537,9 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
 
-        try packageStore.upsertRunArtifact(domainArtifact, runID: runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(problemArtifact, runID: runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(exportArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(domainArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(problemArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(exportArtifact, runID: runID, inProjectAt: projectRoot)
 
         return XcircuiteSymbolicPlannerPDDLArtifactSet(
             domainArtifact: try requireFoundationArtifactReference(
@@ -552,16 +564,16 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
         try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let planURL = exportDirectory.appending(path: "solver-plan.txt")
-        try packageStore.writeText(text, to: planURL)
+        try storage.writeText(text, to: planURL)
 
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverPlanRelativePath)",
             artifactID: Self.symbolicPlannerSolverPlanArtifactID,
             kind: .other,
@@ -569,7 +581,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -583,16 +595,16 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard validation.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: validation.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let validationURL = exportDirectory.appending(path: "plan-replay-validation.json")
-        try packageStore.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
+        try storage.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
 
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPlanReplayValidationRelativePath)",
             artifactID: Self.symbolicPlannerPlanReplayValidationArtifactID,
             kind: .other,
@@ -600,7 +612,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -614,16 +626,16 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard certificate.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: certificate.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let certificateURL = exportDirectory.appending(path: "solver-certificate.json")
-        try packageStore.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
+        try storage.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
 
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverCertificateRelativePath)",
             artifactID: Self.symbolicPlannerSolverCertificateArtifactID,
             kind: .other,
@@ -631,7 +643,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -647,19 +659,19 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard validation.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: validation.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let stdoutURL = exportDirectory.appending(path: "proof-validation-stdout.txt")
         let stderrURL = exportDirectory.appending(path: "proof-validation-stderr.txt")
         let validationURL = exportDirectory.appending(path: "proof-validation.json")
-        try packageStore.writeText(standardOutput, to: stdoutURL)
-        try packageStore.writeText(standardError, to: stderrURL)
+        try storage.writeText(standardOutput, to: stdoutURL)
+        try storage.writeText(standardError, to: stderrURL)
 
-        let stdoutArtifact = try packageStore.fileReference(
+        let stdoutArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStdoutRelativePath)",
             artifactID: Self.symbolicPlannerProofValidationStdoutArtifactID,
             kind: .other,
@@ -667,7 +679,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        let stderrArtifact = try packageStore.fileReference(
+        let stderrArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStderrRelativePath)",
             artifactID: Self.symbolicPlannerProofValidationStderrArtifactID,
             kind: .other,
@@ -684,9 +696,9 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             stderrArtifact,
             field: "proofValidation.standardErrorArtifact"
         )
-        try packageStore.writeJSON(persistedValidation, to: validationURL, forProjectAt: projectRoot)
+        try storage.writeJSON(persistedValidation, to: validationURL, forProjectAt: projectRoot)
 
-        let validationArtifact = try packageStore.fileReference(
+        let validationArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationRelativePath)",
             artifactID: Self.symbolicPlannerProofValidationArtifactID,
             kind: .other,
@@ -695,9 +707,9 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
 
-        try packageStore.upsertRunArtifact(stdoutArtifact, runID: runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(validationArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(stdoutArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(validationArtifact, runID: runID, inProjectAt: projectRoot)
         return XcircuiteSymbolicPlannerProofValidationArtifactSet(
             validationArtifact: try requireFoundationArtifactReference(
                 validationArtifact,
@@ -726,20 +738,20 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard report.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: report.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let stdoutURL = exportDirectory.appending(path: "solver-stdout.txt")
         let stderrURL = exportDirectory.appending(path: "solver-stderr.txt")
         let reportURL = exportDirectory.appending(path: "solver-run.json")
-        try packageStore.writeText(standardOutput, to: stdoutURL)
-        try packageStore.writeText(standardError, to: stderrURL)
-        try packageStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeText(standardOutput, to: stdoutURL)
+        try storage.writeText(standardError, to: stderrURL)
+        try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
 
-        let stdoutArtifact = try packageStore.fileReference(
+        let stdoutArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStdoutRelativePath)",
             artifactID: Self.symbolicPlannerSolverStdoutArtifactID,
             kind: .other,
@@ -747,7 +759,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        let stderrArtifact = try packageStore.fileReference(
+        let stderrArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStderrRelativePath)",
             artifactID: Self.symbolicPlannerSolverStderrArtifactID,
             kind: .other,
@@ -755,7 +767,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        let runArtifact = try packageStore.fileReference(
+        let runArtifact = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverRunRelativePath)",
             artifactID: Self.symbolicPlannerSolverRunArtifactID,
             kind: .other,
@@ -764,9 +776,9 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
 
-        try packageStore.upsertRunArtifact(stdoutArtifact, runID: runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(runArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(stdoutArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(runArtifact, runID: runID, inProjectAt: projectRoot)
         return XcircuiteSymbolicPlannerSolverArtifactSet(
             runArtifact: try requireFoundationArtifactReference(
                 runArtifact,
@@ -793,17 +805,17 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard qualification.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: qualification.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let reportURL = exportDirectory.appending(path: "solver-qualification.json")
         let persistedQualification = qualification.detachingQualificationArtifactReferencesForPersistence()
-        try packageStore.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
 
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverQualificationRelativePath)",
             artifactID: Self.symbolicPlannerSolverQualificationArtifactID,
             kind: .other,
@@ -811,7 +823,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -826,20 +838,20 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard comparison.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: comparison.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
             .appending(path: "solver-family")
             .appending(path: comparison.comparisonID)
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let reportURL = exportDirectory.appending(path: "solver-family-comparison.json")
-        try packageStore.writeJSON(comparison, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(comparison, to: reportURL, forProjectAt: projectRoot)
 
         let comparisonArtifactID = "\(Self.symbolicPlannerSolverFamilyComparisonArtifactID)-\(String(comparison.comparisonID.prefix(80)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparison.comparisonID)/solver-family-comparison.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: comparisonArtifactID,
             kind: .other,
@@ -847,7 +859,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -862,20 +874,20 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard promotion.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: promotion.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
             .appending(path: "solver-family")
             .appending(path: promotion.comparisonID)
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let reportURL = exportDirectory.appending(path: "solver-family-promotion.json")
-        try packageStore.writeJSON(promotion, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(promotion, to: reportURL, forProjectAt: projectRoot)
 
         let promotionArtifactID = "\(Self.symbolicPlannerSolverFamilyPromotionArtifactID)-\(String(promotion.comparisonID.prefix(80)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(promotion.comparisonID)/solver-family-promotion.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: promotionArtifactID,
             kind: .other,
@@ -883,7 +895,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -898,20 +910,20 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard batchRun.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: batchRun.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
             .appending(path: "solver-family")
             .appending(path: batchRun.comparisonID)
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let reportURL = exportDirectory.appending(path: "solver-family-batch.json")
-        try packageStore.writeJSON(batchRun, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(batchRun, to: reportURL, forProjectAt: projectRoot)
 
         let batchArtifactID = "\(Self.symbolicPlannerSolverFamilyBatchArtifactID)-\(String(batchRun.comparisonID.prefix(80)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(batchRun.comparisonID)/solver-family-batch.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: batchArtifactID,
             kind: .other,
@@ -919,7 +931,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -934,18 +946,18 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard lane.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: lane.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let reportURL = exportDirectory.appending(path: "installed-solver-lane.json")
-        try packageStore.writeJSON(lane, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(lane, to: reportURL, forProjectAt: projectRoot)
 
         let artifactID = "\(Self.symbolicPlannerInstalledSolverLaneArtifactID)-\(String(lane.laneID.prefix(80)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/installed-solver-lane.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
             kind: .other,
@@ -953,7 +965,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -971,7 +983,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard qualification.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: qualification.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
@@ -979,15 +991,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             .appending(path: comparisonID)
             .appending(path: "candidates")
             .appending(path: candidateID)
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let reportURL = exportDirectory.appending(path: "solver-qualification.json")
         let persistedQualification = qualification.detachingQualificationArtifactReferencesForPersistence()
-        try packageStore.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
 
         let artifactID = "\(Self.symbolicPlannerSolverFamilyQualificationArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-qualification.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
             kind: .other,
@@ -995,7 +1007,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1010,7 +1022,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
         try XcircuiteIdentifierValidator().validate(comparisonID, kind: .artifactID)
         try XcircuiteIdentifierValidator().validate(candidateID, kind: .artifactID)
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
@@ -1018,14 +1030,14 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             .appending(path: comparisonID)
             .appending(path: "candidates")
             .appending(path: candidateID)
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let solverPlanURL = exportDirectory.appending(path: "solver-plan.txt")
-        try packageStore.writeText(solverPlanText, to: solverPlanURL)
+        try storage.writeText(solverPlanText, to: solverPlanURL)
 
         let artifactID = "\(Self.symbolicPlannerSolverFamilySolverPlanArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-plan.txt"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
             kind: .other,
@@ -1033,7 +1045,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1051,7 +1063,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard certificate.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: certificate.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let exportDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
@@ -1059,14 +1071,14 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             .appending(path: comparisonID)
             .appending(path: "candidates")
             .appending(path: candidateID)
-        try packageStore.ensureDirectory(at: exportDirectory)
+        try storage.ensureDirectory(at: exportDirectory)
 
         let certificateURL = exportDirectory.appending(path: "solver-certificate.json")
-        try packageStore.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
+        try storage.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
 
         let artifactID = "\(Self.symbolicPlannerSolverFamilyCertificateArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-certificate.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
             kind: .other,
@@ -1074,7 +1086,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1084,25 +1096,24 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
         try XcircuiteIdentifierValidator().validate(suiteSpec.suiteID, kind: .artifactID)
-        let suiteDirectory = XcircuitePackage(projectRoot: projectRoot)
-            .packageURL
-            .appending(path: "qualification")
-            .appending(path: "symbolic-planner")
-            .appending(path: suiteSpec.suiteID)
-        try packageStore.ensureDirectory(at: suiteDirectory)
+        let suiteDirectory = try storage.url(
+            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)",
+            inProjectAt: projectRoot
+        )
+        try storage.ensureDirectory(at: suiteDirectory)
 
         let suiteSpecURL = suiteDirectory.appending(path: "solver-qualification-corpus-suite.json")
-        try packageStore.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
+        try storage.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)/solver-qualification-corpus-suite.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID,
             kind: .other,
             format: .json,
             inProjectAt: projectRoot
         )
-        try packageStore.upsertFileReference(reference, forProjectAt: projectRoot)
+        try storage.upsertFileReference(reference, forProjectAt: projectRoot)
         return reference
     }
 
@@ -1112,25 +1123,24 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
         try XcircuiteIdentifierValidator().validate(corpus.suiteID, kind: .artifactID)
-        let corpusDirectory = XcircuitePackage(projectRoot: projectRoot)
-            .packageURL
-            .appending(path: "qualification")
-            .appending(path: "symbolic-planner")
-            .appending(path: corpus.suiteID)
-        try packageStore.ensureDirectory(at: corpusDirectory)
+        let corpusDirectory = try storage.url(
+            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)",
+            inProjectAt: projectRoot
+        )
+        try storage.ensureDirectory(at: corpusDirectory)
 
         let corpusURL = corpusDirectory.appending(path: "solver-qualification-corpus.json")
-        try packageStore.writeJSON(corpus, to: corpusURL, forProjectAt: projectRoot)
+        try storage.writeJSON(corpus, to: corpusURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)/solver-qualification-corpus.json"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.symbolicPlannerSolverQualificationCorpusArtifactID,
             kind: .other,
             format: .json,
             inProjectAt: projectRoot
         )
-        try packageStore.upsertFileReference(reference, forProjectAt: projectRoot)
+        try storage.upsertFileReference(reference, forProjectAt: projectRoot)
         return reference
     }
 
@@ -1144,15 +1154,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard verification.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: verification.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let verificationURL = planningDirectory.appending(path: "plan-verification.json")
-        try packageStore.writeJSON(verification, to: verificationURL, forProjectAt: projectRoot)
+        try storage.writeJSON(verification, to: verificationURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.planVerificationRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.planVerificationArtifactID,
             kind: .other,
@@ -1160,7 +1170,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1174,15 +1184,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard execution.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: execution.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let executionURL = planningDirectory.appending(path: "plan-execution.json")
-        try packageStore.writeJSON(execution, to: executionURL, forProjectAt: projectRoot)
+        try storage.writeJSON(execution, to: executionURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.planExecutionRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.planExecutionArtifactID,
             kind: .other,
@@ -1190,7 +1200,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1204,15 +1214,15 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard loop.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: loop.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let loopURL = planningDirectory.appending(path: "numeric-repair-loop.json")
-        try packageStore.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
+        try storage.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
 
         let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.numericRepairLoopRelativePath)"
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.numericRepairLoopArtifactID,
             kind: .other,
@@ -1220,7 +1230,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1234,12 +1244,12 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard profile.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: profile.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let profileURL = planningDirectory.appending(path: "metric-threshold-profile.json")
-        try packageStore.writeJSON(profile, to: profileURL, forProjectAt: projectRoot)
+        try storage.writeJSON(profile, to: profileURL, forProjectAt: projectRoot)
 
         let reference = try jsonPlanningFileReference(
             relativePath: Self.metricThresholdProfileRelativePath,
@@ -1247,7 +1257,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             runID: runID,
             projectRoot: projectRoot
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1261,12 +1271,12 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard report.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: report.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let reportURL = planningDirectory.appending(path: "cost-calibration.json")
-        try packageStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
 
         let reference = try jsonPlanningFileReference(
             relativePath: Self.costCalibrationRelativePath,
@@ -1274,7 +1284,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             runID: runID,
             projectRoot: projectRoot
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1288,14 +1298,14 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard candidateSet.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: candidateSet.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let candidatesURL = planningDirectory.appending(path: "pareto-candidates.jsonl")
-        try packageStore.writeText(try jsonLines(for: candidateSet.candidates), to: candidatesURL)
+        try storage.writeText(try jsonLines(for: candidateSet.candidates), to: candidatesURL)
 
-        let reference = try packageStore.fileReference(
+        let reference = try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.paretoCandidatesRelativePath)",
             artifactID: Self.paretoCandidatesArtifactID,
             kind: .other,
@@ -1303,7 +1313,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1317,12 +1327,12 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard loop.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: loop.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let loopURL = planningDirectory.appending(path: "improvement-loop.json")
-        try packageStore.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
+        try storage.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
 
         let reference = try jsonPlanningFileReference(
             relativePath: Self.improvementLoopRelativePath,
@@ -1330,7 +1340,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             runID: runID,
             projectRoot: projectRoot
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1344,12 +1354,12 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         guard report.runID == runID else {
             throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: report.runID)
         }
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: runID)
+        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
         let planningDirectory = runDirectory.appending(path: "planning")
-        try packageStore.ensureDirectory(at: planningDirectory)
+        try storage.ensureDirectory(at: planningDirectory)
 
         let reportURL = planningDirectory.appending(path: "rejected-feedback-learning-report.json")
-        try packageStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
 
         let reference = try jsonPlanningFileReference(
             relativePath: Self.rejectedFeedbackLearningReportRelativePath,
@@ -1357,7 +1367,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             runID: runID,
             projectRoot: projectRoot
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -1445,7 +1455,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
-        try packageStore.fileReference(
+        try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(relativePath)",
             artifactID: artifactID,
             kind: .other,
@@ -1461,7 +1471,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
-        try packageStore.fileReference(
+        try storage.fileReference(
             forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(relativePath)",
             artifactID: artifactID,
             kind: .other,
