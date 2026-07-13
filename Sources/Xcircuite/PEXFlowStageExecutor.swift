@@ -43,6 +43,40 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
+    public static func production(
+        stageID: String,
+        layoutInput: XcircuiteFlowInputReference,
+        layoutFormat: LayoutFormat,
+        sourceNetlistInput: XcircuiteFlowInputReference,
+        sourceNetlistFormat: NetlistFormat = .spice,
+        topCell: String,
+        corners: [PEXCorner],
+        technology: XcircuitePEXTechnologySpec,
+        technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
+        processProfile: PEXProcessProfileReference? = nil,
+        backendSelection: PEXBackendSelection = PEXBackendSelection(backendID: "magic"),
+        options: PEXRunOptions = .default
+    ) -> PEXFlowStageExecutor {
+        PEXFlowStageExecutor(
+            stageID: stageID,
+            toolID: SignoffToolDescriptors.pexToolID(
+                backendID: backendSelection.backendID
+            ),
+            layoutInput: layoutInput,
+            layoutFormat: layoutFormat,
+            sourceNetlistInput: sourceNetlistInput,
+            sourceNetlistFormat: sourceNetlistFormat,
+            topCell: topCell,
+            corners: corners,
+            technology: technology,
+            technologyByCorner: technologyByCorner,
+            processProfile: processProfile,
+            backendSelection: backendSelection,
+            options: options,
+            engine: DefaultPEXEngine.withDefaults()
+        )
+    }
+
     public init(
         stageID: String,
         toolID: String,
@@ -168,6 +202,55 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 from: runResult,
                 projectRoot: context.projectRoot
             )
+            let pexDiagnostics = flowDiagnostics(
+                from: runResult,
+                artifactCompleteness: artifactCompleteness
+            )
+            if let blockedKind = blockedErrorKind(from: runResult) {
+                let artifacts = try artifactReferences(
+                    from: runResult,
+                    summaryURL: nil,
+                    context: context
+                )
+                let flowArtifactGate = StageArtifactManifestCoverageGateBuilder().pexGate(
+                    manifestURL: runResult.manifestURL,
+                    artifacts: artifacts,
+                    projectRoot: context.projectRoot
+                )
+                let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
+                    for: artifacts,
+                    projectRoot: context.projectRoot
+                )
+                let blockedDiagnostic = FlowDiagnostic(
+                    severity: .error,
+                    code: diagnosticCode(for: blockedKind),
+                    message: blockedMessage(for: runResult, kind: blockedKind)
+                )
+                let diagnostics = [blockedDiagnostic]
+                    + pexDiagnostics
+                    + flowArtifactGate.diagnostics
+                    + artifactIntegrityGate.diagnostics
+                return FlowStageResult(
+                    stageID: stage.stageID,
+                    status: .blocked,
+                    diagnostics: diagnostics,
+                    gates: [
+                        FlowGateResult(
+                            gateID: "pex",
+                            status: .blocked,
+                            diagnostics: [blockedDiagnostic] + pexDiagnostics
+                        ),
+                        FlowGateResult(
+                            gateID: "pex-artifacts",
+                            status: gateStatus(from: artifactCompleteness.status),
+                            diagnostics: artifactDiagnostics(from: artifactCompleteness)
+                        ),
+                        flowArtifactGate,
+                        artifactIntegrityGate,
+                    ],
+                    artifacts: artifacts
+                )
+            }
             let persistedSummary = try persistSummaryArtifact(
                 from: runResult,
                 projectRoot: context.projectRoot
@@ -178,7 +261,6 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 summaryURL: persistedSummary.url,
                 context: context
             )
-            let pexDiagnostics = flowDiagnostics(from: runResult, artifactCompleteness: artifactCompleteness)
             let overallGateStatus = gateStatus(
                 runStatus: runResult.status,
                 artifactCompletenessStatus: artifactCompleteness.status
@@ -264,6 +346,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
+        } catch let error as PEXError {
+            return pexErrorResult(stageID: stage.stageID, error: error)
         } catch let error as XcircuiteRuntimeError {
             switch error {
             case .artifactOutsideProject:
@@ -306,6 +390,93 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 ),
             ]
         )
+    }
+
+    private func pexErrorResult(
+        stageID: String,
+        error: PEXError
+    ) -> FlowStageResult {
+        let diagnostic = FlowDiagnostic(
+            severity: .error,
+            code: diagnosticCode(for: error.kind),
+            message: error.description
+        )
+        let status: FlowStageStatus = isBlocked(error.kind) ? .blocked : .failed
+        let gateStatus: FlowGateStatus = isBlocked(error.kind) ? .blocked : .failed
+        return FlowStageResult(
+            stageID: stageID,
+            status: status,
+            diagnostics: [diagnostic],
+            gates: [
+                FlowGateResult(
+                    gateID: "pex",
+                    status: gateStatus,
+                    diagnostics: [diagnostic]
+                ),
+            ]
+        )
+    }
+
+    private func blockedErrorKind(from result: PEXRunResult) -> PEXErrorKind? {
+        if let failureKind = result.artifacts.corners
+            .compactMap({ $0.failure?.failureKind })
+            .first(where: isBlocked)
+        {
+            return failureKind
+        }
+        if result.extractorRun?.readiness.status == .blocked {
+            return .adapterUnavailable
+        }
+        return nil
+    }
+
+    private func blockedMessage(
+        for result: PEXRunResult,
+        kind: PEXErrorKind
+    ) -> String {
+        if let failure = result.artifacts.corners
+            .compactMap(\.failure)
+            .first(where: { $0.failureKind == kind })
+        {
+            return failure.message
+        }
+        if let readiness = result.extractorRun?.readiness {
+            return readiness.reason
+        }
+        return "PEX backend is unavailable."
+    }
+
+    private func isBlocked(_ kind: PEXErrorKind) -> Bool {
+        switch kind {
+        case .adapterUnavailable, .technologyResolutionFailed:
+            true
+        case .invalidInput, .backendExecutionFailed, .cancelled, .parseFailed,
+             .irValidationFailed, .persistenceFailed, .internalInvariantViolation:
+            false
+        }
+    }
+
+    private func diagnosticCode(for kind: PEXErrorKind) -> String {
+        switch kind {
+        case .adapterUnavailable:
+            "PEX_BACKEND_UNAVAILABLE"
+        case .technologyResolutionFailed:
+            "PEX_TECHNOLOGY_BLOCKED"
+        case .invalidInput:
+            "PEX_INPUT_INVALID"
+        case .backendExecutionFailed:
+            "PEX_BACKEND_EXECUTION_FAILED"
+        case .cancelled:
+            "PEX_EXECUTION_CANCELLED"
+        case .parseFailed:
+            "PEX_PARSE_FAILED"
+        case .irValidationFailed:
+            "PEX_IR_VALIDATION_FAILED"
+        case .persistenceFailed:
+            "PEX_PERSISTENCE_FAILED"
+        case .internalInvariantViolation:
+            "PEX_INTERNAL_INVARIANT_FAILED"
+        }
     }
 
     private func preparedRequest(
@@ -377,7 +548,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
 
     private func artifactReferences(
         from result: PEXRunResult,
-        summaryURL: URL,
+        summaryURL: URL?,
         context: FlowExecutionContext
     ) throws -> [XcircuiteFileReference] {
         let pexRunDirectory = result.manifestURL.deletingLastPathComponent()
@@ -389,15 +560,17 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 format: .json,
                 producedByRunID: context.runID
             ),
-            try artifactBuilder.reference(
+        ]
+        if let summaryURL {
+            artifacts.append(try artifactBuilder.reference(
                 for: summaryURL,
                 projectRoot: context.projectRoot,
                 artifactID: "pex-summary",
                 kind: .report,
                 format: .json,
                 producedByRunID: context.runID
-            ),
-        ]
+            ))
+        }
 
         for artifact in result.artifacts.artifacts where artifact.status == .available {
             let url = pexRunDirectory.appending(path: artifact.relativePath.value)

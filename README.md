@@ -37,7 +37,7 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `LayoutCommandFlowStageExecutor` | Applies replayable `LayoutCommands` requests, writes flow-managed layout/result/manifest artifacts, and can emit DRC-compatible JSON plus standard layout exports for downstream DRC/LVS/PEX stages |
 | `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
-| `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, indexes extraction artifacts and `pex-summary` as `XcircuiteFileReference`s, and verifies output artifact references before stage success |
+| `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `XcircuiteFileReference`s, and blocks unavailable infrastructure without fabricating signoff output |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
 | `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, re-hashes reviewed artifacts on resume, and delegates approval validation to `PhysicalDesignReviewGate` |
 
@@ -89,6 +89,14 @@ Every successful PEX stage writes `pex-summary.json` with stable artifact ID
 and ParasiticIR artifacts, so Agent / CI / Human review can inspect per-corner
 top parasitic nets from the `.xcircuite` run ledger without re-running PEX or
 scraping logs.
+
+`PEXFlowStageExecutor.production(...)` selects `DefaultPEXEngine.withDefaults()`
+and the real backend named by `PEXBackendSelection`. An unavailable Magic
+executable, PDK, or extraction deck is retained as typed `adapterUnavailable`
+failure evidence and maps to a blocked flow stage; it does not produce a
+`pex-summary` signoff artifact. `PEXFlowStageExecutor.mock(...)` remains an
+explicit contract-test lane and is never accepted by the production runtime
+spec.
 
 PEX stages also write `evidence/pex-summary-envelope.json`. The envelope expands
 `PEXRunSummaryReport` into Agent-readable observation channels for artifact
