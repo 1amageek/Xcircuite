@@ -2,7 +2,6 @@ import Foundation
 import CircuiteFoundation
 import DesignFlowKernel
 import SignoffToolSupport
-import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolving {
     private let packageStore: XcircuitePackageStore
@@ -122,10 +121,10 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             standardError: processOutcome.standardError,
             solverPlanText: solverPlan?.text
         )
-        var solverPlanArtifact: XcircuiteFileReference?
+        var solverPlanArtifact: ArtifactReference?
         var importResult: XcircuiteSymbolicPlannerPlanImportResult?
         var planReplayValidation: XcircuiteSymbolicPlannerPlanReplayValidation?
-        var planReplayValidationArtifact: XcircuiteFileReference?
+        var planReplayValidationArtifact: ArtifactReference?
 
         if processOutcome.exitCode == 0,
            !processOutcome.didTimeout,
@@ -155,7 +154,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                         projectRoot: projectRoot
                     )
                     importResult = imported
-                    solverPlanArtifact = legacyArtifactReference(imported.solverPlanArtifact)
+                    solverPlanArtifact = imported.solverPlanArtifact
                     if let pddlExportArtifact {
                         let replay = try replayValidation(
                             importResult: imported,
@@ -163,10 +162,13 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                             projectRoot: projectRoot
                         )
                         planReplayValidation = replay
-                        planReplayValidationArtifact = try artifactStore.persistSymbolicPlannerPlanReplayValidation(
-                            replay,
-                            runID: request.runID,
-                            projectRoot: projectRoot
+                        planReplayValidationArtifact = try requireFoundationArtifactReference(
+                            artifactStore.persistSymbolicPlannerPlanReplayValidation(
+                                replay,
+                                runID: request.runID,
+                                projectRoot: projectRoot
+                            ),
+                            field: "solver.planReplayValidationArtifact"
                         )
                         diagnostics.append(contentsOf: replayDiagnostics(from: replay))
                     }
@@ -179,10 +181,13 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                     }
                 }
             } else {
-                solverPlanArtifact = try artifactStore.persistSymbolicPlannerSolverPlan(
-                    solverPlanText,
-                    runID: request.runID,
-                    projectRoot: projectRoot
+                solverPlanArtifact = try requireFoundationArtifactReference(
+                    artifactStore.persistSymbolicPlannerSolverPlan(
+                        solverPlanText,
+                        runID: request.runID,
+                        projectRoot: projectRoot
+                    ),
+                    field: "solver.solverPlanArtifact"
                 )
                 status = "solved-without-import"
             }
@@ -207,23 +212,10 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             arguments: arguments,
             timeoutSeconds: request.timeoutSeconds,
             workingDirectoryPath: workingDirectoryPath,
-            domainArtifact: try requireFoundationArtifactReference(
-                domainArtifact,
-                field: "solver.report.domainArtifact"
-            ),
-            problemArtifact: try requireFoundationArtifactReference(
-                problemArtifact,
-                field: "solver.report.problemArtifact"
-            ),
-            pddlExportArtifact: try pddlExportArtifact.map {
-                try requireFoundationArtifactReference($0, field: "solver.report.pddlExportArtifact")
-            },
-            planReplayValidationArtifact: try planReplayValidationArtifact.map {
-                try requireFoundationArtifactReference(
-                    $0,
-                    field: "solver.report.planReplayValidationArtifact"
-                )
-            },
+            domainArtifact: domainArtifact,
+            problemArtifact: problemArtifact,
+            pddlExportArtifact: pddlExportArtifact,
+            planReplayValidationArtifact: planReplayValidationArtifact,
             planReplayValidationStatus: planReplayValidation?.status,
             solverPlanOutputPath: solverPlanOutputPath,
             solverPlanSource: solverPlanSource,
@@ -249,26 +241,14 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             exitCode: processOutcome.exitCode,
             didTimeout: processOutcome.didTimeout,
             didCancel: processOutcome.didCancel,
-            domainArtifact: try requireFoundationArtifactReference(
-                domainArtifact,
-                field: "solver.domainArtifact"
-            ),
-            problemArtifact: try requireFoundationArtifactReference(
-                problemArtifact,
-                field: "solver.problemArtifact"
-            ),
-            pddlExportArtifact: try pddlExportArtifact.map {
-                try requireFoundationArtifactReference($0, field: "solver.pddlExportArtifact")
-            },
+            domainArtifact: domainArtifact,
+            problemArtifact: problemArtifact,
+            pddlExportArtifact: pddlExportArtifact,
             runArtifact: solverArtifacts.runArtifact,
             standardOutputArtifact: solverArtifacts.standardOutputArtifact,
             standardErrorArtifact: solverArtifacts.standardErrorArtifact,
-            solverPlanArtifact: try solverPlanArtifact.map {
-                try requireFoundationArtifactReference($0, field: "solver.solverPlanArtifact")
-            },
-            planReplayValidationArtifact: try planReplayValidationArtifact.map {
-                try requireFoundationArtifactReference($0, field: "solver.planReplayValidationArtifact")
-            },
+            solverPlanArtifact: solverPlanArtifact,
+            planReplayValidationArtifact: planReplayValidationArtifact,
             solverMetadata: solverMetadata,
             importResult: importResult,
             planReplayValidation: planReplayValidation,
@@ -278,7 +258,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
 
     private func replayValidation(
         importResult: XcircuiteSymbolicPlannerPlanImportResult,
-        pddlExportArtifact: XcircuiteFileReference,
+        pddlExportArtifact: ArtifactReference,
         projectRoot: URL
     ) throws -> XcircuiteSymbolicPlannerPlanReplayValidation {
         let pddlExport = try packageStore.readJSON(
@@ -501,11 +481,11 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
     }
 
     private func protectedSolverInputArtifacts(
-        domainArtifact: XcircuiteFileReference,
+        domainArtifact: ArtifactReference,
         domainURL: URL,
-        problemArtifact: XcircuiteFileReference,
+        problemArtifact: ArtifactReference,
         problemURL: URL,
-        pddlExportArtifact: XcircuiteFileReference?,
+        pddlExportArtifact: ArtifactReference?,
         pddlExportURL: URL?
     ) -> [ProtectedSolverInputArtifact] {
         var artifacts = [
@@ -547,7 +527,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
         request: XcircuiteSymbolicPlannerSolverRequest,
         manifest: XcircuiteRunManifest,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         if request.importCandidatePlan || request.pddlExportPath != nil || request.pddlExportArtifactID != nil {
             return try artifactReference(
                 explicitPath: request.pddlExportPath,
@@ -570,9 +550,9 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
         runID: String,
         projectRoot: URL,
         format: XcircuiteFileFormat
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         if let explicitPath {
-            return try artifactReferenceResolver.projectFileReference(
+            return try artifactReferenceResolver.projectArtifactReference(
                 path: explicitPath,
                 artifactID: artifactID,
                 field: "solverInputArtifact",
@@ -584,7 +564,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
         guard let artifactID else {
             throw missingReferenceError
         }
-        return try artifactReferenceResolver.uniqueManifestArtifact(
+        return try artifactReferenceResolver.uniqueManifestArtifactReference(
             artifactID: artifactID,
             field: "solverInputArtifact",
             expectedFormat: format,

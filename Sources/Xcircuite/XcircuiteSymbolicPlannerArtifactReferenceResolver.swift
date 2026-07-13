@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
@@ -74,6 +75,48 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
         )
         try validateArtifactIntegrity(reference, field: field, projectRoot: projectRoot)
         return reference
+    }
+
+    func projectArtifactReference(
+        path: String,
+        artifactID: String? = nil,
+        field: String,
+        expectedFormat: XcircuiteFileFormat,
+        runID: String,
+        projectRoot: URL
+    ) throws -> ArtifactReference {
+        try requireFoundationArtifactReference(
+            projectFileReference(
+                path: path,
+                artifactID: artifactID,
+                field: field,
+                expectedFormat: expectedFormat,
+                runID: runID,
+                projectRoot: projectRoot
+            ),
+            field: field
+        )
+    }
+
+    func uniqueManifestArtifactReference(
+        artifactID: String,
+        field: String,
+        expectedFormat: XcircuiteFileFormat,
+        manifest: XcircuiteRunManifest,
+        runID: String,
+        projectRoot: URL
+    ) throws -> ArtifactReference {
+        try requireFoundationArtifactReference(
+            uniqueManifestArtifact(
+                artifactID: artifactID,
+                field: field,
+                expectedFormat: expectedFormat,
+                manifest: manifest,
+                runID: runID,
+                projectRoot: projectRoot
+            ),
+            field: field
+        )
     }
 
     func verifiedArtifactReference(

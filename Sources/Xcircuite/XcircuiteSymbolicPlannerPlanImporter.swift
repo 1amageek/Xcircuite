@@ -1,19 +1,20 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
     private let packageStore: XcircuitePackageStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         packageStore: XcircuitePackageStore = XcircuitePackageStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.packageStore = packageStore
         self.artifactStore = artifactStore
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func importSolverPlan(
@@ -69,10 +70,13 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             manifest: manifest,
             projectRoot: projectRoot
         )
-        let solverPlanArtifact = try artifactStore.persistSymbolicPlannerSolverPlan(
-            solverPlanText,
-            runID: request.runID,
-            projectRoot: projectRoot
+        let solverPlanArtifact = try foundationArtifact(
+            artifactStore.persistSymbolicPlannerSolverPlan(
+                solverPlanText,
+                runID: request.runID,
+                projectRoot: projectRoot
+            ),
+            field: "solver-plan"
         )
         let draft = makeCandidatePlan(
             problem: problem,
@@ -80,10 +84,13 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             pddlExport: pddlExport,
             solverPlanText: solverPlanText
         )
-        let candidatePlanArtifact = try artifactStore.persistCandidatePlan(
-            draft.plan,
-            runID: request.runID,
-            projectRoot: projectRoot
+        let candidatePlanArtifact = try foundationArtifact(
+            artifactStore.persistCandidatePlan(
+                draft.plan,
+                runID: request.runID,
+                projectRoot: projectRoot
+            ),
+            field: "candidate-plan"
         )
         return XcircuiteSymbolicPlannerPlanImportResult(
             status: draft.diagnostics.contains(where: { $0.severity == "error" }) ? "imported-with-errors" : "imported",
@@ -91,18 +98,9 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             problemID: problem.problemID,
             planID: draft.plan.planID,
             importedActionCount: draft.plan.steps.count,
-            solverPlanArtifact: try foundationArtifact(
-                solverPlanArtifact,
-                field: "solver-plan"
-            ),
-            pddlExportArtifact: try foundationArtifact(
-                pddlExportRef,
-                field: "pddl-export"
-            ),
-            candidatePlanArtifact: try foundationArtifact(
-                candidatePlanArtifact,
-                field: "candidate-plan"
-            ),
+            solverPlanArtifact: solverPlanArtifact,
+            pddlExportArtifact: pddlExportRef,
+            candidatePlanArtifact: candidatePlanArtifact,
             candidatePlan: draft.plan,
             diagnostics: draft.diagnostics
         )
@@ -343,7 +341,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
         let verifiedReference = try verifiedArtifactReference(
-            reference,
+            foundationArtifact(reference, field: "solver-plan"),
             field: "solver-plan",
             projectRoot: projectRoot
         )
@@ -357,7 +355,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         manifest: XcircuiteRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         if let explicitPath {
             return try verifiedManifestProjectFileReference(
                 path: explicitPath,
@@ -378,7 +376,11 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 artifactID: artifactID
             )
         }
-        return try verifiedArtifactReference(reference, field: "pddl-export", projectRoot: projectRoot)
+        return try verifiedArtifactReference(
+            foundationArtifact(reference, field: "pddl-export"),
+            field: "pddl-export",
+            projectRoot: projectRoot
+        )
     }
 
     private func requiredProblemPath(
@@ -408,7 +410,11 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 artifactID: artifactID
             )
         }
-        return try verifiedArtifactReference(reference, field: "planning-problem", projectRoot: projectRoot).path
+        return try verifiedArtifactReference(
+            foundationArtifact(reference, field: "planning-problem"),
+            field: "planning-problem",
+            projectRoot: projectRoot
+        ).path
     }
 
     private func verifiedProjectFileReference(
@@ -418,7 +424,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         format: XcircuiteFileFormat,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let reference = try packageStore.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
@@ -427,7 +433,11 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        return try verifiedArtifactReference(reference, field: field, projectRoot: projectRoot)
+        return try verifiedArtifactReference(
+            foundationArtifact(reference, field: field),
+            field: field,
+            projectRoot: projectRoot
+        )
     }
 
     private func verifiedManifestProjectFileReference(
@@ -438,7 +448,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         manifest: XcircuiteRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let explicitReference = try packageStore.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
@@ -453,19 +463,30 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 artifactID: artifactID
             )
         }
+        guard manifestReference.producedByRunID == runID else {
+            throw manifestReferenceMismatch(
+                field: field,
+                artifactID: artifactID,
+                path: explicitReference.path,
+                manifestPath: manifestReference.path,
+                reason: "Run manifest artifact provenance does not match the requested run."
+            )
+        }
+        let explicitArtifact = try foundationArtifact(explicitReference, field: field)
+        let manifestArtifact = try foundationArtifact(manifestReference, field: field)
         try validateExplicitReference(
-            explicitReference,
-            matches: manifestReference,
+            explicitArtifact,
+            matches: manifestArtifact,
             field: field,
             artifactID: artifactID,
             runID: runID
         )
-        return try verifiedArtifactReference(manifestReference, field: field, projectRoot: projectRoot)
+        return try verifiedArtifactReference(manifestArtifact, field: field, projectRoot: projectRoot)
     }
 
     private func validateExplicitReference(
-        _ explicitReference: XcircuiteFileReference,
-        matches manifestReference: XcircuiteFileReference,
+        _ explicitReference: ArtifactReference,
+        matches manifestReference: ArtifactReference,
         field: String,
         artifactID: String,
         runID: String
@@ -497,15 +518,6 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 reason: "Explicit file byte count does not match the run manifest artifact byte count."
             )
         }
-        guard manifestReference.producedByRunID == runID else {
-            throw manifestReferenceMismatch(
-                field: field,
-                artifactID: artifactID,
-                path: explicitReference.path,
-                manifestPath: manifestReference.path,
-                reason: "Run manifest artifact provenance does not match the requested run."
-            )
-        }
     }
 
     private func manifestReferenceMismatch(
@@ -525,18 +537,19 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
     }
 
     private func verifiedArtifactReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         field: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+    ) throws -> ArtifactReference {
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
+            let issue = integrity.issues.first
             throw XcircuiteSymbolicPlannerPlanImportError.artifactIntegrityFailed(
                 field: field,
                 artifactID: reference.artifactID,
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: legacyIntegrityStatus(for: issue),
+                message: legacyIntegrityMessage(for: issue)
             )
         }
         return reference
@@ -554,6 +567,42 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
         return converted
+    }
+
+    private func legacyIntegrityStatus(
+        for issue: ArtifactIntegrityIssue?
+    ) -> XcircuiteFileReferenceIntegrityStatus {
+        switch issue?.code {
+        case .missingFile:
+            return .missingArtifact
+        case .byteCountMismatch:
+            return .byteCountMismatch
+        case .digestMismatch:
+            return .sha256Mismatch
+        case .invalidLocation:
+            return .invalidPath
+        case .unsupportedDigestAlgorithm:
+            return .invalidDigest
+        case .notRegularFile, .unreadableFile, .none:
+            return .unreadableArtifact
+        }
+    }
+
+    private func legacyIntegrityMessage(
+        for issue: ArtifactIntegrityIssue?
+    ) -> String {
+        switch issue?.code {
+        case .byteCountMismatch:
+            return "Artifact byte count does not match the file reference."
+        case .digestMismatch:
+            return "Artifact SHA-256 digest does not match the file reference."
+        case .missingFile:
+            return "Artifact file is missing."
+        case .invalidLocation:
+            return issue?.detail ?? "Artifact path must stay inside the project root."
+        case .unsupportedDigestAlgorithm, .notRegularFile, .unreadableFile, .none:
+            return issue?.detail ?? "Artifact file could not be read for integrity verification."
+        }
     }
 
     private func initialSymbolicState(for problem: XcircuiteCircuitPlanningProblem) -> [String] {

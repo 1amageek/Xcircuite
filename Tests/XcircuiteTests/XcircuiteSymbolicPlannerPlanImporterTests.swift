@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import CircuiteFoundation
 import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
@@ -33,6 +34,9 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         #expect(result.importedActionCount == 1)
         #expect(result.solverPlanArtifact.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID)
         #expect(result.candidatePlanArtifact.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID)
+        #expect(result.solverPlanArtifact.locator.role == .output)
+        #expect(result.pddlExportArtifact.locator.role == .output)
+        #expect(result.candidatePlanArtifact.locator.role == .output)
         #expect(result.candidatePlan.planID == "run-pddl-problem-external-symbolic-plan-1")
         #expect(result.candidatePlan.strategy == "external-symbolic-planner-pddl-import")
         #expect(result.candidatePlan.executionReadiness == "ready")
