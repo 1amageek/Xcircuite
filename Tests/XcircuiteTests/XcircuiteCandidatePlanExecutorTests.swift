@@ -342,16 +342,16 @@ struct XcircuiteCandidatePlanExecutorTests {
         let layoutGDS = try #require(result.producedArtifacts.first {
             $0.artifactID == "candidate-layout-gds"
         })
-        #expect(layoutGDS.kind == .layout)
-        #expect(layoutGDS.format == .gdsii)
-        #expect(layoutGDS.path.hasSuffix("candidate-layout-gds.gds"))
-        #expect(layoutGDS.sha256?.isEmpty == false)
-        #expect((layoutGDS.byteCount ?? 0) > 0)
-        #expect(fileExists(layoutGDS.path, in: root))
+        #expect(layoutGDS.locator.kind == .layout)
+        #expect(layoutGDS.locator.format == .gdsii)
+        #expect(layoutGDS.locator.location.value.hasSuffix("candidate-layout-gds.gds"))
+        #expect(!layoutGDS.digest.hexadecimalValue.isEmpty)
+        #expect(layoutGDS.byteCount > 0)
+        #expect(fileExists(layoutGDS.locator.location.value, in: root))
 
         let execution = try store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: root.appending(path: result.planExecutionArtifact.locator.location.value)
         )
         #expect(execution.stepResults.first?.artifactRefs.contains {
             $0.artifactID == "candidate-layout-gds"

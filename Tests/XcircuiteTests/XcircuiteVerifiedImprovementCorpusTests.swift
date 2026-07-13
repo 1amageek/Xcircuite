@@ -482,6 +482,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             projectRoot: root
         )
 
+        let candidatePlanFoundationRef = try foundationReference(candidatePlanRef, role: .output)
+        let designDiffFoundationRef = try designDiffRef.map { try foundationReference($0, role: .output) }
+        let verificationFoundationRef = try foundationReference(verificationRef, role: .output)
         let numericLoop = XcircuiteNumericRepairLoopResult(
             status: status,
             runID: runID,
@@ -507,10 +510,10 @@ struct XcircuiteVerifiedImprovementCorpusTests {
                     executionStatus: accepted ? "succeeded" : "completed",
                     verificationStatus: accepted ? "accepted" : "rejected",
                     accepted: accepted,
-                    candidatePlanArtifact: candidatePlanRef,
-                    designDiffArtifact: designDiffRef,
-                    producedArtifacts: [designDiffRef].compactMap { $0 },
-                    planVerificationArtifact: verificationRef,
+                    candidatePlanArtifact: candidatePlanFoundationRef,
+                    designDiffArtifact: designDiffFoundationRef,
+                    producedArtifacts: [designDiffFoundationRef].compactMap { $0 },
+                    planVerificationArtifact: verificationFoundationRef,
                     diagnostics: [
                         XcircuiteNumericRepairLoopDiagnostic(
                             severity: accepted ? "info" : "warning",

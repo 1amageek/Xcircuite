@@ -294,6 +294,14 @@ func requireFoundationArtifactReference(
 }
 
 func legacyArtifactReference(_ reference: ArtifactReference) -> XcircuiteFileReference {
+    legacyArtifactReferenceWithProvenance(reference)
+}
+
+func legacyArtifactReferenceWithProvenance(
+    _ reference: ArtifactReference,
+    producedByRunID: String? = nil,
+    verifiedByRunID: String? = nil
+) -> XcircuiteFileReference {
     let kind: XcircuiteFileKind
     switch reference.locator.kind.rawValue {
     case "parasitics":
@@ -325,6 +333,8 @@ func legacyArtifactReference(_ reference: ArtifactReference) -> XcircuiteFileRef
         kind: kind,
         format: format,
         sha256: reference.digest.hexadecimalValue,
-        byteCount: Int64(reference.byteCount)
+        byteCount: Int64(reference.byteCount),
+        producedByRunID: producedByRunID,
+        verifiedByRunID: verifiedByRunID
     )
 }

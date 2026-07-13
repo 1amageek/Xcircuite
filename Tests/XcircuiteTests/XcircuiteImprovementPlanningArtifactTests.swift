@@ -78,12 +78,11 @@ struct XcircuiteImprovementPlanningArtifactTests {
             from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
         )
         for reference in [thresholdRef, calibrationRef, paretoRef, loopRef] {
-            #expect(manifest.artifacts.contains {
-                $0.artifactID == reference.artifactID
-                    && $0.path == reference.path
-                    && $0.sha256 == reference.sha256
-                    && $0.byteCount == reference.byteCount
-            })
+            let manifestReference = manifest.artifacts.first {
+                $0.artifactID == reference.artifactID && $0.path == reference.path
+            }
+            #expect(manifestReference?.sha256 == reference.sha256)
+            #expect(manifestReference?.byteCount == reference.byteCount)
         }
     }
 
@@ -257,7 +256,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             projectRoot: root
         )
         try planningStore.persistNumericRepairLoop(
-            makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
+            try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
@@ -326,12 +325,12 @@ struct XcircuiteImprovementPlanningArtifactTests {
             result.improvementLoopArtifact,
             result.rejectedFeedbackLearningReportArtifact,
         ].compactMap({ $0 }) {
-            #expect(manifest.artifacts.contains {
-                $0.artifactID == reference.artifactID
-                    && $0.path == reference.path
-                    && $0.sha256 == reference.sha256
-                    && $0.byteCount == reference.byteCount
-            })
+            let manifestReference = manifest.artifacts.first {
+                $0.artifactID == reference.id.rawValue
+                    && $0.path == reference.locator.location.value
+            }
+            #expect(manifestReference?.sha256 == reference.digest.hexadecimalValue)
+            #expect(reference.byteCount == UInt64(manifestReference?.byteCount ?? 0))
         }
     }
 
@@ -359,7 +358,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             projectRoot: root
         )
         try planningStore.persistNumericRepairLoop(
-            makeNumericRepairLoopWithRankChange(
+            try makeNumericRepairLoopWithRankChange(
                 selectionTraceRef: selectionTraceRef,
                 rejectedPlansRef: rejectedPlansRef
             ),
@@ -383,7 +382,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
         let learningRef = try #require(result.rejectedFeedbackLearningReportArtifact)
         let report = try packageStore.readJSON(
             XcircuiteRejectedFeedbackLearningReport.self,
-            from: root.appending(path: learningRef.path)
+            from: root.appending(path: learningRef.locator.location.value)
         )
 
         #expect(report.rejectedPlansPath == rejectedPlansRef.path)
@@ -409,9 +408,9 @@ struct XcircuiteImprovementPlanningArtifactTests {
         )
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.rejectedFeedbackLearningReportArtifactID
-                && $0.path == learningRef.path
-                && $0.sha256 == learningRef.sha256
-                && $0.byteCount == learningRef.byteCount
+                && $0.path == learningRef.locator.location.value
+                && $0.sha256 == learningRef.digest.hexadecimalValue
+                && learningRef.byteCount == UInt64($0.byteCount ?? 0)
         })
     }
 
@@ -554,7 +553,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             projectRoot: root
         )
         try planningStore.persistNumericRepairLoop(
-            makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
+            try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
@@ -601,7 +600,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             runID: "run-1",
             projectRoot: root
         )
-        var loop = makeNumericRepairLoop(selectionTraceRef: selectionTraceRef)
+        var loop = try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef)
         loop.iterationCount = 2
         try planningStore.persistNumericRepairLoop(
             loop,
@@ -642,7 +641,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             projectRoot: root
         )
         try planningStore.persistNumericRepairLoop(
-            makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
+            try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
@@ -683,7 +682,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             packageStore: packageStore
         )
         try planningStore.persistNumericRepairLoop(
-            makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
+            try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
@@ -1021,7 +1020,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
 
     private func makeNumericRepairLoop(
         selectionTraceRef: XcircuiteFileReference
-    ) -> XcircuiteNumericRepairLoopResult {
+    ) throws -> XcircuiteNumericRepairLoopResult {
         XcircuiteNumericRepairLoopResult(
             status: "iteration-limit-reached",
             runID: "run-1",
@@ -1045,7 +1044,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
                     planID: "plan-a",
                     verificationStatus: "rejected",
                     accepted: false,
-                    selectionTraceArtifact: selectionTraceRef,
+                    selectionTraceArtifact: try foundationReference(selectionTraceRef),
                     diagnostics: [
                         XcircuiteNumericRepairLoopDiagnostic(
                             severity: "warning",
@@ -1072,7 +1071,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
     private func makeNumericRepairLoopWithRankChange(
         selectionTraceRef: XcircuiteFileReference,
         rejectedPlansRef: XcircuiteFileReference
-    ) -> XcircuiteNumericRepairLoopResult {
+    ) throws -> XcircuiteNumericRepairLoopResult {
         XcircuiteNumericRepairLoopResult(
             status: "iteration-limit-reached",
             runID: "run-1",
@@ -1096,8 +1095,8 @@ struct XcircuiteImprovementPlanningArtifactTests {
                     planID: "plan-b",
                     verificationStatus: "rejected",
                     accepted: false,
-                    selectionTraceArtifact: selectionTraceRef,
-                    rejectedPlansArtifact: rejectedPlansRef,
+                    selectionTraceArtifact: try foundationReference(selectionTraceRef),
+                    rejectedPlansArtifact: try foundationReference(rejectedPlansRef),
                     diagnostics: [
                         XcircuiteNumericRepairLoopDiagnostic(
                             severity: "warning",

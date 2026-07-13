@@ -45,22 +45,22 @@ struct XcircuitePlanningProblemValidatorTests {
         #expect(result.validation.objectiveCount == 1)
         #expect(result.validation.candidateActionCount == 1)
         #expect(result.validation.verificationGateCount == 2)
-        #expect(result.validationArtifact.artifactID == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID)
-        #expect(result.validationArtifact.path == ".xcircuite/runs/run-validate/planning/problem-validation.json")
-        #expect(result.validationArtifact.sha256?.isEmpty == false)
-        #expect(result.validationArtifact.byteCount != nil)
+        #expect(result.validationArtifact.id.rawValue == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID)
+        #expect(result.validationArtifact.locator.location.value == ".xcircuite/runs/run-validate/planning/problem-validation.json")
+        #expect(!result.validationArtifact.digest.hexadecimalValue.isEmpty)
+        #expect(result.validationArtifact.byteCount > 0)
         let translationAuditArtifact = try #require(result.problemTranslationAuditArtifact)
-        #expect(translationAuditArtifact.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID)
-        #expect(translationAuditArtifact.path == ".xcircuite/runs/run-validate/planning/problem-translation-audit.json")
-        #expect(result.validation.problemTranslationAuditArtifactID == translationAuditArtifact.artifactID)
-        #expect(result.validation.problemTranslationAuditPath == translationAuditArtifact.path)
+        #expect(translationAuditArtifact.id.rawValue == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID)
+        #expect(translationAuditArtifact.locator.location.value == ".xcircuite/runs/run-validate/planning/problem-translation-audit.json")
+        #expect(result.validation.problemTranslationAuditArtifactID == translationAuditArtifact.id.rawValue)
+        #expect(result.validation.problemTranslationAuditPath == translationAuditArtifact.locator.location.value)
         let actionDomainArtifact = try #require(result.actionDomainSnapshotArtifact)
-        #expect(actionDomainArtifact.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID)
-        #expect(result.validation.actionDomainSnapshotPath == actionDomainArtifact.path)
+        #expect(actionDomainArtifact.id.rawValue == XcircuitePlanningArtifactStore.actionDomainArtifactID)
+        #expect(result.validation.actionDomainSnapshotPath == actionDomainArtifact.locator.location.value)
 
         let persisted = try store.readJSON(
             XcircuitePlanningProblemValidation.self,
-            from: root.appending(path: result.validationArtifact.path)
+            from: root.appending(path: result.validationArtifact.locator.location.value)
         )
         #expect(persisted == result.validation)
 
@@ -70,15 +70,15 @@ struct XcircuitePlanningProblemValidatorTests {
         )
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID
-                && $0.path == result.validationArtifact.path
+                && $0.path == result.validationArtifact.locator.location.value
         })
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID
-                && $0.path == translationAuditArtifact.path
+                && $0.path == translationAuditArtifact.locator.location.value
         })
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
-                && $0.path == actionDomainArtifact.path
+                && $0.path == actionDomainArtifact.locator.location.value
         })
     }
 
@@ -270,10 +270,10 @@ struct XcircuitePlanningProblemValidatorTests {
         #expect(result.validation.actionDomainSnapshotPath == actionDomainRef.path)
 
         let actionDomainArtifact = try #require(result.actionDomainSnapshotArtifact)
-        #expect(actionDomainArtifact.path == actionDomainRef.path)
+        #expect(actionDomainArtifact.locator.location.value == actionDomainRef.path)
         let snapshot = try store.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
-            from: root.appending(path: actionDomainArtifact.path)
+            from: root.appending(path: actionDomainArtifact.locator.location.value)
         )
         let pexDomain = try #require(snapshot.domains.first { $0.domainID == "pex-extraction" })
         #expect(pexDomain.ownerPackages.contains("PEXEngine"))

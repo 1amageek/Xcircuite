@@ -65,12 +65,12 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidatesArtifactID
                 && $0.sha256 == artifact.sha256
-                && $0.byteCount == artifact.byteCount
+                && artifact.byteCount == UInt64($0.byteCount ?? 0)
         })
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSearchTraceArtifactID
                 && $0.sha256 == searchTraceArtifact.sha256
-                && $0.byteCount == searchTraceArtifact.byteCount
+                && searchTraceArtifact.byteCount == UInt64($0.byteCount ?? 0)
         })
     }
 
