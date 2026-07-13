@@ -233,10 +233,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         if let artifact = qualification.solverResult.solverPlanArtifact {
             solverPlanArtifact = artifact
         } else if let legacyArtifact = qualification.solverResult.importResult?.solverPlanArtifact {
-            solverPlanArtifact = try requireFoundationArtifactReference(
-                legacyArtifact,
-                field: "promotion.solverPlanArtifact"
-            )
+            solverPlanArtifact = legacyArtifact
         } else {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(

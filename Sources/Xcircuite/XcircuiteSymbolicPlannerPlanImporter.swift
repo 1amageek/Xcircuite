@@ -91,9 +91,18 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             problemID: problem.problemID,
             planID: draft.plan.planID,
             importedActionCount: draft.plan.steps.count,
-            solverPlanArtifact: solverPlanArtifact,
-            pddlExportArtifact: pddlExportRef,
-            candidatePlanArtifact: candidatePlanArtifact,
+            solverPlanArtifact: try foundationArtifact(
+                solverPlanArtifact,
+                field: "solver-plan"
+            ),
+            pddlExportArtifact: try foundationArtifact(
+                pddlExportRef,
+                field: "pddl-export"
+            ),
+            candidatePlanArtifact: try foundationArtifact(
+                candidatePlanArtifact,
+                field: "candidate-plan"
+            ),
             candidatePlan: draft.plan,
             diagnostics: draft.diagnostics
         )
@@ -531,6 +540,20 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
         return reference
+    }
+
+    private func foundationArtifact(
+        _ reference: XcircuiteFileReference,
+        field: String
+    ) throws -> ArtifactReference {
+        guard let converted = foundationArtifactReference(reference) else {
+            throw XcircuiteSymbolicPlannerPlanImportError.invalidArtifactReference(
+                field: field,
+                path: reference.path,
+                reason: "The verified legacy reference does not contain a valid digest and byte count."
+            )
+        }
+        return converted
     }
 
     private func initialSymbolicState(for problem: XcircuiteCircuitPlanningProblem) -> [String] {

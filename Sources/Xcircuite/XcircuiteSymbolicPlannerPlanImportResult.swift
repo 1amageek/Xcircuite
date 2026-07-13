@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPlanImportResult: Codable, Sendable, Hashable {
@@ -7,9 +8,12 @@ public struct XcircuiteSymbolicPlannerPlanImportResult: Codable, Sendable, Hasha
     public var problemID: String
     public var planID: String
     public var importedActionCount: Int
-    public var solverPlanArtifact: XcircuiteFileReference
-    public var pddlExportArtifact: XcircuiteFileReference
-    public var candidatePlanArtifact: XcircuiteFileReference
+    /// Artifact emitted by the external solver and persisted by the planning store.
+    public var solverPlanArtifact: ArtifactReference
+    /// PDDL export consumed while importing the solver plan.
+    public var pddlExportArtifact: ArtifactReference
+    /// Canonical candidate plan artifact generated from the solver output.
+    public var candidatePlanArtifact: ArtifactReference
     public var candidatePlan: XcircuiteCandidatePlan
     public var diagnostics: [XcircuiteSymbolicPlannerPlanImportDiagnostic]
 
@@ -20,9 +24,9 @@ public struct XcircuiteSymbolicPlannerPlanImportResult: Codable, Sendable, Hasha
         problemID: String,
         planID: String,
         importedActionCount: Int,
-        solverPlanArtifact: XcircuiteFileReference,
-        pddlExportArtifact: XcircuiteFileReference,
-        candidatePlanArtifact: XcircuiteFileReference,
+        solverPlanArtifact: ArtifactReference,
+        pddlExportArtifact: ArtifactReference,
+        candidatePlanArtifact: ArtifactReference,
         candidatePlan: XcircuiteCandidatePlan,
         diagnostics: [XcircuiteSymbolicPlannerPlanImportDiagnostic]
     ) {

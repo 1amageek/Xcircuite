@@ -363,7 +363,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let qualifiedSolverPlanRef = try foundationReference(qualifiedSolverPlanLegacyRef)
     qualified.solverResult.solverPlanArtifact = qualifiedSolverPlanRef
     if var importResult = qualified.solverResult.importResult {
-        importResult.solverPlanArtifact = qualifiedSolverPlanLegacyRef
+        importResult.solverPlanArtifact = qualifiedSolverPlanRef
         qualified.solverResult.importResult = importResult
     }
 
@@ -1068,9 +1068,9 @@ private func preparePromotionFixture(
         problemID: "\(runID)-problem",
         planID: "fixture-plan",
         importedActionCount: 1,
-        solverPlanArtifact: solverPlanLegacyReference,
-        pddlExportArtifact: solverPlanLegacyReference,
-        candidatePlanArtifact: solverPlanLegacyReference,
+        solverPlanArtifact: try foundationReference(solverPlanLegacyReference),
+        pddlExportArtifact: try foundationReference(solverPlanLegacyReference),
+        candidatePlanArtifact: try foundationReference(solverPlanLegacyReference),
         candidatePlan: candidatePlan,
         diagnostics: []
     )

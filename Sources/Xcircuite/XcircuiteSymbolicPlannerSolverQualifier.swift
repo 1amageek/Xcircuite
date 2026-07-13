@@ -308,7 +308,10 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             return nil
         }
         let pddlExportArtifact = try artifactReferenceResolver.verifiedArtifactReference(
-            importResult.pddlExportArtifact,
+            legacyArtifactReferenceWithProvenance(
+                importResult.pddlExportArtifact,
+                producedByRunID: solverResult.runID
+            ),
             field: "pddlExportArtifact",
             expectedFormat: .json,
             runID: solverResult.runID,
@@ -336,7 +339,10 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             return nil
         }
         let pddlExportArtifact = try artifactReferenceResolver.verifiedArtifactReference(
-            importResult.pddlExportArtifact,
+            legacyArtifactReferenceWithProvenance(
+                importResult.pddlExportArtifact,
+                producedByRunID: solverResult.runID
+            ),
             field: "pddlExportArtifact",
             expectedFormat: .json,
             runID: solverResult.runID,

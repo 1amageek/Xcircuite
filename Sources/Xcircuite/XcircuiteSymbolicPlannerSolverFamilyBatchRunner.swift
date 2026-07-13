@@ -137,10 +137,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         if let artifact = qualification.solverResult.solverPlanArtifact {
             solverPlanArtifact = artifact
         } else if let legacyArtifact = qualification.solverResult.importResult?.solverPlanArtifact {
-            solverPlanArtifact = try requireFoundationArtifactReference(
-                legacyArtifact,
-                field: "solverFamily.solverPlanArtifact"
-            )
+            solverPlanArtifact = legacyArtifact
         } else {
             return nil
         }
@@ -159,7 +156,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         )
         qualification.solverResult.solverPlanArtifact = foundationSnapshot
         if var importResult = qualification.solverResult.importResult {
-            importResult.solverPlanArtifact = snapshot
+            importResult.solverPlanArtifact = foundationSnapshot
             qualification.solverResult.importResult = importResult
         }
         return foundationSnapshot

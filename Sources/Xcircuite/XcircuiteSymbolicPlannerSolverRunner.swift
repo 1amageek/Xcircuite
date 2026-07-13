@@ -155,7 +155,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                         projectRoot: projectRoot
                     )
                     importResult = imported
-                    solverPlanArtifact = imported.solverPlanArtifact
+                    solverPlanArtifact = legacyArtifactReference(imported.solverPlanArtifact)
                     if let pddlExportArtifact {
                         let replay = try replayValidation(
                             importResult: imported,

@@ -2,12 +2,12 @@ import Foundation
 import DesignFlowKernel
 
 public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
-    private let storage: any XcircuiteVerifiedImprovementCorpusStoring
+    private let storage: any VerifiedImprovementCorpusStoring
     private let identifierValidator: XcircuiteIdentifierValidator
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        storage: any XcircuiteVerifiedImprovementCorpusStoring = XcircuitePackageStore(),
+        storage: any VerifiedImprovementCorpusStoring = XcircuitePackageStore(),
         identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {

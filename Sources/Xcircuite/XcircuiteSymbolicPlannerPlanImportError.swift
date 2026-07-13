@@ -13,6 +13,7 @@ public enum XcircuiteSymbolicPlannerPlanImportError: Error, LocalizedError, Equa
         status: XcircuiteFileReferenceIntegrityStatus,
         message: String
     )
+    case invalidArtifactReference(field: String, path: String, reason: String)
     case manifestReferenceMismatch(
         field: String,
         artifactID: String,
@@ -34,6 +35,8 @@ public enum XcircuiteSymbolicPlannerPlanImportError: Error, LocalizedError, Equa
             "Run \(runID) does not contain artifact \(artifactID)."
         case .artifactIntegrityFailed(let field, let artifactID, let path, let status, let message):
             "Symbolic planner plan import artifact reference \(field) \(artifactID ?? path) failed integrity verification at \(path) with status \(status.rawValue): \(message)"
+        case .invalidArtifactReference(let field, let path, let reason):
+            "Symbolic planner plan import artifact reference \(field) at \(path) is invalid: \(reason)"
         case .manifestReferenceMismatch(let field, let artifactID, let path, let manifestPath, let reason):
             "Symbolic planner plan import artifact reference \(field) \(artifactID) at \(path) does not match run manifest path \(manifestPath): \(reason)"
         case .runMismatch(let expected, let actual):

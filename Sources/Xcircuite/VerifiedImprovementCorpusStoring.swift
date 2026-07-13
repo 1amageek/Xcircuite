@@ -6,7 +6,7 @@ import DesignFlowKernel
 /// The qualifier depends on this narrow storage contract instead of a concrete
 /// project store. Concrete `.xcircuite` persistence remains at the storage
 /// boundary and can be replaced by a workspace-backed implementation.
-public protocol XcircuiteVerifiedImprovementCorpusStoring: Sendable {
+public protocol VerifiedImprovementCorpusStoring: Sendable {
     func ensureDirectory(at url: URL) throws
 
     func url(
@@ -46,4 +46,4 @@ public protocol XcircuiteVerifiedImprovementCorpusStoring: Sendable {
     ) throws -> XcircuiteRunManifest
 }
 
-extension XcircuitePackageStore: XcircuiteVerifiedImprovementCorpusStoring {}
+extension XcircuitePackageStore: VerifiedImprovementCorpusStoring {}
