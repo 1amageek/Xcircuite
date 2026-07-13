@@ -50,7 +50,20 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
                 digestLineage: lineage
             )
             let wrapperReference = try persist(persisted, context: context)
-            var diagnostics = result.diagnostics.map(FoundationFlowProjection.flowDiagnostic)
+            var diagnostics = result.diagnostics.map { diagnostic in
+                let severity: FlowDiagnosticSeverity
+                switch diagnostic.severity {
+                case .information: severity = .info
+                case .warning: severity = .warning
+                case .error: severity = .error
+                }
+                let detail = diagnostic.detail.map { value in " (\(value))" } ?? ""
+                return FlowDiagnostic(
+                    severity: severity,
+                    code: diagnostic.code.rawValue,
+                    message: diagnostic.summary + detail
+                )
+            }
             let committed = persisted.committedNewRevision
             if result.status == .completed && !committed {
                 diagnostics.append(FlowDiagnostic(

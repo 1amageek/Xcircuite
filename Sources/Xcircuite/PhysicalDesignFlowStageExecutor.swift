@@ -72,7 +72,20 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
             )
             let result = try await engine.execute(request)
             try context.checkCancellation()
-            let diagnostics = FoundationFlowProjection.flowDiagnostics(result.diagnostics)
+            let diagnostics = result.diagnostics.map { diagnostic in
+                let severity: FlowDiagnosticSeverity
+                switch diagnostic.severity {
+                case .information: severity = .info
+                case .warning: severity = .warning
+                case .error: severity = .error
+                }
+                let detail = diagnostic.detail.map { value in " (\(value))" } ?? ""
+                return FlowDiagnostic(
+                    severity: severity,
+                    code: diagnostic.code.rawValue,
+                    message: diagnostic.summary + detail
+                )
+            }
             let artifacts = result.artifacts
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
