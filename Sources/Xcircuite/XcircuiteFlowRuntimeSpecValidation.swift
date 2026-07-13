@@ -221,6 +221,20 @@ private extension XcircuiteFlowStageExecutorSpec {
             try validateInput(spec.rootInput, stageID: spec.stageID, field: "rootInput")
         case .pdkStandardView(let spec):
             try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
+            if let externalProcess = spec.externalProcess {
+                try externalProcess.validate()
+            }
+            guard !spec.assetID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "assetID"
+                )
+            }
+        case .pdkRuleDeck(let spec):
+            try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
+            if let externalProcess = spec.externalProcess {
+                try externalProcess.validate()
+            }
             guard !spec.assetID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
@@ -389,6 +403,8 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .pdkCorpus(let spec):
             spec.tool
         case .pdkStandardView(let spec):
+            spec.tool
+        case .pdkRuleDeck(let spec):
             spec.tool
         case .pdkOracle(let spec):
             spec.tool

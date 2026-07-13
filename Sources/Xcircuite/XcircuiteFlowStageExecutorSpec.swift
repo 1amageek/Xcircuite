@@ -32,6 +32,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case pdkValidation(PDKValidation)
     case pdkCorpus(PDKCorpus)
     case pdkStandardView(PDKStandardView)
+    case pdkRuleDeck(PDKRuleDeck)
     case pdkOracle(PDKOracle)
     case pdkQualification(PDKQualification)
     case releaseQualification(ReleaseQualification)
@@ -109,6 +110,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var manifestInput: XcircuiteFlowInputReference
         public var assetID: String
         public var format: PDKStandardViewFormat
+        public var externalProcess: PDKExternalInspectionProcessConfiguration?
         public var tool: XcircuiteFlowToolSpec
 
         public init(
@@ -116,12 +118,36 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             manifestInput: XcircuiteFlowInputReference,
             assetID: String,
             format: PDKStandardViewFormat,
+            externalProcess: PDKExternalInspectionProcessConfiguration? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
             self.manifestInput = manifestInput
             self.assetID = assetID
             self.format = format
+            self.externalProcess = externalProcess
+            self.tool = tool
+        }
+    }
+
+    public struct PDKRuleDeck: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var manifestInput: XcircuiteFlowInputReference
+        public var assetID: String
+        public var externalProcess: PDKExternalInspectionProcessConfiguration?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
+            manifestInput: XcircuiteFlowInputReference,
+            assetID: String,
+            externalProcess: PDKExternalInspectionProcessConfiguration? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.manifestInput = manifestInput
+            self.assetID = assetID
+            self.externalProcess = externalProcess
             self.tool = tool
         }
     }
@@ -822,6 +848,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case pdkValidation
         case pdkCorpus
         case pdkStandardView
+        case pdkRuleDeck
         case pdkOracle
         case pdkQualification
         case releaseQualification
@@ -873,6 +900,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .pdkCorpus(try container.decode(PDKCorpus.self, forKey: .value))
         case .pdkStandardView:
             self = .pdkStandardView(try container.decode(PDKStandardView.self, forKey: .value))
+        case .pdkRuleDeck:
+            self = .pdkRuleDeck(try container.decode(PDKRuleDeck.self, forKey: .value))
         case .pdkOracle:
             self = .pdkOracle(try container.decode(PDKOracle.self, forKey: .value))
         case .pdkQualification:
@@ -951,6 +980,9 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             try container.encode(value, forKey: .value)
         case .pdkStandardView(let value):
             try container.encode(Kind.pdkStandardView, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .pdkRuleDeck(let value):
+            try container.encode(Kind.pdkRuleDeck, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .pdkOracle(let value):
             try container.encode(Kind.pdkOracle, forKey: .kind)
@@ -1159,11 +1191,34 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 rootInput: spec.rootInput
             )
         case .pdkStandardView(let spec):
+            if let externalProcess = spec.externalProcess {
+                return PDKStandardViewInspectionFlowStageExecutor.external(
+                    configuration: externalProcess,
+                    stageID: spec.stageID,
+                    manifestInput: spec.manifestInput,
+                    assetID: spec.assetID,
+                    format: spec.format
+                )
+            }
             return PDKStandardViewInspectionFlowStageExecutor.local(
                 stageID: spec.stageID,
                 manifestInput: spec.manifestInput,
                 assetID: spec.assetID,
                 format: spec.format
+            )
+        case .pdkRuleDeck(let spec):
+            if let externalProcess = spec.externalProcess {
+                return PDKRuleDeckInspectionFlowStageExecutor.external(
+                    configuration: externalProcess,
+                    stageID: spec.stageID,
+                    manifestInput: spec.manifestInput,
+                    assetID: spec.assetID
+                )
+            }
+            return PDKRuleDeckInspectionFlowStageExecutor.local(
+                stageID: spec.stageID,
+                manifestInput: spec.manifestInput,
+                assetID: spec.assetID
             )
         case .pdkOracle(let spec):
             return PDKOracleFlowStageExecutor.local(
@@ -1348,6 +1403,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             PDKToolDescriptors.corpus(level: spec.tool.qualificationLevel)
         case .pdkStandardView(let spec):
             PDKToolDescriptors.standardView(level: spec.tool.qualificationLevel)
+        case .pdkRuleDeck(let spec):
+            PDKToolDescriptors.ruleDeck(level: spec.tool.qualificationLevel)
         case .pdkOracle(let spec):
             PDKToolDescriptors.oracle(level: spec.tool.qualificationLevel)
         case .pdkQualification(let spec):
@@ -1417,6 +1474,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .pdkCorpus(let spec):
             spec.tool
         case .pdkStandardView(let spec):
+            spec.tool
+        case .pdkRuleDeck(let spec):
             spec.tool
         case .pdkOracle(let spec):
             spec.tool

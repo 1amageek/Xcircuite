@@ -43,6 +43,16 @@ public enum PDKToolDescriptors {
         )
     }
 
+    public static func ruleDeck(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+        descriptor(
+            toolID: "pdk-rule-deck-inspection",
+            displayName: "PDK rule-deck inspection",
+            operationID: "pdk-inspect-rule-deck",
+            inputFormats: [.json, .text],
+            level: level
+        )
+    }
+
     public static func oracle(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         descriptor(
             toolID: "pdk-oracle-comparison",

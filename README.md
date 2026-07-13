@@ -7,9 +7,10 @@ tool qualification, and Agent-operable planning surface used by both
 
 `.xcircuite` project runtime: the adapter layer between `DesignFlowKernel` and the
 engine packages. It turns engine results into `FlowStageResult`s, gates, and
-artifact references — and implements **no** verdict logic, parsers, or external
-tool invocation itself (those stay in `CoreSpice` / `DRCEngine` / `LVSEngine` /
-`PEXEngine`).
+artifact references. Domain verdict logic and parsers stay in the engine
+packages; the explicit PDK external-inspection provider is the controlled
+process boundary, using `SignoffToolSupport` and retaining raw process evidence
+before `PDKKit` validates the returned envelope.
 
 ## License
 
@@ -39,7 +40,19 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `XcircuiteFileReference`s, and blocks unavailable infrastructure without fabricating signoff output |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
+| `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
+| `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, re-hashes reviewed artifacts on resume, and delegates approval validation to `PhysicalDesignReviewGate` |
+
+PDK external inspection is selected by adding `externalProcess` to a tagged
+`pdkStandardView` or `pdkRuleDeck` runtime executor. The configuration is
+validated before runtime construction, expands only the documented request,
+result, project, run and asset placeholders, and writes
+`.xcircuite/runs/<run-id>/stages/<stage-id>/raw/external-pdk/` artifacts for the
+request, result, stdout, stderr and execution record. The process result is
+still subject to `PDKKit` schema, run, asset, format, source-reference and
+digest-bound validation; process completion alone never promotes tool trust or
+process qualification.
 
 ```mermaid
 flowchart LR

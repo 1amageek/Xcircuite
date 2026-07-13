@@ -43,6 +43,16 @@ DesignFlowKernel.FlowStageExecutor
 
 Each adapter must resolve and verify inputs, evaluate ToolQualification requirements, invoke one injected domain protocol, persist returned artifacts, map diagnostics into FlowStageResult and bind the result to design, PDK and tool digests.
 
+The PDK standard-view and rule-deck adapters additionally expose an explicit
+external-process path. `PDKExternalInspectionProcessConfiguration` is carried
+in the agent-facing runtime spec, `TimedPDKExternalInspectionProcessRunner`
+uses `SignoffToolSupport` for timeout and cancellation-aware execution, and the
+provider persists request/result/stdout/stderr/execution artifacts under the
+run stage before `PDKKit` validates the returned envelope. This boundary is
+process execution and evidence retention, not tool qualification: the
+`ToolQualification` descriptor and any independent process evidence remain a
+separate trust gate.
+
 ## Stage registration
 
 XcircuiteEnginePackageCatalog is the canonical scaffold catalog for package, product, stage and artifact-role ownership. Implementation agents must update the catalog and integration tests when adding or changing a stage.

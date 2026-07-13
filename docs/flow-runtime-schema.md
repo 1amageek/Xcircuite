@@ -205,6 +205,51 @@ valid Xcircuite stage identifier, and executor stage IDs must be unique. Duplica
 stage IDs are rejected before `attach-evidence` so evidence cannot be attached to
 an ambiguous stage.
 
+### PDK external inspection executors
+
+`pdkStandardView` and `pdkRuleDeck` accept an optional `externalProcess` object.
+When it is absent, the local PDKKit inspector is used. When it is present, the
+typed Xcircuite process provider is selected after configuration validation.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `stageID` | string | yes | Stable executor stage identifier |
+| `manifestInput` | `XcircuiteFlowInputReference` | yes | PDK manifest consumed by the stage |
+| `assetID` | string | yes | Manifest asset to inspect |
+| `format` | string | `pdkStandardView` only | Requested standard-view format |
+| `externalProcess` | object or null | no | External process configuration; null selects the local inspector |
+
+`externalProcess` fields are:
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `schemaVersion` | integer | yes | Current value is `1` |
+| `executablePath` | absolute string | yes | Executable to launch |
+| `arguments` | array of strings | no | Arguments passed in order |
+| `workingDirectoryPath` | string or null | no | Optional process working directory |
+| `timeoutSeconds` | positive number | no | Timeout; defaults to `300` |
+
+Arguments may contain only these substitutions: `{{requestPath}}`,
+`{{resultPath}}`, `{{projectRoot}}`, `{{runID}}`, and `{{assetID}}`. The process
+boundary writes the following immutable raw evidence before the stage envelope
+is persisted:
+
+```text
+.xcircuite/runs/<run-id>/stages/<stage-id>/raw/external-pdk/
+  request.json
+  result.json
+  stdout.txt
+  stderr.txt
+  execution.json
+```
+
+`execution.json` records the resolved command, timeout, exit status, timestamps
+and typed failure diagnostics. A non-zero exit, timeout, cancellation or invalid
+result produces structured failed/cancelled evidence and retains the raw files.
+The returned envelope then passes through PDKKit's fail-closed schema, run,
+asset, format, source-reference and digest checks. Process execution evidence
+does not imply ToolQualification or foundry/process qualification.
+
 `toolchainProfile` is a run-level technology contract, not an Agent wrapper. It
 lets Agent / CI / Human-authored runtime configs pin the PDK/catalog provenance
 once and reuse it across signoff stages. Stage-local technology inputs always
