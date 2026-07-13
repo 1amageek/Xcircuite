@@ -1,11 +1,11 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import DesignFlowKernel
 
 struct StageArtifactEnvelopeBuilder: Sendable {
     func summaryEnvelopeReference(
         summaryArtifactID: String,
-        stageArtifacts: [XcircuiteFileReference],
+        stageArtifacts: [ArtifactReference],
         domain: String,
         gateID: String,
         gateStatus: FlowGateStatus,
@@ -13,7 +13,7 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
@@ -32,8 +32,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
     }
 
     func summaryEnvelopeReference(
-        summaryArtifact: XcircuiteFileReference,
-        stageArtifacts: [XcircuiteFileReference],
+        summaryArtifact: ArtifactReference,
+        stageArtifacts: [ArtifactReference],
         domain: String,
         gateID: String,
         gateStatus: FlowGateStatus,
@@ -41,12 +41,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
-        guard let artifactID = summaryArtifact.artifactID else {
-            throw XcircuiteRuntimeError.invalidInputReference(
-                "Summary artifact must have an artifact ID before envelope creation."
-            )
-        }
+    ) throws -> ArtifactReference {
+        let artifactID = summaryArtifact.artifactID
 
         let envelope = XcircuiteArtifactEnvelope(
             artifactID: artifactID,
@@ -94,8 +90,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
     }
 
     private func dependencies(
-        from artifacts: [XcircuiteFileReference],
-        excluding summaryArtifact: XcircuiteFileReference
+        from artifacts: [ArtifactReference],
+        excluding summaryArtifact: ArtifactReference
     ) -> [XcircuiteArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }

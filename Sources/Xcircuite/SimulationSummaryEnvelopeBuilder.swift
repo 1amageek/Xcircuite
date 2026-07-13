@@ -1,26 +1,22 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
-import DesignFlowKernel
 
 struct SimulationSummaryEnvelopeBuilder: Sendable {
     func envelopeReference(
         summary: SimulationRunSummaryReport,
         summaryArtifactID: String,
-        stageArtifacts: [XcircuiteFileReference],
+        stageArtifacts: [ArtifactReference],
         gateStatus: FlowGateStatus,
         diagnostics: [FlowDiagnostic],
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
-        guard let artifactID = summaryArtifact.artifactID else {
-            throw XcircuiteRuntimeError.invalidInputReference(
-                "Simulation summary artifact must have an artifact ID before envelope creation."
-            )
-        }
+        let artifactID = summaryArtifact.artifactID
 
         let hasQualifiedEvidence = hasQualifiedEvidence(context: context, toolID: toolID)
         let toolEvidenceCount = context.healthResults[toolID]?.evidence.count ?? 0
@@ -424,8 +420,8 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
     }
 
     private func dependencies(
-        from artifacts: [XcircuiteFileReference],
-        excluding summaryArtifact: XcircuiteFileReference
+        from artifacts: [ArtifactReference],
+        excluding summaryArtifact: ArtifactReference
     ) -> [XcircuiteArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }

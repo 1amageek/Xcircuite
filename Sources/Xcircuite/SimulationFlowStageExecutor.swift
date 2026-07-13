@@ -158,14 +158,14 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             let envelopeArtifact = try SimulationSummaryEnvelopeBuilder().envelopeReference(
                 summary: summary,
                 summaryArtifactID: "simulation-summary",
-                stageArtifacts: FoundationFlowProjection.legacyReferences(from: artifacts),
+                stageArtifacts: artifacts,
                 gateStatus: gateStatus,
                 diagnostics: diagnostics,
                 stageID: stage.stageID,
                 toolID: toolID,
                 context: context
             )
-            artifacts.append(try FoundationFlowProjection.artifactReference(from: envelopeArtifact))
+            artifacts.append(envelopeArtifact)
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
                 projectRoot: context.projectRoot

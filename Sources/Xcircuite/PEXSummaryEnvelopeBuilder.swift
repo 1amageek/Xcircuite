@@ -17,8 +17,6 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         let summaryErrorDiagnosticCount: Int
     }
 
-    /// Projects the canonical stage artifacts through the legacy envelope
-    /// record until DesignFlowKernel adopts Foundation references natively.
     func envelopeReference(
         summary: PEXRunSummaryReport,
         summaryArtifactID: String,
@@ -29,38 +27,10 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         toolID: String,
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
-        let legacyArtifacts = FoundationFlowProjection.legacyReferences(from: stageArtifacts)
-        let legacyEnvelope = try envelopeReference(
-            summary: summary,
-            summaryArtifactID: summaryArtifactID,
-            stageArtifacts: legacyArtifacts,
-            gateStatus: gateStatus,
-            diagnostics: diagnostics,
-            stageID: stageID,
-            toolID: toolID,
-            context: context
-        )
-        return try FoundationFlowProjection.artifactReference(from: legacyEnvelope, role: .output)
-    }
-
-    func envelopeReference(
-        summary: PEXRunSummaryReport,
-        summaryArtifactID: String,
-        stageArtifacts: [XcircuiteFileReference],
-        gateStatus: FlowGateStatus,
-        diagnostics: [FlowDiagnostic],
-        stageID: String,
-        toolID: String,
-        context: FlowExecutionContext
-    ) throws -> XcircuiteFileReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
-        guard let artifactID = summaryArtifact.artifactID else {
-            throw XcircuiteRuntimeError.invalidInputReference(
-                "PEX summary artifact must have an artifact ID before envelope creation."
-            )
-        }
+        let artifactID = summaryArtifact.artifactID
 
         let hasQualifiedEvidence = hasQualifiedEvidence(context: context, toolID: toolID)
         let toolEvidenceCount = context.healthResults[toolID]?.evidence.count ?? 0
@@ -1176,8 +1146,8 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     }
 
     private func dependencies(
-        from artifacts: [XcircuiteFileReference],
-        excluding summaryArtifact: XcircuiteFileReference
+        from artifacts: [ArtifactReference],
+        excluding summaryArtifact: ArtifactReference
     ) -> [XcircuiteArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }
