@@ -3,6 +3,7 @@ import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
+import CircuiteFoundation
 
 @Suite("Xcircuite candidate plan generator")
 struct XcircuiteCandidatePlanGeneratorTests {
@@ -1068,7 +1069,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
         let store = XcircuitePackageStore()
         let artifactStore = XcircuitePlanningArtifactStore()
         let generator = XcircuiteCandidatePlanGenerator()
-        let verifier = XcircuiteFileReferenceVerifier()
+        let verifier = LocalArtifactVerifier()
         try store.createPackage(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
@@ -1090,8 +1091,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
         )
         let first = try generator.runSymbolicPlannerFamily(request: request, projectRoot: root)
         let selectedPlanArtifact = first.familyRun.selectedCandidatePlanArtifact
-        let selectedPlanSHA256 = try #require(selectedPlanArtifact.sha256)
-        #expect(verifier.verify(selectedPlanArtifact, projectRoot: root).status == .verified)
+        let selectedPlanSHA256 = selectedPlanArtifact.sha256
+        #expect(verifier.verify(selectedPlanArtifact, relativeTo: root).isVerified)
 
         do {
             _ = try generator.runSymbolicPlannerFamily(request: request, projectRoot: root)
@@ -1106,9 +1107,13 @@ struct XcircuiteCandidatePlanGeneratorTests {
             Issue.record("Expected XcircuiteCandidatePlanGenerationError, got \(error).")
         }
 
-        let selectedPlanIntegrity = verifier.verify(selectedPlanArtifact, projectRoot: root)
-        #expect(selectedPlanIntegrity.status == .verified)
-        #expect(selectedPlanIntegrity.actualSHA256 == selectedPlanSHA256)
+        let selectedPlanIntegrity = verifier.verify(selectedPlanArtifact, relativeTo: root)
+        #expect(selectedPlanIntegrity.isVerified)
+        let actualDigest = try SHA256ContentDigester().digest(
+            fileAt: root.appending(path: selectedPlanArtifact.path),
+            using: .sha256
+        )
+        #expect(actualDigest.hexadecimalValue == selectedPlanSHA256)
         let manifest = try store.readJSON(
             XcircuiteRunManifest.self,
             from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
@@ -1127,7 +1132,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
         let store = XcircuitePackageStore()
         let artifactStore = XcircuitePlanningArtifactStore()
         let generator = XcircuiteCandidatePlanGenerator()
-        let verifier = XcircuiteFileReferenceVerifier()
+        let verifier = LocalArtifactVerifier()
         try store.createPackage(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
@@ -1164,8 +1169,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
         #expect(firstPlanArtifact.artifactID != secondPlanArtifact.artifactID)
         #expect(firstPlanArtifact.path.contains("family/family-a/candidates/1-first-ready-action-per-objective"))
         #expect(secondPlanArtifact.path.contains("family/family-b/candidates/1-first-ready-action-per-objective"))
-        #expect(verifier.verify(firstPlanArtifact, projectRoot: root).status == .verified)
-        #expect(verifier.verify(secondPlanArtifact, projectRoot: root).status == .verified)
+        #expect(verifier.verify(firstPlanArtifact, relativeTo: root).isVerified)
+        #expect(verifier.verify(secondPlanArtifact, relativeTo: root).isVerified)
 
         let manifest = try store.readJSON(
             XcircuiteRunManifest.self,

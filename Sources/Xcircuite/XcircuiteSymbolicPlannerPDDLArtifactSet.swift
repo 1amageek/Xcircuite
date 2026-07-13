@@ -1,14 +1,15 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPDDLArtifactSet: Codable, Sendable, Hashable {
-    public var domainArtifact: XcircuiteFileReference
-    public var problemArtifact: XcircuiteFileReference
-    public var exportArtifact: XcircuiteFileReference
+    public var domainArtifact: ArtifactReference
+    public var problemArtifact: ArtifactReference
+    public var exportArtifact: ArtifactReference
 
     public init(
-        domainArtifact: XcircuiteFileReference,
-        problemArtifact: XcircuiteFileReference,
-        exportArtifact: XcircuiteFileReference
+        domainArtifact: ArtifactReference,
+        problemArtifact: ArtifactReference,
+        exportArtifact: ArtifactReference
     ) {
         self.domainArtifact = domainArtifact
         self.problemArtifact = problemArtifact

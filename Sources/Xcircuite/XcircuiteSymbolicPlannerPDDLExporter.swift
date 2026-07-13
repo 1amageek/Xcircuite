@@ -69,8 +69,14 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
             domainName: export.domainName,
             problemName: export.problemName,
             problemPath: problemPath,
-            problemTranslationAuditArtifact: translationAuditResult.auditArtifact,
-            actionDomainSnapshotArtifact: actionDomainContext.reference,
+            problemTranslationAuditArtifact: try requireFoundationArtifactReference(
+                translationAuditResult.auditArtifact,
+                field: "pddl.problemTranslationAuditArtifact"
+            ),
+            actionDomainSnapshotArtifact: try requireFoundationArtifactReference(
+                actionDomainContext.reference,
+                field: "pddl.actionDomainSnapshotArtifact"
+            ),
             domainArtifact: artifacts.domainArtifact,
             problemArtifact: artifacts.problemArtifact,
             exportArtifact: artifacts.exportArtifact,

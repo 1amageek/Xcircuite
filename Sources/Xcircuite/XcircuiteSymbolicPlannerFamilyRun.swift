@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerFamilyRun: Codable, Sendable, Hashable {
@@ -14,10 +15,10 @@ public struct XcircuiteSymbolicPlannerFamilyRun: Codable, Sendable, Hashable {
     public var selectedCandidateIndex: Int
     public var selectedStrategy: String
     public var selectedPlanID: String
-    public var selectedCandidatePlanArtifact: XcircuiteFileReference
-    public var selectedSymbolicPlannerTraceArtifact: XcircuiteFileReference
-    public var promotedCandidatePlanArtifact: XcircuiteFileReference
-    public var promotedSymbolicPlannerTraceArtifact: XcircuiteFileReference
+    public var selectedCandidatePlanArtifact: ArtifactReference
+    public var selectedSymbolicPlannerTraceArtifact: ArtifactReference
+    public var promotedCandidatePlanArtifact: ArtifactReference
+    public var promotedSymbolicPlannerTraceArtifact: ArtifactReference
     public var candidates: [XcircuiteSymbolicPlannerFamilyCandidateResult]
     public var diagnostics: [String]
 
@@ -34,10 +35,10 @@ public struct XcircuiteSymbolicPlannerFamilyRun: Codable, Sendable, Hashable {
         selectedCandidateIndex: Int,
         selectedStrategy: String,
         selectedPlanID: String,
-        selectedCandidatePlanArtifact: XcircuiteFileReference,
-        selectedSymbolicPlannerTraceArtifact: XcircuiteFileReference,
-        promotedCandidatePlanArtifact: XcircuiteFileReference,
-        promotedSymbolicPlannerTraceArtifact: XcircuiteFileReference,
+        selectedCandidatePlanArtifact: ArtifactReference,
+        selectedSymbolicPlannerTraceArtifact: ArtifactReference,
+        promotedCandidatePlanArtifact: ArtifactReference,
+        promotedSymbolicPlannerTraceArtifact: ArtifactReference,
         candidates: [XcircuiteSymbolicPlannerFamilyCandidateResult],
         diagnostics: [String] = []
     ) {

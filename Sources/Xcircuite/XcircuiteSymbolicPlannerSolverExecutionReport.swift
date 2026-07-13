@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverExecutionReport: Codable, Sendable, Hashable {
@@ -8,10 +9,10 @@ public struct XcircuiteSymbolicPlannerSolverExecutionReport: Codable, Sendable, 
     public var arguments: [String]
     public var timeoutSeconds: Double
     public var workingDirectoryPath: String
-    public var domainArtifact: XcircuiteFileReference
-    public var problemArtifact: XcircuiteFileReference
-    public var pddlExportArtifact: XcircuiteFileReference?
-    public var planReplayValidationArtifact: XcircuiteFileReference?
+    public var domainArtifact: ArtifactReference
+    public var problemArtifact: ArtifactReference
+    public var pddlExportArtifact: ArtifactReference?
+    public var planReplayValidationArtifact: ArtifactReference?
     public var planReplayValidationStatus: String?
     public var solverPlanOutputPath: String?
     public var solverPlanSource: String?
@@ -31,10 +32,10 @@ public struct XcircuiteSymbolicPlannerSolverExecutionReport: Codable, Sendable, 
         arguments: [String],
         timeoutSeconds: Double,
         workingDirectoryPath: String,
-        domainArtifact: XcircuiteFileReference,
-        problemArtifact: XcircuiteFileReference,
-        pddlExportArtifact: XcircuiteFileReference?,
-        planReplayValidationArtifact: XcircuiteFileReference? = nil,
+        domainArtifact: ArtifactReference,
+        problemArtifact: ArtifactReference,
+        pddlExportArtifact: ArtifactReference?,
+        planReplayValidationArtifact: ArtifactReference? = nil,
         planReplayValidationStatus: String? = nil,
         solverPlanOutputPath: String?,
         solverPlanSource: String?,

@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPDDLExportResult: Codable, Sendable, Hashable {
@@ -8,11 +9,11 @@ public struct XcircuiteSymbolicPlannerPDDLExportResult: Codable, Sendable, Hasha
     public var domainName: String
     public var problemName: String
     public var problemPath: String
-    public var problemTranslationAuditArtifact: XcircuiteFileReference?
-    public var actionDomainSnapshotArtifact: XcircuiteFileReference
-    public var domainArtifact: XcircuiteFileReference
-    public var problemArtifact: XcircuiteFileReference
-    public var exportArtifact: XcircuiteFileReference
+    public var problemTranslationAuditArtifact: ArtifactReference?
+    public var actionDomainSnapshotArtifact: ArtifactReference
+    public var domainArtifact: ArtifactReference
+    public var problemArtifact: ArtifactReference
+    public var exportArtifact: ArtifactReference
     public var export: XcircuiteSymbolicPlannerPDDLExport
 
     public init(
@@ -23,11 +24,11 @@ public struct XcircuiteSymbolicPlannerPDDLExportResult: Codable, Sendable, Hasha
         domainName: String,
         problemName: String,
         problemPath: String,
-        problemTranslationAuditArtifact: XcircuiteFileReference? = nil,
-        actionDomainSnapshotArtifact: XcircuiteFileReference,
-        domainArtifact: XcircuiteFileReference,
-        problemArtifact: XcircuiteFileReference,
-        exportArtifact: XcircuiteFileReference,
+        problemTranslationAuditArtifact: ArtifactReference? = nil,
+        actionDomainSnapshotArtifact: ArtifactReference,
+        domainArtifact: ArtifactReference,
+        problemArtifact: ArtifactReference,
+        exportArtifact: ArtifactReference,
         export: XcircuiteSymbolicPlannerPDDLExport
     ) {
         self.schemaVersion = schemaVersion

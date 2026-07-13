@@ -530,9 +530,18 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try packageStore.upsertRunArtifact(exportArtifact, runID: runID, inProjectAt: projectRoot)
 
         return XcircuiteSymbolicPlannerPDDLArtifactSet(
-            domainArtifact: domainArtifact,
-            problemArtifact: problemArtifact,
-            exportArtifact: exportArtifact
+            domainArtifact: try requireFoundationArtifactReference(
+                domainArtifact,
+                field: "pddl.domainArtifact"
+            ),
+            problemArtifact: try requireFoundationArtifactReference(
+                problemArtifact,
+                field: "pddl.problemArtifact"
+            ),
+            exportArtifact: try requireFoundationArtifactReference(
+                exportArtifact,
+                field: "pddl.exportArtifact"
+            )
         )
     }
 

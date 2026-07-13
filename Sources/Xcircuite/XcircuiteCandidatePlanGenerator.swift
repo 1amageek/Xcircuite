@@ -140,10 +140,22 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             selectedCandidateIndex: selected.candidateIndex,
             selectedStrategy: selected.build.draft.trace.strategy,
             selectedPlanID: selected.build.draft.plan.planID,
-            selectedCandidatePlanArtifact: selected.candidatePlanArtifact,
-            selectedSymbolicPlannerTraceArtifact: selected.symbolicPlannerTraceArtifact,
-            promotedCandidatePlanArtifact: promotedPlanArtifact,
-            promotedSymbolicPlannerTraceArtifact: promotedTraceArtifact,
+            selectedCandidatePlanArtifact: try requireFoundationArtifactReference(
+                selected.candidatePlanArtifact,
+                field: "familyRun.selectedCandidatePlanArtifact"
+            ),
+            selectedSymbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
+                selected.symbolicPlannerTraceArtifact,
+                field: "familyRun.selectedSymbolicPlannerTraceArtifact"
+            ),
+            promotedCandidatePlanArtifact: try requireFoundationArtifactReference(
+                promotedPlanArtifact,
+                field: "familyRun.promotedCandidatePlanArtifact"
+            ),
+            promotedSymbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
+                promotedTraceArtifact,
+                field: "familyRun.promotedSymbolicPlannerTraceArtifact"
+            ),
             candidates: candidateResults,
             diagnostics: familyDiagnostics(from: candidateResults)
         )
@@ -155,7 +167,10 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
         return XcircuiteSymbolicPlannerFamilyRunResult(
             status: "generated",
             familyRun: familyRun,
-            familyRunArtifact: familyRunArtifact
+            familyRunArtifact: try requireFoundationArtifactReference(
+                familyRunArtifact,
+                field: "familyRun.familyRunArtifact"
+            )
         )
     }
 

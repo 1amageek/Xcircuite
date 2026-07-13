@@ -207,10 +207,23 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             arguments: arguments,
             timeoutSeconds: request.timeoutSeconds,
             workingDirectoryPath: workingDirectoryPath,
-            domainArtifact: domainArtifact,
-            problemArtifact: problemArtifact,
-            pddlExportArtifact: pddlExportArtifact,
-            planReplayValidationArtifact: planReplayValidationArtifact,
+            domainArtifact: try requireFoundationArtifactReference(
+                domainArtifact,
+                field: "solver.report.domainArtifact"
+            ),
+            problemArtifact: try requireFoundationArtifactReference(
+                problemArtifact,
+                field: "solver.report.problemArtifact"
+            ),
+            pddlExportArtifact: try pddlExportArtifact.map {
+                try requireFoundationArtifactReference($0, field: "solver.report.pddlExportArtifact")
+            },
+            planReplayValidationArtifact: try planReplayValidationArtifact.map {
+                try requireFoundationArtifactReference(
+                    $0,
+                    field: "solver.report.planReplayValidationArtifact"
+                )
+            },
             planReplayValidationStatus: planReplayValidation?.status,
             solverPlanOutputPath: solverPlanOutputPath,
             solverPlanSource: solverPlanSource,
