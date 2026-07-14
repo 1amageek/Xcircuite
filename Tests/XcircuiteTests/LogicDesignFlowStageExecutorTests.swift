@@ -65,7 +65,7 @@ struct LogicDesignFlowStageExecutorTests {
             Issue.record("Expected the flattened logic-design artifact")
             return
         }
-        let snapshotURL = try XcircuitePackage(projectRoot: root).url(
+        let snapshotURL = try XcircuiteWorkspace(projectRoot: root).url(
             forProjectRelativePath: snapshotArtifact.path
         )
         let snapshot = try LogicDesignSnapshotCodec.decode(try Data(contentsOf: snapshotURL))
@@ -109,7 +109,7 @@ struct LogicDesignFlowStageExecutorTests {
 
     private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
         let runDirectory = root
-            .appending(path: XcircuitePackage.directoryName)
+            .appending(path: XcircuiteWorkspace.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         do {
@@ -121,7 +121,7 @@ struct LogicDesignFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

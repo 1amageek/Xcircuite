@@ -2,16 +2,16 @@ import Foundation
 import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let hasher: XcircuiteHasher
     private let identifierValidator: XcircuiteIdentifierValidator
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         hasher: XcircuiteHasher = XcircuiteHasher(),
         identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.hasher = hasher
         self.identifierValidator = identifierValidator
     }
@@ -76,21 +76,21 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             retainedSignoffReportURL: retainedSignoffReportURL
         )
         let suiteDirectory = try suiteDirectoryURL(suiteID: qualification.suiteID, projectRoot: projectRoot)
-        try packageStore.ensureDirectory(at: suiteDirectory)
+        try workspaceStore.ensureDirectory(at: suiteDirectory)
         let assessmentPath = suiteProjectRelativePath(
             suiteID: qualification.suiteID,
             fileName: "promotion-assessment.json"
         )
-        let assessmentURL = try packageStore.url(forProjectRelativePath: assessmentPath, inProjectAt: projectRoot)
-        try packageStore.writeJSON(assessmentWithoutSelfRef, to: assessmentURL, forProjectAt: projectRoot)
-        let assessmentArtifact = try packageStore.fileReference(
+        let assessmentURL = try workspaceStore.url(forProjectRelativePath: assessmentPath, inProjectAt: projectRoot)
+        try workspaceStore.writeJSON(assessmentWithoutSelfRef, to: assessmentURL, forProjectAt: projectRoot)
+        let assessmentArtifact = try workspaceStore.fileReference(
             forProjectRelativePath: assessmentPath,
             artifactID: "generated-layout-signoff-promotion-assessment",
             kind: .report,
             format: .json,
             inProjectAt: projectRoot
         )
-        try packageStore.upsertFileReference(assessmentArtifact, forProjectAt: projectRoot)
+        try workspaceStore.upsertFileReference(assessmentArtifact, forProjectAt: projectRoot)
 
         var assessment = assessmentWithoutSelfRef
         assessment.assessmentArtifact = assessmentArtifact
@@ -451,14 +451,14 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
     }
 
     private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try packageStore.url(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
+        try workspaceStore.url(
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
             inProjectAt: projectRoot
         )
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuitePackage.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func blocker(

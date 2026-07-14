@@ -46,8 +46,8 @@ enum XcircuiteRunManifestTamper {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let projectManifestURL = projectRoot
-            .appending(path: XcircuitePackage.directoryName)
-            .appending(path: XcircuitePackage.manifestFileName)
+            .appending(path: XcircuiteWorkspace.directoryName)
+            .appending(path: XcircuiteWorkspace.manifestFileName)
         let projectData = try Data(contentsOf: projectManifestURL)
         guard var project = try JSONSerialization.jsonObject(with: projectData) as? [String: Any],
               var files = project["files"] as? [[String: Any]] else {

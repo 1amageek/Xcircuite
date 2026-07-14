@@ -458,15 +458,15 @@ struct LogicEngineFlowStageExecutorTests {
     }
 
     private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: root)
         let runDirectory = root.appending(path: ".xcircuite/runs/(runID)")
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
         return FlowExecutionContext(
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

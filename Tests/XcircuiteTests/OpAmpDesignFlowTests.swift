@@ -76,9 +76,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-cli")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-cli"
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
 
         let specURL = root.appending(path: "input/opamp-spec.json")
         let specOutput = try await XcircuiteFlowCLICommand.run(arguments: [
@@ -288,9 +288,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-waveform-metrics")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-waveform-metrics"
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
 
         let acCSV = """
         frequency,V(vout)_real,V(vout)_imag
@@ -442,9 +442,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-merged-metrics")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-merged-metrics"
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
 
         let spec = OpAmpSpec(
             specID: "merged-opamp",
@@ -577,9 +577,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-deck-run")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-deck-run"
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
 
         let deckSet = makeExecutableOpAmpDeckSet()
         let spec = OpAmpSpec(
@@ -657,9 +657,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-post-layout")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-post-layout"
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
 
         let spec = OpAmpSpec.makeDefault(
             specID: "post-layout-opamp",

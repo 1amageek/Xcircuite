@@ -10,14 +10,14 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func repairHintArtifactDrivesCLIPlanningAndVerifiedPortRepair() async throws {
         let root = try makeTemporaryRoot("repair-hint-artifact-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-lvs-hint-port"
         let layoutPath = "layout/port-layout.json"
         let layoutNetlistPath = "circuits/layout.spice"
         let schematicNetlistPath = "circuits/schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-repair-hints.json"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeSimpleLayoutDocument(path: layoutPath, root: root)
         try writeMatchingLVSNetlists(
@@ -166,13 +166,13 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func approvedPolicyRepairArtifactDrivesNativeLVSVerification() async throws {
         let root = try makeTemporaryRoot("approved-policy-repair-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-lvs-policy-repair"
         let layoutNetlistPath = "circuits/model-layout.spice"
         let schematicNetlistPath = "circuits/model-schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-repair-hints.json"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeModelMismatchLVSNetlists(
             layoutPath: layoutNetlistPath,
@@ -339,13 +339,13 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func approvedTerminalPolicyRepairArtifactDrivesNativeLVSVerification() async throws {
         let root = try makeTemporaryRoot("approved-terminal-policy-repair-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-lvs-terminal-policy-repair"
         let layoutNetlistPath = "circuits/terminal-layout.spice"
         let schematicNetlistPath = "circuits/terminal-schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-repair-hints.json"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeTerminalMismatchLVSNetlists(
             layoutPath: layoutNetlistPath,
@@ -522,7 +522,7 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func closedLVSRepairLoopUsesEditedLayoutNetlistAndAcceptsRepairedCandidate() async throws {
         let root = try makeTemporaryRoot("closed-lvs-repair-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareRun(root: root, runID: "run-1")
 
         try persistCandidatePlan(
@@ -624,8 +624,8 @@ struct XcircuiteLVSRepairLoopTests {
     }
 
     private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText(
             """
@@ -1140,7 +1140,7 @@ struct XcircuiteLVSRepairLoopTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -1165,7 +1165,7 @@ struct XcircuiteLVSRepairLoopTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let reference = try store.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,

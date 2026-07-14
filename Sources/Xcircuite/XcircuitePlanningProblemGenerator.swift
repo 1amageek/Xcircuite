@@ -6,18 +6,18 @@ import DesignFlowKernel
 import CircuiteFoundation
 
 public struct XcircuitePlanningProblemGenerator: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let builder: XcircuiteDiagnosticPlanningProblemBuilder
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         builder: XcircuiteDiagnosticPlanningProblemBuilder = XcircuiteDiagnosticPlanningProblemBuilder(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.builder = builder
         self.fileReferenceVerifier = fileReferenceVerifier
@@ -68,9 +68,9 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         let problem: XcircuiteCircuitPlanningProblem
         switch request.source {
         case .drcSummary:
-            let summary = try packageStore.readJSON(
+            let summary = try workspaceStore.readJSON(
                 DRCRunSummaryReport.self,
-                from: packageStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
+                from: workspaceStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
             )
             let repairHints = try loadDRCRepairHintsIfPresent(
                 path: repairHintPath,
@@ -88,9 +88,9 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
                 actionDomainArtifactPath: actionDomainPath
             )
         case .lvsSummary:
-            let summary = try packageStore.readJSON(
+            let summary = try workspaceStore.readJSON(
                 LVSRunSummaryReport.self,
-                from: packageStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
+                from: workspaceStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
             )
             let repairHints = try loadLVSRepairHintsIfPresent(
                 path: repairHintPath,
@@ -108,9 +108,9 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
                 actionDomainArtifactPath: actionDomainPath
             )
         case .pexSummary:
-            let summary = try packageStore.readJSON(
+            let summary = try workspaceStore.readJSON(
                 PEXRunSummaryReport.self,
-                from: packageStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
+                from: workspaceStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
             )
             let metricReport = try loadPostLayoutMetricReportIfPresent(
                 path: request.metricReportPath,
@@ -156,7 +156,7 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadPostLayoutMetricReportIfPresent(
@@ -167,8 +167,8 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
             return nil
         }
         let validatedPath = try validateExplicitPathExists(path, projectRoot: projectRoot)
-        let url = try packageStore.url(forProjectRelativePath: validatedPath, inProjectAt: projectRoot)
-        return try packageStore.readJSON(PostLayoutComparisonReport.self, from: url)
+        let url = try workspaceStore.url(forProjectRelativePath: validatedPath, inProjectAt: projectRoot)
+        return try workspaceStore.readJSON(PostLayoutComparisonReport.self, from: url)
     }
 
     private func loadDRCRepairHintsIfPresent(
@@ -178,8 +178,8 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         guard let path else {
             return nil
         }
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        return try packageStore.readJSON(DRCRepairHintReport.self, from: url)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        return try workspaceStore.readJSON(DRCRepairHintReport.self, from: url)
     }
 
     private func loadLVSRepairHintsIfPresent(
@@ -189,8 +189,8 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         guard let path else {
             return nil
         }
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        return try packageStore.readJSON(LVSRepairHintReport.self, from: url)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        return try workspaceStore.readJSON(LVSRepairHintReport.self, from: url)
     }
 
     private func requiredPath(
@@ -252,7 +252,7 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         _ path: String,
         projectRoot: URL
     ) throws -> String {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             throw XcircuitePlanningProblemGenerationError.explicitPathNotFound(path: path)
         }

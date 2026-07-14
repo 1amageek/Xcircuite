@@ -15,7 +15,7 @@ extension XcircuiteCandidatePlanExecutor {
         context: inout CandidatePlanExecutionContext
     ) throws -> XcircuiteCandidatePlanExecutionStepResult {
         let executionDirectory = try executionDirectoryURL(plan: plan, step: step, projectRoot: projectRoot)
-        try packageStore.ensureDirectory(at: executionDirectory)
+        try workspaceStore.ensureDirectory(at: executionDirectory)
         let request = try layoutCommandRequest(
             step: step,
             plan: plan,
@@ -24,7 +24,7 @@ extension XcircuiteCandidatePlanExecutor {
             context: context
         )
         let requestURL = executionDirectory.appending(path: "layout-command-request.json")
-        try packageStore.writeJSON(request, to: requestURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(request, to: requestURL, forProjectAt: projectRoot)
 
         let result = try layoutRunner.run(request: request, baseURL: projectRoot)
         let validatedArtifacts = try validateLayoutCommandResult(
@@ -80,7 +80,7 @@ extension XcircuiteCandidatePlanExecutor {
             projectRoot: projectRoot
         ))
         for artifact in artifacts {
-            try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
         }
         let artifactReferences = try foundationArtifactReferences(
             artifacts,
@@ -104,7 +104,7 @@ extension XcircuiteCandidatePlanExecutor {
         projectRoot: URL
     ) throws -> XcircuiteCandidatePlanExecutionStepResult {
         let executionDirectory = try executionDirectoryURL(plan: plan, step: step, projectRoot: projectRoot)
-        try packageStore.ensureDirectory(at: executionDirectory)
+        try workspaceStore.ensureDirectory(at: executionDirectory)
 
         let policyKind = try lvsPolicyRepairKind(from: step)
         let policyURL: URL
@@ -114,13 +114,13 @@ extension XcircuiteCandidatePlanExecutor {
         case "model-equivalence":
             let policy = try modelEquivalencePolicy(from: step)
             policyURL = executionDirectory.appending(path: "model-equivalence-policy.json")
-            try packageStore.writeJSON(policy, to: policyURL, forProjectAt: projectRoot)
+            try workspaceStore.writeJSON(policy, to: policyURL, forProjectAt: projectRoot)
             policyArtifactID = "candidate-step-\(step.order)-model-equivalence-policy"
             terminalPolicyMetadata = nil
         case "terminal-equivalence":
             let policy = try terminalEquivalencePolicy(from: step)
             policyURL = executionDirectory.appending(path: "terminal-equivalence-policy.json")
-            try packageStore.writeJSON(policy.policy, to: policyURL, forProjectAt: projectRoot)
+            try workspaceStore.writeJSON(policy.policy, to: policyURL, forProjectAt: projectRoot)
             policyArtifactID = "candidate-step-\(step.order)-terminal-equivalence-policy"
             terminalPolicyMetadata = (
                 kind: policy.rule.kind,
@@ -160,7 +160,7 @@ extension XcircuiteCandidatePlanExecutor {
             rationale: step.reason
         )
         let reportURL = executionDirectory.appending(path: "lvs-policy-repair-report.json")
-        try packageStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
 
         let artifacts = try [
             artifactBuilder.reference(
@@ -181,7 +181,7 @@ extension XcircuiteCandidatePlanExecutor {
             ),
         ]
         for artifact in artifacts {
-            try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
         }
         let artifactReferences = try foundationArtifactReferences(
             artifacts,
@@ -214,7 +214,7 @@ extension XcircuiteCandidatePlanExecutor {
         }
         let documentData = try Data(contentsOf: outputDocumentURL)
         let document = try LayoutDocumentSerializer().decodeDocument(documentData)
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: plan.runID)
+        let runDirectory = try XcircuiteWorkspace(projectRoot: projectRoot).runDirectoryURL(for: plan.runID)
         return try specs.map { spec in
             let artifact = try exportStandardLayout(
                 document,
@@ -258,15 +258,15 @@ extension XcircuiteCandidatePlanExecutor {
                 field: "resultPath"
             )
         }
-        let outputURL = try packageStore.url(
+        let outputURL = try workspaceStore.url(
             forProjectRelativePath: request.outputDocumentPath,
             inProjectAt: projectRoot
         )
-        let manifestURL = try packageStore.url(
+        let manifestURL = try workspaceStore.url(
             forProjectRelativePath: manifestPath,
             inProjectAt: projectRoot
         )
-        let resultURL = try packageStore.url(
+        let resultURL = try workspaceStore.url(
             forProjectRelativePath: resultPath,
             inProjectAt: projectRoot
         )
@@ -428,11 +428,11 @@ extension XcircuiteCandidatePlanExecutor {
         guard let problemPath = plan.sourceProblemRef.path else {
             return nil
         }
-        let problemURL = try packageStore.url(
+        let problemURL = try workspaceStore.url(
             forProjectRelativePath: problemPath,
             inProjectAt: projectRoot
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
             from: problemURL
         )
@@ -442,7 +442,7 @@ extension XcircuiteCandidatePlanExecutor {
         guard layoutPath.lowercased().hasSuffix(".json") else {
             return nil
         }
-        let layoutURL = try packageStore.url(
+        let layoutURL = try workspaceStore.url(
             forProjectRelativePath: layoutPath,
             inProjectAt: projectRoot
         )

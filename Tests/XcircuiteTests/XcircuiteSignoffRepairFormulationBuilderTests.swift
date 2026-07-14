@@ -12,8 +12,8 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         let root = try makeTemporaryRoot("signoff-repair-formulation")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-formulation"
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeReports(root: root, runID: runID, registerArtifacts: true)
 
@@ -126,8 +126,8 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         let root = try makeTemporaryRoot("signoff-repair-empty")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-empty"
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         let reportsDirectory = root.appending(path: "reports")
         try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
@@ -173,8 +173,8 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         let root = try makeTemporaryRoot("signoff-repair-unregistered-report")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-unregistered"
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeReports(root: root, runID: runID, registerArtifacts: false)
 
@@ -201,8 +201,8 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         let root = try makeTemporaryRoot("signoff-repair-stale-report")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-stale"
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeReports(root: root, runID: runID, registerArtifacts: true)
         let reportURL = root.appending(path: "reports/drc-repair-hints.json")
@@ -232,7 +232,7 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
     private func writeReports(root: URL, runID: String, registerArtifacts: Bool) throws {
         let reportsDirectory = root.appending(path: "reports")
         try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try store.writeJSON(
             makeDRCRepairHints(),
             to: reportsDirectory.appending(path: "drc-repair-hints.json"),

@@ -3,16 +3,16 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let artifactVerifier: LocalArtifactVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactVerifier = artifactVerifier
     }
@@ -30,9 +30,9 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
         )
         guard problem.runID == request.runID else {
             throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
@@ -48,9 +48,9 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let pddlExport = try packageStore.readJSON(
+        let pddlExport = try workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: packageStore.url(forProjectRelativePath: pddlExportRef.path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: pddlExportRef.path, inProjectAt: projectRoot)
         )
         guard pddlExport.runID == request.runID else {
             throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
@@ -327,7 +327,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let url = try packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            let url = try workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
             return try String(contentsOf: url, encoding: .utf8)
         }
         let artifactID = request.solverPlanArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID
@@ -345,7 +345,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             field: "solver-plan",
             projectRoot: projectRoot
         )
-        let url = try packageStore.url(forProjectRelativePath: verifiedReference.path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: verifiedReference.path, inProjectAt: projectRoot)
         return try String(contentsOf: url, encoding: .utf8)
     }
 
@@ -425,7 +425,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> ArtifactReference {
-        let reference = try packageStore.fileReference(
+        let reference = try workspaceStore.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
@@ -449,7 +449,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> ArtifactReference {
-        let explicitReference = try packageStore.fileReference(
+        let explicitReference = try workspaceStore.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
@@ -665,7 +665,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func identifier(_ rawValue: String) -> String {

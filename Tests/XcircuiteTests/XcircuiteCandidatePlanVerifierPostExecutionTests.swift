@@ -13,8 +13,8 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRunsNativeDRCGateAndAcceptsPassingPlan() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-drc-pass")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-3", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeExecutableDRCPlan(runID: "run-3", width: 2, requiredWidth: 1),
@@ -68,8 +68,8 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRejectsNativeDRCViolation() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-drc-fail")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-4", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeExecutableDRCPlan(runID: "run-4", width: 0.5, requiredWidth: 1),
@@ -106,9 +106,9 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRejectsNativeDRCWhenRequestedTopCellIsMissing() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-drc-missing-top")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-drc-missing-top"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         var plan = makeExecutableDRCPlan(runID: runID, width: 2, requiredWidth: 1)
         plan.steps[0].parameterHints["topCell"] = .string("missing_top")
@@ -145,7 +145,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRunsNativeLVSGateAndAcceptsMatchingNetlists() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-lvs-pass")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareExecutableLVSRun(
             root: root,
             runID: "run-5",
@@ -201,7 +201,7 @@ extension XcircuiteCandidatePlanVerifierTests {
                     "candidate-plan-post-execution-lvs-produced-\(layoutCase.id)-\(circuitCase.id)"
                 )
                 defer { removeTemporaryRoot(root) }
-                let store = XcircuitePackageStore()
+                let store = XcircuiteWorkspaceStore()
                 let runID = "run-produced-lvs-\(layoutCase.id)-\(circuitCase.id)"
                 try prepareProducedStandardLayoutLVSRun(
                     root: root,
@@ -244,7 +244,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRejectsNativeLVSMismatch() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-lvs-fail")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareExecutableLVSRun(
             root: root,
             runID: "run-6",
@@ -290,7 +290,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationBlocksMockPEXSummaryEvenWhenPlanAllowsMockBackend() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-mock-plan-allow")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareExecutablePEXRun(root: root, runID: "run-7")
         _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-7"),
@@ -323,7 +323,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationBlocksPEXSummaryGateWithoutExplicitBackend() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-missing-backend")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-pex-missing-backend"
         try prepareExecutablePEXRun(root: root, runID: runID)
         var plan = makeExecutablePEXPlan(runID: runID)
@@ -364,7 +364,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationBlocksPEXSummaryGateWhenMockBackendIsNotApproved() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-mock-not-approved")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-pex-mock-not-approved"
         try prepareExecutablePEXRun(root: root, runID: runID)
         var plan = makeExecutablePEXPlan(runID: runID)
@@ -405,7 +405,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         for layoutCase in producedLayoutCorpusCases() {
             let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-produced-\(layoutCase.id)")
             defer { removeTemporaryRoot(root) }
-            let store = XcircuitePackageStore()
+            let store = XcircuiteWorkspaceStore()
             let runID = "run-produced-pex-\(layoutCase.id)"
             try prepareProducedStandardLayoutPEXRun(root: root, runID: runID, layoutCase: layoutCase)
 
@@ -441,7 +441,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRunsSimulationMetricGateAndAcceptsMeasurements() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-sim-pass")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareExecutableSimulationRun(root: root, runID: "run-8", target: 1.0)
         _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-8"),
@@ -487,7 +487,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRejectsSimulationMetricOutOfTolerance() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-sim-fail")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareExecutableSimulationRun(root: root, runID: "run-9", target: 0.5)
         _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-9"),
@@ -553,8 +553,8 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionRejectedPlanRecordsSourceParameterCandidateIDFromEditReport() async throws {
         let root = try makeTemporaryRoot("candidate-plan-rejected-source-candidate")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-10", inProjectAt: root)
         let plan = XcircuiteCandidatePlan(
             planID: "run-10-parameter-plan",

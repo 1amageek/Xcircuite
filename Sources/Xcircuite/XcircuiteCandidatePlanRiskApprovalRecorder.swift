@@ -3,12 +3,12 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore()
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
     }
 
     public func recordApproval(
@@ -28,15 +28,15 @@ public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
             note: request.note,
             createdAt: request.decidedAt
         )
-        let approvalPath = "\(XcircuitePackage.directoryName)/runs/\(request.runID)/approvals/\(request.approvalID).json"
-        var approvalArtifact = try packageStore.writeApprovalArtifact(approval, inProjectAt: projectRoot)
+        let approvalPath = "\(XcircuiteWorkspace.directoryName)/runs/\(request.runID)/approvals/\(request.approvalID).json"
+        var approvalArtifact = try workspaceStore.writeApprovalArtifact(approval, inProjectAt: projectRoot)
         approvalArtifact.artifactID = "planning-approval-\(request.approvalID)"
-        try packageStore.upsertRunArtifact(
+        try workspaceStore.upsertRunArtifact(
             approvalArtifact,
             runID: request.runID,
             inProjectAt: projectRoot
         )
-        try packageStore.appendRunAction(
+        try workspaceStore.appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "\(request.runID)-\(request.approvalID)-approval",
                 runID: request.runID,

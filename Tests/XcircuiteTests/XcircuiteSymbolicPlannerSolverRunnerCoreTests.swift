@@ -212,7 +212,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         projectRoot: root
     )
     let solverURL = root.appending(path: "mock-symbolic-planner.sh")
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         printf 'Solution Found\\n'
@@ -259,7 +259,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(importResult.status == "imported")
     #expect(importResult.candidatePlan.steps.map(\.actionID) == ["fix-m1-width"])
 
-    let solverRun = try XcircuitePackageStore().readJSON(
+    let solverRun = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
         from: root.appending(path: result.runArtifact.path)
     )
@@ -273,7 +273,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(FileManager.default.fileExists(atPath: root.appending(path: result.standardOutputArtifact.path).path(percentEncoded: false)))
     #expect(FileManager.default.fileExists(atPath: root.appending(path: result.standardErrorArtifact.path).path(percentEncoded: false)))
 
-    let replayValidation = try XcircuitePackageStore().readJSON(
+    let replayValidation = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerPlanReplayValidation.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/plan-replay-validation.json")
     )
@@ -285,14 +285,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         request: XcircuiteCandidatePlanVerificationRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let verification = try XcircuitePackageStore().readJSON(
+    let verification = try XcircuiteWorkspaceStore().readJSON(
         XcircuitePlanVerification.self,
         from: root.appending(path: verifierResult.planVerificationArtifact.path)
     )
     #expect(verification.goalCoverageStatus == "covered")
     #expect(verification.missingGoalAtoms == [])
 
-    let manifest = try XcircuitePackageStore().readJSON(
+    let manifest = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteRunManifest.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
     )
@@ -314,7 +314,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         projectRoot: root
     )
     let solverURL = root.appending(path: "empty-symbolic-planner.sh")
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         exit 0
@@ -343,7 +343,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.diagnostics.contains { $0.code == "missing-solver-plan-output" })
     #expect(FileManager.default.fileExists(atPath: root.appending(path: result.runArtifact.path).path(percentEncoded: false)))
 
-    let manifest = try XcircuitePackageStore().readJSON(
+    let manifest = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteRunManifest.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
     )
@@ -365,7 +365,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         projectRoot: root
     )
     let runDirectory = root
-        .appending(path: XcircuitePackage.directoryName)
+        .appending(path: XcircuiteWorkspace.directoryName)
         .appending(path: "runs")
         .appending(path: "run-pddl")
     try Data("{".utf8).write(
@@ -375,7 +375,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
     let markerURL = root.appending(path: "unreadable-cancel-planner-launched.txt")
     let solverURL = root.appending(path: "unreadable-cancel-symbolic-planner.sh")
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -404,7 +404,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.diagnostics.contains { $0.code == "cancellation-check-failed" })
     #expect(!FileManager.default.fileExists(atPath: markerURL.path(percentEncoded: false)))
 
-    let solverRun = try XcircuitePackageStore().readJSON(
+    let solverRun = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
         from: root.appending(path: result.runArtifact.path)
     )
@@ -423,7 +423,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let markerURL = root.appending(path: "conflicting-output-planner-launched.txt")
     let solverURL = root.appending(path: "conflicting-output-symbolic-planner.sh")
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -473,8 +473,8 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let markerURL = root.appending(path: "outside-output-planner-launched.txt")
     let solverURL = root.appending(path: "outside-output-symbolic-planner.sh")
-    let outputPath = "\(XcircuitePackage.directoryName)/runs/run-pddl/planning/symbolic-planner/external-solver-plan.out"
-    try XcircuitePackageStore().writeText(
+    let outputPath = "\(XcircuiteWorkspace.directoryName)/runs/run-pddl/planning/symbolic-planner/external-solver-plan.out"
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -504,7 +504,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             return
         }
         #expect(path == outputPath)
-        #expect(workingDirectoryPath == "\(XcircuitePackage.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work")
+        #expect(workingDirectoryPath == "\(XcircuiteWorkspace.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work")
     }
     #expect(!FileManager.default.fileExists(atPath: markerURL.path(percentEncoded: false)))
 }
@@ -517,13 +517,13 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let outputPath = "\(XcircuitePackage.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work/solver-plan.out"
+    let outputPath = "\(XcircuiteWorkspace.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work/solver-plan.out"
     let outputURL = root.appending(path: outputPath)
     try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try XcircuitePackageStore().writeText("0.000: (a-stale-action) [1.000]\n", to: outputURL)
+    try XcircuiteWorkspaceStore().writeText("0.000: (a-stale-action) [1.000]\n", to: outputURL)
     let markerURL = root.appending(path: "stale-output-planner-launched.txt")
     let solverURL = root.appending(path: "stale-output-symbolic-planner.sh")
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -567,7 +567,7 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
     )
     let solverURL = root.appending(path: "cancelled-symbolic-planner.sh")
     let childPIDURL = root.appending(path: "cancelled-symbolic-planner-child.pid")
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         trap '' TERM
@@ -617,7 +617,7 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
     #expect(childPID == observedChildPID)
     #expect(await waitForProcessExit(childPID, timeoutSeconds: 2.0))
 
-    let solverRun = try XcircuitePackageStore().readJSON(
+    let solverRun = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
         from: root.appending(path: result.runArtifact.path)
     )

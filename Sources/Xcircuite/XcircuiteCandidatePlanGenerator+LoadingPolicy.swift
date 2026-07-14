@@ -3,7 +3,7 @@ import DesignFlowKernel
 
 extension XcircuiteCandidatePlanGenerator {
     func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     func loadOrPersistActionDomainSnapshot(
@@ -12,7 +12,7 @@ extension XcircuiteCandidatePlanGenerator {
         projectRoot: URL
     ) throws -> ActionDomainSnapshotContext {
         let resolved = try XcircuiteActionDomainSnapshotResolver(
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             artifactStore: artifactStore
         ).loadDefaultOrPersist(
             manifest: manifest,
@@ -247,7 +247,7 @@ extension XcircuiteCandidatePlanGenerator {
         projectRoot: URL
     ) throws -> XcircuiteFileReference? {
         if let explicitPath {
-            return try packageStore.fileReference(
+            return try workspaceStore.fileReference(
                 forProjectRelativePath: explicitPath,
                 artifactID: artifactID ?? defaultArtifactID,
                 kind: .other,
@@ -290,7 +290,7 @@ extension XcircuiteCandidatePlanGenerator {
         projectRoot: URL
     ) throws -> String? {
         if let explicitPath {
-            _ = try packageStore.url(forProjectRelativePath: explicitPath, inProjectAt: projectRoot)
+            _ = try workspaceStore.url(forProjectRelativePath: explicitPath, inProjectAt: projectRoot)
             return explicitPath
         }
         guard let artifactID else {
@@ -310,7 +310,7 @@ extension XcircuiteCandidatePlanGenerator {
         path: String,
         projectRoot: URL
     ) throws -> [XcircuiteRejectedPlanRecord] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var records: [XcircuiteRejectedPlanRecord] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -332,9 +332,9 @@ extension XcircuiteCandidatePlanGenerator {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteMetricThresholdProfile {
-        let profile = try packageStore.readJSON(
+        let profile = try workspaceStore.readJSON(
             XcircuiteMetricThresholdProfile.self,
-            from: packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         )
         guard profile.runID == runID else {
             throw XcircuiteCandidatePlanGenerationError.runMismatch(
@@ -350,9 +350,9 @@ extension XcircuiteCandidatePlanGenerator {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteCostCalibrationReport {
-        let report = try packageStore.readJSON(
+        let report = try workspaceStore.readJSON(
             XcircuiteCostCalibrationReport.self,
-            from: packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         )
         guard report.runID == runID else {
             throw XcircuiteCandidatePlanGenerationError.runMismatch(
@@ -368,7 +368,7 @@ extension XcircuiteCandidatePlanGenerator {
         runID: String,
         projectRoot: URL
     ) throws -> [XcircuiteParetoCandidateSet.Candidate] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var candidates: [XcircuiteParetoCandidateSet.Candidate] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -405,7 +405,7 @@ extension XcircuiteCandidatePlanGenerator {
         projectRoot: URL
     ) throws -> String {
         if let explicitPath {
-            _ = try packageStore.url(forProjectRelativePath: explicitPath, inProjectAt: projectRoot)
+            _ = try workspaceStore.url(forProjectRelativePath: explicitPath, inProjectAt: projectRoot)
             return explicitPath
         }
         guard let artifactID else {

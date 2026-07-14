@@ -123,7 +123,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let snapshotURL = planningDirectory.appending(path: "action-domain-snapshot.json")
         try storage.writeJSON(snapshot, to: snapshotURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.actionDomainRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.actionDomainRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.actionDomainArtifactID,
@@ -153,7 +153,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let formulationURL = planningDirectory.appending(path: "repair-formulation.json")
         try storage.writeJSON(formulation, to: formulationURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.repairPlanFormulationRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.repairPlanFormulationRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.repairPlanFormulationArtifactID,
@@ -183,7 +183,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let problemURL = planningDirectory.appending(path: "problem.json")
         try storage.writeJSON(problem, to: problemURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.problemRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.problemRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.problemArtifactID,
@@ -213,7 +213,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let validationURL = planningDirectory.appending(path: "problem-validation.json")
         try storage.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.planningProblemValidationRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.planningProblemValidationRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.planningProblemValidationArtifactID,
@@ -243,7 +243,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let auditURL = planningDirectory.appending(path: "problem-translation-audit.json")
         try storage.writeJSON(audit, to: auditURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.problemTranslationAuditRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.problemTranslationAuditRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.problemTranslationAuditArtifactID,
@@ -273,7 +273,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let candidatesURL = planningDirectory.appending(path: "parameter-candidates.jsonl")
         try storage.writeText(try jsonLines(for: candidates), to: candidatesURL)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.parameterCandidatesRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.parameterCandidatesRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.parameterCandidatesArtifactID,
@@ -315,7 +315,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let prefix = existingText.isEmpty || existingText.hasSuffix("\n") ? existingText : "\(existingText)\n"
         try storage.writeText("\(prefix)\(line)\n", to: rejectedPlansURL)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.rejectedPlansRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.rejectedPlansRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.rejectedPlansArtifactID,
@@ -345,7 +345,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let traceURL = planningDirectory.appending(path: "parameter-candidate-search-trace.json")
         try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.parameterCandidateSearchTraceRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.parameterCandidateSearchTraceRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.parameterCandidateSearchTraceArtifactID,
@@ -372,7 +372,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let traceURL = planningDirectory.appending(path: "parameter-candidate-selection-trace.json")
         try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.parameterCandidateSelectionTraceRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.parameterCandidateSelectionTraceRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.parameterCandidateSelectionTraceArtifactID,
@@ -402,7 +402,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let candidatePlanURL = planningDirectory.appending(path: "candidate-plan.json")
         try storage.writeJSON(plan, to: candidatePlanURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.candidatePlanRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.candidatePlanRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.candidatePlanArtifactID,
@@ -432,7 +432,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let traceURL = planningDirectory.appending(path: "symbolic-planner-trace.json")
         try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerTraceRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerTraceRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.symbolicPlannerTraceArtifactID,
@@ -467,7 +467,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let familyRunURL = familyDirectory.appending(path: "family-run.json")
         try storage.writeJSON(familyRun, to: familyRunURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRun.familyRunID)/family-run.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRun.familyRunID)/family-run.json"
         let familyArtifactID = "\(Self.symbolicPlannerFamilyRunArtifactID)-\(String(familyRun.familyRunID.prefix(80)))"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
@@ -517,7 +517,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             projectRoot: projectRoot
         )
         let exportArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPDDLExportRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPDDLExportRelativePath)",
             artifactID: Self.symbolicPlannerPDDLExportArtifactID,
             kind: .other,
             format: .json,
@@ -562,7 +562,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeText(text, to: planURL)
 
         let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverPlanRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverPlanRelativePath)",
             artifactID: Self.symbolicPlannerSolverPlanArtifactID,
             kind: .other,
             format: .text,
@@ -593,7 +593,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
 
         let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPlanReplayValidationRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPlanReplayValidationRelativePath)",
             artifactID: Self.symbolicPlannerPlanReplayValidationArtifactID,
             kind: .other,
             format: .json,
@@ -624,7 +624,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
 
         let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverCertificateRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverCertificateRelativePath)",
             artifactID: Self.symbolicPlannerSolverCertificateArtifactID,
             kind: .other,
             format: .json,
@@ -660,7 +660,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeText(standardError, to: stderrURL)
 
         let stdoutArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStdoutRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStdoutRelativePath)",
             artifactID: Self.symbolicPlannerProofValidationStdoutArtifactID,
             kind: .other,
             format: .text,
@@ -668,7 +668,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
         let stderrArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStderrRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStderrRelativePath)",
             artifactID: Self.symbolicPlannerProofValidationStderrArtifactID,
             kind: .other,
             format: .text,
@@ -687,7 +687,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(persistedValidation, to: validationURL, forProjectAt: projectRoot)
 
         let validationArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationRelativePath)",
             artifactID: Self.symbolicPlannerProofValidationArtifactID,
             kind: .other,
             format: .json,
@@ -740,7 +740,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
 
         let stdoutArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStdoutRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStdoutRelativePath)",
             artifactID: Self.symbolicPlannerSolverStdoutArtifactID,
             kind: .other,
             format: .text,
@@ -748,7 +748,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
         let stderrArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStderrRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStderrRelativePath)",
             artifactID: Self.symbolicPlannerSolverStderrArtifactID,
             kind: .other,
             format: .text,
@@ -756,7 +756,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
             producedByRunID: runID
         )
         let runArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverRunRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverRunRelativePath)",
             artifactID: Self.symbolicPlannerSolverRunArtifactID,
             kind: .other,
             format: .json,
@@ -804,7 +804,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
 
         let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverQualificationRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverQualificationRelativePath)",
             artifactID: Self.symbolicPlannerSolverQualificationArtifactID,
             kind: .other,
             format: .json,
@@ -838,7 +838,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(comparison, to: reportURL, forProjectAt: projectRoot)
 
         let comparisonArtifactID = "\(Self.symbolicPlannerSolverFamilyComparisonArtifactID)-\(String(comparison.comparisonID.prefix(80)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparison.comparisonID)/solver-family-comparison.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparison.comparisonID)/solver-family-comparison.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: comparisonArtifactID,
@@ -874,7 +874,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(promotion, to: reportURL, forProjectAt: projectRoot)
 
         let promotionArtifactID = "\(Self.symbolicPlannerSolverFamilyPromotionArtifactID)-\(String(promotion.comparisonID.prefix(80)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(promotion.comparisonID)/solver-family-promotion.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(promotion.comparisonID)/solver-family-promotion.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: promotionArtifactID,
@@ -910,7 +910,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(batchRun, to: reportURL, forProjectAt: projectRoot)
 
         let batchArtifactID = "\(Self.symbolicPlannerSolverFamilyBatchArtifactID)-\(String(batchRun.comparisonID.prefix(80)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(batchRun.comparisonID)/solver-family-batch.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(batchRun.comparisonID)/solver-family-batch.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: batchArtifactID,
@@ -944,7 +944,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(lane, to: reportURL, forProjectAt: projectRoot)
 
         let artifactID = "\(Self.symbolicPlannerInstalledSolverLaneArtifactID)-\(String(lane.laneID.prefix(80)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/installed-solver-lane.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/installed-solver-lane.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
@@ -986,7 +986,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
 
         let artifactID = "\(Self.symbolicPlannerSolverFamilyQualificationArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-qualification.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-qualification.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
@@ -1024,7 +1024,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeText(solverPlanText, to: solverPlanURL)
 
         let artifactID = "\(Self.symbolicPlannerSolverFamilySolverPlanArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-plan.txt"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-plan.txt"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
@@ -1065,7 +1065,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
 
         let artifactID = "\(Self.symbolicPlannerSolverFamilyCertificateArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-certificate.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-certificate.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
@@ -1085,7 +1085,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
     ) throws -> XcircuiteFileReference {
         try XcircuiteIdentifierValidator().validate(suiteSpec.suiteID, kind: .artifactID)
         let suiteDirectory = try storage.url(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)",
             inProjectAt: projectRoot
         )
         try storage.ensureDirectory(at: suiteDirectory)
@@ -1093,7 +1093,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let suiteSpecURL = suiteDirectory.appending(path: "solver-qualification-corpus-suite.json")
         try storage.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)/solver-qualification-corpus-suite.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)/solver-qualification-corpus-suite.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID,
@@ -1112,7 +1112,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
     ) throws -> XcircuiteFileReference {
         try XcircuiteIdentifierValidator().validate(corpus.suiteID, kind: .artifactID)
         let corpusDirectory = try storage.url(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)",
             inProjectAt: projectRoot
         )
         try storage.ensureDirectory(at: corpusDirectory)
@@ -1120,7 +1120,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let corpusURL = corpusDirectory.appending(path: "solver-qualification-corpus.json")
         try storage.writeJSON(corpus, to: corpusURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)/solver-qualification-corpus.json"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)/solver-qualification-corpus.json"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.symbolicPlannerSolverQualificationCorpusArtifactID,
@@ -1149,7 +1149,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let verificationURL = planningDirectory.appending(path: "plan-verification.json")
         try storage.writeJSON(verification, to: verificationURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.planVerificationRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.planVerificationRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.planVerificationArtifactID,
@@ -1179,7 +1179,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let executionURL = planningDirectory.appending(path: "plan-execution.json")
         try storage.writeJSON(execution, to: executionURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.planExecutionRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.planExecutionRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.planExecutionArtifactID,
@@ -1209,7 +1209,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let loopURL = planningDirectory.appending(path: "numeric-repair-loop.json")
         try storage.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
 
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.numericRepairLoopRelativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.numericRepairLoopRelativePath)"
         let reference = try storage.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: Self.numericRepairLoopArtifactID,
@@ -1294,7 +1294,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         try storage.writeText(try jsonLines(for: candidateSet.candidates), to: candidatesURL)
 
         let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(Self.paretoCandidatesRelativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.paretoCandidatesRelativePath)",
             artifactID: Self.paretoCandidatesArtifactID,
             kind: .other,
             format: .text,
@@ -1444,7 +1444,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
         try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(relativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(relativePath)",
             artifactID: artifactID,
             kind: .other,
             format: .text,
@@ -1460,7 +1460,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
         try storage.fileReference(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/runs/\(runID)/\(relativePath)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(relativePath)",
             artifactID: artifactID,
             kind: .other,
             format: .json,

@@ -46,4 +46,4 @@ public protocol VerifiedImprovementCorpusStoring: Sendable {
     ) throws -> XcircuiteRunManifest
 }
 
-extension XcircuitePackageStore: VerifiedImprovementCorpusStoring {}
+extension XcircuiteWorkspaceStore: VerifiedImprovementCorpusStoring {}

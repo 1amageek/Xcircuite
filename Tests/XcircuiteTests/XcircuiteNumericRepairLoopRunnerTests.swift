@@ -9,8 +9,8 @@ struct XcircuiteNumericRepairLoopRunnerTests {
     @Test func numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses() async throws {
         let root = try makeTemporaryRoot("simulation-metric-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         try writeText(
             """
@@ -102,8 +102,8 @@ struct XcircuiteNumericRepairLoopRunnerTests {
     @Test func cp7FeedbackPolicyGeneratesCalibrationArtifactsBeforeRetry() async throws {
         let root = try makeTemporaryRoot("cp7-feedback-policy")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-cp7", inProjectAt: root)
         try writeText(
             """
@@ -197,9 +197,9 @@ struct XcircuiteNumericRepairLoopRunnerTests {
     @Test func numericRepairLoopDoesNotOverwriteExistingIterationArchives() async throws {
         let root = try makeTemporaryRoot("archive-overwrite-guard")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-archive-guard"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText(
             """

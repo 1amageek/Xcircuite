@@ -19,7 +19,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-process-qualification-flow-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-process-qualification-flow-run"
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let processRequest = try materializeArtifactReferences(
             try makeProcessQualificationRequest(runID: runID),
             root: root,
@@ -45,7 +45,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: store,
+            workspaceStore: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -78,7 +78,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-process-qualification-resume-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-process-qualification-resume-run"
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let processRequest = try materializeArtifactReferences(
             try makeProcessQualificationRequest(runID: runID),
             root: root,
@@ -155,7 +155,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(processRequest).write(to: requestURL)
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let requestReference = try store.fileReference(
             forProjectRelativePath: "process-qualification.json",
             artifactID: "process-qualification-input",
@@ -168,7 +168,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: store,
+            workspaceStore: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -195,7 +195,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-process-qualification-approval-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-process-qualification-approval-run"
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         var processRequest = try materializeArtifactReferences(
             try makeProcessQualificationRequest(runID: runID),
             root: root,
@@ -258,7 +258,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: store,
+            workspaceStore: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -464,7 +464,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
     private func materializeArtifactReferences(
         _ request: ElectricalSignoffProcessQualificationRequest,
         root: URL,
-        store: XcircuitePackageStore,
+        store: XcircuiteWorkspaceStore,
         runID: String
     ) throws -> ElectricalSignoffProcessQualificationRequest {
         var materialized = request
@@ -541,7 +541,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
     private func materializeEvidence(
         _ evidence: [ToolEvidence],
         root: URL,
-        store: XcircuitePackageStore,
+        store: XcircuiteWorkspaceStore,
         runID: String
     ) throws -> [ToolEvidence] {
         try evidence.map { item in
@@ -561,7 +561,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
     private func materialize(
         _ references: [ArtifactReference],
         root: URL,
-        store: XcircuitePackageStore,
+        store: XcircuiteWorkspaceStore,
         runID: String
     ) throws -> [ArtifactReference] {
         try references.map { reference in

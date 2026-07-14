@@ -3,16 +3,16 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.fileReferenceVerifier = fileReferenceVerifier
     }
@@ -44,9 +44,9 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
             expectedFormat: .text,
             missingError: .missingParameterCandidatesReference
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
         )
         guard problem.runID == request.runID else {
             throw XcircuiteParameterCandidatePlanSynthesisError.runMismatch(
@@ -773,7 +773,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         path: String,
         projectRoot: URL
     ) throws -> [XcircuiteParameterCandidate] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var candidates: [XcircuiteParameterCandidate] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -791,7 +791,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         path: String,
         projectRoot: URL
     ) throws -> [XcircuiteRejectedPlanRecord] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var records: [XcircuiteRejectedPlanRecord] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -809,7 +809,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func requiredPath(
@@ -864,7 +864,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? packageStore.fileReference(
+        let reference = try matches.first ?? workspaceStore.fileReference(
             forProjectRelativePath: explicitPath,
             artifactID: artifactID,
             kind: .other,

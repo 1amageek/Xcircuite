@@ -248,7 +248,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             return nil
         }
 
-        let audit = try context.packageStore.readJSON(
+        let audit = try context.storage.readJSON(
             RTLVerificationStageAuditRecord.self,
             from: auditURL
         )
@@ -269,7 +269,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             return nil
         }
 
-        let result = try context.packageStore.readJSON(
+        let result = try context.storage.readJSON(
             RTLVerificationResult.self,
             from: resultURL
         )
@@ -277,7 +277,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
               result.status == audit.status else {
             return nil
         }
-        let evidence = try context.packageStore.readJSON(
+        let evidence = try context.storage.readJSON(
             LogicSynthesisEquivalenceEvidence.self,
             from: evidenceURL
         )
@@ -290,7 +290,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 "The persisted logic equivalence evidence does not match the request."
             )
         }
-        let acceptance = try context.packageStore.readJSON(
+        let acceptance = try context.storage.readJSON(
             LogicSynthesisAcceptanceResult.self,
             from: acceptanceURL
         )
@@ -303,7 +303,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 "The persisted synthesis acceptance does not match the equivalence evidence."
             )
         }
-        let review = try context.packageStore.readJSON(
+        let review = try context.storage.readJSON(
             RTLVerificationReviewArtifact.self,
             from: reviewURL
         )
@@ -455,9 +455,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: directoryName)
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: fileName)
-        try context.packageStore.writeJSON(value, to: url, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(value, to: url, forProjectAt: context.projectRoot)
         return try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,

@@ -36,7 +36,7 @@ struct PDKStageExecutionSupport: Sendable {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: stageDirectory)
+        try context.storage.ensureDirectory(at: stageDirectory)
         let outputURL = stageDirectory.appending(path: "pdk-result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

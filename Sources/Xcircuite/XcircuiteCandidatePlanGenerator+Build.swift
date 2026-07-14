@@ -15,9 +15,9 @@ extension XcircuiteCandidatePlanGenerator {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
         )
         guard problem.runID == request.runID else {
             throw XcircuiteCandidatePlanGenerationError.runMismatch(
@@ -116,7 +116,7 @@ extension XcircuiteCandidatePlanGenerator {
             )
         }
 
-        let familyDirectory = try XcircuitePackage(projectRoot: projectRoot)
+        let familyDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
             .runDirectoryURL(for: request.runID)
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
@@ -161,7 +161,7 @@ extension XcircuiteCandidatePlanGenerator {
         projectRoot: URL
     ) throws -> FamilyCandidateArtifacts {
         let slotID = familyCandidateSlotID(index: candidateIndex, strategy: requestedStrategy)
-        let runDirectory = try XcircuitePackage(projectRoot: projectRoot).runDirectoryURL(for: build.problem.runID)
+        let runDirectory = try XcircuiteWorkspace(projectRoot: projectRoot).runDirectoryURL(for: build.problem.runID)
         let candidateDirectory = runDirectory
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
@@ -169,17 +169,17 @@ extension XcircuiteCandidatePlanGenerator {
             .appending(path: familyRunID)
             .appending(path: "candidates")
             .appending(path: slotID)
-        try packageStore.ensureDirectory(at: candidateDirectory)
+        try workspaceStore.ensureDirectory(at: candidateDirectory)
         let planURL = candidateDirectory.appending(path: "candidate-plan.json")
         let traceURL = candidateDirectory.appending(path: "symbolic-planner-trace.json")
-        try packageStore.writeJSON(build.draft.plan, to: planURL, forProjectAt: projectRoot)
-        try packageStore.writeJSON(build.draft.trace, to: traceURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(build.draft.plan, to: planURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(build.draft.trace, to: traceURL, forProjectAt: projectRoot)
 
         let basePath = symbolicPlannerFamilyPathPrefix(
             runID: build.problem.runID,
             familyRunID: familyRunID
         ) + "candidates/\(slotID)"
-        let planArtifact = try packageStore.fileReference(
+        let planArtifact = try workspaceStore.fileReference(
             forProjectRelativePath: "\(basePath)/candidate-plan.json",
             artifactID: familyCandidateArtifactID(
                 prefix: "planning-symbolic-planner-family-candidate-plan",
@@ -191,7 +191,7 @@ extension XcircuiteCandidatePlanGenerator {
             inProjectAt: projectRoot,
             producedByRunID: build.problem.runID
         )
-        let traceArtifact = try packageStore.fileReference(
+        let traceArtifact = try workspaceStore.fileReference(
             forProjectRelativePath: "\(basePath)/symbolic-planner-trace.json",
             artifactID: familyCandidateArtifactID(
                 prefix: "planning-symbolic-planner-family-candidate-trace",
@@ -203,8 +203,8 @@ extension XcircuiteCandidatePlanGenerator {
             inProjectAt: projectRoot,
             producedByRunID: build.problem.runID
         )
-        try packageStore.upsertRunArtifact(planArtifact, runID: build.problem.runID, inProjectAt: projectRoot)
-        try packageStore.upsertRunArtifact(traceArtifact, runID: build.problem.runID, inProjectAt: projectRoot)
+        try workspaceStore.upsertRunArtifact(planArtifact, runID: build.problem.runID, inProjectAt: projectRoot)
+        try workspaceStore.upsertRunArtifact(traceArtifact, runID: build.problem.runID, inProjectAt: projectRoot)
         return FamilyCandidateArtifacts(plan: planArtifact, trace: traceArtifact)
     }
 
@@ -382,7 +382,7 @@ extension XcircuiteCandidatePlanGenerator {
     }
 
     func symbolicPlannerFamilyPathPrefix(runID: String, familyRunID: String) -> String {
-        "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRunID)/"
+        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRunID)/"
     }
 
     func familyCandidateArtifactID(prefix: String, familyRunID: String, slotID: String) -> String {

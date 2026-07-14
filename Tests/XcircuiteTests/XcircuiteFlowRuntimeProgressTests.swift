@@ -294,7 +294,7 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: root
         )
         #expect(ledger.progressEvents.map(\.sequence) == expectedSequences)
-        let manifest = try XcircuitePackageStore().readJSON(
+        let manifest = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteRunManifest.self,
             from: root.appending(path: ".xcircuite/runs/run-progress-drc-stress/manifest.json")
         )
@@ -525,7 +525,7 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: root
         )
         #expect(ledger.progressEvents.map(\.sequence) == expectedSequences)
-        let manifest = try XcircuitePackageStore().readJSON(
+        let manifest = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteRunManifest.self,
             from: root.appending(path: ".xcircuite/runs/run-progress-multifamily-stress/manifest.json")
         )

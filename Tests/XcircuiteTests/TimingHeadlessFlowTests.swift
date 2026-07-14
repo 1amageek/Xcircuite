@@ -168,15 +168,15 @@ struct TimingHeadlessFlowTests {
     }
 
     private func makeContext(projectRoot: URL, runID: String) throws -> FlowExecutionContext {
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
         let runDirectory = projectRoot.appending(path: ".xcircuite/runs/\(runID)")
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
         return FlowExecutionContext(
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

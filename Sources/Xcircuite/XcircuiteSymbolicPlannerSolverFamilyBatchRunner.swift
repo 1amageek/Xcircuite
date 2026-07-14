@@ -3,20 +3,20 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let qualifier: XcircuiteSymbolicPlannerSolverQualifier
     private let comparator: XcircuiteSymbolicPlannerSolverFamilyComparator
     private let promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         qualifier: XcircuiteSymbolicPlannerSolverQualifier = XcircuiteSymbolicPlannerSolverQualifier(),
         comparator: XcircuiteSymbolicPlannerSolverFamilyComparator = XcircuiteSymbolicPlannerSolverFamilyComparator(),
         promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter = XcircuiteSymbolicPlannerSolverFamilyPromoter()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.qualifier = qualifier
         self.comparator = comparator
@@ -360,6 +360,6 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         if path.hasPrefix("/") {
             return URL(filePath: path)
         }
-        return try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        return try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
     }
 }

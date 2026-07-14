@@ -15,8 +15,8 @@ struct RTLVerificationFlowStageExecutorTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appending(path: "rtl-verification-stage-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
         let rtlURL = projectRoot.appending(path: "top.sv")
         let source = "module top(input logic a, output logic q); assign q = a; endmodule"
         try source.write(to: rtlURL, atomically: true, encoding: .utf8)
@@ -24,13 +24,13 @@ struct RTLVerificationFlowStageExecutorTests {
             .appending(path: ".xcircuite")
             .appending(path: "runs")
             .appending(path: "rtl-stage-run")
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
 
         let context = FlowExecutionContext(
             projectRoot: projectRoot,
             runID: "rtl-stage-run",
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -58,8 +58,8 @@ struct RTLVerificationFlowStageExecutorTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appending(path: "rtl-verification-resume-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
         let rtlURL = projectRoot.appending(path: "top.sv")
         try "module top(input logic a, output logic q); assign q = a; endmodule"
             .write(to: rtlURL, atomically: true, encoding: .utf8)
@@ -67,12 +67,12 @@ struct RTLVerificationFlowStageExecutorTests {
             .appending(path: ".xcircuite")
             .appending(path: "runs")
             .appending(path: "rtl-resume-run")
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
         let context = FlowExecutionContext(
             projectRoot: projectRoot,
             runID: "rtl-resume-run",
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -99,20 +99,20 @@ struct RTLVerificationFlowStageExecutorTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appending(path: "rtl-verification-tool-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
         try "module top(input logic a, output logic q); assign q = a; endmodule"
             .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
         let runDirectory = projectRoot
             .appending(path: ".xcircuite")
             .appending(path: "runs")
             .appending(path: "rtl-tool-gate-run")
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
         let context = FlowExecutionContext(
             projectRoot: projectRoot,
             runID: "rtl-tool-gate-run",
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -142,8 +142,8 @@ struct RTLVerificationFlowStageExecutorTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appending(path: "rtl-verification-qualification-input-(UUID().uuidString)")
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
         try "module top(input logic a, output logic q); assign q = a; endmodule"
             .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
         let qualificationInput = RTLVerificationQualificationInput()
@@ -153,12 +153,12 @@ struct RTLVerificationFlowStageExecutorTests {
             .appending(path: ".xcircuite")
             .appending(path: "runs")
             .appending(path: "rtl-qualification-input-run")
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
         let context = FlowExecutionContext(
             projectRoot: projectRoot,
             runID: "rtl-qualification-input-run",
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -188,8 +188,8 @@ struct RTLVerificationFlowStageExecutorTests {
         let projectRoot = FileManager.default.temporaryDirectory
             .appending(path: "rtl-verification-qualification-integrity-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
         try "module top(input logic a, output logic q); assign q = a; endmodule"
             .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
 
@@ -220,12 +220,12 @@ struct RTLVerificationFlowStageExecutorTests {
             .appending(path: ".xcircuite")
             .appending(path: "runs")
             .appending(path: runID)
-        try packageStore.ensureDirectory(at: runDirectory)
+        try workspaceStore.ensureDirectory(at: runDirectory)
         let context = FlowExecutionContext(
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -409,22 +409,22 @@ private func makeRTLStageFixture(
     let projectRoot = FileManager.default.temporaryDirectory
         .appending(path: "rtl-oracle-fixture-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-    let packageStore = XcircuitePackageStore()
-    try packageStore.ensurePackageDirectory(forProjectAt: projectRoot)
+    let workspaceStore = XcircuiteWorkspaceStore()
+    try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
     try "module top(input logic a, output logic q); assign q = a; endmodule"
         .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
     let runDirectory = projectRoot
         .appending(path: ".xcircuite")
         .appending(path: "runs")
         .appending(path: runID)
-    try packageStore.ensureDirectory(at: runDirectory)
+    try workspaceStore.ensureDirectory(at: runDirectory)
     return (
         projectRoot,
         FlowExecutionContext(
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             toolRegistry: toolRegistry,
             healthResults: healthResults
         )

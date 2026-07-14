@@ -221,14 +221,14 @@ extension XcircuiteCandidatePlanVerifier {
     ) throws -> XcircuiteCircuitPlanningProblem? {
         let problemURL: URL
         if let path = plan.sourceProblemRef.path {
-            problemURL = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            problemURL = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         } else if let artifactID = plan.sourceProblemRef.artifactID,
                   let artifact = manifest.artifacts.first(where: { $0.artifactID == artifactID }) {
-            problemURL = try packageStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
+            problemURL = try workspaceStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
         } else {
             return nil
         }
-        let problem = try packageStore.readJSON(XcircuiteCircuitPlanningProblem.self, from: problemURL)
+        let problem = try workspaceStore.readJSON(XcircuiteCircuitPlanningProblem.self, from: problemURL)
         guard problem.runID == plan.runID else {
             throw CandidatePlanGateExecutionError.sourceProblemRunMismatch(
                 expected: plan.runID,
@@ -244,11 +244,11 @@ extension XcircuiteCandidatePlanVerifier {
         projectRoot: URL
     ) throws -> URL {
         if let path = reference.path {
-            return try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            return try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         }
         if let artifactID = reference.artifactID,
            let artifact = manifest.artifacts.first(where: { $0.artifactID == artifactID }) {
-            return try packageStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
+            return try workspaceStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
         }
         throw CandidatePlanGateExecutionError.planningReferencePathMissing(reference.refID)
     }

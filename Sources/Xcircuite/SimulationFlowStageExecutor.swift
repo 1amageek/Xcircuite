@@ -61,7 +61,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
-            try context.packageStore.ensureDirectory(at: rawDirectory)
+            try context.storage.ensureDirectory(at: rawDirectory)
             try context.checkCancellation()
 
             // The run captures its own input: the netlist is copied in
@@ -72,7 +72,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             )
             let source = try String(contentsOf: resolvedNetlistURL, encoding: .utf8)
             let netlistCopy = rawDirectory.appending(path: "input-netlist.cir")
-            try context.packageStore.writeText(source, to: netlistCopy)
+            try context.storage.writeText(source, to: netlistCopy)
             try context.checkCancellation()
 
             let outcome = try await engine.run(
@@ -82,9 +82,9 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             try context.checkCancellation()
 
             let waveformURL = rawDirectory.appending(path: "waveform.csv")
-            try context.packageStore.writeText(outcome.waveformCSV, to: waveformURL)
+            try context.storage.writeText(outcome.waveformCSV, to: waveformURL)
             let measurementsURL = rawDirectory.appending(path: "measurements.json")
-            try context.packageStore.writeJSON(
+            try context.storage.writeJSON(
                 outcome.measurements,
                 to: measurementsURL,
                 forProjectAt: context.projectRoot
@@ -102,7 +102,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 gateStatus: gateStatus,
                 diagnostics: diagnostics
             )
-            try context.packageStore.writeJSON(
+            try context.storage.writeJSON(
                 summary,
                 to: summaryURL,
                 forProjectAt: context.projectRoot

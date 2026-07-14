@@ -9,8 +9,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesizeParameterCandidatePlanCLIAndExecuteNetlistEdit() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-synthesis")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -112,8 +112,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func missingCandidateRankFailsWithoutReplacingCandidatePlan() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-missing-rank")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-2", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-2", withBounds: true),
@@ -147,8 +147,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisRejectsStaleParameterCandidatesArtifact() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-stale-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-stale", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -195,8 +195,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisSkipsRejectedCandidateFeedbackUnlessExplicitlyIncluded() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-3", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -297,8 +297,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisDoesNotExcludeBlockedCandidateFeedback() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-blocked-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-4", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -364,8 +364,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisRanksEligibleCandidatesWithFeedbackPenalty() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-feedback-ranking")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-5", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -446,8 +446,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisUsesCostModelFeedbackWeightingPolicy() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-feedback-weighting")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-6", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -533,8 +533,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisAppliesGlobalRejectedPlanFeedbackToMatchingVerificationGate() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-global-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-8", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(
@@ -613,8 +613,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisRejectsInvalidFeedbackWeightingPolicy() throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-invalid-feedback-weighting")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-7", inProjectAt: root)
         try store.ensureDirectory(at: root.appending(path: "circuits"))
         try store.writeText(

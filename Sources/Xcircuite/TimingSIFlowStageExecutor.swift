@@ -117,7 +117,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
         let directory = context.runDirectory.appending(path: "stages").appending(path: stageID).appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: "timing-signal-integrity-result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

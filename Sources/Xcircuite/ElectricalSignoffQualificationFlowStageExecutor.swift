@@ -94,16 +94,16 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             let artifactRoot = ".xcircuite/runs/\(context.runID)/qualification"
             let specPath = "\(artifactRoot)/electrical-signoff-spec.json"
             let reportPath = "\(artifactRoot)/electrical-signoff-report.json"
-            let specOutputURL = try context.packageStore.url(
+            let specOutputURL = try context.storage.url(
                 forProjectRelativePath: specPath,
                 inProjectAt: context.projectRoot
             )
-            let reportURL = try context.packageStore.url(
+            let reportURL = try context.storage.url(
                 forProjectRelativePath: reportPath,
                 inProjectAt: context.projectRoot
             )
-            try context.packageStore.ensureDirectory(at: reportURL.deletingLastPathComponent())
-            try context.packageStore.writeJSON(spec, to: specOutputURL, forProjectAt: context.projectRoot)
+            try context.storage.ensureDirectory(at: reportURL.deletingLastPathComponent())
+            try context.storage.writeJSON(spec, to: specOutputURL, forProjectAt: context.projectRoot)
             let specReference = try foundationReference(
                 forProjectRelativePath: specPath,
                 artifactID: "electrical-signoff-qualification-spec",
@@ -113,7 +113,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 producedByRunID: context.runID,
                 verifiedByRunID: context.runID
             )
-            try context.packageStore.writeJSON(report, to: reportURL, forProjectAt: context.projectRoot)
+            try context.storage.writeJSON(report, to: reportURL, forProjectAt: context.projectRoot)
             let reportReference = try foundationReference(
                 forProjectRelativePath: reportPath,
                 artifactID: "electrical-signoff-qualification-report",
@@ -131,11 +131,11 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             )
             try inputManifest.validate()
             let inputManifestPath = "\(artifactRoot)/electrical-signoff-inputs.json"
-            let inputManifestURL = try context.packageStore.url(
+            let inputManifestURL = try context.storage.url(
                 forProjectRelativePath: inputManifestPath,
                 inProjectAt: context.projectRoot
             )
-            try context.packageStore.writeJSON(inputManifest, to: inputManifestURL, forProjectAt: context.projectRoot)
+            try context.storage.writeJSON(inputManifest, to: inputManifestURL, forProjectAt: context.projectRoot)
             let inputManifestReference = try foundationReference(
                 forProjectRelativePath: inputManifestPath,
                 artifactID: "electrical-signoff-input-manifest",
@@ -153,11 +153,11 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 checkedAt: report.generatedAt
             )
             let evidencePath = "\(artifactRoot)/electrical-signoff-tool-evidence.json"
-            let evidenceURL = try context.packageStore.url(
+            let evidenceURL = try context.storage.url(
                 forProjectRelativePath: evidencePath,
                 inProjectAt: context.projectRoot
             )
-            try context.packageStore.writeJSON(evidence, to: evidenceURL, forProjectAt: context.projectRoot)
+            try context.storage.writeJSON(evidence, to: evidenceURL, forProjectAt: context.projectRoot)
             let evidenceReference = try foundationReference(
                 forProjectRelativePath: evidencePath,
                 artifactID: "electrical-signoff-tool-evidence",
@@ -343,10 +343,10 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
 
         let suitePath = "\(artifactRoot)/electrical-signoff-suite.json"
         let reportPath = "\(artifactRoot)/electrical-signoff-retained-report.json"
-        let suiteURL = try context.packageStore.url(forProjectRelativePath: suitePath, inProjectAt: context.projectRoot)
-        let retainedReportURL = try context.packageStore.url(forProjectRelativePath: reportPath, inProjectAt: context.projectRoot)
-        try context.packageStore.writeJSON(suite, to: suiteURL, forProjectAt: context.projectRoot)
-        try context.packageStore.writeJSON(retainedReport, to: retainedReportURL, forProjectAt: context.projectRoot)
+        let suiteURL = try context.storage.url(forProjectRelativePath: suitePath, inProjectAt: context.projectRoot)
+        let retainedReportURL = try context.storage.url(forProjectRelativePath: reportPath, inProjectAt: context.projectRoot)
+        try context.storage.writeJSON(suite, to: suiteURL, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(retainedReport, to: retainedReportURL, forProjectAt: context.projectRoot)
         let suiteReference = try foundationReference(
             forProjectRelativePath: suitePath,
             artifactID: "electrical-signoff-retained-suite",
@@ -440,23 +440,23 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         let stdoutPath = "\(artifactRoot)/stdout.txt"
         let stderrPath = "\(artifactRoot)/stderr.txt"
         let executionPath = "\(artifactRoot)/execution.json"
-        let outputURL = try context.packageStore.url(
+        let outputURL = try context.storage.url(
             forProjectRelativePath: outputPath,
             inProjectAt: context.projectRoot
         )
-        let stdoutURL = try context.packageStore.url(
+        let stdoutURL = try context.storage.url(
             forProjectRelativePath: stdoutPath,
             inProjectAt: context.projectRoot
         )
-        let stderrURL = try context.packageStore.url(
+        let stderrURL = try context.storage.url(
             forProjectRelativePath: stderrPath,
             inProjectAt: context.projectRoot
         )
-        let executionURL = try context.packageStore.url(
+        let executionURL = try context.storage.url(
             forProjectRelativePath: executionPath,
             inProjectAt: context.projectRoot
         )
-        try context.packageStore.ensureDirectory(at: outputURL.deletingLastPathComponent())
+        try context.storage.ensureDirectory(at: outputURL.deletingLastPathComponent())
         let workingDirectory = configuration.resolvedWorkingDirectory(projectRoot: context.projectRoot)
         let arguments = configuration.expandedArguments(
             specPath: specURL.path(percentEncoded: false),
@@ -480,8 +480,8 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
-            try context.packageStore.writeText("", to: stdoutURL)
-            try context.packageStore.writeText(error.localizedDescription, to: stderrURL)
+            try context.storage.writeText("", to: stdoutURL)
+            try context.storage.writeText(error.localizedDescription, to: stderrURL)
             let execution = ElectricalSignoffOracleProcessExecution(
                 runID: context.runID,
                 executablePath: configuration.executablePath,
@@ -497,14 +497,14 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
                 completedAt: Date(),
                 message: error.localizedDescription
             )
-            try context.packageStore.writeJSON(execution, to: executionURL, forProjectAt: context.projectRoot)
+            try context.storage.writeJSON(execution, to: executionURL, forProjectAt: context.projectRoot)
             throw ElectricalSignoffQualificationFlowError.externalOracleProcessFailed(
                 error.localizedDescription
             )
         }
 
-        try context.packageStore.writeText(processResult.standardOutput, to: stdoutURL)
-        try context.packageStore.writeText(processResult.standardError, to: stderrURL)
+        try context.storage.writeText(processResult.standardOutput, to: stdoutURL)
+        try context.storage.writeText(processResult.standardError, to: stderrURL)
         let processSucceeded = processResult.exitCode == 0
         let execution = ElectricalSignoffOracleProcessExecution(
             runID: context.runID,
@@ -521,7 +521,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
             completedAt: Date(),
             message: processSucceeded ? nil : "External oracle process exited with code \(processResult.exitCode)."
         )
-        try context.packageStore.writeJSON(execution, to: executionURL, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(execution, to: executionURL, forProjectAt: context.projectRoot)
         guard processSucceeded else {
             throw ElectricalSignoffQualificationFlowError.externalOracleProcessFailed(
                 "External oracle process exited with code \(processResult.exitCode)."
@@ -605,7 +605,7 @@ public struct ElectricalSignoffQualificationFlowStageExecutor: FlowStageExecutor
         var references: [ArtifactReference] = []
         for (fileName, artifactID, format) in descriptors {
             let relativePath = "\(artifactRoot)/\(fileName)"
-            let url = try context.packageStore.url(
+            let url = try context.storage.url(
                 forProjectRelativePath: relativePath,
                 inProjectAt: context.projectRoot
             )

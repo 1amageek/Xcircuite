@@ -350,14 +350,14 @@ struct SimulationFlowStageExecutorTests {
     @Test func stageArtifactInputDigestMismatchReturnsStructuredDiagnostic() async throws {
         let root = try makeTemporaryRoot("sim-stage-artifact-digest")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-sim-input-digest", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-sim-input-digest", inProjectAt: root)
         let producerRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "005-netlist")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: producerRawDirectory)
+        try workspaceStore.ensureDirectory(at: producerRawDirectory)
         let netlistURL = producerRawDirectory.appending(path: "input.cir")
         let netlistData = Data(rcNetlist.utf8)
         try netlistData.write(to: netlistURL, options: [.atomic])
@@ -365,7 +365,7 @@ struct SimulationFlowStageExecutorTests {
         let producerStageDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "005-netlist")
-        try packageStore.writeJSON(
+        try workspaceStore.writeJSON(
             FlowStageResult(
                 stageID: "005-netlist",
                 status: .succeeded,
@@ -401,7 +401,7 @@ struct SimulationFlowStageExecutorTests {
                 projectRoot: root,
                 runID: "run-sim-input-digest",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

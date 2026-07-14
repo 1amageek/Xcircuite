@@ -10,8 +10,8 @@ struct XcircuiteAgentLoopCLITests {
         let root = try makeTemporaryRoot("missing-evidence")
         defer { removeTemporaryRoot(root) }
         let runID = "run-xcircuite-agent-loop"
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.ensureRunDirectory(for: runID, inProjectAt: root)
         try store.appendRunAction(
             XcircuiteRunActionRecord(
@@ -57,8 +57,8 @@ struct XcircuiteAgentLoopCLITests {
         let root = try makeTemporaryRoot("compare-artifacts")
         defer { removeTemporaryRoot(root) }
         let runID = "run-xcircuite-compare-artifacts"
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.ensureRunDirectory(for: runID, inProjectAt: root)
         try writeSimulationSummaryEnvelope(root: root, runID: runID)
 
@@ -104,7 +104,7 @@ struct XcircuiteAgentLoopCLITests {
     }
 
     private func writeSimulationSummaryEnvelope(root: URL, runID: String) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let summaryPath = ".xcircuite/runs/\(runID)/evidence/simulation-summary.json"
         let summaryURL = root.appending(path: summaryPath)
         try FileManager.default.createDirectory(

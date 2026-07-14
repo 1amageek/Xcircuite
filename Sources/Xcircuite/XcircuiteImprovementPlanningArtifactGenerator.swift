@@ -9,14 +9,14 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         var verification: XcircuitePlanVerification?
     }
 
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
     }
 
@@ -32,9 +32,9 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             manifest: manifest,
             missingError: .missingNumericRepairLoopReference
         )
-        let loop = try packageStore.readJSON(
+        let loop = try workspaceStore.readJSON(
             XcircuiteNumericRepairLoopResult.self,
-            from: packageStore.url(forProjectRelativePath: loopPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: loopPath, inProjectAt: projectRoot)
         )
         guard loop.runID == request.runID else {
             throw XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(
@@ -491,7 +491,7 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         var records: [XcircuiteRejectedPlanRecord] = []
         let decoder = JSONDecoder()
         for path in paths {
-            let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
             }
@@ -622,14 +622,14 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         guard let reference else {
             return nil
         }
-        return try packageStore.readJSON(
+        return try workspaceStore.readJSON(
             T.self,
             from: try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
         )
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadProblem(
@@ -638,9 +638,9 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         loopProblemID: String?,
         projectRoot: URL
     ) throws -> XcircuiteCircuitPlanningProblem {
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         )
         guard problem.runID == runID else {
             throw XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(

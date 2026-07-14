@@ -133,7 +133,7 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
         guard integrity.status == .verified else {
             throw XcircuiteElectricalRepairRevisionError.sourceIntegrity(integrity.message)
         }
-        let url = try XcircuitePackage(projectRoot: context.projectRoot)
+        let url = try XcircuiteWorkspace(projectRoot: context.projectRoot)
             .url(forProjectRelativePath: request.repairPlanArtifact.path)
         do {
             return try JSONDecoder().decode(
@@ -203,9 +203,9 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
         let relativePath = ".xcircuite/runs/\(context.runID)/electrical-signoff/repair-revision.json"
-        let url = try context.packageStore.url(forProjectRelativePath: relativePath, inProjectAt: context.projectRoot)
-        try context.packageStore.ensureDirectory(at: url.deletingLastPathComponent())
-        try context.packageStore.writeJSON(result, to: url, forProjectAt: context.projectRoot)
+        let url = try context.storage.url(forProjectRelativePath: relativePath, inProjectAt: context.projectRoot)
+        try context.storage.ensureDirectory(at: url.deletingLastPathComponent())
+        try context.storage.writeJSON(result, to: url, forProjectAt: context.projectRoot)
         return try StageArtifactReferenceBuilder().reference(
             for: url,
             projectRoot: context.projectRoot,

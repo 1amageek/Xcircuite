@@ -3,19 +3,19 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.fileReferenceVerifier = fileReferenceVerifier
     }
 
     func runManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     func uniqueManifestArtifact(
@@ -59,7 +59,7 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteFileReference {
-        let reference = try packageStore.fileReference(
+        let reference = try workspaceStore.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,

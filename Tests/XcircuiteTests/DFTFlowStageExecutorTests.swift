@@ -825,7 +825,7 @@ struct DFTFlowStageExecutorTests {
         #expect(resumed.result.stages.first?.gates.contains {
             $0.gateID == "dft-release" && $0.status == .passed
         } == true)
-        let manifest = try XcircuitePackageStore().loadRunManifest(
+        let manifest = try XcircuiteWorkspaceStore().loadRunManifest(
             runID: fixture.request.runID,
             inProjectAt: fixture.root
         )
@@ -1032,7 +1032,7 @@ struct DFTFlowStageExecutorTests {
             "dft.release-evidence",
             "dft.release",
         ])
-        let manifest = try XcircuitePackageStore().loadRunManifest(
+        let manifest = try XcircuiteWorkspaceStore().loadRunManifest(
             runID: fixture.request.runID,
             inProjectAt: fixture.root
         )
@@ -1413,7 +1413,7 @@ struct DFTFlowStageExecutorTests {
 
     private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
         let runDirectory = root
-            .appending(path: XcircuitePackage.directoryName)
+            .appending(path: XcircuiteWorkspace.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         do {
@@ -1425,7 +1425,7 @@ struct DFTFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

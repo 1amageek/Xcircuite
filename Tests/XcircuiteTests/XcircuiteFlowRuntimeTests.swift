@@ -135,7 +135,7 @@ extension XcircuiteFlowRuntimeTests {
         })
         #expect(reportArtifact.sha256.isEmpty == false)
         #expect(reportArtifact.byteCount > 0)
-        let report = try XcircuitePackageStore().readJSON(
+        let report = try XcircuiteWorkspaceStore().readJSON(
             PostLayoutComparisonReport.self,
             from: root.appending(path: reportArtifact.path)
         )
@@ -195,7 +195,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(stage.attempts[1].retryDecision.reason == .stageDidNotFail)
         #expect(stage.artifacts.contains { $0.artifactID == "007-drc-attempts" })
 
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let attempts = try store.readJSON(
             [FlowStageAttemptRecord].self,
             from: root.appending(path: ".xcircuite/runs/run-drc-retry/stages/007-drc/attempts.json")
@@ -259,7 +259,7 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
 
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let snapshotPath = ".xcircuite/runs/run-1/planning/action-domain-snapshot.json"
         let snapshot = try store.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
@@ -437,7 +437,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(resumed.summary.toolchain?.profileArtifactPath == ".xcircuite/runs/run-1/toolchain-profile.json")
         #expect(resumed.summary.nextActions.map(\.kind) == ["archiveOrContinue"])
 
-        let persistedProfile = try XcircuitePackageStore().readJSON(
+        let persistedProfile = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteFlowToolchainProfile.self,
             from: root.appending(path: ".xcircuite/runs/run-1/toolchain-profile.json")
         )

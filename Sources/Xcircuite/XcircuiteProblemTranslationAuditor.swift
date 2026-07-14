@@ -8,28 +8,28 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
         var clauseID: String
     }
 
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.fileReferenceVerifier = fileReferenceVerifier
     }
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         actionDomainSnapshotBuilder: XcircuiteActionDomainSnapshotBuilder,
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = XcircuitePlanningArtifactStore(
-            storage: packageStore,
+            storage: workspaceStore,
             snapshotBuilder: actionDomainSnapshotBuilder
         )
         self.fileReferenceVerifier = fileReferenceVerifier
@@ -48,9 +48,9 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
         )
         guard problem.runID == request.runID else {
             throw XcircuiteProblemTranslationAuditError.runMismatch(
@@ -874,7 +874,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadOrPersistActionDomainSnapshot(
@@ -883,7 +883,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
         projectRoot: URL
     ) throws -> XcircuitePlanningActionDomainSnapshot {
         try XcircuiteActionDomainSnapshotResolver(
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             artifactStore: artifactStore
         ).loadDefaultOrPersist(
             manifest: manifest,
@@ -939,7 +939,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? packageStore.fileReference(
+        let reference = try matches.first ?? workspaceStore.fileReference(
             forProjectRelativePath: explicitPath,
             artifactID: artifactID,
             kind: .other,

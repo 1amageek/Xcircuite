@@ -371,7 +371,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             return try decode(data, as: DFTReleaseReviewApproval.self)
         }
 
-        guard let record = try context.packageStore.loadApproval(
+        guard let record = try context.storage.loadApproval(
             runID: context.runID,
             stageID: stageID,
             inProjectAt: context.projectRoot
@@ -420,7 +420,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: fileName)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -551,7 +551,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 "stage-bound process qualification evidence has no persisted source stage result"
             )
         }
-        let result = try context.packageStore.readJSON(
+        let result = try context.storage.readJSON(
             FlowStageResult.self,
             from: resultURL
         )

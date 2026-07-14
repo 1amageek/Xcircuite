@@ -21,7 +21,7 @@ struct EndToEndDesignFlowTests {
     func retainedMultiEngineRunResumesAfterReview() async throws {
         let root = try makeRoot(name: "end-to-end-design-flow")
         defer { removeRoot(root) }
-        try XcircuitePackageStore().ensurePackageDirectory(forProjectAt: root)
+        try XcircuiteWorkspaceStore().ensureWorkspaceDirectory(forProjectAt: root)
 
         let runID = "end-to-end-design-flow"
         let snapshot = try LogicDesignSnapshotCodec.finalized(LogicDesignSnapshot(
@@ -141,7 +141,7 @@ struct EndToEndDesignFlowTests {
             root: root,
             kind: .technology
         )
-        let constraintsLegacyReference = try XcircuitePackageStore().fileReference(
+        let constraintsLegacyReference = try XcircuiteWorkspaceStore().fileReference(
             forProjectRelativePath: "constraints.sdc",
             artifactID: "e2e-constraints",
             kind: .constraint,

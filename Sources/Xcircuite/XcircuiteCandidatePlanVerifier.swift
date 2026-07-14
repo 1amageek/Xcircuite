@@ -8,7 +8,7 @@ import DesignFlowKernel
 import CircuiteFoundation
 
 public struct XcircuiteCandidatePlanVerifier: Sendable {
-    let packageStore: XcircuitePackageStore
+    let workspaceStore: XcircuiteWorkspaceStore
     let artifactStore: XcircuitePlanningArtifactStore
     let artifactBuilder: StageArtifactReferenceBuilder
     let layoutDocumentSerializer: LayoutDocumentSerializer
@@ -16,11 +16,11 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
     let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactBuilder = StageArtifactReferenceBuilder()
         self.layoutDocumentSerializer = LayoutDocumentSerializer()
@@ -50,7 +50,7 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
                 reason: "candidate plan path cannot be resolved inside the project root."
             )
         }
-        let plan = try packageStore.readJSON(
+        let plan = try workspaceStore.readJSON(
             XcircuiteCandidatePlan.self,
             from: candidatePlanURL
         )
@@ -67,7 +67,7 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
         let planningProblemValidationRef = manifest.artifacts.first {
             $0.artifactID == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID
         }
-        let approvals = try packageStore.loadApprovals(
+        let approvals = try workspaceStore.loadApprovals(
             runID: request.runID,
             inProjectAt: projectRoot
         )

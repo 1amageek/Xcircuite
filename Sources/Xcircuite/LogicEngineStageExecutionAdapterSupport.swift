@@ -22,9 +22,9 @@ struct LogicEngineStageExecutionSupport: Sendable {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: outputDirectory)
+        try context.storage.ensureDirectory(at: outputDirectory)
         let outputURL = outputDirectory.appending(path: fileName)
-        try context.packageStore.writeJSON(result, to: outputURL, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(result, to: outputURL, forProjectAt: context.projectRoot)
         return try artifactBuilder.reference(
             for: outputURL,
             projectRoot: context.projectRoot,

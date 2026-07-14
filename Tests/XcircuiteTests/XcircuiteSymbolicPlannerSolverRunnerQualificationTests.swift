@@ -81,7 +81,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(evidence.qualification?.qualified == true)
     #expect(evidence.artifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationArtifactID)
 
-    let manifest = try XcircuitePackageStore().readJSON(
+    let manifest = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteRunManifest.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
     )
@@ -91,7 +91,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(manifestQualificationArtifact.sha256 != nil)
     #expect(manifestQualificationArtifact.byteCount != nil)
 
-    let persisted = try XcircuitePackageStore().readJSON(
+    let persisted = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverQualificationResult.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-qualification.json")
     )
@@ -166,7 +166,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(evidence.observedCounts["solverCostClaimCount"] == 1)
     #expect(evidence.failureCodes == [])
 
-    let persisted = try XcircuitePackageStore().readJSON(
+    let persisted = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverQualificationResult.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-qualification.json")
     )
@@ -175,7 +175,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(persisted.planCostEvaluation?.evaluatedCost == 1)
     #expect(persisted.planReplayValidation?.status == "validated")
 
-    let persistedReplay = try XcircuitePackageStore().readJSON(
+    let persistedReplay = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerPlanReplayValidation.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/plan-replay-validation.json")
     )
@@ -197,7 +197,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         planText: "0.000: (a-fix-m1-width) [1.000]\\n"
     )
     let certificatePath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/native-certificate.json"
-    try XcircuitePackageStore().writeJSON(
+    try XcircuiteWorkspaceStore().writeJSON(
         XcircuiteSymbolicPlannerSolverCertificate(
             certificateID: "certificate-1",
             solverName: "mock-native-certificate-planner",
@@ -264,7 +264,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(evidence.observedCounts["nativeCertificateProofValidatedCount"] == 1)
     #expect(evidence.failureCodes == [])
 
-    let persistedCertificate = try XcircuitePackageStore().readJSON(
+    let persistedCertificate = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverCertificateParseResult.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-certificate.json")
     )
@@ -312,7 +312,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         planText: "0.000: (a-fix-m1-width) [1.000]\\n"
     )
     let certificatePath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/native-certificate.json"
-    try XcircuitePackageStore().writeJSON(
+    try XcircuiteWorkspaceStore().writeJSON(
         XcircuiteSymbolicPlannerSolverCertificate(
             certificateID: "certificate-cost-fail",
             solverName: "mock-native-certificate-planner",
@@ -406,7 +406,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let solverURL = root.appending(path: "duplicate-certificate-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let certificatePath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/native-certificate.json"
     try store.writeJSON(
         XcircuiteSymbolicPlannerSolverCertificate(
@@ -440,7 +440,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         to: manifestURL
     )
 
-    await #expect(throws: XcircuitePackageError.decodeFailed(
+    await #expect(throws: XcircuiteWorkspaceError.decodeFailed(
         "manifest.json: Invalid run manifest for run-pddl: artifact path '.xcircuite/runs/run-pddl/planning/symbolic-planner/native-certificate.json' must be unique."
     )) {
         _ = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
@@ -508,7 +508,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let checkerURL = root.appending(path: "proof-checker.sh")
     try writeMockProofChecker(to: checkerURL, expectedText: "valid-proof", success: true)
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
     try store.writeText("valid-proof\n", to: root.appending(path: proofPath))
     let proofReference = try store.fileReference(
@@ -562,7 +562,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let checkerURL = root.appending(path: "registered-proof-checker.sh")
     try writeMockProofChecker(to: checkerURL, expectedText: "valid-proof", success: true)
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
     try store.writeText("valid-proof\n", to: root.appending(path: proofPath))
 
@@ -608,7 +608,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let checkerURL = root.appending(path: "conflicting-proof-checker.sh")
     try writeMockProofChecker(to: checkerURL, expectedText: "valid-proof", success: true)
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let manifestProofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
     let explicitProofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof-copy.txt"
     try store.writeText("valid-proof\n", to: root.appending(path: manifestProofPath))

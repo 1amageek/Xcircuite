@@ -8,7 +8,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         var trace: XcircuiteNumericRepairLoopPolicyTrace
     }
 
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let candidateGenerator: XcircuiteParameterCandidateGenerator
     private let planSynthesizer: XcircuiteParameterCandidatePlanSynthesizer
@@ -18,7 +18,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         candidateGenerator: XcircuiteParameterCandidateGenerator = XcircuiteParameterCandidateGenerator(),
         planSynthesizer: XcircuiteParameterCandidatePlanSynthesizer = XcircuiteParameterCandidatePlanSynthesizer(),
@@ -27,7 +27,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         improvementArtifactGenerator: XcircuiteImprovementPlanningArtifactGenerator = XcircuiteImprovementPlanningArtifactGenerator(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.candidateGenerator = candidateGenerator
         self.planSynthesizer = planSynthesizer
@@ -401,7 +401,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         projectRoot: URL,
         iterationIndex: Int
     ) throws -> [XcircuiteNumericRepairLoopDiagnostic] {
-        let verification = try packageStore.readJSON(
+        let verification = try workspaceStore.readJSON(
             XcircuitePlanVerification.self,
             from: try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
         )
@@ -451,11 +451,11 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
             }
             let sourceURL = try sourceRef.locator.location.resolvedFileURL(relativeTo: projectRoot)
             let archiveRelativePath = ".xcircuite/runs/\(runID)/planning/numeric-repair-loop/iterations/\(iterationIndex)/\(role)-\(sourceURL.lastPathComponent)"
-            let archiveURL = try packageStore.url(
+            let archiveURL = try workspaceStore.url(
                 forProjectRelativePath: archiveRelativePath,
                 inProjectAt: projectRoot
             )
-            try packageStore.ensureDirectory(at: archiveURL.deletingLastPathComponent())
+            try workspaceStore.ensureDirectory(at: archiveURL.deletingLastPathComponent())
             if FileManager.default.fileExists(atPath: archiveURL.path(percentEncoded: false)) {
                 throw XcircuiteNumericRepairLoopError.archiveArtifactAlreadyExists(path: archiveRelativePath)
             }
@@ -469,7 +469,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                 try removeTemporaryArchiveFile(temporaryURL)
                 throw error
             }
-            let archivedLegacyRef = try packageStore.fileReference(
+            let archivedLegacyRef = try workspaceStore.fileReference(
                 forProjectRelativePath: archiveRelativePath,
                 artifactID: "planning-numeric-repair-loop-iteration-\(iterationIndex)-\(role)",
                 kind: legacyFileKind(for: sourceRef.locator.kind),
@@ -477,7 +477,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                 inProjectAt: projectRoot,
                 producedByRunID: runID
             )
-            try packageStore.upsertRunArtifact(archivedLegacyRef, runID: runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(archivedLegacyRef, runID: runID, inProjectAt: projectRoot)
             archived.append(try requireFoundationArtifactReference(
                 archivedLegacyRef,
                 field: "numeric-repair-loop-iteration-\(iterationIndex)-\(role)"

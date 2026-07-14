@@ -49,7 +49,7 @@ struct ElectricalStandardLayoutImportTests {
                 projectRoot: root,
                 runID: "electrical-standard-fixture-run",
                 runDirectory: root.appending(path: "run"),
-                packageStore: XcircuitePackageStore(),
+                workspaceStore: XcircuiteWorkspaceStore(),
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -59,7 +59,7 @@ struct ElectricalStandardLayoutImportTests {
         let manifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-standard-layout-input-manifest"
         })
-        let manifestURL = try XcircuitePackageStore().url(
+        let manifestURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: manifestReference.path,
             inProjectAt: root
         )
@@ -76,7 +76,7 @@ struct ElectricalStandardLayoutImportTests {
         let snapshotReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-standard-physical-snapshot"
         })
-        let snapshotURL = try XcircuitePackageStore().url(
+        let snapshotURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: snapshotReference.path,
             inProjectAt: root
         )
@@ -121,7 +121,7 @@ struct ElectricalStandardLayoutImportTests {
                 projectRoot: root,
                 runID: "electrical-standard-lef-blocked-run",
                 runDirectory: root.appending(path: "run"),
-                packageStore: XcircuitePackageStore(),
+                workspaceStore: XcircuiteWorkspaceStore(),
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -153,7 +153,7 @@ struct ElectricalStandardLayoutImportTests {
                 projectRoot: root,
                 runID: runID,
                 runDirectory: root.appending(path: "run"),
-                packageStore: XcircuitePackageStore(),
+                workspaceStore: XcircuiteWorkspaceStore(),
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -163,7 +163,7 @@ struct ElectricalStandardLayoutImportTests {
         let manifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-standard-layout-input-manifest"
         })
-        let manifestURL = try XcircuitePackageStore().url(
+        let manifestURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: manifestReference.path,
             inProjectAt: root
         )
@@ -176,7 +176,7 @@ struct ElectricalStandardLayoutImportTests {
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-standard-physical-snapshot" })
         #expect(reference.sha256.count == 64)
         #expect(reference.byteCount > 0)
-        let url = try XcircuitePackageStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
+        let url = try XcircuiteWorkspaceStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
         let snapshot = try PhysicalDesignJSONCodec().decode(PhysicalDesignSnapshot.self, from: Data(contentsOf: url))
         #expect(snapshot.topCell == "top")
         #expect(snapshot.nets.map { $0.id } == ["VDD"])
@@ -261,7 +261,7 @@ struct ElectricalStandardLayoutImportTests {
                     projectRoot: root,
                     runID: "electrical-standard-\(extensionName)-run",
                     runDirectory: root.appending(path: "run"),
-                    packageStore: XcircuitePackageStore(),
+                    workspaceStore: XcircuiteWorkspaceStore(),
                     toolRegistry: ToolRegistry(),
                     healthResults: [:]
                 )
@@ -271,7 +271,7 @@ struct ElectricalStandardLayoutImportTests {
             let manifestReference = try #require(result.artifacts.first {
                 $0.artifactID == "electrical-standard-layout-input-manifest"
             })
-            let manifestURL = try XcircuitePackageStore().url(
+            let manifestURL = try XcircuiteWorkspaceStore().url(
                 forProjectRelativePath: manifestReference.path,
                 inProjectAt: root
             )

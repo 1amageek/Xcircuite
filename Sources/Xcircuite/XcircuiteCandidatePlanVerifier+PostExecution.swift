@@ -91,9 +91,9 @@ extension XcircuiteCandidatePlanVerifier {
                 nextActions: nextActions
             )
         }
-        let execution = try packageStore.readJSON(
+        let execution = try workspaceStore.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: packageStore.url(forProjectRelativePath: executionRef.path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: executionRef.path, inProjectAt: projectRoot)
         )
         let postExecutionSymbolicSummary = postExecutionSymbolicVerificationSummary(
             for: plan,

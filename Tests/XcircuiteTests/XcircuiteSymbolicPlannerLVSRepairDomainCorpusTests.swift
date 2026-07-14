@@ -183,8 +183,8 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
         runID: String,
         repair: LVSRepairFixture
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(runID: runID, repair: repair),
@@ -459,7 +459,7 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
     }
 
     private func writeLVSRepairMockPlanner(to solverURL: URL) throws {
-        try XcircuitePackageStore().writeText(
+        try XcircuiteWorkspaceStore().writeText(
             """
             #!/bin/sh
             case "$1" in

@@ -45,7 +45,7 @@ struct PhysicalDesignFlowStageExecutorTests {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         try encoder.encode(request).write(to: requestURL, options: [.atomic])
         let runDirectory = root
-            .appending(path: XcircuitePackage.directoryName)
+            .appending(path: XcircuiteWorkspace.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
@@ -53,7 +53,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -100,13 +100,13 @@ struct PhysicalDesignFlowStageExecutorTests {
         )
         let requestURL = root.appending(path: "request.json")
         try JSONEncoder().encode(request).write(to: requestURL, options: [.atomic])
-        let runDirectory = root.appending(path: XcircuitePackage.directoryName).appending(path: "runs").appending(path: runID)
+        let runDirectory = root.appending(path: XcircuiteWorkspace.directoryName).appending(path: "runs").appending(path: runID)
         try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
         let context = FlowExecutionContext(
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

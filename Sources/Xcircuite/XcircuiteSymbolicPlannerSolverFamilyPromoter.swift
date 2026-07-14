@@ -3,19 +3,19 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             fileReferenceVerifier: fileReferenceVerifier
         )
     }
@@ -202,7 +202,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
                 projectRoot: projectRoot
             )
         }
-        let comparison = try packageStore.readJSON(
+        let comparison = try workspaceStore.readJSON(
             XcircuiteSymbolicPlannerSolverFamilyComparison.self,
             from: url(for: reference.path, projectRoot: projectRoot)
         )
@@ -216,7 +216,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     ) throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
         let integrity = LocalArtifactVerifier().verify(artifact, relativeTo: projectRoot)
         guard !integrity.isVerified else {
-            return try packageStore.readJSON(
+            return try workspaceStore.readJSON(
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
                 from: url(for: artifact.path, projectRoot: projectRoot)
             )
@@ -362,7 +362,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     }
 
     private func url(for path: String, projectRoot: URL) throws -> URL {
-        return try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        return try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
     }
 
     private struct ComparisonInput {

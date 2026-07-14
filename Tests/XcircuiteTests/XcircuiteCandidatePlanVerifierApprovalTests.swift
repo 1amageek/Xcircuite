@@ -106,8 +106,8 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func recordedRiskApprovalPassesSyntheticApprovalGate() throws {
         let root = try makeTemporaryRoot("candidate-plan-approved-risk-integrity")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-risk-approved", inProjectAt: root)
         var plan = makeSingleStepPlan(
             runID: "run-risk-approved",

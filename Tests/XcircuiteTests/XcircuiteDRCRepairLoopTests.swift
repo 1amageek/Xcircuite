@@ -10,14 +10,14 @@ struct XcircuiteDRCRepairLoopTests {
     @Test func repairHintArtifactDrivesCLIPlanningAndVerifiedNotchRepair() async throws {
         let root = try makeTemporaryRoot("repair-hint-artifact-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-hint-notch"
         let layoutPath = "layout/notch-layout.json"
         let layoutNetlistPath = "circuits/layout.spice"
         let schematicNetlistPath = "circuits/schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-drc/drc-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-drc/drc-repair-hints.json"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeNotchLayoutDocument(path: layoutPath, root: root)
         try writeMatchingLVSNetlists(
@@ -167,12 +167,12 @@ struct XcircuiteDRCRepairLoopTests {
     @Test func notchRepairPlanFromDiagnosticFillsRegionAndPassesNativeDRC() async throws {
         let root = try makeTemporaryRoot("notch-diagnostic-repair-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let runID = "run-notch"
         let layoutPath = "layout/notch-layout.json"
         let layoutNetlistPath = "circuits/layout.spice"
         let schematicNetlistPath = "circuits/schematic.spice"
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeNotchLayoutDocument(path: layoutPath, root: root)
         try writeMatchingLVSNetlists(
@@ -257,7 +257,7 @@ struct XcircuiteDRCRepairLoopTests {
     @Test func closedDRCRepairLoopRejectsFailingCandidateAndAcceptsRepairedLayout() async throws {
         let root = try makeTemporaryRoot("closed-drc-repair-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareRun(root: root, runID: "run-1")
 
         try persistCandidatePlan(makeDRCPlan(runID: "run-1", planID: "run-1-drc-width-failing-plan", width: 0.5), root: root)
@@ -340,8 +340,8 @@ struct XcircuiteDRCRepairLoopTests {
     }
 
     private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeDRCProblem(runID: runID),
@@ -612,7 +612,7 @@ struct XcircuiteDRCRepairLoopTests {
         layoutPath: String,
         root: URL
     ) throws -> DRCExecutionResult {
-        let layoutURL = try XcircuitePackageStore().url(
+        let layoutURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: layoutPath,
             inProjectAt: root
         )
@@ -662,7 +662,7 @@ struct XcircuiteDRCRepairLoopTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -687,7 +687,7 @@ struct XcircuiteDRCRepairLoopTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let reference = try store.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,

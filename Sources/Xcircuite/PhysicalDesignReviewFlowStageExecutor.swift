@@ -106,7 +106,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 actions: ["rerun_physical_design_review_stage"]
             )]
         }
-        let packetURL = try XcircuitePackage(projectRoot: context.projectRoot)
+        let packetURL = try XcircuiteWorkspace(projectRoot: context.projectRoot)
             .url(forProjectRelativePath: packetReference.path)
         let packetData = try Data(contentsOf: packetURL)
         let decoder = JSONDecoder()
@@ -159,7 +159,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         projectRoot: URL
     ) -> [FlowDiagnostic] {
         var diagnostics: [FlowDiagnostic] = []
-        let package = XcircuitePackage(projectRoot: projectRoot)
+        let package = XcircuiteWorkspace(projectRoot: projectRoot)
         let hasher = XcircuiteHasher()
         do {
             let manifestURL = try package.url(forProjectRelativePath: packet.manifestReference.path)
@@ -229,7 +229,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: fileName)
         let data = try PhysicalDesignJSONCodec().encode(value)
         try data.write(to: url, options: .atomic)

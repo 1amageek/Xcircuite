@@ -2,14 +2,14 @@ import Foundation
 import DesignFlowKernel
 
 public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
     }
 
@@ -61,11 +61,11 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         guard let formulationPath = request.formulationPath else {
             throw XcircuiteRepairPlanFormulationCompilationError.missingFormulation
         }
-        let formulationURL = try packageStore.url(
+        let formulationURL = try workspaceStore.url(
             forProjectRelativePath: formulationPath,
             inProjectAt: projectRoot
         )
-        return try packageStore.readJSON(XcircuiteRepairPlanFormulation.self, from: formulationURL)
+        return try workspaceStore.readJSON(XcircuiteRepairPlanFormulation.self, from: formulationURL)
     }
 
     private func validate(

@@ -5,22 +5,22 @@ import ToolQualification
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let solverRunner: XcircuiteSymbolicPlannerSolving
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         solverRunner: XcircuiteSymbolicPlannerSolving = XcircuiteSymbolicPlannerSolverRunner(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.solverRunner = solverRunner
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             fileReferenceVerifier: fileReferenceVerifier
         )
     }
@@ -120,9 +120,9 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 projectRoot: projectRoot
             )
             planVerificationArtifact = verifierResult.planVerificationArtifact
-            let verification = try packageStore.readJSON(
+            let verification = try workspaceStore.readJSON(
                 XcircuitePlanVerification.self,
-                from: packageStore.url(
+                from: workspaceStore.url(
                     forProjectRelativePath: planVerificationArtifact?.path
                         ?? verifierResult.planVerificationArtifact.path,
                     inProjectAt: projectRoot
@@ -263,7 +263,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     ) throws {
         guard let value else { return }
         do {
-            _ = try packageStore.url(forProjectRelativePath: value, inProjectAt: projectRoot)
+            _ = try workspaceStore.url(forProjectRelativePath: value, inProjectAt: projectRoot)
         } catch {
             throw XcircuiteSymbolicPlannerSolverError.invalidSolverQualificationPath(
                 field: field,
@@ -317,9 +317,9 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             runID: solverResult.runID,
             projectRoot: projectRoot
         )
-        let pddlExport = try packageStore.readJSON(
+        let pddlExport = try workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: packageStore.url(
+            from: workspaceStore.url(
                 forProjectRelativePath: pddlExportArtifact.path,
                 inProjectAt: projectRoot
             )
@@ -348,9 +348,9 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             runID: solverResult.runID,
             projectRoot: projectRoot
         )
-        let pddlExport = try packageStore.readJSON(
+        let pddlExport = try workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: packageStore.url(
+            from: workspaceStore.url(
                 forProjectRelativePath: pddlExportArtifact.path,
                 inProjectAt: projectRoot
             )
@@ -491,7 +491,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 ]
             )
         }
-        let certificateURL = try packageStore.url(
+        let certificateURL = try workspaceStore.url(
             forProjectRelativePath: sourceArtifact.path,
             inProjectAt: projectRoot
         )
@@ -553,7 +553,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         let artifactID = request.certificateArtifactID
             ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverCertificateArtifactID
         if let certificatePath = request.certificatePath {
-            let certificateURL = try packageStore.url(
+            let certificateURL = try workspaceStore.url(
                 forProjectRelativePath: certificatePath,
                 inProjectAt: projectRoot
             )
@@ -796,22 +796,22 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 projectRoot: projectRoot
             )
         }
-        let proofURL = try packageStore.url(forProjectRelativePath: proofArtifact.path, inProjectAt: projectRoot)
-        let domainURL = try packageStore.url(forProjectRelativePath: domainArtifact.path, inProjectAt: projectRoot)
-        let problemURL = try packageStore.url(forProjectRelativePath: problemArtifact.path, inProjectAt: projectRoot)
+        let proofURL = try workspaceStore.url(forProjectRelativePath: proofArtifact.path, inProjectAt: projectRoot)
+        let domainURL = try workspaceStore.url(forProjectRelativePath: domainArtifact.path, inProjectAt: projectRoot)
+        let problemURL = try workspaceStore.url(forProjectRelativePath: problemArtifact.path, inProjectAt: projectRoot)
         let pddlExportURL = try pddlExportArtifact.map {
-            try packageStore.url(forProjectRelativePath: $0.path, inProjectAt: projectRoot)
+            try workspaceStore.url(forProjectRelativePath: $0.path, inProjectAt: projectRoot)
         }
         let solverPlanURL = try solverPlanArtifact.map {
-            try packageStore.url(forProjectRelativePath: $0.path, inProjectAt: projectRoot)
+            try workspaceStore.url(forProjectRelativePath: $0.path, inProjectAt: projectRoot)
         }
         let workingDirectoryPath = request.proofCheckerWorkingDirectoryPath
             ?? defaultProofCheckerWorkingDirectoryPath(runID: request.runID)
-        let workingDirectoryURL = try packageStore.url(
+        let workingDirectoryURL = try workspaceStore.url(
             forProjectRelativePath: workingDirectoryPath,
             inProjectAt: projectRoot
         )
-        try packageStore.ensureDirectory(at: workingDirectoryURL)
+        try workspaceStore.ensureDirectory(at: workingDirectoryURL)
 
         let proofCheckerArguments = resolvedProofCheckerArguments(
             request.proofCheckerArguments.isEmpty ? ["{proof}"] : request.proofCheckerArguments,
@@ -874,7 +874,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     ) throws -> ArtifactReference? {
         let artifactID = request.proofArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverProofArtifactID
         if let proofPath = request.proofPath {
-            let proofURL = try packageStore.url(forProjectRelativePath: proofPath, inProjectAt: projectRoot)
+            let proofURL = try workspaceStore.url(forProjectRelativePath: proofPath, inProjectAt: projectRoot)
             guard FileManager.default.fileExists(atPath: proofURL.path(percentEncoded: false)) else {
                 return nil
             }
@@ -915,7 +915,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            try packageStore.upsertRunArtifact(legacyReference, runID: request.runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(legacyReference, runID: request.runID, inProjectAt: projectRoot)
             return try requireFoundationArtifactReference(legacyReference, field: "proofArtifact")
         }
         return try requireFoundationArtifactReference(
@@ -1118,7 +1118,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func defaultProofCheckerWorkingDirectoryPath(runID: String) -> String {
-        "\(XcircuitePackage.directoryName)/runs/\(runID)/planning/symbolic-planner/proof-checker-work"
+        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/proof-checker-work"
     }
 
     private func approximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {

@@ -2,10 +2,10 @@ import Foundation
 import DesignFlowKernel
 
 public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
 
-    public init(packageStore: XcircuitePackageStore = XcircuitePackageStore()) {
-        self.packageStore = packageStore
+    public init(workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore()) {
+        self.workspaceStore = workspaceStore
     }
 
     public func resolve(
@@ -42,7 +42,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
         commandID: String?,
         projectRoot: URL
     ) throws -> XcircuiteSuggestedCommandSelection {
-        let selections = try packageStore.loadSuggestedCommandSelections(
+        let selections = try workspaceStore.loadSuggestedCommandSelections(
             runID: runID,
             inProjectAt: projectRoot
         )

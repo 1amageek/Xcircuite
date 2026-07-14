@@ -123,8 +123,8 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
         runID: String,
         repair: PEXRepairFixture
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(runID: runID, repair: repair),
@@ -367,7 +367,7 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
     }
 
     private func writePEXRepairMockPlanner(to solverURL: URL) throws {
-        try XcircuitePackageStore().writeText(
+        try XcircuiteWorkspaceStore().writeText(
             """
             #!/bin/sh
             case "$1" in

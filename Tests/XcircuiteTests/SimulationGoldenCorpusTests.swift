@@ -304,8 +304,8 @@ struct SimulationGoldenCorpusTests {
     @Test func sourcePreservingNetlistEditFeedsGoldenCorpusQualification() async throws {
         let projectRoot = try makeTemporaryRoot("simulation-golden-source-edit")
         defer { removeTemporaryRoot(projectRoot) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: projectRoot)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: projectRoot)
         try store.createRunDirectory(for: "run-source-edit", inProjectAt: projectRoot)
 
         let sourceNetlistPath = "circuits/source-edit.spice"

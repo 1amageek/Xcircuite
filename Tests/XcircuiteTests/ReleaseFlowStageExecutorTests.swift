@@ -238,7 +238,7 @@ struct ReleaseFlowStageExecutorTests {
             $0.gateID == "approval" && $0.status == .passed
         } == true)
         #expect(resumed.summary.approvalCount == 1)
-        let manifest = try XcircuitePackageStore().loadRunManifest(runID: runID, inProjectAt: root)
+        let manifest = try XcircuiteWorkspaceStore().loadRunManifest(runID: runID, inProjectAt: root)
         #expect(manifest.artifacts.contains { $0.artifactID == "release-qualification-result" })
     }
 
@@ -395,7 +395,7 @@ struct ReleaseFlowStageExecutorTests {
         ])
         #expect(completed.summary.approvalCount == 3)
 
-        let manifest = try XcircuitePackageStore().loadRunManifest(runID: runID, inProjectAt: root)
+        let manifest = try XcircuiteWorkspaceStore().loadRunManifest(runID: runID, inProjectAt: root)
         #expect(manifest.runID == runID)
         #expect(manifest.artifacts.contains { $0.artifactID == "release-signoff-result" })
         #expect(manifest.artifacts.contains { $0.artifactID == "release-qualification-result" })
@@ -448,7 +448,7 @@ struct ReleaseFlowStageExecutorTests {
 
     private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
         let runDirectory = root
-            .appending(path: XcircuitePackage.directoryName)
+            .appending(path: XcircuiteWorkspace.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         do {
@@ -460,7 +460,7 @@ struct ReleaseFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

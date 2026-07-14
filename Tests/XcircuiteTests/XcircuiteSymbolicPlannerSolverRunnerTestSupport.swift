@@ -17,8 +17,8 @@ func prepareRun(
     repair: DRCRepairFixture = .width,
     includeViolationAtom: Bool = true
 ) throws {
-    let store = XcircuitePackageStore()
-    try store.createPackage(at: root)
+    let store = XcircuiteWorkspaceStore()
+    try store.createWorkspace(at: root)
     try store.createRunDirectory(for: runID, inProjectAt: root)
     try XcircuitePlanningArtifactStore().persistPlanningProblem(
         makePlanningProblem(
@@ -319,7 +319,7 @@ func waitForProcessExit(_ pid: pid_t, timeoutSeconds: Double) async -> Bool {
 }
 
 func writeMockPlanner(to solverURL: URL, planText: String) throws {
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         printf '\(planText)'
@@ -338,7 +338,7 @@ func writeMockProofChecker(
     success: Bool
 ) throws {
     let failureExit = success ? 3 : 4
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         if grep -q '\(expectedText)' "$1"; then
@@ -357,7 +357,7 @@ func writeMockProofChecker(
 }
 
 func writeDRCRepairMockPlanner(to solverURL: URL) throws {
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         """
         #!/bin/sh
         case "$1" in

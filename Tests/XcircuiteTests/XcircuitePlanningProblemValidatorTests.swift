@@ -10,8 +10,8 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemCLIPersistsValidationArtifact() async throws {
         let root = try makeTemporaryRoot("planning-problem-validation-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-validate", inProjectAt: root)
         let problem = makePlanningProblem(includeSymbolicGoals: true)
         let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
@@ -85,8 +85,8 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemRejectsStaleProblemArtifact() throws {
         let root = try makeTemporaryRoot("planning-problem-validation-stale-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-validate", inProjectAt: root)
         let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(includeSymbolicGoals: true),
@@ -116,8 +116,8 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemRecordsBlockingTranslationAuditGate() async throws {
         let root = try makeTemporaryRoot("planning-problem-validation-audit-block")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-validate", inProjectAt: root)
         var problem = makePlanningProblem(includeSymbolicGoals: true)
         problem.objectives[0].sourceRefIDs = []
@@ -156,8 +156,8 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemCLIAcceptsGeneratedPEXMetricRecoveryProblem() async throws {
         let root = try makeTemporaryRoot("pex-metric-recovery-validation-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-pex", inProjectAt: root)
         let summaryPath = ".xcircuite/runs/run-pex/stages/009-pex/raw/pex-summary.json"
         let layoutPath = ".xcircuite/runs/run-pex/stages/006-layout/raw/layout.gds"
@@ -677,7 +677,7 @@ struct XcircuitePlanningProblemValidatorTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -704,7 +704,7 @@ struct XcircuitePlanningProblemValidatorTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),

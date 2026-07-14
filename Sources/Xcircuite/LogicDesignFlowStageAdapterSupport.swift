@@ -29,9 +29,9 @@ struct LogicDesignFlowStageSupport: Sendable {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: fileName)
-        try context.packageStore.writeJSON(result, to: url, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(result, to: url, forProjectAt: context.projectRoot)
         return try artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,

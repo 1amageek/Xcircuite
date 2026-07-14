@@ -20,15 +20,15 @@ extension XcircuiteCandidatePlanVerifier {
         let netlistURL = try url(for: netlistRef, manifest: manifest, projectRoot: projectRoot)
         let source = try String(contentsOf: netlistURL, encoding: .utf8)
         let netlistCopyURL = verificationDirectory.appending(path: "input-\(netlistURL.lastPathComponent)")
-        try packageStore.writeText(source, to: netlistCopyURL)
+        try workspaceStore.writeText(source, to: netlistCopyURL)
         let outcome = try await CoreSpiceSimulationEngine().run(
             netlistSource: source,
             fileName: netlistURL.lastPathComponent
         )
         let waveformURL = verificationDirectory.appending(path: "waveform.csv")
-        try packageStore.writeText(outcome.waveformCSV, to: waveformURL)
+        try workspaceStore.writeText(outcome.waveformCSV, to: waveformURL)
         let measurementsURL = verificationDirectory.appending(path: "measurements.json")
-        try packageStore.writeJSON(
+        try workspaceStore.writeJSON(
             outcome.measurements,
             to: measurementsURL,
             forProjectAt: projectRoot
@@ -38,7 +38,7 @@ extension XcircuiteCandidatePlanVerifier {
             expectations: spec.expectations
         )
         let summaryURL = verificationDirectory.appending(path: "simulation-summary.json")
-        try packageStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
         let artifacts = try simulationMetricArtifactRefs(
             netlistURL: netlistCopyURL,
             waveformURL: waveformURL,
@@ -48,7 +48,7 @@ extension XcircuiteCandidatePlanVerifier {
             projectRoot: projectRoot
         )
         for artifact in artifacts {
-            try packageStore.upsertRunArtifact(artifact, runID: runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(artifact, runID: runID, inProjectAt: projectRoot)
         }
         let diagnostics = simulationMetricDiagnostics(from: summary)
         return GateExecutionEvaluation(
@@ -73,13 +73,13 @@ extension XcircuiteCandidatePlanVerifier {
         projectRoot: URL
     ) throws -> GateExecutionEvaluation {
         let reportURL = try url(for: metricReportRef, manifest: manifest, projectRoot: projectRoot)
-        let postLayoutReport = try packageStore.readJSON(PostLayoutComparisonReport.self, from: reportURL)
+        let postLayoutReport = try workspaceStore.readJSON(PostLayoutComparisonReport.self, from: reportURL)
         let summary = simulationMetricReport(
             postLayoutReport: postLayoutReport,
             sourceReportPath: metricReportRef.path
         )
         let summaryURL = verificationDirectory.appending(path: "simulation-summary.json")
-        try packageStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
         let artifacts = [
             try artifactBuilder.reference(
                 for: summaryURL,
@@ -91,7 +91,7 @@ extension XcircuiteCandidatePlanVerifier {
             ),
         ]
         for artifact in artifacts {
-            try packageStore.upsertRunArtifact(artifact, runID: runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(artifact, runID: runID, inProjectAt: projectRoot)
         }
         let diagnostics = simulationMetricDiagnostics(from: summary)
         return GateExecutionEvaluation(

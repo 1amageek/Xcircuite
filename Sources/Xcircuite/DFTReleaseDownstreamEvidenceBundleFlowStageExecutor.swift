@@ -53,7 +53,7 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                 .appending(path: "stages")
                 .appending(path: stageID)
                 .appending(path: "raw")
-            try context.packageStore.ensureDirectory(at: directory)
+            try context.storage.ensureDirectory(at: directory)
             let evidenceURL = directory.appending(path: "dft-downstream-evidence.json")
             try evidenceData.write(to: evidenceURL, options: .atomic)
             let bundleArtifact = try artifactBuilder.reference(

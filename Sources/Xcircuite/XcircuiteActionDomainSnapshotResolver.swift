@@ -30,16 +30,16 @@ enum XcircuiteActionDomainSnapshotResolutionError: Error, LocalizedError, Equata
 }
 
 struct XcircuiteActionDomainSnapshotResolver: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let verifier: XcircuiteFileReferenceVerifier
 
     init(
-        packageStore: XcircuitePackageStore,
+        workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
         verifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.verifier = verifier
     }
@@ -104,15 +104,15 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteResolvedActionDomainSnapshot {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        let snapshot = try packageStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let snapshot = try workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
         guard snapshot.runID == runID else {
             throw XcircuiteActionDomainSnapshotResolutionError.runMismatch(
                 expected: runID,
                 actual: snapshot.runID
             )
         }
-        let reference = try packageStore.fileReference(
+        let reference = try workspaceStore.fileReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
@@ -143,7 +143,7 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
         guard let url = verifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
             return nil
         }
-        let snapshot = try packageStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
+        let snapshot = try workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
         guard snapshot.runID == runID else {
             return nil
         }
@@ -189,7 +189,7 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
                 reason: "artifact path cannot be resolved inside the project root."
             )
         }
-        let snapshot = try packageStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
+        let snapshot = try workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
         guard snapshot.runID == runID else {
             throw XcircuiteActionDomainSnapshotResolutionError.runMismatch(
                 expected: runID,
@@ -207,9 +207,9 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
             runID: runID,
             projectRoot: projectRoot
         )
-        let snapshot = try packageStore.readJSON(
+        let snapshot = try workspaceStore.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
-            from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
         )
         guard snapshot.runID == runID else {
             throw XcircuiteActionDomainSnapshotResolutionError.runMismatch(

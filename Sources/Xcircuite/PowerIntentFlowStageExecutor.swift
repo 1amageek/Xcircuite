@@ -91,9 +91,9 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                     .appending(path: "stages")
                     .appending(path: stageID)
                     .appending(path: "raw")
-                try context.packageStore.ensureDirectory(at: directory)
+                try context.storage.ensureDirectory(at: directory)
                 let intentURL = directory.appending(path: "power-intent.json")
-                try context.packageStore.writeJSON(
+                try context.storage.writeJSON(
                     intent,
                     to: intentURL,
                     forProjectAt: context.projectRoot
@@ -146,9 +146,9 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: "power-intent-result.json")
-        try context.packageStore.writeJSON(result, to: url, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(result, to: url, forProjectAt: context.projectRoot)
         return try support.artifactBuilder.reference(
             for: url,
             projectRoot: context.projectRoot,

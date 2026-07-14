@@ -93,12 +93,12 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuitePackage(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "pex-summary")
-            try packageStore.ensureDirectory(at: verificationDirectory)
+            try workspaceStore.ensureDirectory(at: verificationDirectory)
             let executionResult = try await DefaultPEXEngine.withDefaults().run(PEXRunRequest(
                 layoutURL: try url(
                     for: layoutRef,
@@ -131,7 +131,7 @@ extension XcircuiteCandidatePlanVerifier {
                 topNets: executionSpec.topNets
             )
             let summaryURL = verificationDirectory.appending(path: "pex-summary.json")
-            try packageStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
+            try workspaceStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
             let artifacts = try pexSummaryArtifactRefs(
                 summaryURL: summaryURL,
                 executionResult: executionResult,
@@ -139,7 +139,7 @@ extension XcircuiteCandidatePlanVerifier {
                 projectRoot: projectRoot
             )
             for artifact in artifacts {
-                try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
+                try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
             }
             let status = pexSummaryGateStatus(
                 runStatus: executionResult.status,

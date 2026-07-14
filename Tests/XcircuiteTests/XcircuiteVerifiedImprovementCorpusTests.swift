@@ -9,8 +9,8 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     @Test func qualifyVerifiedImprovementCorpusCollectsDRCLVSPEXNumericCases() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
 
         let cases = [
             try prepareCase(
@@ -107,7 +107,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         #expect(pexCase.artifactRefs.contains { $0.artifactID == XcircuitePlanningArtifactStore.planVerificationArtifactID })
         #expect(pexCase.artifactRefs.contains { $0.artifactID == "planning-design-diff" })
 
-        let projectManifest = try packageStore.loadManifest(forProjectAt: root)
+        let projectManifest = try workspaceStore.loadManifest(forProjectAt: root)
         #expect(projectManifest.files.contains {
             $0.artifactID == "verified-improvement-corpus-suite"
         })
@@ -144,8 +144,8 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     @Test func qualifyVerifiedImprovementCorpusReportsMissingEvidence() throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-missing")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
 
         let caseSpec = try prepareCase(
             root: root,
@@ -191,8 +191,8 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     @Test func qualifyVerifiedImprovementCorpusRejectsAmbiguousCanonicalManifest() throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
 
         let caseSpec = try prepareCase(
             root: root,
@@ -204,7 +204,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             gateID: "native-drc"
         )
         let manifestURL = runManifestURL(root: root, runID: caseSpec.runID)
-        let manifest = try packageStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
+        let manifest = try workspaceStore.readJSON(XcircuiteRunManifest.self, from: manifestURL)
         let numericLoopReference = try #require(
             manifest.artifacts.first {
                 $0.artifactID == XcircuitePlanningArtifactStore.numericRepairLoopArtifactID
@@ -233,8 +233,8 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     @Test func qualifyVerifiedImprovementCorpusAcceptsExplicitManifestLoopPaths() throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-explicit-manifest-paths")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
 
         let caseSpec = try prepareCase(
             root: root,
@@ -245,7 +245,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             diagnosticCode: "drc-rule-cleared",
             gateID: "native-drc"
         )
-        let manifest = try packageStore.readJSON(
+        let manifest = try workspaceStore.readJSON(
             XcircuiteRunManifest.self,
             from: runManifestURL(root: root, runID: caseSpec.runID)
         )
@@ -298,8 +298,8 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     @Test func qualifyVerifiedImprovementCorpusRejectsExplicitLoopPathOutsideRunManifest() throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-explicit-path-mismatch")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
 
         let caseSpec = try prepareCase(
             root: root,
@@ -310,7 +310,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             diagnosticCode: "drc-rule-cleared",
             gateID: "native-drc"
         )
-        let manifest = try packageStore.readJSON(
+        let manifest = try workspaceStore.readJSON(
             XcircuiteRunManifest.self,
             from: runManifestURL(root: root, runID: caseSpec.runID)
         )
@@ -359,8 +359,8 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     @Test func qualifyVerifiedImprovementCorpusRejectsTamperedPlanVerificationArtifact() throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-tampered-plan-verification")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
 
         let caseSpec = try prepareCase(
             root: root,
@@ -371,7 +371,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             diagnosticCode: "pex-corner-recovered",
             gateID: "post-layout-pex"
         )
-        let manifest = try packageStore.readJSON(
+        let manifest = try workspaceStore.readJSON(
             XcircuiteRunManifest.self,
             from: runManifestURL(root: root, runID: caseSpec.runID)
         )
@@ -410,9 +410,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         gateID: String,
         includeDesignDiff: Bool = true
     ) throws -> XcircuiteVerifiedImprovementCorpusSuiteSpec.CaseSpec {
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createRunDirectory(for: runID, inProjectAt: root)
-        let planningStore = XcircuitePlanningArtifactStore(storage: packageStore)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createRunDirectory(for: runID, inProjectAt: root)
+        let planningStore = XcircuitePlanningArtifactStore(storage: workspaceStore)
         let candidatePlanRef = try writePlanningArtifact(
             root: root,
             runID: runID,
@@ -587,11 +587,11 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         kind: XcircuiteFileKind,
         value: T
     ) throws -> XcircuiteFileReference {
-        let packageStore = XcircuitePackageStore()
+        let workspaceStore = XcircuiteWorkspaceStore()
         let relativePath = ".xcircuite/runs/\(runID)/planning/\(fileName)"
         let url = root.appending(path: relativePath)
-        try packageStore.writeJSON(value, to: url, forProjectAt: root)
-        let reference = try packageStore.fileReference(
+        try workspaceStore.writeJSON(value, to: url, forProjectAt: root)
+        let reference = try workspaceStore.fileReference(
             forProjectRelativePath: relativePath,
             artifactID: artifactID,
             kind: kind,
@@ -599,7 +599,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             inProjectAt: root,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
+        try workspaceStore.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
         return reference
     }
 

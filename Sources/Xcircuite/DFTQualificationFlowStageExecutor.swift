@@ -300,9 +300,9 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.packageStore.ensureDirectory(at: directory)
+        try context.storage.ensureDirectory(at: directory)
         let url = directory.appending(path: fileName)
-        try context.packageStore.writeJSON(value, to: url, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(value, to: url, forProjectAt: context.projectRoot)
         return try reference(
             for: url,
             artifactID: artifactID,

@@ -3,19 +3,19 @@ import ToolQualification
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             fileReferenceVerifier: fileReferenceVerifier
         )
     }
@@ -118,9 +118,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let qualification = try packageStore.readJSON(
+            let qualification = try workspaceStore.readJSON(
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
-                from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+                from: workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
             )
             inputs.append(
                 QualificationInput(
@@ -140,9 +140,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let qualification = try packageStore.readJSON(
+            let qualification = try workspaceStore.readJSON(
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
-                from: packageStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+                from: workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
             )
             inputs.append(
                 QualificationInput(

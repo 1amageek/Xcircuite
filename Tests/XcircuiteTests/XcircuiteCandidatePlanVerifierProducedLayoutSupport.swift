@@ -131,7 +131,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             withIntermediateDirectories: true
         )
         try MaskDataFormatConverter(tech: tech).exportDocument(document, to: artifactURL, format: layoutCase.layoutFileFormat)
-        return try XcircuitePackageStore().fileReference(
+        return try XcircuiteWorkspaceStore().fileReference(
             forProjectRelativePath: artifactPath,
             artifactID: layoutCase.artifactID,
             kind: .layout,

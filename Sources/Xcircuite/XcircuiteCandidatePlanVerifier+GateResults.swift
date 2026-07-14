@@ -343,18 +343,18 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuitePackage(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "native-drc")
-            try packageStore.ensureDirectory(at: verificationDirectory)
-            let layoutURL = try packageStore.url(forProjectRelativePath: layoutRef.path, inProjectAt: projectRoot)
+            try workspaceStore.ensureDirectory(at: verificationDirectory)
+            let layoutURL = try workspaceStore.url(forProjectRelativePath: layoutRef.path, inProjectAt: projectRoot)
             let documentData = try Data(contentsOf: layoutURL)
             let document = try layoutDocumentSerializer.decodeDocument(documentData)
             let drcLayout = try nativeDRCLayout(from: document, spec: spec)
             let drcLayoutURL = verificationDirectory.appending(path: "drc-layout.json")
-            try packageStore.writeJSON(drcLayout, to: drcLayoutURL, forProjectAt: projectRoot)
+            try workspaceStore.writeJSON(drcLayout, to: drcLayoutURL, forProjectAt: projectRoot)
 
             let executionResult = try await DefaultDRCEngine(backend: nil).run(DRCRequest(
                 layoutURL: drcLayoutURL,
@@ -363,7 +363,7 @@ extension XcircuiteCandidatePlanVerifier {
                 backendSelection: DRCBackendSelection(backendID: "native")
             ))
             let summaryURL = verificationDirectory.appending(path: "drc-summary.json")
-            try packageStore.writeJSON(
+            try workspaceStore.writeJSON(
                 DRCRunSummaryBuilder().build(result: executionResult),
                 to: summaryURL,
                 forProjectAt: projectRoot
@@ -375,7 +375,7 @@ extension XcircuiteCandidatePlanVerifier {
                 projectRoot: projectRoot
             )
             for artifact in artifacts {
-                try packageStore.upsertRunArtifact(
+                try workspaceStore.upsertRunArtifact(
                     legacyArtifactReferenceWithProvenance(artifact, producedByRunID: plan.runID),
                     runID: plan.runID,
                     inProjectAt: projectRoot
@@ -498,12 +498,12 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuitePackage(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "native-lvs")
-            try packageStore.ensureDirectory(at: verificationDirectory)
+            try workspaceStore.ensureDirectory(at: verificationDirectory)
             let executionResult = try await DefaultLVSEngine(
                 backend: nil,
                 layoutNetlistExtractor: nil
@@ -541,7 +541,7 @@ extension XcircuiteCandidatePlanVerifier {
                 backendSelection: LVSBackendSelection(backendID: executionSpec.backendID)
             ))
             let summaryURL = verificationDirectory.appending(path: "lvs-summary.json")
-            try packageStore.writeJSON(
+            try workspaceStore.writeJSON(
                 LVSRunSummaryBuilder().build(result: executionResult),
                 to: summaryURL,
                 forProjectAt: projectRoot
@@ -552,7 +552,7 @@ extension XcircuiteCandidatePlanVerifier {
                 projectRoot: projectRoot
             )
             for artifact in artifacts {
-                try packageStore.upsertRunArtifact(
+                try workspaceStore.upsertRunArtifact(
                     legacyArtifactReferenceWithProvenance(artifact, producedByRunID: plan.runID),
                     runID: plan.runID,
                     inProjectAt: projectRoot
@@ -746,12 +746,12 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuitePackage(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "simulation-metric")
-            try packageStore.ensureDirectory(at: verificationDirectory)
+            try workspaceStore.ensureDirectory(at: verificationDirectory)
 
             if !spec.expectations.isEmpty, let netlistRef = spec.netlistRef {
                 let executionNetlistRef = editedNetlistReference(

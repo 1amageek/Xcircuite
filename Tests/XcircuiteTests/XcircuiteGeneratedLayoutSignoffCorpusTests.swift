@@ -1155,7 +1155,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliAssessment.status == .readyForExternalCaseExpansion)
         #expect(cliAssessment.assessmentArtifact?.artifactID == "generated-layout-signoff-promotion-assessment")
 
-        let manifest = try XcircuitePackageStore().loadManifest(forProjectAt: root)
+        let manifest = try XcircuiteWorkspaceStore().loadManifest(forProjectAt: root)
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-corpus-suite"
                 && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-suite.json"
@@ -1352,7 +1352,7 @@ extension XcircuiteFlowRuntimeTests {
                 ".xcircuite/runs/\(runID)/reports/generated-layout-failure-ladder-generated-layout-drc-failure-cli.json"
         )
 
-        let manifest = try XcircuitePackageStore().loadManifest(forProjectAt: root)
+        let manifest = try XcircuiteWorkspaceStore().loadManifest(forProjectAt: root)
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-drc-failure"
                 && $0.path == ".xcircuite/runs/\(runID)/reports/generated-layout-failure-ladder-generated-layout-drc-failure.json"
@@ -2006,7 +2006,7 @@ extension XcircuiteFlowRuntimeTests {
                 && $0.identifier == "\(drcRunID):generated-layout-drc-coverage-failure"
         })
 
-        let coverageManifest = try XcircuitePackageStore().loadManifest(forProjectAt: postLayoutRoot)
+        let coverageManifest = try XcircuiteWorkspaceStore().loadManifest(forProjectAt: postLayoutRoot)
         #expect(coverageManifest.files.contains {
             $0.artifactID == "generated-layout-failure-ladder-coverage-audit-policy"
                 && $0.path == ".xcircuite/qualification/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit-policy.json"

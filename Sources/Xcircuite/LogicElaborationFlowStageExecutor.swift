@@ -67,9 +67,9 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     .appending(path: "stages")
                     .appending(path: stageID)
                     .appending(path: "raw")
-                try context.packageStore.ensureDirectory(at: directory)
+                try context.storage.ensureDirectory(at: directory)
                 let snapshotURL = directory.appending(path: "logic-design.json")
-                try context.packageStore.writeJSON(
+                try context.storage.writeJSON(
                     snapshot,
                     to: snapshotURL,
                     forProjectAt: context.projectRoot

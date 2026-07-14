@@ -18,7 +18,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-repair-revision-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-repair-revision-run"
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let snapshot = PhysicalDesignSnapshot(
             topCell: "top",
             die: PhysicalDesignSnapshot.Rect(x: 0, y: 0, width: 100_000, height: 100_000),
@@ -134,7 +134,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: ".xcircuite/runs/\(runID)"),
-            packageStore: store,
+            workspaceStore: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

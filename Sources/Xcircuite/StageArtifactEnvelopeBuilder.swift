@@ -82,7 +82,7 @@ struct StageArtifactEnvelopeBuilder: Sendable {
             ]
         )
 
-        return try context.packageStore.writeArtifactEnvelope(
+        return try context.storage.writeArtifactEnvelope(
             envelope,
             runID: context.runID,
             inProjectAt: context.projectRoot

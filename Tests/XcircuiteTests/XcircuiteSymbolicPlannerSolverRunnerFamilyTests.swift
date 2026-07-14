@@ -19,7 +19,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let fastDownwardSolverURL = root.appending(path: "fast-downward-family-symbolic-planner.sh")
     try writeMockPlanner(to: fastDownwardSolverURL, planText: "0.000: (a-fix-m1-width) [1.000]\n")
     let metricFFSolverURL = root.appending(path: "metric-ff-family-symbolic-planner.sh")
@@ -167,13 +167,13 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.lane.batchRequest?.candidates.first?.requireNativeCertificate == true)
     #expect(result.laneArtifact.artifactID == "\(XcircuitePlanningArtifactStore.symbolicPlannerInstalledSolverLaneArtifactID)-installed-fixture-lane")
 
-    let persistedLane = try XcircuitePackageStore().readJSON(
+    let persistedLane = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerInstalledSolverLane.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/installed-solver-lane.json")
     )
     #expect(persistedLane.batchRequest?.candidates.count == 1)
 
-    let writtenBatchSpec = try XcircuitePackageStore().readJSON(
+    let writtenBatchSpec = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerSolverFamilyBatchRequest.self,
         from: batchSpecURL
     )
@@ -320,7 +320,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let solverURL = root.appending(path: "family-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let failedSolverURL = root.appending(path: "failed-family-symbolic-planner.sh")
@@ -499,7 +499,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let qualifiedSolverURL = root.appending(path: "batch-qualified-symbolic-planner.sh")
     try writeMockPlanner(to: qualifiedSolverURL, planText: "0.000: (a-fix-m1-width) [1.000]\n")
     let failedSolverURL = root.appending(path: "batch-failed-symbolic-planner.sh")
@@ -609,7 +609,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let solverURL = root.appending(path: "proof-qualified-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "Optimal solution found\\n0.000: (a-fix-m1-width) [1.000]\\n")
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         "proof-ok\n",
         to: root.appending(path: proofPath)
     )
@@ -657,14 +657,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(evidence.observedCounts["proofValidationErrorCount"] == 0)
     #expect(evidence.failureCodes == [])
 
-    let persistedValidation = try XcircuitePackageStore().readJSON(
+    let persistedValidation = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteSymbolicPlannerProofValidation.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/proof-validation.json")
     )
     #expect(persistedValidation.status == "validated")
     #expect(persistedValidation.standardOutputArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerProofValidationStdoutArtifactID)
 
-    let manifest = try XcircuitePackageStore().readJSON(
+    let manifest = try XcircuiteWorkspaceStore().readJSON(
         XcircuiteRunManifest.self,
         from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
     )
@@ -685,7 +685,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let solverURL = root.appending(path: "proof-rejected-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
-    try XcircuitePackageStore().writeText(
+    try XcircuiteWorkspaceStore().writeText(
         "proof-bad\n",
         to: root.appending(path: proofPath)
     )
@@ -935,7 +935,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
     try XcircuiteRunManifestTamper.append([fixture.comparisonArtifact], to: manifestURL)
 
-    await #expect(throws: XcircuitePackageError.decodeFailed(
+    await #expect(throws: XcircuiteWorkspaceError.decodeFailed(
         "manifest.json: Invalid run manifest for run-pddl: artifact path '\(fixture.comparisonArtifact.path)' must be unique."
     )) {
         _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter().promote(
@@ -960,7 +960,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
     try XcircuiteRunManifestTamper.append([fixture.qualificationArtifact], to: manifestURL)
 
-    #expect(throws: XcircuitePackageError.decodeFailed(
+    #expect(throws: XcircuiteWorkspaceError.decodeFailed(
         "manifest.json: Invalid run manifest for run-pddl: artifact path '\(fixture.qualificationArtifact.path)' must be unique."
     )) {
         _ = try XcircuiteSymbolicPlannerSolverFamilyComparator().compare(
@@ -1012,7 +1012,7 @@ private func preparePromotionFixture(
     comparisonID: String
 ) throws -> PromotionFixture {
     try prepareRun(root: root, runID: runID)
-    let store = XcircuitePackageStore()
+    let store = XcircuiteWorkspaceStore()
     let artifactStore = XcircuitePlanningArtifactStore()
     let solverPlanPath = ".xcircuite/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/fixture-solver-plan.txt"
     try FileManager.default.createDirectory(

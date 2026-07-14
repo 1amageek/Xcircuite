@@ -13,7 +13,7 @@ extension XcircuiteCandidatePlanExecutor {
         step: XcircuiteCandidatePlanStep,
         projectRoot: URL
     ) throws -> URL {
-        try XcircuitePackage(projectRoot: projectRoot)
+        try XcircuiteWorkspace(projectRoot: projectRoot)
             .runDirectoryURL(for: plan.runID)
             .appending(path: "planning")
             .appending(path: "executions")
@@ -22,7 +22,7 @@ extension XcircuiteCandidatePlanExecutor {
     }
 
     func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     func requiredCandidatePlanReference(
@@ -40,7 +40,7 @@ extension XcircuiteCandidatePlanExecutor {
                     reason: "multiple manifest artifacts reference the same explicit path."
                 )
             }
-            let reference = try matches.first ?? packageStore.fileReference(
+            let reference = try matches.first ?? workspaceStore.fileReference(
                 forProjectRelativePath: explicitPath,
                 artifactID: artifactID,
                 kind: .other,

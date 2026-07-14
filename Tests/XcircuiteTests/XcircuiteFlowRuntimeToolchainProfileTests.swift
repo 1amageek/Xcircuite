@@ -176,7 +176,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(toolchain.profile?.lvsTechnologyInput == .path("tech/process.json"))
         #expect(toolchain.profile?.pexTechnology == .jsonFile(path: "tech/pex.json"))
 
-        let persistedProfile = try XcircuitePackageStore().readJSON(
+        let persistedProfile = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteFlowToolchainProfile.self,
             from: root.appending(path: ".xcircuite/runs/run-1/toolchain-profile.json")
         )

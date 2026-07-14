@@ -904,21 +904,21 @@ extension XcircuiteFlowRuntimeTests {
     @Test func stageArtifactInputReferenceRejectsDigestMismatch() async throws {
         let root = try makeTemporaryRoot("runtime-stage-artifact-digest")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let layoutRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: layoutRawDirectory)
+        try workspaceStore.ensureDirectory(at: layoutRawDirectory)
         let layoutURL = layoutRawDirectory.appending(path: "drc-layout.json")
         try Data("tampered".utf8).write(to: layoutURL, options: [.atomic])
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/drc-layout.json"
         let layoutStageDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
-        try packageStore.writeJSON(
+        try workspaceStore.writeJSON(
             FlowStageResult(
                 stageID: "006-layout",
                 status: .succeeded,
@@ -959,7 +959,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -974,14 +974,14 @@ extension XcircuiteFlowRuntimeTests {
     @Test func stageArtifactInputReferenceRejectsByteCountMismatch() async throws {
         let root = try makeTemporaryRoot("runtime-stage-artifact-byte-count")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let layoutRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: layoutRawDirectory)
+        try workspaceStore.ensureDirectory(at: layoutRawDirectory)
         let layoutURL = layoutRawDirectory.appending(path: "drc-layout.json")
         let layoutData = Data("{}".utf8)
         try layoutData.write(to: layoutURL, options: [.atomic])
@@ -989,7 +989,7 @@ extension XcircuiteFlowRuntimeTests {
         let layoutStageDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
-        try packageStore.writeJSON(
+        try workspaceStore.writeJSON(
             FlowStageResult(
                 stageID: "006-layout",
                 status: .succeeded,
@@ -1030,7 +1030,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1049,14 +1049,14 @@ extension XcircuiteFlowRuntimeTests {
             removeTemporaryRoot(root)
             removeTemporaryRoot(outsideRoot)
         }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let layoutRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: layoutRawDirectory)
+        try workspaceStore.ensureDirectory(at: layoutRawDirectory)
         let outsideLayoutURL = outsideRoot.appending(path: "escaped-layout.json")
         try Data("{}".utf8).write(to: outsideLayoutURL, options: [.atomic])
         try FileManager.default.createSymbolicLink(
@@ -1083,7 +1083,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1104,14 +1104,14 @@ extension XcircuiteFlowRuntimeTests {
             removeTemporaryRoot(root)
             removeTemporaryRoot(outsideRoot)
         }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let layoutRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: layoutRawDirectory)
+        try workspaceStore.ensureDirectory(at: layoutRawDirectory)
         let layoutURL = layoutRawDirectory.appending(path: "drc-layout.json")
         let layoutData = Data("{}".utf8)
         try layoutData.write(to: layoutURL, options: [.atomic])
@@ -1163,7 +1163,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1180,14 +1180,14 @@ extension XcircuiteFlowRuntimeTests {
     @Test func stageArtifactInputReferenceMatchesPathSuffixByComponent() async throws {
         let root = try makeTemporaryRoot("runtime-stage-artifact-component-suffix")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let layoutRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: layoutRawDirectory)
+        try workspaceStore.ensureDirectory(at: layoutRawDirectory)
         let layoutURL = layoutRawDirectory.appending(path: "notdrc-layout.json")
         let layoutData = Data("{}".utf8)
         try layoutData.write(to: layoutURL, options: [.atomic])
@@ -1195,7 +1195,7 @@ extension XcircuiteFlowRuntimeTests {
         let layoutStageDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "006-layout")
-        try packageStore.writeJSON(
+        try workspaceStore.writeJSON(
             FlowStageResult(
                 stageID: "006-layout",
                 status: .succeeded,
@@ -1236,7 +1236,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

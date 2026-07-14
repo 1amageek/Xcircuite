@@ -330,7 +330,7 @@ struct PDKFlowStageExecutorTests {
 
     private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
         let runDirectory = root
-            .appending(path: XcircuitePackage.directoryName)
+            .appending(path: XcircuiteWorkspace.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         do {
@@ -342,7 +342,7 @@ struct PDKFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

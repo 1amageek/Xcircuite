@@ -116,12 +116,12 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             )
             try context.checkCancellation()
             let relativePath = ".xcircuite/runs/\(context.runID)/electrical-signoff/physical-design-snapshot.json"
-            let url = try context.packageStore.url(
+            let url = try context.storage.url(
                 forProjectRelativePath: relativePath,
                 inProjectAt: context.projectRoot
             )
-            try context.packageStore.ensureDirectory(at: url.deletingLastPathComponent())
-            try context.packageStore.writeJSON(snapshot, to: url, forProjectAt: context.projectRoot)
+            try context.storage.ensureDirectory(at: url.deletingLastPathComponent())
+            try context.storage.writeJSON(snapshot, to: url, forProjectAt: context.projectRoot)
             let inputManifest = ElectricalSignoffInputArtifactManifest(
                 runID: context.runID,
                 stageID: stage.stageID,
@@ -129,11 +129,11 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             )
             try inputManifest.validate()
             let manifestPath = ".xcircuite/runs/\(context.runID)/electrical-signoff/standard-layout-inputs.json"
-            let manifestURL = try context.packageStore.url(
+            let manifestURL = try context.storage.url(
                 forProjectRelativePath: manifestPath,
                 inProjectAt: context.projectRoot
             )
-            try context.packageStore.writeJSON(inputManifest, to: manifestURL, forProjectAt: context.projectRoot)
+            try context.storage.writeJSON(inputManifest, to: manifestURL, forProjectAt: context.projectRoot)
             let manifestReference = try StageArtifactReferenceBuilder().reference(
                 for: manifestURL,
                 projectRoot: context.projectRoot,

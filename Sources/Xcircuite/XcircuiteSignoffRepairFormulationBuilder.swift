@@ -19,18 +19,18 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         var risk: XcircuitePlanningRiskClassification?
     }
 
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let compiler: XcircuiteRepairPlanFormulationCompiler
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         compiler: XcircuiteRepairPlanFormulationCompiler = XcircuiteRepairPlanFormulationCompiler(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.compiler = compiler
         self.fileReferenceVerifier = fileReferenceVerifier
@@ -126,7 +126,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadVerifiedReport<T: Decodable>(
@@ -139,7 +139,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         projectRoot: URL
     ) throws -> (report: T, reference: XcircuiteFileReference) {
         do {
-            _ = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            _ = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         } catch {
             throw XcircuiteSignoffRepairFormulationError.invalidRepairHintArtifact(
                 sourceKind: sourceKind,
@@ -207,8 +207,8 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         projectRoot: URL
     ) throws -> T {
         do {
-            let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-            return try packageStore.readJSON(type, from: url)
+            let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            return try workspaceStore.readJSON(type, from: url)
         } catch {
             throw XcircuiteSignoffRepairFormulationError.reportReadFailed(
                 path: path,

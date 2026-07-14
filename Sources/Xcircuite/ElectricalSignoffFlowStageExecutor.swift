@@ -166,12 +166,12 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
     ) throws -> ArtifactReference {
         let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
         let relativePath = "\(relativeDirectory)/repair-plan.json"
-        let fileURL = try context.packageStore.url(
+        let fileURL = try context.storage.url(
             forProjectRelativePath: relativePath,
             inProjectAt: context.projectRoot
         )
-        try context.packageStore.ensureDirectory(at: fileURL.deletingLastPathComponent())
-        try context.packageStore.writeJSON(plan, to: fileURL, forProjectAt: context.projectRoot)
+        try context.storage.ensureDirectory(at: fileURL.deletingLastPathComponent())
+        try context.storage.writeJSON(plan, to: fileURL, forProjectAt: context.projectRoot)
         return try StageArtifactReferenceBuilder().reference(
             for: fileURL,
             projectRoot: context.projectRoot,
@@ -187,12 +187,12 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
     ) throws -> ArtifactReference {
         let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
         let relativePath = "\(relativeDirectory)/run-result.json"
-        let fileURL = try context.packageStore.url(
+        let fileURL = try context.storage.url(
             forProjectRelativePath: relativePath,
             inProjectAt: context.projectRoot
         )
-        try context.packageStore.ensureDirectory(at: fileURL.deletingLastPathComponent())
-        try context.packageStore.writeJSON(runResult, to: fileURL, forProjectAt: context.projectRoot)
+        try context.storage.ensureDirectory(at: fileURL.deletingLastPathComponent())
+        try context.storage.writeJSON(runResult, to: fileURL, forProjectAt: context.projectRoot)
         return try StageArtifactReferenceBuilder().reference(
             for: fileURL,
             projectRoot: context.projectRoot,
@@ -208,12 +208,12 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
     ) throws -> ArtifactReference {
         let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
         let relativePath = "\(relativeDirectory)/foundation-evidence.json"
-        let fileURL = try context.packageStore.url(
+        let fileURL = try context.storage.url(
             forProjectRelativePath: relativePath,
             inProjectAt: context.projectRoot
         )
-        try context.packageStore.ensureDirectory(at: fileURL.deletingLastPathComponent())
-        try context.packageStore.writeJSON(evidence, to: fileURL, forProjectAt: context.projectRoot)
+        try context.storage.ensureDirectory(at: fileURL.deletingLastPathComponent())
+        try context.storage.writeJSON(evidence, to: fileURL, forProjectAt: context.projectRoot)
         return try StageArtifactReferenceBuilder().reference(
             for: fileURL,
             projectRoot: context.projectRoot,

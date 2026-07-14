@@ -6,7 +6,7 @@ import DesignFlowKernel
 
 extension XcircuiteDiagnosticPlanningProblemBuilder {
     func actionDomainPath(runID: String) -> String {
-        "\(XcircuitePackage.directoryName)/runs/\(runID)/\(XcircuitePlanningArtifactStore.actionDomainRelativePath)"
+        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(XcircuitePlanningArtifactStore.actionDomainRelativePath)"
     }
 
     func identifier(_ rawValue: String) throws -> String {

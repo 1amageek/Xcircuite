@@ -50,7 +50,7 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
         #expect(problemPDDL.contains("(:goal (and (p-drc-width-fixed)))"))
         #expect(problemPDDL.contains("(:metric minimize (total-cost))"))
 
-        let storedExport = try XcircuitePackageStore().readJSON(
+        let storedExport = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
             from: root.appending(path: result.exportArtifact.path)
         )
@@ -71,7 +71,7 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
         #expect(actionMapping.actionCostUnit == "planner action cost")
         #expect(actionMapping.actionCostSource == "planning-cost-model")
 
-        let manifest = try XcircuitePackageStore().readJSON(
+        let manifest = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteRunManifest.self,
             from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
         )
@@ -131,7 +131,7 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
     @Test func exportSymbolicPlannerProblemRefreshesStalePassedAuditAndBlocksMutatedProblem() throws {
         let root = try makeTemporaryRoot("symbolic-pddl-stale-audit")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareRun(root: root, runID: "run-pddl")
         let problemPath = ".xcircuite/runs/run-pddl/planning/problem.json"
         let staleAudit = try XcircuiteProblemTranslationAuditor().auditProblemTranslation(
@@ -176,7 +176,7 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
     @Test func exportSymbolicPlannerProblemRejectsStaleManifestProblemArtifact() throws {
         let root = try makeTemporaryRoot("symbolic-pddl-stale-problem-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareRun(root: root, runID: "run-pddl")
         var problem = makePlanningProblem(runID: "run-pddl")
         problem.problemID = "tampered-run-pddl-problem"
@@ -197,7 +197,7 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
     @Test func exportSymbolicPlannerProblemBlocksUnsupportedGoalAtomsBeforePDDL() throws {
         let root = try makeTemporaryRoot("symbolic-pddl-unsupported-goal")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareRun(root: root, runID: "run-pddl")
         var problem = makePlanningProblem(runID: "run-pddl")
         problem.objectives[0].evidence = [
@@ -232,7 +232,7 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
     @Test func exportSymbolicPlannerProblemBlocksUncoveredIntentClausesBeforePDDL() throws {
         let root = try makeTemporaryRoot("symbolic-pddl-uncovered-intent-clause")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         try prepareRun(root: root, runID: "run-pddl")
         var problem = makePlanningProblem(runID: "run-pddl")
         problem.sourceRefs[0] = XcircuitePlanningReference(
@@ -281,8 +281,8 @@ struct XcircuiteSymbolicPlannerPDDLExporterTests {
     }
 
     private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(runID: runID),

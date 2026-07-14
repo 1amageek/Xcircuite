@@ -2,10 +2,10 @@ import Foundation
 import DesignFlowKernel
 
 public struct OpAmpDesignArtifactStore: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
 
-    public init(packageStore: XcircuitePackageStore = XcircuitePackageStore()) {
-        self.packageStore = packageStore
+    public init(workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore()) {
+        self.workspaceStore = workspaceStore
     }
 
     @discardableResult
@@ -220,12 +220,12 @@ public struct OpAmpDesignArtifactStore: Sendable {
         artifactID: String,
         kind: XcircuiteFileKind
     ) throws -> XcircuiteFileReference {
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(relativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(relativePath)"
         let url = projectRoot.appending(path: projectRelativePath)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: projectRoot)
-        try packageStore.ensureDirectory(at: url.deletingLastPathComponent())
-        try packageStore.writeJSON(value, to: url, forProjectAt: projectRoot)
-        let reference = try packageStore.fileReference(
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: projectRoot)
+        try workspaceStore.ensureDirectory(at: url.deletingLastPathComponent())
+        try workspaceStore.writeJSON(value, to: url, forProjectAt: projectRoot)
+        let reference = try workspaceStore.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
             kind: kind,
@@ -233,7 +233,7 @@ public struct OpAmpDesignArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 
@@ -246,12 +246,12 @@ public struct OpAmpDesignArtifactStore: Sendable {
         kind: XcircuiteFileKind,
         format: XcircuiteFileFormat
     ) throws -> XcircuiteFileReference {
-        let projectRelativePath = "\(XcircuitePackage.directoryName)/runs/\(runID)/\(relativePath)"
+        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(relativePath)"
         let url = projectRoot.appending(path: projectRelativePath)
-        try packageStore.ensureRunDirectory(for: runID, inProjectAt: projectRoot)
-        try packageStore.ensureDirectory(at: url.deletingLastPathComponent())
-        try packageStore.writeText(text, to: url)
-        let reference = try packageStore.fileReference(
+        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: projectRoot)
+        try workspaceStore.ensureDirectory(at: url.deletingLastPathComponent())
+        try workspaceStore.writeText(text, to: url)
+        let reference = try workspaceStore.fileReference(
             forProjectRelativePath: projectRelativePath,
             artifactID: artifactID,
             kind: kind,
@@ -259,7 +259,7 @@ public struct OpAmpDesignArtifactStore: Sendable {
             inProjectAt: projectRoot,
             producedByRunID: runID
         )
-        try packageStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
         return reference
     }
 }

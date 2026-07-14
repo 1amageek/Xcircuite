@@ -20,7 +20,7 @@ struct FlowExecutionCancellationProbeTests {
 
         let runID = "run-cancel-probe"
         let runDirectory = root
-            .appending(path: XcircuitePackage.directoryName)
+            .appending(path: XcircuiteWorkspace.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
@@ -33,13 +33,13 @@ struct FlowExecutionCancellationProbeTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
         let probe = FlowExecutionCancellationProbe.make(context: context)
 
-        await #expect(throws: XcircuitePackageError.self) {
+        await #expect(throws: XcircuiteWorkspaceError.self) {
             _ = try await probe()
         }
     }

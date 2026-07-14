@@ -9,8 +9,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func generateParameterCandidatesCLIWritesJSONLAndRunArtifact() async throws {
         let root = try makeTemporaryRoot("parameter-candidates-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-1", withBounds: true),
@@ -77,8 +77,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func adaptiveBoundedRefinementUsesPreferredDirectionAndWritesSearchTrace() throws {
         let root = try makeTemporaryRoot("adaptive-parameter-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-3", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-3", withBounds: true, preferredDirection: "increase"),
@@ -124,8 +124,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func feedbackAwareRefinementDemotesRejectedAssignmentsAndRecordsLearningTrace() throws {
         let root = try makeTemporaryRoot("feedback-aware-parameter-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-4", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-4", withBounds: true, preferredDirection: "increase"),
@@ -205,8 +205,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func rejectedPlanLedgerRejectsCorruptedExistingJSONL() throws {
         let root = try makeTemporaryRoot("rejected-plan-ledger-corruption")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-ledger-corrupt", inProjectAt: root)
         let ledgerURL = root.appending(path: ".xcircuite/runs/run-ledger-corrupt/planning/rejected-plans.jsonl")
         try store.writeText("{not-json}\n", to: ledgerURL)
@@ -240,8 +240,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func rejectedPlanLedgerRejectsDuplicateRejectionID() throws {
         let root = try makeTemporaryRoot("rejected-plan-ledger-duplicate")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-ledger-duplicate", inProjectAt: root)
         let artifactStore = XcircuitePlanningArtifactStore()
         let record = rejectedPlanRecord(
@@ -274,9 +274,9 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func calibratedFeedbackAwareRefinementDemotesParetoFailedCandidates() async throws {
         let root = try makeTemporaryRoot("calibrated-feedback-aware-parameter-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-5", inProjectAt: root)
         let problem = makeMetricPlanningProblem(runID: "run-5", withBounds: true, preferredDirection: "increase")
         try artifactStore.persistPlanningProblem(problem, runID: "run-5", projectRoot: root)
@@ -451,8 +451,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func missingBoundsBlocksGenerationWithoutCandidateArtifact() throws {
         let root = try makeTemporaryRoot("parameter-candidates-missing-bounds")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-2", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-2", withBounds: false),
@@ -483,8 +483,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func generateParameterCandidatesRejectsTamperedPlanningProblemManifestArtifactBeforeUse() throws {
         let root = try makeTemporaryRoot("parameter-candidates-tampered-problem")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-tampered-problem", inProjectAt: root)
         let problemReference = try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-tampered-problem", withBounds: true),

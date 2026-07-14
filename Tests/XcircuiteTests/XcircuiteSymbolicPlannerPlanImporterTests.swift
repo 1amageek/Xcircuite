@@ -57,7 +57,7 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
             request: XcircuiteCandidatePlanVerificationRequest(runID: "run-pddl"),
             projectRoot: root
         )
-        let verification = try XcircuitePackageStore().readJSON(
+        let verification = try XcircuiteWorkspaceStore().readJSON(
             XcircuitePlanVerification.self,
             from: root.appending(path: verifierResult.planVerificationArtifact.path)
         )
@@ -66,7 +66,7 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         #expect(verification.missingGoalAtoms == [])
         #expect(verification.finalSymbolicState.contains("drc-width-fixed"))
 
-        let manifest = try XcircuitePackageStore().readJSON(
+        let manifest = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteRunManifest.self,
             from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
         )
@@ -84,7 +84,7 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         )
         let solverPlanPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/external-plan.txt"
         let solverPlanURL = root.appending(path: solverPlanPath)
-        try XcircuitePackageStore().writeText("(a-fix-m1-width)\n", to: solverPlanURL)
+        try XcircuiteWorkspaceStore().writeText("(a-fix-m1-width)\n", to: solverPlanURL)
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -116,7 +116,7 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
             request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
             projectRoot: root
         )
-        let manifest = try XcircuitePackageStore().readJSON(
+        let manifest = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteRunManifest.self,
             from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
         )
@@ -219,8 +219,8 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
     }
 
     private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(runID: runID),

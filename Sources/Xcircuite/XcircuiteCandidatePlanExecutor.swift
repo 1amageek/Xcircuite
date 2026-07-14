@@ -9,19 +9,19 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteCandidatePlanExecutor: Sendable {
-    let packageStore: XcircuitePackageStore
+    let workspaceStore: XcircuiteWorkspaceStore
     let artifactStore: XcircuitePlanningArtifactStore
     let layoutRunner: any LayoutCommandRunning
     let artifactBuilder: StageArtifactReferenceBuilder
     let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         layoutRunner: any LayoutCommandRunning = LayoutCommandRunner(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.layoutRunner = layoutRunner
         self.artifactBuilder = StageArtifactReferenceBuilder()
@@ -50,7 +50,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 reason: "candidate plan path cannot be resolved inside the project root."
             )
         }
-        let plan = try packageStore.readJSON(
+        let plan = try workspaceStore.readJSON(
             XcircuiteCandidatePlan.self,
             from: candidatePlanURL
         )
@@ -61,7 +61,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             )
         }
         let riskReviewer = XcircuiteCandidatePlanRiskReviewer()
-        let approvals = try packageStore.loadApprovals(
+        let approvals = try workspaceStore.loadApprovals(
             runID: request.runID,
             inProjectAt: projectRoot
         )

@@ -79,9 +79,9 @@ extension XcircuiteCandidatePlanVerifier {
                 continue
             }
             let storageReference = legacyArtifactReference(reference)
-            let report = try packageStore.readJSON(
+            let report = try workspaceStore.readJSON(
                 XcircuiteNetlistParameterEditReport.self,
-                from: packageStore.url(forProjectRelativePath: storageReference.path, inProjectAt: projectRoot)
+                from: workspaceStore.url(forProjectRelativePath: storageReference.path, inProjectAt: projectRoot)
             )
             if let sourceParameterCandidateID = report.sourceParameterCandidateID {
                 ids.append(sourceParameterCandidateID)
@@ -126,7 +126,7 @@ extension XcircuiteCandidatePlanVerifier {
                 message: $0.message
             )
         }
-        try packageStore.appendRunAction(
+        try workspaceStore.appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "\(verification.planID)-verification",
                 runID: verification.runID,
@@ -153,7 +153,7 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     func loadPlanningProblem(
@@ -163,11 +163,11 @@ extension XcircuiteCandidatePlanVerifier {
         guard let path = plan.sourceProblemRef.path else {
             return nil
         }
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             return nil
         }
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
             from: url
         )
@@ -186,7 +186,7 @@ extension XcircuiteCandidatePlanVerifier {
         projectRoot: URL
     ) throws -> ActionDomainSnapshotContext {
         let resolved = try XcircuiteActionDomainSnapshotResolver(
-            packageStore: packageStore,
+            workspaceStore: workspaceStore,
             artifactStore: artifactStore
         ).loadDefaultOrPersist(
             manifest: manifest,
@@ -211,7 +211,7 @@ extension XcircuiteCandidatePlanVerifier {
                     reason: "multiple manifest artifacts reference the same explicit path."
                 )
             }
-            let reference = try matches.first ?? packageStore.fileReference(
+            let reference = try matches.first ?? workspaceStore.fileReference(
                 forProjectRelativePath: explicitPath,
                 artifactID: artifactID,
                 kind: .other,

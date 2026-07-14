@@ -10,8 +10,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func generateCandidatePlanCLIReadsPlanningProblemFromRunManifest() async throws {
         let root = try makeTemporaryRoot("candidate-plan-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.objectives[0].evidence = [
@@ -186,8 +186,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func generateCandidatePlanBlocksWhenTranslationAuditBlocks() async throws {
         let root = try makeTemporaryRoot("candidate-plan-audit-block")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.objectives[0].sourceRefIDs = []
@@ -214,9 +214,9 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func generateCandidatePlanRefreshesStalePassedAuditAndBlocksMutatedProblem() async throws {
         let root = try makeTemporaryRoot("candidate-plan-stale-audit")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         let problemRef = try artifactStore.persistPlanningProblem(
@@ -271,10 +271,10 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func generateCandidatePlanRefreshesTamperedActionDomainSnapshotBeforeUse() throws {
         let root = try makeTemporaryRoot("candidate-plan-tampered-action-domain")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
         let verifier = XcircuiteFileReferenceVerifier()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.objectives[0].evidence = [
@@ -340,9 +340,9 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func generateCandidatePlanRejectsTamperedPlanningProblemManifestArtifactBeforeUse() throws {
         let root = try makeTemporaryRoot("candidate-plan-tampered-problem")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         let problemReference = try artifactStore.persistPlanningProblem(
@@ -426,8 +426,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func generatedTraceCarriesSymbolicStateAcrossSelectedSteps() throws {
         let root = try makeTemporaryRoot("candidate-plan-state-progression")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-state", inProjectAt: root)
         let problem = makeStateProgressionPlanningProblem()
         _ = try XcircuitePlanningArtifactStore().persistPlanningProblem(
@@ -481,8 +481,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func stateAwareStrategyOrdersObjectivesBySymbolicReadiness() throws {
         let root = try makeTemporaryRoot("candidate-plan-state-aware-ordering")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-state", inProjectAt: root)
         var problem = makeStateProgressionPlanningProblem()
         problem.objectives.reverse()
@@ -530,8 +530,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func globalRejectedPlanFeedbackPenalizesMatchingSymbolicActionGate() async throws {
         let root = try makeTemporaryRoot("candidate-plan-global-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-global-feedback", inProjectAt: root)
         let problem = makeGlobalFeedbackPlanningProblem()
         _ = try XcircuitePlanningArtifactStore().persistPlanningProblem(
@@ -612,9 +612,9 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func cp7CalibrationPenalizesMatchingSymbolicActionGate() async throws {
         let root = try makeTemporaryRoot("candidate-plan-cp7-calibration")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-global-feedback", inProjectAt: root)
         let problem = makeGlobalFeedbackPlanningProblem()
         _ = try artifactStore.persistPlanningProblem(
@@ -757,9 +757,9 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func cp7PolicySelectsCalibratedSymbolicStrategyFromRunManifest() async throws {
         let root = try makeTemporaryRoot("candidate-plan-cp7-policy")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-global-feedback", inProjectAt: root)
         let problem = makeGlobalFeedbackPlanningProblem()
         _ = try artifactStore.persistPlanningProblem(
@@ -892,9 +892,9 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func symbolicPlannerFamilyPromotesSelectedCP7CalibratedCandidate() async throws {
         let root = try makeTemporaryRoot("symbolic-planner-family-cp7")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-global-feedback", inProjectAt: root)
         let problem = makeGlobalFeedbackPlanningProblem()
         _ = try artifactStore.persistPlanningProblem(
@@ -1066,11 +1066,11 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func symbolicPlannerFamilyRejectsExistingFamilyRunOutputs() throws {
         let root = try makeTemporaryRoot("symbolic-planner-family-reuse")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
         let generator = XcircuiteCandidatePlanGenerator()
         let verifier = LocalArtifactVerifier()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.objectives[0].evidence = [
@@ -1129,11 +1129,11 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func symbolicPlannerFamilyCandidateArtifactIDsAreScopedByFamilyRun() throws {
         let root = try makeTemporaryRoot("symbolic-planner-family-artifact-id-scope")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
         let generator = XcircuiteCandidatePlanGenerator()
         let verifier = LocalArtifactVerifier()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.objectives[0].evidence = [
@@ -1187,8 +1187,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func unsupportedGoalAtomsBlockCandidatePlanBeforeGeneration() async throws {
         let root = try makeTemporaryRoot("candidate-plan-missing-goal")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.objectives[0].evidence = [
@@ -1232,8 +1232,8 @@ struct XcircuiteCandidatePlanGeneratorTests {
     @Test func uncoveredIntentClausesBlockCandidatePlanBeforeGeneration() async throws {
         let root = try makeTemporaryRoot("candidate-plan-uncovered-intent-clause")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         var problem = makeDRCPlanningProblem()
         problem.sourceRefs[0] = XcircuitePlanningReference(

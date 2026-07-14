@@ -199,7 +199,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.nextActions.contains("run-verification-gate:native-drc"))
         #expect(result.nextActions.contains("run-verification-gate:native-lvs"))
 
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let execution = try store.readJSON(
             XcircuiteCandidatePlanExecution.self,
             from: root.appending(path: result.planExecutionArtifact.path)
@@ -290,7 +290,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.status == "blocked")
         #expect(result.designDiffArtifact == nil)
         #expect(result.nextActions.contains("request-human-approval:policy-repair-approval"))
-        let execution = try XcircuitePackageStore().readJSON(
+        let execution = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteCandidatePlanExecution.self,
             from: root.appending(path: result.planExecutionArtifact.path)
         )
@@ -301,8 +301,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorBlocksApprovalRequiredRiskBeforeDesignMutation() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-approval-risk")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-risk", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeApprovalRequiredLayoutPlan(),
@@ -340,8 +340,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func approveCandidatePlanRiskCLIAllowsExecutionAfterReview() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-approved-risk")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-risk", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeApprovalRequiredLayoutPlan(),
@@ -410,8 +410,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorChainsImplementedLayoutCommandsAcrossSteps() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-chain")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-3", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeChainedLayoutPlan(),
@@ -483,8 +483,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorExportsStandardLayoutArtifactsFromLayoutStepHint() async throws {
         let root = try makeTemporaryRoot("candidate-plan-standard-layout-export")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-5", inProjectAt: root)
         try writeStandardLayoutTechnology(root: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
@@ -534,8 +534,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorRecordsMultiFamilyCoverageAndNetlistArtifactHandoff() async throws {
         let root = try makeTemporaryRoot("candidate-plan-multi-family-coverage")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-coverage", inProjectAt: root)
         try writeSPICENetlist(root: root, path: "circuits/input.spice")
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
@@ -640,8 +640,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorPersistsLayoutCommandFailureAsPlanExecutionDiagnostic() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-failure")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-4", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeFailingLayoutPlan(),
@@ -673,8 +673,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorRejectsLayoutCommandOutputPathMismatchBeforeArtifactPromotion() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-output-path-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-layout-path-mismatch", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeSingleLayoutPlan(runID: "run-layout-path-mismatch"),
@@ -703,8 +703,8 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorRejectsLayoutCommandDigestMismatchBeforeArtifactPromotion() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-digest-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-layout-digest-mismatch", inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistCandidatePlan(
             makeSingleLayoutPlan(runID: "run-layout-digest-mismatch"),
@@ -736,8 +736,8 @@ struct XcircuiteCandidatePlanExecutorTests {
         runID: String,
         problem: XcircuiteCircuitPlanningProblem
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             problem,

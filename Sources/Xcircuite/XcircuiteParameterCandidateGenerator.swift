@@ -3,16 +3,16 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteParameterCandidateGenerator: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.fileReferenceVerifier = fileReferenceVerifier
     }
@@ -34,9 +34,9 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
             projectRoot: projectRoot,
             expectedFormat: .json
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
         )
         guard problem.runID == request.runID else {
             throw XcircuiteParameterCandidateGenerationError.runMismatch(
@@ -856,7 +856,7 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func requiredPath(
@@ -937,7 +937,7 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? packageStore.fileReference(
+        let reference = try matches.first ?? workspaceStore.fileReference(
             forProjectRelativePath: explicitPath,
             artifactID: artifactID,
             kind: .other,
@@ -1184,9 +1184,9 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteMetricThresholdProfile {
-        let profile = try packageStore.readJSON(
+        let profile = try workspaceStore.readJSON(
             XcircuiteMetricThresholdProfile.self,
-            from: packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         )
         guard profile.runID == runID else {
             throw XcircuiteParameterCandidateGenerationError.runMismatch(
@@ -1202,9 +1202,9 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteCostCalibrationReport {
-        let report = try packageStore.readJSON(
+        let report = try workspaceStore.readJSON(
             XcircuiteCostCalibrationReport.self,
-            from: packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         )
         guard report.runID == runID else {
             throw XcircuiteParameterCandidateGenerationError.runMismatch(
@@ -1220,7 +1220,7 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
         runID: String,
         projectRoot: URL
     ) throws -> [XcircuiteParetoCandidateSet.Candidate] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var candidates: [XcircuiteParetoCandidateSet.Candidate] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -1253,7 +1253,7 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
         path: String,
         projectRoot: URL
     ) throws -> [XcircuiteParameterCandidate] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var candidates: [XcircuiteParameterCandidate] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -1274,7 +1274,7 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
         path: String,
         projectRoot: URL
     ) throws -> [XcircuiteRejectedPlanRecord] {
-        let url = try packageStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var records: [XcircuiteRejectedPlanRecord] = []
         for (index, line) in text.split(separator: "\n").enumerated() {

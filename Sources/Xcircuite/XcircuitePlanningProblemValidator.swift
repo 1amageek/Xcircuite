@@ -3,16 +3,16 @@ import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuitePlanningProblemValidator: Sendable {
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.fileReferenceVerifier = fileReferenceVerifier
     }
@@ -30,9 +30,9 @@ public struct XcircuitePlanningProblemValidator: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try packageStore.readJSON(
+        let problem = try workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: packageStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
         )
         guard problem.runID == request.runID else {
             throw XcircuitePlanningProblemValidationError.runMismatch(
@@ -649,7 +649,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
     }
 
     private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try packageStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
     }
 
     private func loadOrPersistActionDomainSnapshot(
@@ -662,7 +662,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
         let resolved: XcircuiteResolvedActionDomainSnapshot
         do {
             resolved = try XcircuiteActionDomainSnapshotResolver(
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 artifactStore: artifactStore
             ).loadExplicitOrDefault(
                 explicitPath: explicitPath,
@@ -752,7 +752,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? packageStore.fileReference(
+        let reference = try matches.first ?? workspaceStore.fileReference(
             forProjectRelativePath: explicitPath,
             artifactID: artifactID,
             kind: .other,

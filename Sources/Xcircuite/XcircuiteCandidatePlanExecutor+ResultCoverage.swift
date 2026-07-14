@@ -147,7 +147,7 @@ extension XcircuiteCandidatePlanExecutor {
                 summary: "Executed candidate plan step \(result.stepID) with operation \(result.operationID)."
             )
         }
-        return try packageStore.writeDesignDiff(
+        return try workspaceStore.writeDesignDiff(
             XcircuiteDesignDiff(
                 runID: plan.runID,
                 title: "Candidate plan \(plan.planID) execution",
@@ -273,7 +273,7 @@ extension XcircuiteCandidatePlanExecutor {
         let outputs = [executionRef]
             + legacyArtifactReferences(execution.artifactReferences)
             + [designDiffRef].compactMap { $0 }
-        try packageStore.appendRunAction(
+        try workspaceStore.appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "\(execution.planID)-execution",
                 runID: execution.runID,

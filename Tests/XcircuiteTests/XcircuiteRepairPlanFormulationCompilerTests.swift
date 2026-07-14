@@ -9,8 +9,8 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
     @Test func formulateRepairPlanningProblemCLICompilesAuditableProblemAndPDDLExport() async throws {
         let root = try makeTemporaryRoot("repair-formulation")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-formulation", inProjectAt: root)
         try persistActionDomainSnapshot(root: root, runID: "run-formulation")
         let formulation = makeFormulation(runID: "run-formulation")
@@ -101,8 +101,8 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
     @Test func compilerRejectsActionReferencingUnknownGoal() throws {
         let root = try makeTemporaryRoot("repair-formulation-unknown-goal")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-formulation", inProjectAt: root)
         var formulation = makeFormulation(runID: "run-formulation")
         formulation.actions[0].sourceGoalIDs = ["missing-goal"]
@@ -297,8 +297,8 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
     ) throws {
         let root = try makeTemporaryRoot(rootName)
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: formulation.runID, inProjectAt: root)
 
         do {
@@ -403,7 +403,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
                 ),
             ]
         )
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let snapshotURL = root.appending(path: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json")
         try FileManager.default.createDirectory(
             at: snapshotURL.deletingLastPathComponent(),

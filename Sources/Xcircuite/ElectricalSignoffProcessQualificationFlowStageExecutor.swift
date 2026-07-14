@@ -154,12 +154,12 @@ public struct ElectricalSignoffProcessQualificationFlowStageExecutor: FlowStageE
         artifactID: String,
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
-        let url = try context.packageStore.url(
+        let url = try context.storage.url(
             forProjectRelativePath: relativePath,
             inProjectAt: context.projectRoot
         )
-        try context.packageStore.ensureDirectory(at: url.deletingLastPathComponent())
-        try context.packageStore.writeJSON(value, to: url, forProjectAt: context.projectRoot)
+        try context.storage.ensureDirectory(at: url.deletingLastPathComponent())
+        try context.storage.writeJSON(value, to: url, forProjectAt: context.projectRoot)
         return try StageArtifactReferenceBuilder().reference(
             for: url,
             projectRoot: context.projectRoot,

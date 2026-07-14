@@ -5,20 +5,20 @@ import DesignFlowKernel
 public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     private let ledgerLoader: any FlowRunLedgerLoading
     private let reviewBundler: any FlowRunReviewBundling
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let identifierValidator: XcircuiteIdentifierValidator
     private let stageClassifier: XcircuiteGeneratedLayoutSignoffStageClassifier
 
     public init(
         ledgerLoader: any FlowRunLedgerLoading = FlowRunLedgerLoader(),
         reviewBundler: any FlowRunReviewBundling = DefaultFlowRunReviewBundler(),
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator(),
         stageClassifier: XcircuiteGeneratedLayoutSignoffStageClassifier = XcircuiteGeneratedLayoutSignoffStageClassifier()
     ) {
         self.ledgerLoader = ledgerLoader
         self.reviewBundler = reviewBundler
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.identifierValidator = identifierValidator
         self.stageClassifier = stageClassifier
     }
@@ -56,9 +56,9 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     ) throws -> XcircuiteGeneratedLayoutFailureLadderReport {
         let reportWithoutSelfRef = try collect(request: request, projectRoot: projectRoot)
         let reportPath = reportProjectRelativePath(runID: request.runID, ladderID: request.ladderID)
-        let reportURL = try packageStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
-        try packageStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try packageStore.fileReference(
+        let reportURL = try workspaceStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
+        try workspaceStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
+        let reportArtifact = try workspaceStore.fileReference(
             forProjectRelativePath: reportPath,
             artifactID: request.ladderID,
             kind: .report,
@@ -67,7 +67,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
             producedByRunID: request.runID,
             verifiedByRunID: request.runID
         )
-        try packageStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
+        try workspaceStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var report = reportWithoutSelfRef
         report.reportArtifact = reportArtifact
@@ -434,7 +434,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     }
 
     private func reportProjectRelativePath(runID: String, ladderID: String) -> String {
-        "\(XcircuitePackage.directoryName)/runs/\(runID)/reports/generated-layout-failure-ladder-\(ladderID).json"
+        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/reports/generated-layout-failure-ladder-\(ladderID).json"
     }
 
     private func artifactReferenceSortOrder(

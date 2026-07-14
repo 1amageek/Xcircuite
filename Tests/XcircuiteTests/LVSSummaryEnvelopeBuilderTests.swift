@@ -11,15 +11,15 @@ struct LVSSummaryEnvelopeBuilderTests {
     @Test func duplicateMismatchBucketsProduceUniqueFeedbackChannels() throws {
         let root = try makeTemporaryRoot("duplicate-lvs-buckets")
         defer { removeTemporaryRoot(root) }
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
         let runID = "run-lvs-envelope"
-        let runDirectory = try packageStore.createRunDirectory(for: runID, inProjectAt: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: runID, inProjectAt: root)
         let rawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "008-lvs")
             .appending(path: "raw")
-        try packageStore.ensureDirectory(at: rawDirectory)
+        try workspaceStore.ensureDirectory(at: rawDirectory)
 
         let bucket = LVSMismatchBucketSummary(
             ruleID: "LVS_MODEL_MISMATCH",
@@ -60,7 +60,7 @@ struct LVSSummaryEnvelopeBuilderTests {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(summary).write(to: summaryURL, options: .atomic)
-        let summaryReference = try foundationReference(packageStore.fileReference(
+        let summaryReference = try foundationReference(workspaceStore.fileReference(
             forProjectRelativePath: ".xcircuite/runs/\(runID)/stages/008-lvs/raw/lvs-summary.json",
             artifactID: "lvs-summary",
             kind: .report,
@@ -81,7 +81,7 @@ struct LVSSummaryEnvelopeBuilderTests {
                 projectRoot: root,
                 runID: runID,
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

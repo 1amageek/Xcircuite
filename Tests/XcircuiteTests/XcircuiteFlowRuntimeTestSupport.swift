@@ -144,10 +144,10 @@ extension XcircuiteFlowRuntimeTests {
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
-            try context.packageStore.ensureDirectory(at: rawDirectory)
+            try context.storage.ensureDirectory(at: rawDirectory)
             let waveformURL = rawDirectory.appending(path: fileName)
-            try context.packageStore.writeText(csv, to: waveformURL)
-            let reference = try context.packageStore.fileReference(
+            try context.storage.writeText(csv, to: waveformURL)
+            let reference = try context.storage.fileReference(
                 forProjectRelativePath: ".xcircuite/runs/\(context.runID)/stages/\(stage.stageID)/raw/\(fileName)",
                 artifactID: artifactID,
                 kind: .waveform,
@@ -595,7 +595,7 @@ extension XcircuiteFlowRuntimeTests {
     }
 
     func readToolchainManifest(in root: URL, runID: String) throws -> FlowToolchainManifest {
-        try XcircuitePackageStore().readJSON(
+        try XcircuiteWorkspaceStore().readJSON(
             FlowToolchainManifest.self,
             from: root.appending(path: ".xcircuite/runs/\(runID)/toolchain.json")
         )

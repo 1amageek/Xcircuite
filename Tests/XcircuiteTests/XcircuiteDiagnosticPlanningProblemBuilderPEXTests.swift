@@ -112,8 +112,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
     @Test func generatePlanningProblemCLIReadsPEXSummaryFromRunManifest() async throws {
         let root = try makeTemporaryRoot("pex-planning-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-3", inProjectAt: root)
         let summaryPath = ".xcircuite/runs/run-3/stages/009-pex/raw/pex-summary.json"
         let layoutPath = ".xcircuite/runs/run-3/stages/006-layout/raw/layout.gds"
@@ -217,8 +217,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
     @Test func generatePlanningProblemRejectsMissingExplicitMetricReport() throws {
         let root = try makeTemporaryRoot("pex-planning-missing-metric-report")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-missing-metric", inProjectAt: root)
         let summaryPath = ".xcircuite/runs/run-missing-metric/stages/009-pex/raw/pex-summary.json"
         try registerJSONArtifact(
@@ -370,7 +370,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -397,7 +397,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),

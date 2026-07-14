@@ -7,7 +7,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        storage: any VerifiedImprovementCorpusStoring = XcircuitePackageStore(),
+        storage: any VerifiedImprovementCorpusStoring = XcircuiteWorkspaceStore(),
         identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator(),
         fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
     ) {
@@ -630,13 +630,13 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
 
     private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
         try storage.url(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/verified-improvement/\(suiteID)",
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/verified-improvement/\(suiteID)",
             inProjectAt: projectRoot
         )
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuitePackage.directoryName)/qualification/verified-improvement/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspace.directoryName)/qualification/verified-improvement/\(suiteID)/\(fileName)"
     }
 
     private func isDesignDiffArtifact(_ reference: XcircuiteFileReference) -> Bool {

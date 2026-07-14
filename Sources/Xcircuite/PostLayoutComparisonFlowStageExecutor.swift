@@ -56,7 +56,7 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
-            try context.packageStore.ensureDirectory(at: rawDirectory)
+            try context.storage.ensureDirectory(at: rawDirectory)
             try context.checkCancellation()
 
             let preLayoutWaveformURL = try preLayoutWaveformInput.resolveExisting(
@@ -77,7 +77,7 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
             )
             try context.checkCancellation()
             let reportURL = rawDirectory.appending(path: "comparison-report.json")
-            try context.packageStore.writeJSON(
+            try context.storage.writeJSON(
                 report,
                 to: reportURL,
                 forProjectAt: context.projectRoot

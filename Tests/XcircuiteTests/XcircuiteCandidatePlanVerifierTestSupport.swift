@@ -75,8 +75,8 @@ extension XcircuiteCandidatePlanVerifierTests {
         runID: String,
         problem: XcircuiteCircuitPlanningProblem
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try XcircuitePlanningArtifactStore().persistPlanningProblem(
             problem,
@@ -288,8 +288,8 @@ extension XcircuiteCandidatePlanVerifierTests {
         layoutNetlist: String,
         schematicNetlist: String
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText(layoutNetlist, path: "circuits/layout.spice", root: root)
         try writeText(schematicNetlist, path: "circuits/schematic.spice", root: root)
@@ -311,9 +311,9 @@ extension XcircuiteCandidatePlanVerifierTests {
         layoutCase: ProducedLayoutCorpusCase,
         circuitCase: ProducedCircuitCorpusCase
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText(
             circuitCase.schematicNetlist,
@@ -366,9 +366,9 @@ extension XcircuiteCandidatePlanVerifierTests {
         runID: String,
         layoutCase: ProducedLayoutCorpusCase
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createPackage(at: root)
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText(
             """
@@ -633,8 +633,8 @@ extension XcircuiteCandidatePlanVerifierTests {
         runID: String,
         target: Double
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText(
             """
@@ -766,8 +766,8 @@ extension XcircuiteCandidatePlanVerifierTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: runID, inProjectAt: root)
         try writeText("GDS placeholder for deterministic mock PEX input", path: "layout/top.gds", root: root)
         try writeText(

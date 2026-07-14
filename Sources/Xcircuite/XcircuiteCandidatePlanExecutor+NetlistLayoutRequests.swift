@@ -15,13 +15,13 @@ extension XcircuiteCandidatePlanExecutor {
         context: inout CandidatePlanExecutionContext
     ) async throws -> XcircuiteCandidatePlanExecutionStepResult {
         let executionDirectory = try executionDirectoryURL(plan: plan, step: step, projectRoot: projectRoot)
-        try packageStore.ensureDirectory(at: executionDirectory)
+        try workspaceStore.ensureDirectory(at: executionDirectory)
         guard let sourceNetlistPath = stringHint("netlistPath", step: step)
             ?? stringHint("inputNetlistPath", step: step)
             ?? context.latestNetlistPath else {
             throw XcircuiteCandidatePlanExecutionError.missingNetlistInput(stepID: step.stepID)
         }
-        let sourceNetlistURL = try packageStore.url(
+        let sourceNetlistURL = try workspaceStore.url(
             forProjectRelativePath: sourceNetlistPath,
             inProjectAt: projectRoot
         )
@@ -40,7 +40,7 @@ extension XcircuiteCandidatePlanExecutor {
         let outputNetlistURL = executionDirectory.appending(path: "netlist.spice")
         let outputNetlistPath = try projectRelativePath(for: outputNetlistURL, projectRoot: projectRoot)
         let serialized = SPICESerializer().serialize(edited.netlist, options: .default)
-        try packageStore.writeText(serialized, to: outputNetlistURL)
+        try workspaceStore.writeText(serialized, to: outputNetlistURL)
         context.latestNetlistPath = outputNetlistPath
         let outputNetlistRef = try artifactBuilder.reference(
             for: outputNetlistURL,
@@ -63,7 +63,7 @@ extension XcircuiteCandidatePlanExecutor {
             outputNetlistArtifactID: outputNetlistRef.artifactID ?? "candidate-step-\(step.order)-edited-netlist",
             edits: edited.edits
         )
-        try packageStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try workspaceStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
         let reportRef = try artifactBuilder.reference(
             for: reportURL,
             projectRoot: projectRoot,
@@ -74,7 +74,7 @@ extension XcircuiteCandidatePlanExecutor {
         )
         let artifacts = [outputNetlistRef, reportRef]
         for artifact in artifacts {
-            try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
+            try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
         }
         let artifactReferences = try foundationArtifactReferences(
             artifacts,
@@ -184,7 +184,7 @@ extension XcircuiteCandidatePlanExecutor {
         guard requiresExistingCell(step.operationID) else {
             return step
         }
-        let documentURL = try packageStore.url(
+        let documentURL = try workspaceStore.url(
             forProjectRelativePath: inputDocumentPath,
             inProjectAt: projectRoot
         )
@@ -346,7 +346,7 @@ extension XcircuiteCandidatePlanExecutor {
         }
         let cellID = try uuidHint("cellID", step: step, fallbackIndex: step.order * 10 + 1)
         let shapeID = try uuidHint("shapeID", step: step, fallbackIndex: step.order * 10 + 3)
-        let documentURL = try packageStore.url(
+        let documentURL = try workspaceStore.url(
             forProjectRelativePath: inputDocumentPath,
             inProjectAt: projectRoot
         )

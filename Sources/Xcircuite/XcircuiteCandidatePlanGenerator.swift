@@ -8,14 +8,14 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
         var trace: XcircuiteSymbolicPlannerPolicyTrace
     }
 
-    let packageStore: XcircuitePackageStore
+    let workspaceStore: XcircuiteWorkspaceStore
     let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
     ) {
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
     }
 

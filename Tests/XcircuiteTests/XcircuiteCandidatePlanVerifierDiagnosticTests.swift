@@ -34,8 +34,8 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func artifactIntegrityFailsWhenCandidateArtifactDigestDoesNotMatchFile() throws {
         let root = try makeTemporaryRoot("candidate-plan-artifact-integrity-tamper")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-integrity-tamper", inProjectAt: root)
         let plan = makeSingleStepPlan(
             runID: "run-integrity-tamper",
@@ -594,7 +594,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "blocked")
         #expect(result.accepted == false)
         #expect(result.nextActions.contains("revise-plan-to-cover-goals:objective-1"))
-        let verification = try XcircuitePackageStore().readJSON(
+        let verification = try XcircuiteWorkspaceStore().readJSON(
             XcircuitePlanVerification.self,
             from: root.appending(path: result.planVerificationArtifact.path)
         )

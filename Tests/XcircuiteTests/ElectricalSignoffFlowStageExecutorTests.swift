@@ -37,7 +37,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             result.artifacts.first { $0.artifactID == "electrical-signoff-foundation-evidence" }
         )
         #expect(foundationReference.sha256.count == 64)
-        let foundationURL = try XcircuitePackageStore().url(
+        let foundationURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: foundationReference.path,
             inProjectAt: context.projectRoot
         )
@@ -66,7 +66,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(result.status == FlowStageStatus.failed)
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-repair-plan" })
         let root = context.projectRoot
-        let url = try XcircuitePackageStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
+        let url = try XcircuiteWorkspaceStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
         let plan = try JSONDecoder().decode(ElectricalSignoffRepairPlan.self, from: Data(contentsOf: url))
         #expect(plan.candidates.count == 1)
         #expect(plan.candidates.first?.axis == .erc)
@@ -107,7 +107,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: request.runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -122,7 +122,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let inputManifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-signoff-input-manifest"
         })
-        let inputManifestURL = try XcircuitePackageStore().url(
+        let inputManifestURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: inputManifestReference.path,
             inProjectAt: root
         )
@@ -134,7 +134,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(inputManifest.inputArtifacts.count == 1)
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-tool-evidence" })
         let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
-        let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
+        let suiteURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
         let suite = try JSONDecoder().decode(RetainedCorpusSuite.self, from: Data(contentsOf: suiteURL))
         #expect(suite.isValid)
         #expect(suite.lanes.first?.domain == "electrical-signoff")
@@ -142,7 +142,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let retainedReportReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-report" })
         let qualificationReportReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-qualification-report" })
         let evidenceReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-tool-evidence" })
-        let evidenceURL = try XcircuitePackageStore().url(forProjectRelativePath: evidenceReference.path, inProjectAt: root)
+        let evidenceURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: evidenceReference.path, inProjectAt: root)
         let toolEvidence = try JSONDecoder().decode(ToolEvidence.self, from: Data(contentsOf: evidenceURL))
         let lane = try #require(suite.lanes.first)
         let policy = ReleaseQualificationPolicy(
@@ -229,7 +229,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: request.runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -243,7 +243,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let inputManifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-signoff-input-manifest"
         })
-        let inputManifestURL = try XcircuitePackageStore().url(
+        let inputManifestURL = try XcircuiteWorkspaceStore().url(
             forProjectRelativePath: inputManifestReference.path,
             inProjectAt: root
         )
@@ -256,7 +256,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let oracleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-observations" })
         #expect(oracleReference.sha256.count == 64)
         let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
-        let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
+        let suiteURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
         let suite = try JSONDecoder().decode(RetainedCorpusSuite.self, from: Data(contentsOf: suiteURL))
         let requirements = try #require(suite.requirements)
         #expect(requirements.requiredArtifacts.contains(oracleReference.path))
@@ -333,7 +333,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -347,17 +347,17 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stdout" })
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stderr" })
         let executionReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-execution" })
-        let executionURL = try XcircuitePackageStore().url(forProjectRelativePath: executionReference.path, inProjectAt: root)
+        let executionURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: executionReference.path, inProjectAt: root)
         let execution = try JSONDecoder().decode(ElectricalSignoffOracleProcessExecution.self, from: Data(contentsOf: executionURL))
         #expect(execution.status == "completed")
         #expect(execution.exitCode == 0)
         #expect(execution.arguments.contains { $0.contains("oracle-complete") })
 
         let oracleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-observations" })
-        let oracleURL = try XcircuitePackageStore().url(forProjectRelativePath: oracleReference.path, inProjectAt: root)
+        let oracleURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: oracleReference.path, inProjectAt: root)
         #expect(FileManager.default.fileExists(atPath: oracleURL.path(percentEncoded: false)))
         let suiteReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-retained-suite" })
-        let suiteURL = try XcircuitePackageStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
+        let suiteURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: suiteReference.path, inProjectAt: root)
         let suite = try JSONDecoder().decode(RetainedCorpusSuite.self, from: Data(contentsOf: suiteURL))
         let requirements = try #require(suite.requirements)
         #expect(requirements.requiredArtifacts.contains(executionReference.path))
@@ -411,7 +411,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -426,7 +426,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stdout" })
         #expect(result.artifacts.contains { $0.artifactID == "electrical-signoff-oracle-stderr" })
         let executionReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-execution" })
-        let executionURL = try XcircuitePackageStore().url(forProjectRelativePath: executionReference.path, inProjectAt: root)
+        let executionURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: executionReference.path, inProjectAt: root)
         let execution = try JSONDecoder().decode(ElectricalSignoffOracleProcessExecution.self, from: Data(contentsOf: executionURL))
         #expect(execution.status == "failed")
         #expect(execution.exitCode == 7)
@@ -571,43 +571,43 @@ struct ElectricalSignoffFlowStageExecutorTests {
             to: root.appending(path: "process-qualification.json")
         )
 
-        let packageStore = XcircuitePackageStore()
-        let requestReference = try packageStore.fileReference(
+        let workspaceStore = XcircuiteWorkspaceStore()
+        let requestReference = try workspaceStore.fileReference(
             forProjectRelativePath: "request.json",
             artifactID: "release-request-input",
             kind: .report,
             format: .json,
             inProjectAt: root
         )
-        let runResultReference = try packageStore.fileReference(
+        let runResultReference = try workspaceStore.fileReference(
             forProjectRelativePath: "run-result.json",
             artifactID: "release-run-result-input",
             kind: .report,
             format: .json,
             inProjectAt: root
         )
-        let qualificationSpecReference = try packageStore.fileReference(
+        let qualificationSpecReference = try workspaceStore.fileReference(
             forProjectRelativePath: "qualification-spec.json",
             artifactID: "release-qualification-spec-input",
             kind: .report,
             format: .json,
             inProjectAt: root
         )
-        let qualificationReportReference = try packageStore.fileReference(
+        let qualificationReportReference = try workspaceStore.fileReference(
             forProjectRelativePath: "qualification-report.json",
             artifactID: "release-qualification-report-input",
             kind: .report,
             format: .json,
             inProjectAt: root
         )
-        let policyReference = try packageStore.fileReference(
+        let policyReference = try workspaceStore.fileReference(
             forProjectRelativePath: "release-policy.json",
             artifactID: "release-policy-input",
             kind: .technology,
             format: .json,
             inProjectAt: root
         )
-        let processQualificationEvidenceReference = try packageStore.fileReference(
+        let processQualificationEvidenceReference = try workspaceStore.fileReference(
             forProjectRelativePath: "process-qualification.json",
             artifactID: "process-qualification-input",
             kind: .report,
@@ -629,7 +629,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
                 projectRoot: root,
                 runID: request.runID,
                 runDirectory: root.appending(path: "run"),
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -638,12 +638,12 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(result.status == FlowStageStatus.succeeded)
         #expect(result.gates.map(\.status) == [FlowGateStatus.passed])
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-release-gate" })
-        let url = try XcircuitePackageStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
+        let url = try XcircuiteWorkspaceStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
         let gate = try JSONDecoder().decode(ElectricalSignoffReleaseGateResult.self, from: Data(contentsOf: url))
         #expect(gate.isReleaseReady)
         #expect(gate.checks.contains { $0.checkID == "corner-axis-coverage" && $0.passed })
         let bundleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-release-artifact-bundle" })
-        let bundleURL = try XcircuitePackageStore().url(forProjectRelativePath: bundleReference.path, inProjectAt: root)
+        let bundleURL = try XcircuiteWorkspaceStore().url(forProjectRelativePath: bundleReference.path, inProjectAt: root)
         let bundle = try JSONDecoder().decode(ElectricalSignoffReleaseArtifactBundle.self, from: Data(contentsOf: bundleURL))
         #expect(bundle.runID == request.runID)
         #expect(bundle.request.path == "request.json")
@@ -661,7 +661,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
                 projectRoot: root,
                 runID: request.runID,
                 runDirectory: root.appending(path: "run"),
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -684,7 +684,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            packageStore: XcircuitePackageStore(),
+            workspaceStore: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

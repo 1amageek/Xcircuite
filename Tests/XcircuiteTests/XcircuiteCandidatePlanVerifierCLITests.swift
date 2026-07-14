@@ -46,7 +46,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.nextActions.contains("unblock-verification-gate:native-drc"))
         #expect(result.nextActions.contains("unblock-verification-gate:native-lvs"))
 
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let verification = try store.readJSON(
             XcircuitePlanVerification.self,
             from: root.appending(path: result.planVerificationArtifact.path)
@@ -170,7 +170,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
             projectRoot: root
         )
-        try XcircuitePackageStore().appendRunAction(
+        try XcircuiteWorkspaceStore().appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "selection-verify",
                 runID: "run-1",
@@ -210,7 +210,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         let result = try JSONDecoder().decode(XcircuiteCandidatePlanVerificationResult.self, from: data)
 
         #expect(result.planVerificationArtifact.artifactID == XcircuitePlanningArtifactStore.planVerificationArtifactID)
-        let actions = try XcircuitePackageStore().loadRunActions(runID: "run-1", inProjectAt: root)
+        let actions = try XcircuiteWorkspaceStore().loadRunActions(runID: "run-1", inProjectAt: root)
         #expect(actions.contains { $0.actionKind == "planning.verify-candidate-plan" })
     }
 
@@ -255,7 +255,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             runID: "run-1",
             projectRoot: root
         )
-        try XcircuitePackageStore().appendRunAction(
+        try XcircuiteWorkspaceStore().appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "selection-generate-with-feedback",
                 runID: "run-1",
@@ -307,7 +307,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         let root = try makeTemporaryRoot("selected-command-requires-input")
         defer { removeTemporaryRoot(root) }
         try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuitePackageStore().appendRunAction(
+        try XcircuiteWorkspaceStore().appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "selection-requires-input",
                 runID: "run-1",
@@ -351,7 +351,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         let root = try makeTemporaryRoot("selected-command-run-id-override")
         defer { removeTemporaryRoot(root) }
         try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuitePackageStore().appendRunAction(
+        try XcircuiteWorkspaceStore().appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "selection-verify-overridden-run",
                 runID: "run-1",
@@ -406,7 +406,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         let root = try makeTemporaryRoot("selected-command-absolute-artifact-path")
         defer { removeTemporaryRoot(root) }
         try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuitePackageStore().appendRunAction(
+        try XcircuiteWorkspaceStore().appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "selection-audit-absolute-path",
                 runID: "run-1",
@@ -461,7 +461,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         let root = try makeTemporaryRoot("selected-command-solver-family-comparison")
         defer { removeTemporaryRoot(root) }
         try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuitePackageStore().appendRunAction(
+        try XcircuiteWorkspaceStore().appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "selection-solver-family-comparison",
                 runID: "run-1",

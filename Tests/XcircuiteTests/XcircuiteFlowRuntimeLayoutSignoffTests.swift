@@ -99,8 +99,8 @@ extension XcircuiteFlowRuntimeTests {
         let outsideRoot = try makeTemporaryRoot("layout-command-outside-run-target")
         defer { removeTemporaryRoot(outsideRoot) }
         try writeLayoutCommandRequest(root: root)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
         let outsideRunDirectory = outsideRoot.appending(path: "run-1")
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
@@ -114,7 +114,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: outsideRunDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -131,9 +131,9 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("layout-command-result-path-mismatch")
         defer { removeTemporaryRoot(root) }
         try writeLayoutCommandRequest(root: root)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -146,7 +146,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -163,9 +163,9 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("layout-command-output-digest-mismatch")
         defer { removeTemporaryRoot(root) }
         try writeLayoutCommandRequest(root: root)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -178,7 +178,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -194,9 +194,9 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("layout-command-unpassed-runner-status")
         defer { removeTemporaryRoot(root) }
         try writeLayoutCommandRequest(root: root)
-        let packageStore = XcircuitePackageStore()
-        try packageStore.createPackage(at: root)
-        let runDirectory = try packageStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = XcircuiteWorkspaceStore()
+        try workspaceStore.createWorkspace(at: root)
+        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -209,7 +209,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                packageStore: packageStore,
+                workspaceStore: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

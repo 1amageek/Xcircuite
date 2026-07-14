@@ -684,11 +684,11 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "review")
-        try context.packageStore.ensureDirectory(at: outputDirectory)
-        try context.packageStore.ensureDirectory(at: auditDirectory)
-        try context.packageStore.ensureDirectory(at: reviewDirectory)
+        try context.storage.ensureDirectory(at: outputDirectory)
+        try context.storage.ensureDirectory(at: auditDirectory)
+        try context.storage.ensureDirectory(at: reviewDirectory)
         let outputURL = outputDirectory.appending(path: "rtl-verification-result.json")
-        try context.packageStore.writeJSON(envelope, to: outputURL, forProjectAt: context.projectRoot)
+        try context.storage.writeJSON(envelope, to: outputURL, forProjectAt: context.projectRoot)
         let resultReference = try artifactBuilder.reference(
             for: outputURL,
             projectRoot: context.projectRoot,
@@ -697,7 +697,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             format: ArtifactFormat.json
         )
         let qualificationURL = outputDirectory.appending(path: "qualification.json")
-        try context.packageStore.writeJSON(
+        try context.storage.writeJSON(
             envelope.payload.qualification,
             to: qualificationURL,
             forProjectAt: context.projectRoot
@@ -711,7 +711,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         )
         let reviewArtifact = makeReviewArtifact(envelope)
         let reviewURL = reviewDirectory.appending(path: "rtl-verification-review.json")
-        try context.packageStore.writeJSON(
+        try context.storage.writeJSON(
             reviewArtifact,
             to: reviewURL,
             forProjectAt: context.projectRoot
@@ -742,7 +742,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             nextActions: reviewArtifact.suggestedActions
         )
         let auditURL = auditDirectory.appending(path: "rtl-verification-audit.json")
-        try context.packageStore.writeJSON(
+        try context.storage.writeJSON(
             auditRecord,
             to: auditURL,
             forProjectAt: context.projectRoot
@@ -793,7 +793,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
               FileManager.default.fileExists(atPath: reviewURL.path) else {
             return nil
         }
-        let audit = try context.packageStore.readJSON(
+        let audit = try context.storage.readJSON(
             RTLVerificationStageAuditRecord.self,
             from: auditURL
         )
@@ -808,7 +808,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
               audit.requestDigest == (try digest(for: request)) else {
             return nil
         }
-        let envelope = try context.packageStore.readJSON(
+        let envelope = try context.storage.readJSON(
             RTLVerificationResult.self,
             from: resultURL
         )
@@ -822,7 +822,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
            }) {
             return nil
         }
-        let qualification = try context.packageStore.readJSON(
+        let qualification = try context.storage.readJSON(
             RTLVerificationQualificationReport.self,
             from: qualificationURL
         )
@@ -832,7 +832,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 "The persisted RTL qualification artifact does not match the result envelope."
             )
         }
-        let review = try context.packageStore.readJSON(
+        let review = try context.storage.readJSON(
             RTLVerificationReviewArtifact.self,
             from: reviewURL
         )

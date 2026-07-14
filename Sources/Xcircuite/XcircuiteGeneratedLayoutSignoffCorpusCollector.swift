@@ -5,18 +5,18 @@ import DesignFlowKernel
 public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     private let ledgerLoader: any FlowRunLedgerLoading
     private let reviewBundler: any FlowRunReviewBundling
-    private let packageStore: XcircuitePackageStore
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let identifierValidator: XcircuiteIdentifierValidator
 
     public init(
         ledgerLoader: any FlowRunLedgerLoading = FlowRunLedgerLoader(),
         reviewBundler: any FlowRunReviewBundling = DefaultFlowRunReviewBundler(),
-        packageStore: XcircuitePackageStore = XcircuitePackageStore(),
+        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
         identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
     ) {
         self.ledgerLoader = ledgerLoader
         self.reviewBundler = reviewBundler
-        self.packageStore = packageStore
+        self.workspaceStore = workspaceStore
         self.identifierValidator = identifierValidator
     }
 
@@ -42,19 +42,19 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     ) throws -> XcircuiteGeneratedLayoutSignoffCorpusReport {
         try validate(request)
         let suiteDirectory = try suiteDirectoryURL(suiteID: request.suiteID, projectRoot: projectRoot)
-        try packageStore.ensureDirectory(at: suiteDirectory)
+        try workspaceStore.ensureDirectory(at: suiteDirectory)
 
         let suiteSpecPath = suiteProjectRelativePath(suiteID: request.suiteID, fileName: "corpus-suite.json")
-        let suiteSpecURL = try packageStore.url(forProjectRelativePath: suiteSpecPath, inProjectAt: projectRoot)
-        try packageStore.writeJSON(request, to: suiteSpecURL, forProjectAt: projectRoot)
-        let suiteSpecArtifact = try packageStore.fileReference(
+        let suiteSpecURL = try workspaceStore.url(forProjectRelativePath: suiteSpecPath, inProjectAt: projectRoot)
+        try workspaceStore.writeJSON(request, to: suiteSpecURL, forProjectAt: projectRoot)
+        let suiteSpecArtifact = try workspaceStore.fileReference(
             forProjectRelativePath: suiteSpecPath,
             artifactID: "generated-layout-signoff-corpus-suite",
             kind: .report,
             format: .json,
             inProjectAt: projectRoot
         )
-        try packageStore.upsertFileReference(suiteSpecArtifact, forProjectAt: projectRoot)
+        try workspaceStore.upsertFileReference(suiteSpecArtifact, forProjectAt: projectRoot)
 
         let caseResults = try request.cases.map { corpusCase in
             try collectCase(corpusCase, projectRoot: projectRoot)
@@ -66,16 +66,16 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
             reportArtifact: nil
         )
         let reportPath = suiteProjectRelativePath(suiteID: request.suiteID, fileName: "corpus-report.json")
-        let reportURL = try packageStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
-        try packageStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try packageStore.fileReference(
+        let reportURL = try workspaceStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
+        try workspaceStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
+        let reportArtifact = try workspaceStore.fileReference(
             forProjectRelativePath: reportPath,
             artifactID: "generated-layout-signoff-corpus-report",
             kind: .report,
             format: .json,
             inProjectAt: projectRoot
         )
-        try packageStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
+        try workspaceStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var report = reportWithoutSelfRef
         report.reportArtifact = reportArtifact
@@ -532,14 +532,14 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     }
 
     private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try packageStore.url(
-            forProjectRelativePath: "\(XcircuitePackage.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
+        try workspaceStore.url(
+            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
             inProjectAt: projectRoot
         )
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuitePackage.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func artifactReferenceSortOrder(

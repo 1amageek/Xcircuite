@@ -161,7 +161,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
-            try context.packageStore.ensureDirectory(at: rawDirectory)
+            try context.storage.ensureDirectory(at: rawDirectory)
             try context.checkCancellation()
 
             let request = try preparedRequest(

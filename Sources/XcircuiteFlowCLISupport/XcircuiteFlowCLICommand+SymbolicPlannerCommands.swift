@@ -551,7 +551,7 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--spec")
         }
 
-        var request = try XcircuitePackageStore().readJSON(
+        var request = try XcircuiteWorkspaceStore().readJSON(
             XcircuiteSymbolicPlannerSolverFamilyBatchRequest.self,
             from: URL(filePath: specPath)
         )
@@ -638,7 +638,7 @@ extension XcircuiteFlowCLICommand {
         )
         if let batchSpecOutputPath,
            let batchRequest = result.lane.batchRequest {
-            try XcircuitePackageStore().writeJSON(
+            try XcircuiteWorkspaceStore().writeJSON(
                 batchRequest,
                 to: URL(filePath: batchSpecOutputPath),
                 forProjectAt: projectRoot
@@ -765,7 +765,7 @@ extension XcircuiteFlowCLICommand {
                     value: "cannot be combined with per-suite qualification options"
                 )
             }
-            request = try XcircuitePackageStore()
+            request = try XcircuiteWorkspaceStore()
                 .readJSON(
                     XcircuiteSymbolicPlannerSolverCorpusSuiteSpec.self,
                     from: URL(filePath: suiteSpecPath)

@@ -9,8 +9,8 @@ struct XcircuiteProblemTranslationAuditorTests {
     @Test func auditProblemTranslationCLIPersistsAuditArtifact() async throws {
         let root = try makeTemporaryRoot("problem-translation-audit-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-audit", inProjectAt: root)
         let problem = makePlanningProblem()
         let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
@@ -93,8 +93,8 @@ struct XcircuiteProblemTranslationAuditorTests {
     @Test func runSelectedSuggestedCommandDispatchesProblemTranslationAudit() async throws {
         let root = try makeTemporaryRoot("selected-problem-translation-audit")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-audit", inProjectAt: root)
         let problem = makePlanningProblem()
         let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
@@ -155,8 +155,8 @@ struct XcircuiteProblemTranslationAuditorTests {
     @Test func auditProblemTranslationRejectsStaleProblemArtifact() throws {
         let root = try makeTemporaryRoot("problem-translation-audit-stale-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-audit", inProjectAt: root)
         let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(),
@@ -186,8 +186,8 @@ struct XcircuiteProblemTranslationAuditorTests {
     @Test func auditProblemTranslationRejectsExplicitPathForDifferentManifestArtifact() throws {
         let root = try makeTemporaryRoot("problem-translation-audit-explicit-artifact-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-audit", inProjectAt: root)
         _ = try XcircuitePlanningArtifactStore().persistPlanningProblem(
             makePlanningProblem(),

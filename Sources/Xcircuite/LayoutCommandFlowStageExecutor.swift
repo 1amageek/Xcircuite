@@ -64,7 +64,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 .appending(path: "raw")
             let expectedPaths = LayoutCommandArtifactPaths(rawDirectory: rawDirectory)
             try validateOutputDirectories(expectedPaths, projectRoot: context.projectRoot)
-            try context.packageStore.ensureDirectory(at: rawDirectory)
+            try context.storage.ensureDirectory(at: rawDirectory)
             try context.checkCancellation()
 
             let request = try loadRequest()

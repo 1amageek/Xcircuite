@@ -11,8 +11,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func drcSummaryBecomesPlanningProblemAndRunArtifact() throws {
         let root = try makeTemporaryRoot("drc-planning")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         let summary = DRCRunSummaryReport(
             reportURL: nil,
@@ -804,8 +804,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func planningProblemPersistenceRejectsRunMismatch() throws {
         let root = try makeTemporaryRoot("run-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-expected", inProjectAt: root)
         let problem = XcircuiteCircuitPlanningProblem(
             problemID: "problem-1",
@@ -840,8 +840,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func generatePlanningProblemCLIReadsDRCSummaryFromRunManifest() async throws {
         let root = try makeTemporaryRoot("drc-planning-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-1", inProjectAt: root)
         let summaryPath = ".xcircuite/runs/run-1/stages/007-drc/raw/drc-summary.json"
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/layout.gds"
@@ -937,8 +937,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func generatePlanningProblemRejectsStaleManifestArtifact() throws {
         let root = try makeTemporaryRoot("drc-planning-stale-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-stale", inProjectAt: root)
         let summaryPath = ".xcircuite/runs/run-stale/stages/007-drc/raw/drc-summary.json"
         try registerJSONArtifact(
@@ -975,8 +975,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func generatePlanningProblemRejectsAmbiguousCanonicalManifest() throws {
         let root = try makeTemporaryRoot("drc-planning-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-duplicate", inProjectAt: root)
         let summaryPath = ".xcircuite/runs/run-duplicate/stages/007-drc/raw/drc-summary.json"
         try registerJSONArtifact(
@@ -1004,12 +1004,12 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             inProjectAt: root,
             producedByRunID: "run-duplicate"
         )
-        let manifestURL = try XcircuitePackage(projectRoot: root)
+        let manifestURL = try XcircuiteWorkspace(projectRoot: root)
             .runDirectoryURL(for: "run-duplicate")
             .appending(path: "manifest.json")
         try XcircuiteRunManifestTamper.append([duplicateReference], to: manifestURL)
 
-        #expect(throws: XcircuitePackageError.decodeFailed(
+        #expect(throws: XcircuiteWorkspaceError.decodeFailed(
             "manifest.json: Invalid run manifest for run-duplicate: artifactID 'drc-summary' must be unique."
         )) {
             _ = try XcircuitePlanningProblemGenerator().generateRepairProblem(
@@ -1025,8 +1025,8 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func generatePlanningProblemCLIReadsLVSSummaryFromExplicitPath() async throws {
         let root = try makeTemporaryRoot("lvs-planning-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuitePackageStore()
-        try store.createPackage(at: root)
+        let store = XcircuiteWorkspaceStore()
+        try store.createWorkspace(at: root)
         try store.createRunDirectory(for: "run-2", inProjectAt: root)
         let summaryPath = "summaries/lvs-summary.json"
         let summaryURL = root.appending(path: summaryPath)
@@ -1406,7 +1406,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -1433,7 +1433,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         root: URL,
         runID: String
     ) throws {
-        let store = XcircuitePackageStore()
+        let store = XcircuiteWorkspaceStore()
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
