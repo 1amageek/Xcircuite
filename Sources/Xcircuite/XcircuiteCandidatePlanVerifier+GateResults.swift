@@ -368,15 +368,18 @@ extension XcircuiteCandidatePlanVerifier {
                 to: summaryURL,
                 forProjectAt: projectRoot
             )
-            let artifacts = try nativeDRCArtifactRefs(
+            let artifacts = try nativeDRCArtifactReferences(
                 drcLayoutURL: drcLayoutURL,
                 summaryURL: summaryURL,
                 executionResult: executionResult,
-                runID: plan.runID,
                 projectRoot: projectRoot
             )
             for artifact in artifacts {
-                try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
+                try packageStore.upsertRunArtifact(
+                    legacyArtifactReferenceWithProvenance(artifact, producedByRunID: plan.runID),
+                    runID: plan.runID,
+                    inProjectAt: projectRoot
+                )
             }
             let diagnostics = executionResult.result.diagnostics.map { diagnostic in
                 XcircuitePlanVerificationDiagnostic(
@@ -394,7 +397,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
-                artifactReferences: try foundationArtifactReferences(artifacts, field: "native-drc")
+                artifactReferences: artifacts
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
@@ -543,14 +546,17 @@ extension XcircuiteCandidatePlanVerifier {
                 to: summaryURL,
                 forProjectAt: projectRoot
             )
-            let artifacts = try nativeLVSArtifactRefs(
+            let artifacts = try nativeLVSArtifactReferences(
                 summaryURL: summaryURL,
                 executionResult: executionResult,
-                runID: plan.runID,
                 projectRoot: projectRoot
             )
             for artifact in artifacts {
-                try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
+                try packageStore.upsertRunArtifact(
+                    legacyArtifactReferenceWithProvenance(artifact, producedByRunID: plan.runID),
+                    runID: plan.runID,
+                    inProjectAt: projectRoot
+                )
             }
             let diagnostics = executionResult.result.diagnostics.map { diagnostic in
                 XcircuitePlanVerificationDiagnostic(
@@ -568,7 +574,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
-                artifactReferences: try foundationArtifactReferences(artifacts, field: "native-lvs")
+                artifactReferences: artifacts
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(

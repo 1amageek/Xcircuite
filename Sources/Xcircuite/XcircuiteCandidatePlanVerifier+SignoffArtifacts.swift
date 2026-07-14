@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DRCEngine
 import LayoutCore
 import LayoutIO
@@ -7,20 +8,18 @@ import PEXEngine
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifier {
-    func nativeLVSArtifactRefs(
+    func nativeLVSArtifactReferences(
         summaryURL: URL,
         executionResult: LVSExecutionResult,
-        runID: String,
         projectRoot: URL
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         var artifacts = [
             try artifactBuilder.reference(
                 for: summaryURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-summary",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ),
         ]
         if let reportURL = executionResult.reportURL {
@@ -28,9 +27,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: reportURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-report",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let manifestURL = executionResult.artifactManifestURL {
@@ -38,9 +36,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: manifestURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-manifest",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let correspondenceURL = executionResult.correspondenceURL {
@@ -48,9 +45,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: correspondenceURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-correspondence",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let extractionReportURL = executionResult.extractionReportURL {
@@ -58,9 +54,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: extractionReportURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-extraction-report",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let transformLedgerURL = executionResult.transformLedgerURL {
@@ -68,18 +63,16 @@ extension XcircuiteCandidatePlanVerifier {
                 for: transformLedgerURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-transform-ledger",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let log = try artifactBuilder.optionalReference(
             for: executionResult.result.logPath,
             projectRoot: projectRoot,
             artifactID: "planning-native-lvs-log",
-            kind: .report,
-            format: .text,
-            producedByRunID: runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.text
         ) {
             artifacts.append(log)
         }
@@ -88,9 +81,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: extracted,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-lvs-extracted-layout-netlist",
-                kind: .netlist,
-                format: .spice,
-                producedByRunID: runID
+                kind: ArtifactKind.netlist,
+                format: ArtifactFormat.spice
             ))
         }
         return artifacts
@@ -292,29 +284,26 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func nativeDRCArtifactRefs(
+    func nativeDRCArtifactReferences(
         drcLayoutURL: URL,
         summaryURL: URL,
         executionResult: DRCExecutionResult,
-        runID: String,
         projectRoot: URL
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         var artifacts = [
             try artifactBuilder.reference(
                 for: drcLayoutURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-drc-layout",
-                kind: .layout,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.layout,
+                format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: summaryURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-drc-summary",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ),
         ]
         if let reportURL = executionResult.reportURL {
@@ -322,9 +311,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: reportURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-drc-report",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let manifestURL = executionResult.artifactManifestURL {
@@ -332,18 +320,16 @@ extension XcircuiteCandidatePlanVerifier {
                 for: manifestURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-native-drc-manifest",
-                kind: .report,
-                format: .json,
-                producedByRunID: runID
+                kind: ArtifactKind.report,
+                format: ArtifactFormat.json
             ))
         }
         if let log = try artifactBuilder.optionalReference(
             for: executionResult.result.logPath,
             projectRoot: projectRoot,
             artifactID: "planning-native-drc-log",
-            kind: .report,
-            format: .text,
-            producedByRunID: runID
+            kind: ArtifactKind.report,
+            format: ArtifactFormat.text
         ) {
             artifacts.append(log)
         }
