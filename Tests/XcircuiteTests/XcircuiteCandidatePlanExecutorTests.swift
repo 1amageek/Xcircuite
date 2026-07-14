@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import LayoutCommands
 import LayoutTech
 import Testing
@@ -8,6 +9,63 @@ import DesignFlowKernel
 
 @Suite("Xcircuite candidate plan executor")
 struct XcircuiteCandidatePlanExecutorTests {
+    @Test func candidatePlanExecutionEncodesCanonicalArtifactReferencesAndReadsLegacyKey() throws {
+        let legacyArtifact = XcircuiteFileReference(
+            artifactID: "execution-report",
+            path: ".xcircuite/runs/run-artifact/planning/report.json",
+            kind: .report,
+            format: .json,
+            sha256: String(repeating: "a", count: 64),
+            byteCount: 7,
+            producedByRunID: "run-artifact"
+        )
+        let execution = try XcircuiteCandidatePlanExecution(
+            runID: "run-artifact",
+            problemID: "problem-artifact",
+            planID: "plan-artifact",
+            status: "executed",
+            candidatePlanRef: XcircuiteFileReference(
+                artifactID: "candidate-plan",
+                path: ".xcircuite/runs/run-artifact/planning/candidate-plan.json",
+                kind: .other,
+                format: .json
+            ),
+            stepResults: [],
+            artifactRefs: [legacyArtifact],
+            diagnostics: [],
+            nextActions: []
+        )
+
+        let encoded = try JSONEncoder().encode(execution)
+        var encodedObject = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        #expect(encodedObject["schemaVersion"] as? Int == 2)
+        #expect(encodedObject["artifactReferences"] != nil)
+        #expect(encodedObject["artifactRefs"] == nil)
+
+        let legacyArtifacts = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode([legacyArtifact])
+        )
+        encodedObject.removeValue(forKey: "artifactReferences")
+        encodedObject["schemaVersion"] = 1
+        encodedObject["artifactRefs"] = legacyArtifacts
+        let legacyData = try JSONSerialization.data(withJSONObject: encodedObject)
+        let decoded = try JSONDecoder().decode(XcircuiteCandidatePlanExecution.self, from: legacyData)
+
+        let reencoded = try JSONEncoder().encode(decoded)
+        let reencodedObject = try #require(
+            JSONSerialization.jsonObject(with: reencoded) as? [String: Any]
+        )
+        #expect(reencodedObject["schemaVersion"] as? Int == 2)
+        #expect(reencodedObject["artifactReferences"] != nil)
+        #expect(reencodedObject["artifactRefs"] == nil)
+        #expect(decoded.artifactReferences.count == 1)
+        #expect(decoded.artifactReferences[0].id.rawValue == "execution-report")
+        #expect(decoded.artifactReferences[0].digest.hexadecimalValue == String(repeating: "a", count: 64))
+        #expect(decoded.artifactReferences[0].byteCount == 7)
+    }
+
     @Test func executeCandidatePlanCLIRunsLayoutAddRectAndWritesArtifacts() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-cli")
         defer { removeTemporaryRoot(root) }

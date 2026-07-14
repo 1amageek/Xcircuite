@@ -626,7 +626,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             inProjectAt: root,
             producedByRunID: "run-10"
         )
-        let execution = XcircuiteCandidatePlanExecution(
+        let execution = try XcircuiteCandidatePlanExecution(
             runID: "run-10",
             problemID: "run-10-parameter-problem",
             planID: "run-10-parameter-plan",

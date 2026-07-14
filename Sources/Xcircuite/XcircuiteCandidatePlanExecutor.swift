@@ -73,7 +73,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 riskReviews: riskReviews,
                 diagnostics: diagnostics
             )
-            let execution = XcircuiteCandidatePlanExecution(
+            let execution = try XcircuiteCandidatePlanExecution(
                 runID: plan.runID,
                 problemID: plan.problemID,
                 planID: plan.planID,
@@ -140,7 +140,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             actor: request.actor,
             projectRoot: projectRoot
         )
-        let execution = XcircuiteCandidatePlanExecution(
+        let execution = try XcircuiteCandidatePlanExecution(
             runID: plan.runID,
             problemID: plan.problemID,
             planID: plan.planID,

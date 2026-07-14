@@ -327,7 +327,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         try store.upsertRunArtifact(layoutRef, runID: runID, inProjectAt: root)
         try artifactStore.persistPlanExecution(
-            XcircuiteCandidatePlanExecution(
+            try XcircuiteCandidatePlanExecution(
                 runID: runID,
                 problemID: problem.problemID,
                 planID: plan.planID,
@@ -387,7 +387,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         try store.upsertRunArtifact(layoutRef, runID: runID, inProjectAt: root)
         try artifactStore.persistPlanExecution(
-            XcircuiteCandidatePlanExecution(
+            try XcircuiteCandidatePlanExecution(
                 runID: runID,
                 problemID: problem.problemID,
                 planID: plan.planID,
