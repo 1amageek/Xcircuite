@@ -5,7 +5,7 @@ import CircuiteFoundation
 ///
 /// The store owns filesystem access only. Flow lifecycle and run semantics remain
 /// in DesignFlowKernel and are injected through its persistence protocols.
-public actor XcircuiteWorkspaceStore {
+public actor XcircuiteWorkspaceFileStore {
     public let projectRoot: URL
     public let workspaceRoot: URL
 
@@ -14,13 +14,13 @@ public actor XcircuiteWorkspaceStore {
 
     public init(projectRoot: URL) throws {
         guard projectRoot.isFileURL, projectRoot.path(percentEncoded: false).hasPrefix("/") else {
-            throw XcircuiteWorkspaceStoreError.projectRootIsNotAbsolute
+            throw XcircuiteWorkspaceFileStoreError.projectRootIsNotAbsolute
         }
 
         let normalizedRoot = projectRoot.standardizedFileURL
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: normalizedRoot.path(percentEncoded: false), isDirectory: &isDirectory), !isDirectory.boolValue {
-            throw XcircuiteWorkspaceStoreError.projectRootIsNotDirectory
+            throw XcircuiteWorkspaceFileStoreError.projectRootIsNotDirectory
         }
 
         self.projectRoot = normalizedRoot
@@ -31,14 +31,14 @@ public actor XcircuiteWorkspaceStore {
         do {
             try fileManager.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
         } catch {
-            throw XcircuiteWorkspaceStoreError.writeFailed(error.localizedDescription)
+            throw XcircuiteWorkspaceFileStoreError.writeFailed(error.localizedDescription)
         }
     }
 
     public func url(for relativePath: String) throws -> URL {
         let url = try validatedURL(for: relativePath)
         guard pathBoundary.contains(url, projectRoot: workspaceRoot) else {
-            throw XcircuiteWorkspaceStoreError.pathOutsideWorkspace(relativePath)
+            throw XcircuiteWorkspaceFileStoreError.pathOutsideWorkspace(relativePath)
         }
         return url
     }
@@ -50,19 +50,19 @@ public actor XcircuiteWorkspaceStore {
             try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
             try data.write(to: destination, options: [.atomic])
         } catch {
-            throw XcircuiteWorkspaceStoreError.writeFailed(error.localizedDescription)
+            throw XcircuiteWorkspaceFileStoreError.writeFailed(error.localizedDescription)
         }
     }
 
     public func read(from relativePath: String) throws -> Data {
         let source = try url(for: relativePath)
         guard fileManager.fileExists(atPath: source.path(percentEncoded: false)) else {
-            throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
+            throw XcircuiteWorkspaceFileStoreError.missingArtifact(relativePath)
         }
         do {
             return try Data(contentsOf: source, options: [.mappedIfSafe])
         } catch {
-            throw XcircuiteWorkspaceStoreError.readFailed(error.localizedDescription)
+            throw XcircuiteWorkspaceFileStoreError.readFailed(error.localizedDescription)
         }
     }
 
@@ -80,10 +80,10 @@ public actor XcircuiteWorkspaceStore {
             relativeTo: workspaceRoot
         )
         guard !integrity.issues.contains(where: { $0.code == .missingFile }) else {
-            throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
+            throw XcircuiteWorkspaceFileStoreError.missingArtifact(relativePath)
         }
         guard integrity.isVerified else {
-            throw XcircuiteWorkspaceStoreError.artifactIntegrityFailed(
+            throw XcircuiteWorkspaceFileStoreError.artifactIntegrityFailed(
                 path: relativePath,
                 issues: integrity.issues
             )
@@ -97,10 +97,10 @@ public actor XcircuiteWorkspaceStore {
         encoder.outputFormatting = [.sortedKeys]
         do {
             try write(encoder.encode(value), to: relativePath)
-        } catch let error as XcircuiteWorkspaceStoreError {
+        } catch let error as XcircuiteWorkspaceFileStoreError {
             throw error
         } catch {
-            throw XcircuiteWorkspaceStoreError.encodeFailed(error.localizedDescription)
+            throw XcircuiteWorkspaceFileStoreError.encodeFailed(error.localizedDescription)
         }
     }
 
@@ -108,10 +108,10 @@ public actor XcircuiteWorkspaceStore {
     public func readJSON<Value: Decodable & Sendable>(_ type: Value.Type, from relativePath: String) throws -> Value {
         do {
             return try JSONDecoder().decode(type, from: read(from: relativePath))
-        } catch let error as XcircuiteWorkspaceStoreError {
+        } catch let error as XcircuiteWorkspaceFileStoreError {
             throw error
         } catch {
-            throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
+            throw XcircuiteWorkspaceFileStoreError.decodeFailed(error.localizedDescription)
         }
     }
 
@@ -119,11 +119,11 @@ public actor XcircuiteWorkspaceStore {
         guard !relativePath.isEmpty,
               !relativePath.hasPrefix("/"),
               !relativePath.contains("\\") else {
-            throw XcircuiteWorkspaceStoreError.invalidRelativePath(relativePath)
+            throw XcircuiteWorkspaceFileStoreError.invalidRelativePath(relativePath)
         }
         let components = relativePath.split(separator: "/", omittingEmptySubsequences: true)
         guard !components.isEmpty, !components.contains(".."), !components.contains(".") else {
-            throw XcircuiteWorkspaceStoreError.invalidRelativePath(relativePath)
+            throw XcircuiteWorkspaceFileStoreError.invalidRelativePath(relativePath)
         }
         return workspaceRoot.appending(path: components.joined(separator: "/"))
     }
@@ -138,10 +138,10 @@ public actor XcircuiteWorkspaceStore {
             let value = reference.locator.location.value
             guard let absoluteURL = URL(string: value), absoluteURL.isFileURL,
                   absoluteURL.path(percentEncoded: false).hasPrefix("/") else {
-                throw XcircuiteWorkspaceStoreError.invalidArtifactLocation(value)
+                throw XcircuiteWorkspaceFileStoreError.invalidArtifactLocation(value)
             }
             guard pathBoundary.contains(absoluteURL, projectRoot: workspaceRoot) else {
-                throw XcircuiteWorkspaceStoreError.pathOutsideWorkspace(value)
+                throw XcircuiteWorkspaceFileStoreError.pathOutsideWorkspace(value)
             }
             return try pathBoundary.relativePath(for: absoluteURL, projectRoot: workspaceRoot)
         }

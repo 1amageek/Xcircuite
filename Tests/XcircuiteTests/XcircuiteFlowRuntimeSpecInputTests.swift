@@ -959,7 +959,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1030,7 +1030,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1083,7 +1083,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1163,7 +1163,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -1236,7 +1236,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

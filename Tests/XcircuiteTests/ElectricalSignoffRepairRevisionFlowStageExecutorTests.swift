@@ -134,7 +134,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: ".xcircuite/runs/\(runID)"),
-            workspaceStore: store,
+            storage: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

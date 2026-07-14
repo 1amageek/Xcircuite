@@ -81,7 +81,7 @@ struct LVSSummaryEnvelopeBuilderTests {
                 projectRoot: root,
                 runID: runID,
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

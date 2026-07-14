@@ -3,15 +3,15 @@ import Testing
 import CircuiteFoundation
 @testable import Xcircuite
 
-@Suite("XcircuiteWorkspaceStore")
-struct XcircuiteWorkspaceStoreTests {
+@Suite("XcircuiteWorkspaceFileStore")
+struct XcircuiteWorkspaceFileStoreTests {
     @Test
     func writesAndReadsProjectLocalArtifacts() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         try await store.write(Data("artifact".utf8), to: "runs/run-1/report.json")
         #expect(try await store.read(from: "runs/run-1/report.json") == Data("artifact".utf8))
     }
@@ -21,7 +21,7 @@ struct XcircuiteWorkspaceStoreTests {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         let value = ["count": 3]
         try await store.writeJSON(value, to: "runs/run-1/summary.json")
         let decoded = try await store.readJSON([String: Int].self, from: "runs/run-1/summary.json")
@@ -35,11 +35,11 @@ struct XcircuiteWorkspaceStoreTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        await #expect(throws: XcircuiteWorkspaceStoreError.invalidRelativePath("../outside")) {
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
+        await #expect(throws: XcircuiteWorkspaceFileStoreError.invalidRelativePath("../outside")) {
             try await store.write(Data(), to: "../outside")
         }
-        await #expect(throws: XcircuiteWorkspaceStoreError.invalidRelativePath("/tmp/outside")) {
+        await #expect(throws: XcircuiteWorkspaceFileStoreError.invalidRelativePath("/tmp/outside")) {
             try await store.write(Data(), to: "/tmp/outside")
         }
     }
@@ -55,11 +55,11 @@ struct XcircuiteWorkspaceStoreTests {
             remove(outside)
         }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         try await store.ensureWorkspace()
         let link = root.appending(path: ".xcircuite/escape", directoryHint: .isDirectory)
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
-        await #expect(throws: XcircuiteWorkspaceStoreError.pathOutsideWorkspace("escape/file")) {
+        await #expect(throws: XcircuiteWorkspaceFileStoreError.pathOutsideWorkspace("escape/file")) {
             try await store.write(Data(), to: "escape/file")
         }
     }
@@ -69,7 +69,7 @@ struct XcircuiteWorkspaceStoreTests {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         let path = "runs/run-1/report.json"
         let data = Data("artifact".utf8)
         try await store.write(data, to: path)
@@ -85,7 +85,7 @@ struct XcircuiteWorkspaceStoreTests {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         let path = "runs/run-1/report.json"
         try await store.write(Data("artifact".utf8), to: path)
         let reference = try await makeReference(for: path, store: store)
@@ -94,7 +94,7 @@ struct XcircuiteWorkspaceStoreTests {
         do {
             _ = try await store.verify(reference)
             Issue.record("Expected digest verification to fail.")
-        } catch let error as XcircuiteWorkspaceStoreError {
+        } catch let error as XcircuiteWorkspaceFileStoreError {
             guard case .artifactIntegrityFailed(_, let issues) = error else {
                 Issue.record("Unexpected workspace error: \(error.localizedDescription)")
                 return
@@ -108,7 +108,7 @@ struct XcircuiteWorkspaceStoreTests {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         let path = "runs/run-1/report.json"
         let data = Data("artifact".utf8)
         try await store.write(data, to: path)
@@ -118,7 +118,7 @@ struct XcircuiteWorkspaceStoreTests {
         do {
             _ = try await store.verify(reference)
             Issue.record("Expected byte-count verification to fail.")
-        } catch let error as XcircuiteWorkspaceStoreError {
+        } catch let error as XcircuiteWorkspaceFileStoreError {
             guard case .artifactIntegrityFailed(_, let issues) = error else {
                 Issue.record("Unexpected workspace error: \(error.localizedDescription)")
                 return
@@ -132,7 +132,7 @@ struct XcircuiteWorkspaceStoreTests {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let store = try XcircuiteWorkspaceFileStore(projectRoot: root)
         let path = "runs/run-1/missing.json"
         let locator = ArtifactLocator(
             location: try ArtifactLocation(workspaceRelativePath: path),
@@ -150,7 +150,7 @@ struct XcircuiteWorkspaceStoreTests {
             byteCount: 0
         )
 
-        await #expect(throws: XcircuiteWorkspaceStoreError.missingArtifact(path)) {
+        await #expect(throws: XcircuiteWorkspaceFileStoreError.missingArtifact(path)) {
             _ = try await store.verify(reference)
         }
     }
@@ -166,7 +166,7 @@ struct XcircuiteWorkspaceStoreTests {
 
     private func makeReference(
         for path: String,
-        store: XcircuiteWorkspaceStore
+        store: XcircuiteWorkspaceFileStore
     ) async throws -> ArtifactReference {
         let locator = ArtifactLocator(
             location: try ArtifactLocation(workspaceRelativePath: path),

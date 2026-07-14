@@ -49,7 +49,7 @@ struct ElectricalStandardLayoutImportTests {
                 projectRoot: root,
                 runID: "electrical-standard-fixture-run",
                 runDirectory: root.appending(path: "run"),
-                workspaceStore: XcircuiteWorkspaceStore(),
+                storage: XcircuiteWorkspaceStore(),
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -121,7 +121,7 @@ struct ElectricalStandardLayoutImportTests {
                 projectRoot: root,
                 runID: "electrical-standard-lef-blocked-run",
                 runDirectory: root.appending(path: "run"),
-                workspaceStore: XcircuiteWorkspaceStore(),
+                storage: XcircuiteWorkspaceStore(),
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -153,7 +153,7 @@ struct ElectricalStandardLayoutImportTests {
                 projectRoot: root,
                 runID: runID,
                 runDirectory: root.appending(path: "run"),
-                workspaceStore: XcircuiteWorkspaceStore(),
+                storage: XcircuiteWorkspaceStore(),
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -261,7 +261,7 @@ struct ElectricalStandardLayoutImportTests {
                     projectRoot: root,
                     runID: "electrical-standard-\(extensionName)-run",
                     runDirectory: root.appending(path: "run"),
-                    workspaceStore: XcircuiteWorkspaceStore(),
+                    storage: XcircuiteWorkspaceStore(),
                     toolRegistry: ToolRegistry(),
                     healthResults: [:]
                 )

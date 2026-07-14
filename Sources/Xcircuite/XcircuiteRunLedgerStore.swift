@@ -9,12 +9,12 @@ import Foundation
 public actor XcircuiteRunLedgerStore: FlowRunLedgerPersisting {
     public static let ledgerFileName = "ledger.json"
 
-    private let workspace: XcircuiteWorkspaceStore
+    private let workspace: XcircuiteWorkspaceFileStore
     private let projectRoot: URL
 
     public init(projectRoot: URL) throws {
         self.projectRoot = projectRoot.standardizedFileURL
-        self.workspace = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        self.workspace = try XcircuiteWorkspaceFileStore(projectRoot: projectRoot)
     }
 
     public func loadRunLedger(runID: String, projectRoot: URL) async throws -> FlowRunLedger {
@@ -23,9 +23,9 @@ public actor XcircuiteRunLedgerStore: FlowRunLedgerPersisting {
         let relativePath = Self.relativePath(for: runID)
         do {
             return try await workspace.readJSON(FlowRunLedger.self, from: relativePath)
-        } catch XcircuiteWorkspaceStoreError.missingArtifact {
+        } catch XcircuiteWorkspaceFileStoreError.missingArtifact {
             throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
-        } catch let error as XcircuiteWorkspaceStoreError {
+        } catch let error as XcircuiteWorkspaceFileStoreError {
             throw FlowRunLedgerPersistenceError.storageFailed(error.localizedDescription)
         } catch {
             throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
@@ -37,7 +37,7 @@ public actor XcircuiteRunLedgerStore: FlowRunLedgerPersisting {
         try validateRunID(ledger.runID)
         do {
             try await workspace.writeJSON(ledger, to: Self.relativePath(for: ledger.runID))
-        } catch let error as XcircuiteWorkspaceStoreError {
+        } catch let error as XcircuiteWorkspaceFileStoreError {
             throw FlowRunLedgerPersistenceError.storageFailed(error.localizedDescription)
         } catch {
             throw FlowRunLedgerPersistenceError.encodingFailed(error.localizedDescription)

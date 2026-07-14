@@ -1,7 +1,7 @@
 import Foundation
 import CircuiteFoundation
 
-public enum XcircuiteWorkspaceStoreError: Error, Sendable, Equatable, LocalizedError {
+public enum XcircuiteWorkspaceFileStoreError: Error, Sendable, Equatable, LocalizedError {
     case projectRootIsNotAbsolute
     case projectRootIsNotDirectory
     case invalidRelativePath(String)

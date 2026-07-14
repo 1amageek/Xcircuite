@@ -107,7 +107,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: request.runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -229,7 +229,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: request.runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -333,7 +333,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -411,7 +411,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -629,7 +629,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
                 projectRoot: root,
                 runID: request.runID,
                 runDirectory: root.appending(path: "run"),
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -661,7 +661,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
                 projectRoot: root,
                 runID: request.runID,
                 runDirectory: root.appending(path: "run"),
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -684,7 +684,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

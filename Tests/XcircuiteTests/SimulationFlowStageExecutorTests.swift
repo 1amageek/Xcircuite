@@ -401,7 +401,7 @@ struct SimulationFlowStageExecutorTests {
                 projectRoot: root,
                 runID: "run-sim-input-digest",
                 runDirectory: runDirectory,
-                workspaceStore: workspaceStore,
+                storage: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )

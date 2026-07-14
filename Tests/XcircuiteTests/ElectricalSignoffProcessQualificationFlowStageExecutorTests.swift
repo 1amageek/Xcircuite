@@ -45,7 +45,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: store,
+            storage: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -168,7 +168,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: store,
+            storage: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -258,7 +258,7 @@ struct ElectricalSignoffProcessQualificationFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: root.appending(path: "run"),
-            workspaceStore: store,
+            storage: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

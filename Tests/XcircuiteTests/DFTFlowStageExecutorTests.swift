@@ -1425,7 +1425,7 @@ struct DFTFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

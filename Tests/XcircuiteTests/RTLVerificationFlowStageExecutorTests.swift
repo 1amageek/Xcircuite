@@ -30,7 +30,7 @@ struct RTLVerificationFlowStageExecutorTests {
             projectRoot: projectRoot,
             runID: "rtl-stage-run",
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -72,7 +72,7 @@ struct RTLVerificationFlowStageExecutorTests {
             projectRoot: projectRoot,
             runID: "rtl-resume-run",
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -112,7 +112,7 @@ struct RTLVerificationFlowStageExecutorTests {
             projectRoot: projectRoot,
             runID: "rtl-tool-gate-run",
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -158,7 +158,7 @@ struct RTLVerificationFlowStageExecutorTests {
             projectRoot: projectRoot,
             runID: "rtl-qualification-input-run",
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -225,7 +225,7 @@ struct RTLVerificationFlowStageExecutorTests {
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -424,7 +424,7 @@ private func makeRTLStageFixture(
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: toolRegistry,
             healthResults: healthResults
         )

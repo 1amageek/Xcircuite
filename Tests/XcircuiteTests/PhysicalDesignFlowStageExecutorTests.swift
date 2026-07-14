@@ -53,7 +53,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -106,7 +106,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            workspaceStore: XcircuiteWorkspaceStore(),
+            storage: XcircuiteWorkspaceStore(),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

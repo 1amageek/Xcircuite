@@ -176,7 +176,7 @@ struct TimingHeadlessFlowTests {
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            workspaceStore: workspaceStore,
+            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
