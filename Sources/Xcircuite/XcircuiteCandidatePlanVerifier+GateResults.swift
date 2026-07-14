@@ -819,7 +819,8 @@ extension XcircuiteCandidatePlanVerifier {
                 return planningReference(from: reference, fallbackRefID: "\(stepResult.stepID)-edited-netlist")
             }
         }
-        if let reference = execution.artifactRefs.first(where: isEditedNetlistArtifact) {
+        if let reference = legacyArtifactReferences(execution.artifactReferences)
+            .first(where: isEditedNetlistArtifact) {
             return planningReference(from: reference, fallbackRefID: "execution-edited-netlist")
         }
         return nil
@@ -843,7 +844,7 @@ extension XcircuiteCandidatePlanVerifier {
             .sorted { $0.order > $1.order }
             .filter { sourceStepIDSet.isEmpty || sourceStepIDSet.contains($0.stepID) }
             .flatMap(\.artifactRefs)
-        let executionArtifactRefs = Array(execution.artifactRefs.reversed())
+        let executionArtifactRefs = Array(legacyArtifactReferences(execution.artifactReferences).reversed())
         let artifactRefs = stepArtifactRefs + executionArtifactRefs
         if let explicitArtifactID,
            let reference = artifactRefs.first(where: {
@@ -914,7 +915,7 @@ extension XcircuiteCandidatePlanVerifier {
             .sorted { $0.order > $1.order }
             .filter { sourceStepIDSet.isEmpty || sourceStepIDSet.contains($0.stepID) }
             .flatMap(\.artifactRefs)
-        let executionArtifactRefs = Array(execution.artifactRefs.reversed())
+        let executionArtifactRefs = Array(legacyArtifactReferences(execution.artifactReferences).reversed())
         return (stepArtifactRefs + executionArtifactRefs).first(where: predicate)
     }
 

@@ -264,7 +264,9 @@ extension XcircuiteCandidatePlanExecutor {
         default:
             status = .blocked
         }
-        let outputs = [executionRef] + execution.artifactRefs + [designDiffRef].compactMap { $0 }
+        let outputs = [executionRef]
+            + legacyArtifactReferences(execution.artifactReferences)
+            + [designDiffRef].compactMap { $0 }
         try packageStore.appendRunAction(
             XcircuiteRunActionRecord(
                 actionID: "\(execution.planID)-execution",

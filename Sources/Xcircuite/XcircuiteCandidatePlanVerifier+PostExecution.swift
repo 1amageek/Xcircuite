@@ -107,13 +107,20 @@ extension XcircuiteCandidatePlanVerifier {
             finalSymbolicState: postExecutionSymbolicSummary.finalSymbolicState
         )
         let missingGoalAtoms = missingGoalAtomRefs(from: goalCoverage)
-        var artifactReferences = uniqueArtifactReferences(try foundationArtifactReferences(
-            legacyArtifactReferences(baseArtifactRefs)
-                + [executionRef]
-                + execution.artifactRefs
-                + [execution.designDiffRef].compactMap { $0 },
-            field: "post-execution.execution-artifacts"
-        ))
+        let executionArtifactReference = try foundationArtifactReferences(
+            [executionRef],
+            field: "post-execution.execution-artifact"
+        )
+        let designDiffArtifactReferences = try foundationArtifactReferences(
+            [execution.designDiffRef].compactMap { $0 },
+            field: "post-execution.design-diff-artifact"
+        )
+        var artifactReferences = uniqueArtifactReferences(
+            baseArtifactRefs
+                + executionArtifactReference
+                + execution.artifactReferences
+                + designDiffArtifactReferences
+        )
         let gateEvaluation = try await makePostExecutionGateResults(
             plan: plan,
             execution: execution,
