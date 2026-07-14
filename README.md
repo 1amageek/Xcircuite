@@ -8,10 +8,6 @@ rejects traversal and symlink escapes, and writes immutable JSON or byte
 artifacts atomically. Flow lifecycle and approval semantics belong to
 `DesignFlowKernel`; this store is intentionally limited to local persistence.
 
-`XcircuiteWorkspaceMigrationService` performs the one-time JSON migration for
-Foundation schema v2. It only adds the legacy artifact-role sentinel and
-updates artifact schema metadata; it never infers a run verdict.
-
 Xcircuite is the headless core runtime of the LSI semiconductor design
 platform. It provides the project-aware flow, CLI, artifact ledger integration,
 tool qualification, and Agent-operable planning surface used by both
@@ -35,6 +31,26 @@ separate written Commercial License Agreement with 1amageek.
 
 See [the licensing model](docs/licensing.md) for the rights matrix and the
 distinction between Xcircuite code and Third-Party Components.
+
+## Umbrella architecture
+
+[`Xcircuite`](https://github.com/1amageek/Xcircuite) is the umbrella runtime for
+the local-first semiconductor design platform. The packages below remain
+independently usable and own their domain contracts; Xcircuite composes them
+through typed stage executors, artifact references, trust gates, and the
+`.xcircuite` run ledger.
+
+| Package | Responsibility | Repository |
+|---|---|---|
+| `CoreSpice` | In-process SPICE simulation and waveform analysis | [CoreSpice](https://github.com/1amageek/CoreSpice) |
+| `semiconductor-layout` | Layout IR, editing, placement/routing, and native DRC preparation | [semiconductor-layout](https://github.com/1amageek/semiconductor-layout) |
+| `swift-mask-data` | GDSII/OASIS/LEF/DEF/CIF/DXF mask-data I/O | [swift-mask-data](https://github.com/1amageek/swift-mask-data) |
+| `DRCEngine` | Native and external DRC execution, diagnostics, and artifacts | [DRCEngine](https://github.com/1amageek/DRCEngine) |
+| `LVSEngine` | Native and external LVS execution, matching, and qualification | [LVSEngine](https://github.com/1amageek/LVSEngine) |
+| `PEXEngine` | Parasitic extraction, canonical `ParasiticIR`, and PEX artifacts | [PEXEngine](https://github.com/1amageek/PEXEngine) |
+| `ToolQualification` | Tool capability, health, evidence, and trust gates | [ToolQualification](https://github.com/1amageek/ToolQualification) |
+| `DesignFlowKernel` | Stage lifecycle, retries, approvals, and resume | [DesignFlowKernel](https://github.com/1amageek/DesignFlowKernel) |
+| `SignoffToolSupport` | PDK discovery and safe external-process execution | [SignoffToolSupport](https://github.com/1amageek/SignoffToolSupport) |
 
 ## Development
 

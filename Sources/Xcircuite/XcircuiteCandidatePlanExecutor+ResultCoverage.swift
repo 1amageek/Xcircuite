@@ -5,6 +5,7 @@ import LayoutCore
 import LayoutIO
 import LayoutTech
 import LVSEngine
+import CircuiteFoundation
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanExecutor {
@@ -26,6 +27,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "blocked",
+            artifactReferences: [],
             diagnostics: [diagnostic],
             nextActions: nextActions(for: diagnostic, step: step)
         )
@@ -48,6 +50,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "failed",
+            artifactReferences: [],
             diagnostics: [diagnostic],
             nextActions: ["inspect-execution-diagnostic:\(step.stepID)"]
         )
@@ -91,6 +94,7 @@ extension XcircuiteCandidatePlanExecutor {
                     domainID: step.domainID,
                     operationID: step.operationID,
                     status: "blocked",
+                    artifactReferences: [],
                     diagnostics: diagnostics.map { diagnostic in
                         XcircuitePlanVerificationDiagnostic(
                             severity: diagnostic.severity,
@@ -137,11 +141,9 @@ extension XcircuiteCandidatePlanExecutor {
                 path: "/planning/candidate-plan/steps/\(result.stepID)",
                 after: .object([
                     "operationID": .string(result.operationID),
-                    "artifactIDs": .array(result.artifactRefs.compactMap { reference in
-                        reference.artifactID.map { .string($0) }
-                    }),
+                    "artifactIDs": .array(result.artifactReferences.map { .string($0.id.rawValue) }),
                 ]),
-                artifacts: result.artifactRefs,
+                artifacts: legacyArtifactReferences(result.artifactReferences),
                 summary: "Executed candidate plan step \(result.stepID) with operation \(result.operationID)."
             )
         }
@@ -180,7 +182,7 @@ extension XcircuiteCandidatePlanExecutor {
 
     func executionCoverage(
         stepResults: [XcircuiteCandidatePlanExecutionStepResult],
-        artifactRefs: [XcircuiteFileReference]
+        artifactReferences: [ArtifactReference]
     ) -> XcircuiteCandidatePlanExecutionCoverage {
         let requiredFamilyIDs = ["layout", "netlist", "parameter", "policy"]
         let families = requiredFamilyIDs.map { familyID in
@@ -190,7 +192,7 @@ extension XcircuiteCandidatePlanExecutor {
             .filter { $0.status == "covered" }
             .map(\.familyID)
         let missingFamilyIDs = requiredFamilyIDs.filter { !coveredFamilyIDs.contains($0) }
-        let producedArtifactIDs = unique(artifactRefs.compactMap(\.artifactID)).sorted()
+        let producedArtifactIDs = unique(artifactReferences.map { $0.id.rawValue }).sorted()
         return XcircuiteCandidatePlanExecutionCoverage(
             status: missingFamilyIDs.isEmpty ? "covered" : "partial",
             requiredFamilyIDs: requiredFamilyIDs,
@@ -207,7 +209,11 @@ extension XcircuiteCandidatePlanExecutor {
     ) -> XcircuiteCandidatePlanExecutionFamilyCoverage {
         let familyStepResults = stepResults
             .filter { $0.status == "executed" && operationFamilies(for: $0.operationID).contains(familyID) }
-        let artifactIDs = unique(familyStepResults.flatMap(\.artifactRefs).compactMap(\.artifactID)).sorted()
+        let artifactIDs = unique(
+            familyStepResults
+                .flatMap(\.artifactReferences)
+                .map { $0.id.rawValue }
+        ).sorted()
         return XcircuiteCandidatePlanExecutionFamilyCoverage(
             familyID: familyID,
             status: artifactIDs.isEmpty ? "missing" : "covered",

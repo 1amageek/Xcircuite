@@ -82,6 +82,10 @@ extension XcircuiteCandidatePlanExecutor {
         for artifact in artifacts {
             try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
         }
+        let artifactReferences = try foundationArtifactReferences(
+            artifacts,
+            field: "candidate-step-layout-command"
+        )
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
             order: step.order,
@@ -89,7 +93,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "executed",
-            artifactRefs: artifacts,
+            artifactReferences: artifactReferences,
             nextActions: signoffNextActions(for: step)
         )
     }
@@ -179,6 +183,10 @@ extension XcircuiteCandidatePlanExecutor {
         for artifact in artifacts {
             try packageStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
         }
+        let artifactReferences = try foundationArtifactReferences(
+            artifacts,
+            field: "candidate-step-lvs-policy-repair"
+        )
 
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
@@ -187,7 +195,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "executed",
-            artifactRefs: artifacts,
+            artifactReferences: artifactReferences,
             nextActions: signoffNextActions(for: step)
         )
     }

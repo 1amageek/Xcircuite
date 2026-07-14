@@ -92,9 +92,6 @@ public actor XcircuiteWorkspaceStore {
     }
 
     /// Writes an encodable value as sorted-key JSON at a workspace-relative path.
-    ///
-    /// This is the preferred spelling for new callers. The deprecated
-    /// `write(_:asJSONTo:)` overload remains available for source compatibility.
     public func writeJSON<Value: Encodable & Sendable>(_ value: Value, to relativePath: String) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -108,9 +105,6 @@ public actor XcircuiteWorkspaceStore {
     }
 
     /// Reads and decodes a value from a workspace-relative JSON path.
-    ///
-    /// This is the preferred spelling for new callers. The deprecated
-    /// `read(_:fromJSON:)` overload remains available for source compatibility.
     public func readJSON<Value: Decodable & Sendable>(_ type: Value.Type, from relativePath: String) throws -> Value {
         do {
             return try JSONDecoder().decode(type, from: read(from: relativePath))
@@ -119,16 +113,6 @@ public actor XcircuiteWorkspaceStore {
         } catch {
             throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
         }
-    }
-
-    @available(*, deprecated, message: "Use writeJSON(_:to:) instead.")
-    public func write<Value: Encodable & Sendable>(_ value: Value, asJSONTo relativePath: String) throws {
-        try writeJSON(value, to: relativePath)
-    }
-
-    @available(*, deprecated, message: "Use readJSON(_:from:) instead.")
-    public func read<Value: Decodable & Sendable>(_ type: Value.Type, fromJSON relativePath: String) throws -> Value {
-        try readJSON(type, from: relativePath)
     }
 
     private func validatedURL(for relativePath: String) throws -> URL {

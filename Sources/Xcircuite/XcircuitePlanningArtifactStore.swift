@@ -97,18 +97,6 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         self.snapshotBuilder = snapshotBuilder
     }
 
-    /// Source-compatible entry point for callers that still construct the
-    /// deprecated filesystem store directly. New callers inject
-    /// `FlowExecutionStorage` instead so planning logic does not depend on the
-    /// concrete `.xcircuite` implementation.
-    @available(*, deprecated, message: "Use init(storage:snapshotBuilder:) instead.")
-    public init(
-        packageStore: XcircuitePackageStore,
-        snapshotBuilder: XcircuiteActionDomainSnapshotBuilder = XcircuiteActionDomainSnapshotBuilder()
-    ) {
-        self.init(storage: packageStore, snapshotBuilder: snapshotBuilder)
-    }
-
     @discardableResult
     public func persistActionDomainSnapshot(
         runID: String,

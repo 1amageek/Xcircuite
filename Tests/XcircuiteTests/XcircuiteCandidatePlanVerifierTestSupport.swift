@@ -4,10 +4,18 @@ import LayoutCore
 import LayoutIO
 import LayoutTech
 import PEXEngine
+import CircuiteFoundation
 import Testing
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
+
+func requireFoundationArtifactReference(
+    _ reference: XcircuiteFileReference,
+    field: String
+) throws -> ArtifactReference {
+    try #require(foundationArtifactReferences([reference], field: field).first)
+}
 
 
 struct ProducedLayoutCorpusCase: Sendable, Hashable {
@@ -327,7 +335,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         try store.upsertRunArtifact(layoutRef, runID: runID, inProjectAt: root)
         try artifactStore.persistPlanExecution(
-            try XcircuiteCandidatePlanExecution(
+            XcircuiteCandidatePlanExecution(
                 runID: runID,
                 problemID: problem.problemID,
                 planID: plan.planID,
@@ -341,10 +349,10 @@ extension XcircuiteCandidatePlanVerifierTests {
                         domainID: "layout-edit",
                         operationID: "layout.create-cell",
                         status: "executed",
-                        artifactRefs: [layoutRef]
+                        artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-step")]
                     ),
                 ],
-                artifactRefs: [layoutRef],
+                artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-execution")],
                 diagnostics: [],
                 nextActions: []
             ),
@@ -387,7 +395,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         try store.upsertRunArtifact(layoutRef, runID: runID, inProjectAt: root)
         try artifactStore.persistPlanExecution(
-            try XcircuiteCandidatePlanExecution(
+            XcircuiteCandidatePlanExecution(
                 runID: runID,
                 problemID: problem.problemID,
                 planID: plan.planID,
@@ -401,10 +409,10 @@ extension XcircuiteCandidatePlanVerifierTests {
                         domainID: "layout-edit",
                         operationID: "layout.create-cell",
                         status: "executed",
-                        artifactRefs: [layoutRef]
+                        artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-step")]
                     ),
                 ],
-                artifactRefs: [layoutRef],
+                artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-execution")],
                 diagnostics: [],
                 nextActions: []
             ),

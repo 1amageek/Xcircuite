@@ -336,8 +336,8 @@ struct SimulationGoldenCorpusTests {
             from: projectRoot.appending(path: executionResult.planExecutionArtifact.path)
         )
         let stepResult = try #require(execution.stepResults.first)
-        let editReportRef = try #require(stepResult.artifactRefs.first {
-            $0.artifactID == "candidate-step-1-netlist-parameter-edit-report"
+        let editReportRef = try #require(stepResult.artifactReferences.first {
+            $0.id.rawValue == "candidate-step-1-netlist-parameter-edit-report"
         })
         let editReport = try store.readJSON(
             XcircuiteNetlistParameterEditReport.self,

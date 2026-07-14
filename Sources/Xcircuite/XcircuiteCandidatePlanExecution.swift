@@ -61,7 +61,6 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
         case candidatePlanRef
         case stepResults
         case artifactReferences
-        case artifactRefs
         case executionCoverage
         case designDiffRef
         case diagnostics
@@ -71,14 +70,13 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let decodedSchemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        guard decodedSchemaVersion == 1 || decodedSchemaVersion == Self.currentSchemaVersion else {
+        guard decodedSchemaVersion == Self.currentSchemaVersion else {
             throw DecodingError.dataCorruptedError(
                 forKey: .schemaVersion,
                 in: container,
-                debugDescription: "Expected candidate plan execution schema version 1 or \(Self.currentSchemaVersion)."
+                debugDescription: "Expected candidate plan execution schema version \(Self.currentSchemaVersion)."
             )
         }
-        // Normalize legacy records so the next persistence writes the current schema.
         self.schemaVersion = Self.currentSchemaVersion
         self.runID = try container.decode(String.self, forKey: .runID)
         self.problemID = try container.decode(String.self, forKey: .problemID)
@@ -89,27 +87,10 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
             [XcircuiteCandidatePlanExecutionStepResult].self,
             forKey: .stepResults
         )
-        if container.contains(.artifactReferences) {
-            self.artifactReferences = try container.decode(
-                [ArtifactReference].self,
-                forKey: .artifactReferences
-            )
-        } else {
-            let legacyReferences = try container.decode(
-                [XcircuiteFileReference].self,
-                forKey: .artifactRefs
-            )
-            self.artifactReferences = try legacyReferences.enumerated().map { index, reference in
-                guard let artifact = foundationArtifactReference(reference) else {
-                    throw DecodingError.dataCorruptedError(
-                        forKey: .artifactRefs,
-                        in: container,
-                        debugDescription: "Legacy artifact reference at index \(index) cannot be represented as a Foundation artifact."
-                    )
-                }
-                return artifact
-            }
-        }
+        self.artifactReferences = try container.decode(
+            [ArtifactReference].self,
+            forKey: .artifactReferences
+        )
         self.executionCoverage = try container.decode(
             XcircuiteCandidatePlanExecutionCoverage.self,
             forKey: .executionCoverage
@@ -135,57 +116,4 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
         try container.encode(nextActions, forKey: .nextActions)
     }
 
-    /// Legacy read-only projection retained while stored execution records migrate.
-    @available(*, deprecated, message: "Use artifactReferences.")
-    public var artifactRefs: [XcircuiteFileReference] {
-        artifactReferences.map {
-            legacyArtifactReferenceWithProvenance($0, producedByRunID: runID)
-        }
-    }
-
-    /// Legacy initializer retained for callers that still construct execution records at the storage edge.
-    @available(*, deprecated, message: "Use artifactReferences: [ArtifactReference].")
-    public init(
-        runID: String,
-        problemID: String,
-        planID: String,
-        status: String,
-        candidatePlanRef: XcircuiteFileReference,
-        stepResults: [XcircuiteCandidatePlanExecutionStepResult],
-        artifactRefs: [XcircuiteFileReference],
-        executionCoverage: XcircuiteCandidatePlanExecutionCoverage = XcircuiteCandidatePlanExecutionCoverage(
-            status: "not-evaluated",
-            requiredFamilyIDs: [],
-            coveredFamilyIDs: [],
-            missingFamilyIDs: [],
-            familyCoverage: [],
-            producedArtifactIDs: []
-        ),
-        designDiffRef: XcircuiteFileReference? = nil,
-        diagnostics: [XcircuitePlanVerificationDiagnostic],
-        nextActions: [String]
-    ) throws {
-        let artifactReferences = try artifactRefs.enumerated().map { index, reference in
-            guard let artifact = foundationArtifactReference(reference) else {
-                throw XcircuiteCandidatePlanExecutionError.invalidArtifactReference(
-                    path: reference.path,
-                    reason: "Legacy artifact reference at index \(index) cannot be represented as a Foundation artifact."
-                )
-            }
-            return artifact
-        }
-        self.init(
-            runID: runID,
-            problemID: problemID,
-            planID: planID,
-            status: status,
-            candidatePlanRef: candidatePlanRef,
-            stepResults: stepResults,
-            artifactReferences: artifactReferences,
-            executionCoverage: executionCoverage,
-            designDiffRef: designDiffRef,
-            diagnostics: diagnostics,
-            nextActions: nextActions
-        )
-    }
 }

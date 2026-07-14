@@ -5,7 +5,7 @@ import LayoutIO
 import LayoutTech
 import PEXEngine
 import Testing
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
@@ -626,7 +626,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             inProjectAt: root,
             producedByRunID: "run-10"
         )
-        let execution = try XcircuiteCandidatePlanExecution(
+        let execution = XcircuiteCandidatePlanExecution(
             runID: "run-10",
             problemID: "run-10-parameter-problem",
             planID: "run-10-parameter-plan",
@@ -640,10 +640,10 @@ extension XcircuiteCandidatePlanVerifierTests {
                     domainID: "simulation-analysis",
                     operationID: "simulation.set-netlist-parameters",
                     status: "executed",
-                    artifactRefs: [reportRef]
+                    artifactReferences: [try requireFoundationArtifactReference(reportRef, field: "report-step")]
                 ),
             ],
-            artifactRefs: [reportRef],
+            artifactReferences: [try requireFoundationArtifactReference(reportRef, field: "report-execution")],
             diagnostics: [],
             nextActions: []
         )

@@ -9,17 +9,92 @@ import DesignFlowKernel
 
 @Suite("Xcircuite candidate plan executor")
 struct XcircuiteCandidatePlanExecutorTests {
-    @Test func candidatePlanExecutionEncodesCanonicalArtifactReferencesAndReadsLegacyKey() throws {
-        let legacyArtifact = XcircuiteFileReference(
-            artifactID: "execution-report",
-            path: ".xcircuite/runs/run-artifact/planning/report.json",
-            kind: .report,
-            format: .json,
-            sha256: String(repeating: "a", count: 64),
-            byteCount: 7,
-            producedByRunID: "run-artifact"
+    @Test func candidatePlanExecutionStepEncodesCanonicalArtifactReferences() throws {
+        let artifact = ArtifactReference(
+            id: try ArtifactID(rawValue: "step-report"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: ".xcircuite/runs/run-step/planning/report.json"),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            digest: try ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: String(repeating: "b", count: 64)
+            ),
+            byteCount: 9
         )
-        let execution = try XcircuiteCandidatePlanExecution(
+        let step = XcircuiteCandidatePlanExecutionStepResult(
+            stepID: "step-1",
+            order: 1,
+            actionID: "action-1",
+            domainID: "simulation-analysis",
+            operationID: "simulation.run",
+            status: "executed",
+            artifactReferences: [artifact]
+        )
+
+        let encoded = try JSONEncoder().encode(step)
+        let encodedObject = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        #expect(encodedObject["schemaVersion"] as? Int == 2)
+        #expect(encodedObject["artifactReferences"] != nil)
+        #expect(encodedObject["artifactRefs"] == nil)
+
+        let decoded = try JSONDecoder().decode(
+            XcircuiteCandidatePlanExecutionStepResult.self,
+            from: encoded
+        )
+
+        #expect(decoded.schemaVersion == 2)
+        #expect(decoded.artifactReferences.count == 1)
+        #expect(decoded.artifactReferences[0].id.rawValue == "step-report")
+        let reencoded = try JSONEncoder().encode(decoded)
+        let reencodedObject = try #require(
+            JSONSerialization.jsonObject(with: reencoded) as? [String: Any]
+        )
+        #expect(reencodedObject["schemaVersion"] as? Int == 2)
+        #expect(reencodedObject["artifactReferences"] != nil)
+        #expect(reencodedObject["artifactRefs"] == nil)
+    }
+
+    @Test func candidatePlanExecutionStepRejectsUnsupportedSchemaVersion() throws {
+        let payload = Data("""
+        {
+          "schemaVersion": 1,
+          "stepID": "step-invalid",
+          "order": 1,
+          "actionID": "action-invalid",
+          "domainID": "simulation-analysis",
+          "operationID": "simulation.run",
+          "status": "failed",
+          "artifactReferences": [],
+          "diagnostics": [],
+          "nextActions": []
+        }
+        """.utf8)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(XcircuiteCandidatePlanExecutionStepResult.self, from: payload)
+        }
+    }
+
+    @Test func candidatePlanExecutionEncodesCanonicalArtifactReferences() throws {
+        let artifact = ArtifactReference(
+            id: try ArtifactID(rawValue: "execution-report"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: ".xcircuite/runs/run-artifact/planning/report.json"),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            digest: try ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: String(repeating: "a", count: 64)
+            ),
+            byteCount: 7
+        )
+        let execution = XcircuiteCandidatePlanExecution(
             runID: "run-artifact",
             problemID: "problem-artifact",
             planID: "plan-artifact",
@@ -31,27 +106,20 @@ struct XcircuiteCandidatePlanExecutorTests {
                 format: .json
             ),
             stepResults: [],
-            artifactRefs: [legacyArtifact],
+            artifactReferences: [artifact],
             diagnostics: [],
             nextActions: []
         )
 
         let encoded = try JSONEncoder().encode(execution)
-        var encodedObject = try #require(
+        let encodedObject = try #require(
             JSONSerialization.jsonObject(with: encoded) as? [String: Any]
         )
         #expect(encodedObject["schemaVersion"] as? Int == 2)
         #expect(encodedObject["artifactReferences"] != nil)
         #expect(encodedObject["artifactRefs"] == nil)
 
-        let legacyArtifacts = try JSONSerialization.jsonObject(
-            with: JSONEncoder().encode([legacyArtifact])
-        )
-        encodedObject.removeValue(forKey: "artifactReferences")
-        encodedObject["schemaVersion"] = 1
-        encodedObject["artifactRefs"] = legacyArtifacts
-        let legacyData = try JSONSerialization.data(withJSONObject: encodedObject)
-        let decoded = try JSONDecoder().decode(XcircuiteCandidatePlanExecution.self, from: legacyData)
+        let decoded = try JSONDecoder().decode(XcircuiteCandidatePlanExecution.self, from: encoded)
 
         let reencoded = try JSONEncoder().encode(decoded)
         let reencodedObject = try #require(
@@ -64,6 +132,40 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(decoded.artifactReferences[0].id.rawValue == "execution-report")
         #expect(decoded.artifactReferences[0].digest.hexadecimalValue == String(repeating: "a", count: 64))
         #expect(decoded.artifactReferences[0].byteCount == 7)
+    }
+
+    @Test func candidatePlanExecutionRejectsUnsupportedSchemaVersion() throws {
+        let payload = Data("""
+        {
+          "schemaVersion": 1,
+          "runID": "run-invalid",
+          "problemID": "problem-invalid",
+          "planID": "plan-invalid",
+          "status": "executed",
+          "candidatePlanRef": {
+            "artifactID": "candidate-plan",
+            "path": ".xcircuite/runs/run-invalid/planning/candidate-plan.json",
+            "kind": "other",
+            "format": "JSON"
+          },
+          "stepResults": [],
+          "artifactReferences": [],
+          "executionCoverage": {
+            "schemaVersion": 1,
+            "status": "not-evaluated",
+            "requiredFamilyIDs": [],
+            "coveredFamilyIDs": [],
+            "missingFamilyIDs": [],
+            "familyCoverage": [],
+            "producedArtifactIDs": []
+          },
+          "diagnostics": [],
+          "nextActions": []
+        }
+        """.utf8)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(XcircuiteCandidatePlanExecution.self, from: payload)
+        }
     }
 
     @Test func executeCandidatePlanCLIRunsLayoutAddRectAndWritesArtifacts() async throws {
@@ -105,12 +207,12 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(execution.status == "executed")
         #expect(execution.stepResults.map(\.status) == ["executed"])
         #expect(execution.designDiffRef?.artifactID == nil)
-        let layoutDocument = try #require(execution.artifactRefs.first {
-            $0.artifactID == "candidate-step-1-layout-document"
+        let layoutDocument = try #require(execution.artifactReferences.first {
+            $0.id.rawValue == "candidate-step-1-layout-document"
         })
-        #expect(fileExists(layoutDocument.path, in: root))
-        #expect(layoutDocument.sha256?.isEmpty == false)
-        #expect((layoutDocument.byteCount ?? 0) > 0)
+        #expect(fileExists(layoutDocument.locator.location.value, in: root))
+        #expect(!layoutDocument.digest.hexadecimalValue.isEmpty)
+        #expect(layoutDocument.byteCount > 0)
 
         let diff = try store.loadDesignDiff(runID: "run-1", inProjectAt: root)
         #expect(diff.title == "Candidate plan run-1-drc-repair-problem-candidate-plan-1 execution")
@@ -344,20 +446,20 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(execution.stepResults.allSatisfy { $0.status == "executed" })
 
         let stepDocuments = try execution.stepResults.map { result in
-            try #require(result.artifactRefs.first { $0.artifactID == "candidate-step-\(result.order)-layout-document" })
+            try #require(result.artifactReferences.first { $0.id.rawValue == "candidate-step-\(result.order)-layout-document" })
         }
         let stepRequests = try execution.stepResults.map { result in
-            let reference = try #require(result.artifactRefs.first {
-                $0.artifactID == "candidate-step-\(result.order)-layout-request"
+            let reference = try #require(result.artifactReferences.first {
+                $0.id.rawValue == "candidate-step-\(result.order)-layout-request"
             })
             return try store.readJSON(
                 DecodedLayoutCommandRequest.self,
-                from: root.appending(path: reference.path)
+                from: root.appending(path: reference.locator.location.value)
             )
         }
         #expect(stepRequests[0].inputDocumentPath == nil)
         for index in 1..<stepRequests.count {
-            #expect(stepRequests[index].inputDocumentPath == stepDocuments[index - 1].path)
+            #expect(stepRequests[index].inputDocumentPath == stepDocuments[index - 1].locator.location.value)
         }
 
         let finalDocumentRef = try #require(stepDocuments.last)
@@ -411,8 +513,8 @@ struct XcircuiteCandidatePlanExecutorTests {
             XcircuiteCandidatePlanExecution.self,
             from: root.appending(path: result.planExecutionArtifact.locator.location.value)
         )
-        #expect(execution.stepResults.first?.artifactRefs.contains {
-            $0.artifactID == "candidate-layout-gds"
+        #expect(execution.stepResults.first?.artifactReferences.contains {
+            $0.id.rawValue == "candidate-layout-gds"
         } == true)
 
         let manifest = try store.readJSON(
@@ -479,19 +581,19 @@ struct XcircuiteCandidatePlanExecutorTests {
                 && $0.artifactIDs.contains("candidate-step-4-model-equivalence-policy")
         })
 
-        let firstEditReportRef = try #require(execution.stepResults[1].artifactRefs.first {
-            $0.artifactID == "candidate-step-2-netlist-parameter-edit-report"
+        let firstEditReportRef = try #require(execution.stepResults[1].artifactReferences.first {
+            $0.id.rawValue == "candidate-step-2-netlist-parameter-edit-report"
         })
         let firstEditReport = try store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: root.appending(path: firstEditReportRef.path)
+            from: root.appending(path: firstEditReportRef.locator.location.value)
         )
-        let secondEditReportRef = try #require(execution.stepResults[2].artifactRefs.first {
-            $0.artifactID == "candidate-step-3-netlist-parameter-edit-report"
+        let secondEditReportRef = try #require(execution.stepResults[2].artifactReferences.first {
+            $0.id.rawValue == "candidate-step-3-netlist-parameter-edit-report"
         })
         let secondEditReport = try store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: root.appending(path: secondEditReportRef.path)
+            from: root.appending(path: secondEditReportRef.locator.location.value)
         )
         #expect(firstEditReport.outputNetlistPath == secondEditReport.sourceNetlistPath)
 
@@ -512,7 +614,7 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func candidatePlanExecutionRejectsMissingExecutionCoverage() throws {
         let payload = Data("""
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "runID": "run-incomplete",
           "problemID": "problem-incomplete",
           "planID": "plan-incomplete",
@@ -524,7 +626,7 @@ struct XcircuiteCandidatePlanExecutorTests {
             "format": "JSON"
           },
           "stepResults": [],
-          "artifactRefs": [],
+          "artifactReferences": [],
           "diagnostics": [],
           "nextActions": []
         }
@@ -595,7 +697,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         )
         #expect(execution.stepResults.first?.status == "failed")
         #expect(execution.diagnostics.contains { $0.code == "layout-command-result-path-mismatch" })
-        #expect(execution.artifactRefs.isEmpty)
+        #expect(execution.artifactReferences.isEmpty)
     }
 
     @Test func executorRejectsLayoutCommandDigestMismatchBeforeArtifactPromotion() async throws {
@@ -625,7 +727,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         )
         #expect(execution.stepResults.first?.status == "failed")
         #expect(execution.diagnostics.contains { $0.code == "layout-command-output-digest-mismatch" })
-        #expect(execution.artifactRefs.isEmpty)
+        #expect(execution.artifactReferences.isEmpty)
     }
 
 

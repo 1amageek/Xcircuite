@@ -73,15 +73,15 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 riskReviews: riskReviews,
                 diagnostics: diagnostics
             )
-            let execution = try XcircuiteCandidatePlanExecution(
+            let execution = XcircuiteCandidatePlanExecution(
                 runID: plan.runID,
                 problemID: plan.problemID,
                 planID: plan.planID,
                 status: "blocked",
                 candidatePlanRef: candidatePlanRef,
                 stepResults: stepResults,
-                artifactRefs: [],
-                executionCoverage: executionCoverage(stepResults: stepResults, artifactRefs: []),
+                artifactReferences: [],
+                executionCoverage: executionCoverage(stepResults: stepResults, artifactReferences: []),
                 diagnostics: diagnostics,
                 nextActions: riskReviewer.nextActions(from: riskReviews)
             )
@@ -128,8 +128,11 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 context: &context
             ))
         }
-        let producedArtifacts = stepResults.flatMap(\.artifactRefs)
-        let coverage = executionCoverage(stepResults: stepResults, artifactRefs: producedArtifacts)
+        let producedArtifactReferences = stepResults.flatMap(\.artifactReferences)
+        let coverage = executionCoverage(
+            stepResults: stepResults,
+            artifactReferences: producedArtifactReferences
+        )
         let diagnostics = stepResults.flatMap(\.diagnostics)
         let nextActions = unique(stepResults.flatMap(\.nextActions) + signoffNextActions(for: plan))
         let status = executionStatus(stepResults)
@@ -140,14 +143,14 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             actor: request.actor,
             projectRoot: projectRoot
         )
-        let execution = try XcircuiteCandidatePlanExecution(
+        let execution = XcircuiteCandidatePlanExecution(
             runID: plan.runID,
             problemID: plan.problemID,
             planID: plan.planID,
             status: status,
             candidatePlanRef: candidatePlanRef,
             stepResults: stepResults,
-            artifactRefs: producedArtifacts,
+            artifactReferences: producedArtifactReferences,
             executionCoverage: coverage,
             designDiffRef: designDiffRef,
             diagnostics: diagnostics,
@@ -178,9 +181,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             designDiffArtifact: try designDiffRef.map {
                 try requireFoundationArtifactReference($0, field: "design-diff")
             },
-            producedArtifacts: try producedArtifacts.map {
-                try requireFoundationArtifactReference($0, field: "produced-artifact")
-            },
+            producedArtifacts: producedArtifactReferences,
             nextActions: nextActions
         )
     }

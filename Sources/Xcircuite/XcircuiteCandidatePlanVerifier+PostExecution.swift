@@ -235,7 +235,7 @@ extension XcircuiteCandidatePlanVerifier {
             gateIDs: step.verificationGates,
             symbolicEvaluation: symbolicEvaluation,
             diagnostics: executed.diagnostics,
-            producedArtifactRefs: executed.artifactRefs
+            producedArtifactRefs: legacyArtifactReferences(executed.artifactReferences)
         )
     }
 

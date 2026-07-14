@@ -29,7 +29,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
     ) {
         self.packageStore = packageStore
         self.artifactStore = XcircuitePlanningArtifactStore(
-            packageStore: packageStore,
+            storage: packageStore,
             snapshotBuilder: actionDomainSnapshotBuilder
         )
         self.fileReferenceVerifier = fileReferenceVerifier

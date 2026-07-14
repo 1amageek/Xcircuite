@@ -680,7 +680,8 @@ extension XcircuiteCandidatePlanVerifier {
         for stepResult in stepResults where sourceStepIDSet.isEmpty || sourceStepIDSet.contains(stepResult.stepID) {
             guard let step = stepsByID[stepResult.stepID],
                   stringHint("lvsEditedNetlistRole", step: step)?.lowercased() == role,
-                  let reference = stepResult.artifactRefs.first(where: isEditedNetlistArtifact) else {
+                  let reference = legacyArtifactReferences(stepResult.artifactReferences)
+                      .first(where: isEditedNetlistArtifact) else {
                 continue
             }
             return planningReference(
@@ -815,7 +816,8 @@ extension XcircuiteCandidatePlanVerifier {
         let sourceStepIDSet = Set(sourceStepIDs)
         let stepResults = execution.stepResults.sorted { $0.order < $1.order }
         for stepResult in stepResults where sourceStepIDSet.isEmpty || sourceStepIDSet.contains(stepResult.stepID) {
-            if let reference = stepResult.artifactRefs.first(where: isEditedNetlistArtifact) {
+            if let reference = legacyArtifactReferences(stepResult.artifactReferences)
+                .first(where: isEditedNetlistArtifact) {
                 return planningReference(from: reference, fallbackRefID: "\(stepResult.stepID)-edited-netlist")
             }
         }
@@ -843,7 +845,7 @@ extension XcircuiteCandidatePlanVerifier {
         let stepArtifactRefs = execution.stepResults
             .sorted { $0.order > $1.order }
             .filter { sourceStepIDSet.isEmpty || sourceStepIDSet.contains($0.stepID) }
-            .flatMap(\.artifactRefs)
+            .flatMap { legacyArtifactReferences($0.artifactReferences) }
         let executionArtifactRefs = Array(legacyArtifactReferences(execution.artifactReferences).reversed())
         let artifactRefs = stepArtifactRefs + executionArtifactRefs
         if let explicitArtifactID,
@@ -914,7 +916,7 @@ extension XcircuiteCandidatePlanVerifier {
         let stepArtifactRefs = execution.stepResults
             .sorted { $0.order > $1.order }
             .filter { sourceStepIDSet.isEmpty || sourceStepIDSet.contains($0.stepID) }
-            .flatMap(\.artifactRefs)
+            .flatMap { legacyArtifactReferences($0.artifactReferences) }
         let executionArtifactRefs = Array(legacyArtifactReferences(execution.artifactReferences).reversed())
         return (stepArtifactRefs + executionArtifactRefs).first(where: predicate)
     }

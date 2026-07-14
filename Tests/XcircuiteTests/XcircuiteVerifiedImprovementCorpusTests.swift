@@ -412,7 +412,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
     ) throws -> XcircuiteVerifiedImprovementCorpusSuiteSpec.CaseSpec {
         let packageStore = XcircuitePackageStore()
         try packageStore.createRunDirectory(for: runID, inProjectAt: root)
-        let planningStore = XcircuitePlanningArtifactStore(packageStore: packageStore)
+        let planningStore = XcircuitePlanningArtifactStore(storage: packageStore)
         let candidatePlanRef = try writePlanningArtifact(
             root: root,
             runID: runID,

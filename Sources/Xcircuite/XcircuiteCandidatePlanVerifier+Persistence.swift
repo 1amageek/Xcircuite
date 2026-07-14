@@ -18,7 +18,7 @@ extension XcircuiteCandidatePlanVerifier {
         guard status == "rejected" || status == "blocked" else {
             return nil
         }
-        let artifactReferences = try foundationArtifactReferences(
+        _ = try foundationArtifactReferences(
             verification.artifactRefs,
             field: "rejected-plan.verification-artifacts"
         )

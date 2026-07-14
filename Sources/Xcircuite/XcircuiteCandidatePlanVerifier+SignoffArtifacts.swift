@@ -364,7 +364,7 @@ extension XcircuiteCandidatePlanVerifier {
             .sorted { $0.order > $1.order }
             .lazy
             .compactMap { result in
-                result.artifactRefs.first { reference in
+                legacyArtifactReferences(result.artifactReferences).first { reference in
                     reference.artifactID?.hasSuffix("layout-document") == true
                 }
             }
