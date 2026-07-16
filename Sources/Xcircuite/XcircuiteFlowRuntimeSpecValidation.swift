@@ -105,7 +105,7 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "requestPath"
                 )
             }
-        case .logicQualification(let spec):
+        case .logicEvidenceValidation(let spec):
             guard !spec.reportPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
@@ -469,7 +469,7 @@ private extension XcircuiteFlowStageExecutorSpec {
             spec.tool
         case .logicEquivalence(let spec):
             spec.tool
-        case .logicQualification(let spec):
+        case .logicEvidenceValidation(let spec):
             spec.tool
         case .dft(let spec):
             spec.tool

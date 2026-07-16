@@ -38,7 +38,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusSuiteSpec: Codable, Sendable, 
         executablePath: String,
         arguments: [String] = [],
         timeoutSeconds: Double = 300,
-        policyID: String = "symbolic-planner-solver-corpus-qualification-v1",
+        policyID: String = "symbolic-planner-solver-corpus-assessment-v1",
         requiredCoverageTags: [String] = [],
         requireProofValidation: Bool = false,
         proofCheckerExecutablePath: String? = nil,
@@ -63,7 +63,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusSuiteSpec: Codable, Sendable, 
         self.cases = cases
     }
 
-    public init(request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest) {
+    public init(request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest) {
         self.init(
             suiteID: request.suiteID,
             toolID: request.toolID,
@@ -81,8 +81,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusSuiteSpec: Codable, Sendable, 
         )
     }
 
-    public var qualificationRequest: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest {
-        XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+    public var assessmentRequest: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest {
+        XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
             suiteID: suiteID,
             toolID: toolID,
             executablePath: executablePath,

@@ -316,7 +316,10 @@ struct XcircuiteCandidatePlanGeneratorTests {
         let actionDomainArtifact = try #require(result.actionDomainSnapshotArtifact)
         let refreshedIntegrity = LocalArtifactVerifier().verify(actionDomainArtifact, relativeTo: root)
         #expect(refreshedIntegrity.isVerified)
-        #expect(actionDomainArtifact.digest.hexadecimalValue != staleReference.sha256)
+        #expect(
+            actionDomainArtifact.digest.hexadecimalValue
+                != staleReference.digest.hexadecimalValue
+        )
         let refreshedSnapshot = try await store.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
             from: actionDomainArtifact.locator.location.value
@@ -330,8 +333,11 @@ struct XcircuiteCandidatePlanGeneratorTests {
         let manifestActionDomain = try #require(ledger.artifacts.first {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
         })
-        #expect(manifestActionDomain.sha256 == actionDomainArtifact.digest.hexadecimalValue)
-        #expect(actionDomainArtifact.byteCount == UInt64(manifestActionDomain.byteCount ?? 0))
+        #expect(
+            manifestActionDomain.digest.hexadecimalValue
+                == actionDomainArtifact.digest.hexadecimalValue
+        )
+        #expect(actionDomainArtifact.byteCount == manifestActionDomain.byteCount)
     }
 
     @Test func generateCandidatePlanRejectsTamperedPlanningProblemManifestArtifactBeforeUse() async throws {
@@ -1112,7 +1118,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
         )
         let first = try await generator.runSymbolicPlannerFamily(request: request, projectRoot: root)
         let selectedPlanArtifact = first.familyRun.selectedCandidatePlanArtifact
-        let selectedPlanSHA256 = selectedPlanArtifact.sha256
+        let selectedPlanSHA256 = selectedPlanArtifact.digest.hexadecimalValue
         #expect(verifier.verify(selectedPlanArtifact, relativeTo: root).isVerified)
 
         do {
@@ -1140,7 +1146,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
         #expect(ledger.artifacts.contains {
             $0.artifactID == selectedPlanArtifact.artifactID
                 && $0.path == selectedPlanArtifact.path
-                && $0.sha256 == selectedPlanArtifact.sha256
+                && $0.digest == selectedPlanArtifact.digest
         })
     }
 

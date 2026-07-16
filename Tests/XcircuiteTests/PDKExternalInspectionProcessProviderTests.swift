@@ -212,9 +212,7 @@ struct PDKExternalInspectionProcessProviderTests {
                 from: try encoder.encode(spec)
             )
             #expect(decoded == spec)
-            try XcircuiteFlowRuntimeSpec(executors: [decoded]).validate(
-                requireCompleteToolEvidence: false
-            )
+            try XcircuiteFlowRuntimeSpec(executors: [decoded]).validate()
             let executor = try decoded.makeExecutor(projectRoot: URL(filePath: "/tmp/pdk-runtime-spec"))
             #expect(executor.toolID.hasPrefix("pdk-"))
             #expect(executor.toolID.contains("inspection"))

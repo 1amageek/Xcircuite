@@ -4,7 +4,7 @@ import Foundation
 import LogicEngineCore
 import LogicEvidence
 
-public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
+public struct LogicEvidenceValidationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let reportInput: XcircuiteFlowInputReference
@@ -12,8 +12,8 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
-        stageID: String = "logic.qualification",
-        toolID: String = "logic-qualification",
+        stageID: String = "logic.evidence-validation",
+        toolID: String = "logic-evidence-validation",
         reportInput: XcircuiteFlowInputReference
     ) {
         self.stageID = stageID
@@ -41,14 +41,14 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
             try report.validate()
             let additionalArtifacts: [ArtifactReference] = [try reference(
                 for: reportURL,
-                artifactID: "logic-qualification-report",
+                artifactID: "logic-evidence-validation-report",
                 context: context
             )]
             let diagnostics = diagnostics(for: report)
             let resultArtifact = try await support.persistResult(
                 report,
-                fileName: "logic-qualification-result.json",
-                artifactID: "logic-qualification-result",
+                fileName: "logic-evidence-validation-result.json",
+                artifactID: "logic-evidence-validation-result",
                 stageID: stageID,
                 context: context
             )
@@ -87,14 +87,14 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
             return support.failure(
                 stageID: stageID,
                 gateID: stageID,
-                code: "LOGIC_QUALIFICATION_ARTIFACT_INVALID",
+                code: "LOGIC_EVIDENCE_VALIDATION_ARTIFACT_INVALID",
                 message: error.localizedDescription
             )
         } catch {
             return support.failure(
                 stageID: stageID,
                 gateID: stageID,
-                code: "LOGIC_QUALIFICATION_ADAPTER_ERROR",
+                code: "LOGIC_EVIDENCE_VALIDATION_EXECUTION_ERROR",
                 message: error.localizedDescription
             )
         }
@@ -133,26 +133,26 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
         let code: String
         switch report.state {
         case .unassessed:
-            code = "LOGIC_QUALIFICATION_CORPUS_REQUIRED"
+            code = "LOGIC_EVIDENCE_VALIDATION_CORPUS_REQUIRED"
         case .corpusChecked:
-            code = "LOGIC_QUALIFICATION_ORACLE_REQUIRED"
+            code = "LOGIC_EVIDENCE_VALIDATION_ORACLE_REQUIRED"
         case .oracleCorrelated:
-            code = "LOGIC_QUALIFICATION_BLOCKED"
+            code = "LOGIC_EVIDENCE_VALIDATION_BLOCKED"
         }
         let message = report.blockers.sorted().joined(separator: ", ")
         return [DesignDiagnostic(
             code: .trusted(code),
             severity: .error,
-            summary: message.isEmpty ? "Logic qualification has not reached release eligibility." : message
+            summary: message.isEmpty ? "Logic evidence validation has not reached release eligibility." : message
         )]
     }
 
     private func diagnosticCode(for blocker: String) -> String {
         switch blocker {
         case "process_qualification_required":
-            return "LOGIC_QUALIFICATION_PROCESS_REQUIRED"
+            return "LOGIC_EVIDENCE_VALIDATION_PROCESS_REQUIRED"
         default:
-            return "LOGIC_QUALIFICATION_BLOCKED"
+            return "LOGIC_EVIDENCE_VALIDATION_BLOCKED"
         }
     }
 }

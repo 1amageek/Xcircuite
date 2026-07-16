@@ -16,12 +16,12 @@ import ToolQualification
 
 @Suite("LogicEngine flow stage executors")
 struct LogicEngineFlowStageExecutorTests {
-    @Test("qualification stage blocks release without process evidence", .timeLimit(.minutes(1)))
-    func qualificationStageRequiresProcessEvidence() async throws {
-        let root = try makeRoot(name: "logic-qualification-stage")
+    @Test("evidence validation blocks release without process evidence", .timeLimit(.minutes(1)))
+    func evidenceValidationRequiresProcessEvidence() async throws {
+        let root = try makeRoot(name: "logic-evidence-validation-stage")
         defer { removeRoot(root) }
         let report = LogicEvidenceReport(
-            suiteID: "qualification-suite",
+            suiteID: "validation-suite",
             implementationID: "native-logic-engine",
             implementationVersion: "1",
             state: .oracleCorrelated,
@@ -34,7 +34,7 @@ struct LogicEngineFlowStageExecutorTests {
             )],
             blockers: ["process_qualification_required"],
             oracleCorrelation: LogicEvidenceOracleCorrelationReport(
-                suiteID: "qualification-suite",
+                suiteID: "validation-suite",
                 nativeImplementationID: "native-logic-engine",
                 oracleImplementationID: "reference-oracle",
                 matchedCaseIDs: ["case"]
@@ -42,32 +42,32 @@ struct LogicEngineFlowStageExecutorTests {
         )
         let reportReference = try writeJSON(
             report,
-            name: "logic-qualification-report.json",
+            name: "logic-evidence-validation-report.json",
             root: root,
             kind: .report
         )
-        let context = try await makeContext(root: root, runID: "logic-qualification-stage")
-        let result = try await LogicQualificationFlowStageExecutor(
+        let context = try await makeContext(root: root, runID: "logic-evidence-validation-stage")
+        let result = try await LogicEvidenceValidationFlowStageExecutor(
             reportInput: .path(reportReference.locator.location.value)
         ).execute(
-            stage: FlowStageDefinition(stageID: "logic.qualification", displayName: "Logic qualification"),
+            stage: FlowStageDefinition(stageID: "logic.evidence-validation", displayName: "Logic evidence validation"),
             context: context
         )
 
         #expect(result.status == .blocked)
         #expect(
-            result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_PROCESS_REQUIRED" },
+            result.diagnostics.contains { $0.code == "LOGIC_EVIDENCE_VALIDATION_PROCESS_REQUIRED" },
             "Diagnostics: \(result.diagnostics)"
         )
-        #expect(result.artifacts.contains { $0.artifactID == "logic-qualification-result" })
+        #expect(result.artifacts.contains { $0.artifactID == "logic-evidence-validation-result" })
     }
 
-    @Test("qualification stage rejects a forged release report", .timeLimit(.minutes(1)))
-    func qualificationStageRejectsForgedReleaseReport() async throws {
-        let root = try makeRoot(name: "logic-qualification-forged-report")
+    @Test("evidence validation rejects a forged release report", .timeLimit(.minutes(1)))
+    func evidenceValidationRejectsForgedReleaseReport() async throws {
+        let root = try makeRoot(name: "logic-evidence-validation-forged-report")
         defer { removeRoot(root) }
         let report = LogicEvidenceReport(
-            suiteID: "qualification-suite",
+            suiteID: "validation-suite",
             implementationID: "native-logic-engine",
             implementationVersion: "1",
             state: .oracleCorrelated,
@@ -81,20 +81,20 @@ struct LogicEngineFlowStageExecutorTests {
         )
         let reportReference = try writeJSON(
             report,
-            name: "forged-logic-qualification-report.json",
+            name: "forged-logic-evidence-validation-report.json",
             root: root,
             kind: .report
         )
-        let context = try await makeContext(root: root, runID: "logic-qualification-forged-report")
-        let result = try await LogicQualificationFlowStageExecutor(
+        let context = try await makeContext(root: root, runID: "logic-evidence-validation-forged-report")
+        let result = try await LogicEvidenceValidationFlowStageExecutor(
             reportInput: .path(reportReference.locator.location.value)
         ).execute(
-            stage: FlowStageDefinition(stageID: "logic.qualification", displayName: "Logic qualification"),
+            stage: FlowStageDefinition(stageID: "logic.evidence-validation", displayName: "Logic evidence validation"),
             context: context
         )
 
         #expect(result.status == .failed)
-        #expect(result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_ARTIFACT_INVALID" })
+        #expect(result.diagnostics.contains { $0.code == "LOGIC_EVIDENCE_VALIDATION_ARTIFACT_INVALID" })
     }
 
     @Test("lowering stage converts a canonical RTL snapshot into an execution artifact", .timeLimit(.minutes(1)))

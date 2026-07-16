@@ -49,7 +49,10 @@ struct SignoffFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [SignoffToolDescriptors.nativeDRC(level: .smokeChecked)]),
+            toolRegistry: ToolRegistry(descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .smokeChecked
+            )]),
             healthResults: [
                 "native-drc": QualifiedToolFixtures.health(toolID: "native-drc", level: .smokeChecked),
             ],
@@ -611,7 +614,10 @@ struct SignoffFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [SignoffToolDescriptors.nativeLVS(level: .smokeChecked)]),
+            toolRegistry: ToolRegistry(descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeLVS(),
+                qualifiedAt: .smokeChecked
+            )]),
             healthResults: [
                 "native-lvs": QualifiedToolFixtures.health(toolID: "native-lvs", level: .smokeChecked),
             ],

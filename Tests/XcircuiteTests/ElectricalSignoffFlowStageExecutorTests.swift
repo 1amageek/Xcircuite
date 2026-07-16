@@ -35,7 +35,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         let runResultReference = try #require(
             result.artifacts.first { $0.artifactID == "electrical-signoff-run-result" }
         )
-        #expect(runResultReference.sha256.count == 64)
+        #expect(runResultReference.digest.hexadecimalValue.count == 64)
         let persistedRunResult = try JSONDecoder().decode(
             ElectricalSignoffRunResult.self,
             from: try await store.read(from: runResultReference.path)
@@ -182,7 +182,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         try inputManifest.validate()
         #expect(inputManifest.inputArtifacts.count == 2)
         let oracleReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-oracle-observations" })
-        #expect(oracleReference.sha256.count == 64)
+        #expect(oracleReference.digest.hexadecimalValue.count == 64)
         let reportReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-corpus-report" })
         let report = try JSONDecoder().decode(
             ElectricalSignoffCorpusReport.self,
@@ -431,7 +431,12 @@ struct ElectricalSignoffFlowStageExecutorTests {
             inputs: [reference],
             design: LogicDesignReference(artifact: reference, topDesignName: "top", designDigest: "design"),
             physicalDesign: PhysicalDesignReference(layoutArtifact: layoutReference, topCell: "top", layoutDigest: "layout"),
-            pdk: PDKReference(manifest: pdkReference, processID: "fixture", version: "1", digest: pdkReference.sha256)
+            pdk: PDKReference(
+                manifest: pdkReference,
+                processID: "fixture",
+                version: "1",
+                digest: pdkReference.digest.hexadecimalValue
+            )
         )
     }
 

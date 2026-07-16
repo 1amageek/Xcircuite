@@ -26,7 +26,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case rtlVerification(RTLVerification)
     case logicSynthesis(LogicSynthesis)
     case logicEquivalence(LogicEquivalence)
-    case logicQualification(LogicQualification)
+    case logicEvidenceValidation(LogicEvidenceValidation)
     case dft(DFT)
     case physicalReview(PhysicalReview)
     case pdkDiscovery(PDKDiscovery)
@@ -354,13 +354,13 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         }
     }
 
-    public struct LogicQualification: Sendable, Hashable, Codable {
+    public struct LogicEvidenceValidation: Sendable, Hashable, Codable {
         public var stageID: String
         public var reportPath: String
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = "logic.qualification",
+            stageID: String = "logic.evidence-validation",
             reportPath: String,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
@@ -686,7 +686,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case rtlVerification
         case logicSynthesis
         case logicEquivalence
-        case logicQualification
+        case logicEvidenceValidation
         case dft
         case physicalReview
         case pdkDiscovery
@@ -726,8 +726,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .logicSynthesis(try container.decode(LogicSynthesis.self, forKey: .value))
         case .logicEquivalence:
             self = .logicEquivalence(try container.decode(LogicEquivalence.self, forKey: .value))
-        case .logicQualification:
-            self = .logicQualification(try container.decode(LogicQualification.self, forKey: .value))
+        case .logicEvidenceValidation:
+            self = .logicEvidenceValidation(try container.decode(LogicEvidenceValidation.self, forKey: .value))
         case .dft:
             self = .dft(try container.decode(DFT.self, forKey: .value))
         case .physicalReview:
@@ -791,8 +791,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .logicEquivalence(let value):
             try container.encode(Kind.logicEquivalence, forKey: .kind)
             try container.encode(value, forKey: .value)
-        case .logicQualification(let value):
-            try container.encode(Kind.logicQualification, forKey: .kind)
+        case .logicEvidenceValidation(let value):
+            try container.encode(Kind.logicEvidenceValidation, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .dft(let value):
             try container.encode(Kind.dft, forKey: .kind)
@@ -934,8 +934,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 stageID: spec.stageID,
                 requestInput: .path(spec.requestPath)
             )
-        case .logicQualification(let spec):
-            return LogicQualificationFlowStageExecutor(
+        case .logicEvidenceValidation(let spec):
+            return LogicEvidenceValidationFlowStageExecutor(
                 stageID: spec.stageID,
                 reportInput: .path(spec.reportPath)
             )
@@ -1190,8 +1190,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             LogicToolDescriptors.synthesis()
         case .logicEquivalence(let spec):
             LogicToolDescriptors.equivalence()
-        case .logicQualification(let spec):
-            LogicToolDescriptors.qualification()
+        case .logicEvidenceValidation(let spec):
+            LogicToolDescriptors.evidenceValidation()
         case .dft(let spec):
             if spec.releaseEvidenceSources != nil {
                 DFTToolDescriptors.release()
@@ -1290,7 +1290,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             spec.tool
         case .logicEquivalence(let spec):
             spec.tool
-        case .logicQualification(let spec):
+        case .logicEvidenceValidation(let spec):
             spec.tool
         case .dft(let spec):
             spec.tool

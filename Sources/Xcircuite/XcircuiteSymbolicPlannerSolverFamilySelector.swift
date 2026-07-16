@@ -1,9 +1,8 @@
-import Foundation
 import CircuiteFoundation
-import ToolQualification
 import DesignFlowKernel
+import Foundation
 
-public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
+public struct XcircuiteSymbolicPlannerSolverFamilySelector: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
@@ -27,24 +26,24 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     ) async throws -> XcircuiteSymbolicPlannerSolverFamilyComparisonResult {
         try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         try FlowIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
-        guard !request.qualificationArtifactIDs.isEmpty || !request.qualificationPaths.isEmpty else {
+        guard !request.validationArtifactIDs.isEmpty || !request.validationPaths.isEmpty else {
             throw XcircuiteSymbolicPlannerSolverError.emptySolverFamilyComparison
         }
 
-        let inputs = try await qualificationInputs(request: request, projectRoot: projectRoot)
+        let inputs = try await validationInputs(request: request, projectRoot: projectRoot)
         var candidates: [XcircuiteSymbolicPlannerSolverFamilyCandidateResult] = []
         for (index, input) in inputs.enumerated() {
-            guard input.qualification.runID == request.runID else {
-                throw XcircuiteSymbolicPlannerSolverError.qualificationRunMismatch(
+            guard input.validation.runID == request.runID else {
+                throw XcircuiteSymbolicPlannerSolverError.validationRunMismatch(
                     expected: request.runID,
-                    actual: input.qualification.runID
+                    actual: input.validation.runID
                 )
             }
             candidates.append(
                 makeCandidate(
                     index: index,
-                    qualification: input.qualification,
-                    fallbackQualificationArtifact: input.reference
+                    validation: input.validation,
+                    fallbackValidationArtifact: input.reference
                 )
             )
         }
@@ -56,33 +55,33 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
             updated.selected = candidate.candidateIndex == selectedIndex
             return updated
         }
-        let qualifiedCandidateCount = selectedCandidates.filter { $0.qualificationStatus == "qualified" }.count
-        let failedCandidateCount = selectedCandidates.count - qualifiedCandidateCount
+        let passedCandidateCount = selectedCandidates.filter { $0.validationStatus == "passed" }.count
+        let failedCandidateCount = selectedCandidates.count - passedCandidateCount
         var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
-        if qualifiedCandidateCount == 0 {
+        if passedCandidateCount == 0 {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "warning",
-                    code: "no-qualified-solver-certificate",
-                    message: "Solver family comparison did not find a qualified certificate; the highest-scoring failed certificate was selected for inspection."
+                    code: "no-validated-solver-certificate",
+                    message: "Solver family comparison did not find a validated certificate; the highest-scoring failed certificate was selected for inspection."
                 )
             )
         }
-        let status = selectedCandidate.qualificationStatus == "qualified"
-            ? "selected-qualified"
-            : "selected-unqualified"
+        let status = selectedCandidate.validationStatus == "passed"
+            ? "selected-passing"
+            : "selected-failing"
         let comparison = XcircuiteSymbolicPlannerSolverFamilyComparison(
             status: status,
             runID: request.runID,
             comparisonID: request.comparisonID,
             selectionPolicy: request.selectionPolicy,
-            requestedQualificationArtifactIDs: request.qualificationArtifactIDs,
-            requestedQualificationPaths: request.qualificationPaths,
+            requestedValidationArtifactIDs: request.validationArtifactIDs,
+            requestedValidationPaths: request.validationPaths,
             selectedCandidateIndex: selectedIndex,
             selectedToolID: selectedCandidate.toolID,
-            selectedQualificationArtifact: selectedCandidate.qualificationArtifact,
+            selectedValidationArtifact: selectedCandidate.validationArtifact,
             candidateCount: selectedCandidates.count,
-            qualifiedCandidateCount: qualifiedCandidateCount,
+            passedCandidateCount: passedCandidateCount,
             failedCandidateCount: failedCandidateCount,
             candidates: selectedCandidates,
             diagnostics: diagnostics
@@ -98,50 +97,50 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         )
     }
 
-    private func qualificationInputs(
+    private func validationInputs(
         request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest,
         projectRoot: URL
-    ) async throws -> [QualificationInput] {
+    ) async throws -> [ValidationInput] {
         let manifest = try await artifactReferenceResolver.runManifest(
             runID: request.runID
         )
-        var inputs: [QualificationInput] = []
-        for artifactID in request.qualificationArtifactIDs {
+        var inputs: [ValidationInput] = []
+        for artifactID in request.validationArtifactIDs {
             let reference = try await artifactReferenceResolver.uniqueManifestArtifact(
                 artifactID: artifactID,
-                field: "qualificationArtifact",
+                field: "validationArtifact",
                 expectedFormat: .json,
                 manifest: manifest,
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let qualification = try JSONDecoder().decode(
-                XcircuiteSymbolicPlannerSolverQualificationResult.self,
+            let validation = try JSONDecoder().decode(
+                XcircuiteSymbolicPlannerSolverValidationResult.self,
                 from: await workspaceStore.loadArtifactContent(for: reference)
             )
             inputs.append(
-                QualificationInput(
+                ValidationInput(
                     reference: reference,
-                    qualification: qualification
+                    validation: validation
                 )
             )
         }
-        for path in request.qualificationPaths {
+        for path in request.validationPaths {
             let reference = try await artifactReferenceResolver.projectFileReference(
                 path: path,
-                field: "qualificationArtifact",
+                field: "validationArtifact",
                 expectedFormat: .json,
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let qualification = try JSONDecoder().decode(
-                XcircuiteSymbolicPlannerSolverQualificationResult.self,
+            let validation = try JSONDecoder().decode(
+                XcircuiteSymbolicPlannerSolverValidationResult.self,
                 from: await workspaceStore.loadArtifactContent(for: reference)
             )
             inputs.append(
-                QualificationInput(
+                ValidationInput(
                     reference: reference,
-                    qualification: qualification
+                    validation: validation
                 )
             )
         }
@@ -150,81 +149,80 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
 
     private func makeCandidate(
         index: Int,
-        qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
-        fallbackQualificationArtifact: ArtifactReference?
+        validation: XcircuiteSymbolicPlannerSolverValidationResult,
+        fallbackValidationArtifact: ArtifactReference?
     ) -> XcircuiteSymbolicPlannerSolverFamilyCandidateResult {
-        let missingExpectedActionIDs = missingExpectedActions(qualification)
-        let evaluatedCost = evaluatedCost(qualification)
+        let missingExpectedActionIDs = missingExpectedActions(validation)
+        let evaluatedCost = evaluatedCost(validation)
         let score = scoreComponents(
-            qualification: qualification,
+            validation: validation,
             missingExpectedActionIDs: missingExpectedActionIDs,
             evaluatedCost: evaluatedCost,
             candidateIndex: index
         )
         return XcircuiteSymbolicPlannerSolverFamilyCandidateResult(
             candidateIndex: index,
-            status: qualification.status,
+            status: validation.status,
             selected: false,
             selectionScore: score.reduce(0) { $0 + $1.contribution },
             scoreComponents: score,
-            toolID: qualification.toolID,
-            qualificationStatus: qualification.status,
-            toolHealthStatus: qualification.toolHealth.status.rawValue,
-            solverRunStatus: qualification.solverResult.status,
-            expectedActionIDs: qualification.expectedActionIDs,
-            observedActionIDs: qualification.observedActionIDs,
+            toolID: validation.toolID,
+            validationStatus: validation.status,
+            solverRunStatus: validation.solverResult.status,
+            expectedActionIDs: validation.expectedActionIDs,
+            observedActionIDs: validation.observedActionIDs,
             missingExpectedActionIDs: missingExpectedActionIDs,
-            goalCoverageStatus: qualification.goalCoverageStatus,
-            missingGoalAtoms: qualification.missingGoalAtoms,
-            planReplayStatus: qualification.planReplayValidation?.status,
-            proofValidationStatus: qualification.proofValidation?.status
-                ?? qualification.nativeCertificate?.certificate?.proofStatus,
-            optimalityStatus: qualification.nativeCertificate?.certificate?.optimalityStatus
-                ?? qualification.solverMetadata?.optimalityStatus,
+            goalCoverageStatus: validation.goalCoverageStatus,
+            missingGoalAtoms: validation.missingGoalAtoms,
+            planReplayStatus: validation.planReplayValidation?.status,
+            proofValidationStatus: validation.proofValidation?.status
+                ?? validation.nativeCertificate?.certificate?.proofStatus,
+            optimalityStatus: validation.nativeCertificate?.certificate?.optimalityStatus
+                ?? validation.solverMetadata?.optimalityStatus,
             evaluatedCost: evaluatedCost,
-            maximumSolverCost: qualification.maximumSolverCost,
-            solverPlanLength: solverPlanLength(qualification),
-            solverExitCode: qualification.solverResult.exitCode,
-            didTimeout: qualification.solverResult.didTimeout,
-            didCancel: qualification.solverResult.didCancel,
-            qualificationArtifact: fallbackQualificationArtifact ?? qualification.qualificationArtifact,
-            nativeCertificateArtifact: qualification.nativeCertificateArtifact,
-            planVerificationArtifact: qualification.planVerificationArtifact,
-            diagnostics: qualification.diagnostics
+            maximumSolverCost: validation.maximumSolverCost,
+            solverPlanLength: solverPlanLength(validation),
+            solverExitCode: validation.solverResult.exitCode,
+            didTimeout: validation.solverResult.didTimeout,
+            didCancel: validation.solverResult.didCancel,
+            validationArtifact: fallbackValidationArtifact ?? validation.validationArtifact,
+            nativeCertificateArtifact: validation.nativeCertificateArtifact,
+            planVerificationArtifact: validation.planVerificationArtifact,
+            diagnostics: validation.diagnostics
         )
     }
 
     private func missingExpectedActions(
-        _ qualification: XcircuiteSymbolicPlannerSolverQualificationResult
+        _ validation: XcircuiteSymbolicPlannerSolverValidationResult
     ) -> [String] {
-        let observed = Set(qualification.observedActionIDs)
-        return qualification.expectedActionIDs.filter { !observed.contains($0) }
+        let observed = Set(validation.observedActionIDs)
+        return validation.expectedActionIDs.filter { !observed.contains($0) }
     }
 
-    private func evaluatedCost(_ qualification: XcircuiteSymbolicPlannerSolverQualificationResult) -> Double? {
-        if let cost = qualification.planCostEvaluation?.evaluatedCost {
+    private func evaluatedCost(_ validation: XcircuiteSymbolicPlannerSolverValidationResult) -> Double? {
+        if let cost = validation.planCostEvaluation?.evaluatedCost {
             return cost
         }
-        if let cost = qualification.planReplayValidation?.evaluatedCost {
+        if let cost = validation.planReplayValidation?.evaluatedCost {
             return cost
         }
-        if let cost = qualification.nativeCertificate?.certificate?.planCost {
+        if let cost = validation.nativeCertificate?.certificate?.planCost {
             return cost
         }
-        return qualification.solverMetadata?.planCost
+        return validation.solverMetadata?.planCost
     }
 
-    private func solverPlanLength(_ qualification: XcircuiteSymbolicPlannerSolverQualificationResult) -> Int? {
-        if let planLength = qualification.planCostEvaluation?.planLength {
+    private func solverPlanLength(_ validation: XcircuiteSymbolicPlannerSolverValidationResult) -> Int? {
+        if let planLength = validation.planCostEvaluation?.planLength {
             return planLength
         }
-        if let planLength = qualification.nativeCertificate?.certificate?.planLength {
+        if let planLength = validation.nativeCertificate?.certificate?.planLength {
             return planLength
         }
-        if let planLength = qualification.solverMetadata?.planLength {
+        if let planLength = validation.solverMetadata?.planLength {
             return planLength
         }
-        return qualification.planReplayValidation?.steps.count
+        return validation.planReplayValidation?.steps.count
     }
 
     private func selectedCandidateIndex(_ candidates: [XcircuiteSymbolicPlannerSolverFamilyCandidateResult]) -> Int {
@@ -236,7 +234,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     }
 
     private func scoreComponents(
-        qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
+        validation: XcircuiteSymbolicPlannerSolverValidationResult,
         missingExpectedActionIDs: [String],
         evaluatedCost: Double?,
         candidateIndex: Int
@@ -244,36 +242,29 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         var components: [XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent] = []
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
-                termID: "qualification-status",
-                contribution: qualification.status == "qualified" ? 10_000 : -10_000,
-                reason: "Qualified certificates are preferred over failed certificates."
-            )
-        )
-        components.append(
-            XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
-                termID: "tool-health",
-                contribution: toolHealthContribution(qualification.toolHealth.status),
-                reason: "ToolQualification health gates are treated as certificate-level trust evidence."
+                termID: "validation-status",
+                contribution: validation.status == "passed" ? 10_000 : -10_000,
+                reason: "Validated certificates are preferred over failed certificates."
             )
         )
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "solver-process",
-                contribution: solverProcessContribution(qualification.solverResult),
+                contribution: solverProcessContribution(validation.solverResult),
                 reason: "A solver process that completed without timeout or cancellation is preferred."
             )
         )
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "plan-replay",
-                contribution: planReplayContribution(qualification.planReplayValidation?.status),
+                contribution: planReplayContribution(validation.planReplayValidation?.status),
                 reason: "Replay validation proves that imported symbolic actions satisfy preconditions and goals."
             )
         )
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "goal-coverage",
-                contribution: goalCoverageContribution(qualification),
+                contribution: goalCoverageContribution(validation),
                 reason: "Goal coverage is required before a solver certificate can safely drive repair execution."
             )
         )
@@ -289,21 +280,21 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "proof-validation",
-                contribution: proofValidationContribution(qualification),
-                reason: "Validated proof artifacts are preferred when the qualification policy requires proof checking."
+                contribution: proofValidationContribution(validation),
+                reason: "Validated proof artifacts are preferred when the validation policy requires proof checking."
             )
         )
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "native-certificate",
-                contribution: nativeCertificateContribution(qualification),
+                contribution: nativeCertificateContribution(validation),
                 reason: "Parsed native solver certificates provide structured solver-specific optimality and proof evidence."
             )
         )
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "optimality",
-                contribution: optimalityContribution(qualification),
+                contribution: optimalityContribution(validation),
                 reason: "Optimality claims improve trust when they are required or available as solver metadata."
             )
         )
@@ -317,14 +308,14 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "cost-bound",
-                contribution: costBoundContribution(qualification: qualification, evaluatedCost: evaluatedCost),
+                contribution: costBoundContribution(validation: validation, evaluatedCost: evaluatedCost),
                 reason: "Configured maximum solver cost is preserved as an explicit selection signal."
             )
         )
         components.append(
             XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent(
                 termID: "diagnostics",
-                contribution: diagnosticsContribution(qualification.diagnostics),
+                contribution: diagnosticsContribution(validation.diagnostics),
                 reason: "Diagnostics reduce score in proportion to error and warning evidence."
             )
         )
@@ -336,19 +327,6 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
             )
         )
         return components
-    }
-
-    private func toolHealthContribution(_ status: ToolHealthStatus) -> Int {
-        switch status {
-        case .passed:
-            3_000
-        case .blocked:
-            -1_500
-        case .failed:
-            -3_000
-        case .notChecked:
-            -500
-        }
     }
 
     private func solverProcessContribution(_ result: XcircuiteSymbolicPlannerSolverResult) -> Int {
@@ -368,48 +346,48 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         return status == "validated" ? 2_000 : -2_000
     }
 
-    private func goalCoverageContribution(_ qualification: XcircuiteSymbolicPlannerSolverQualificationResult) -> Int {
-        if qualification.goalCoverageStatus == "covered" {
+    private func goalCoverageContribution(_ validation: XcircuiteSymbolicPlannerSolverValidationResult) -> Int {
+        if validation.goalCoverageStatus == "covered" {
             return 3_000
         }
-        if qualification.requireGoalCoverage {
-            return -2_000 - (250 * qualification.missingGoalAtoms.count)
+        if validation.requireGoalCoverage {
+            return -2_000 - (250 * validation.missingGoalAtoms.count)
         }
-        return -250 * qualification.missingGoalAtoms.count
+        return -250 * validation.missingGoalAtoms.count
     }
 
-    private func proofValidationContribution(_ qualification: XcircuiteSymbolicPlannerSolverQualificationResult) -> Int {
-        guard qualification.requireProofValidation else {
-            if qualification.proofValidation?.status == "validated" {
+    private func proofValidationContribution(_ validation: XcircuiteSymbolicPlannerSolverValidationResult) -> Int {
+        guard validation.requireProofValidation else {
+            if validation.proofValidation?.status == "validated" {
                 return 250
             }
-            return qualification.nativeCertificate?.certificate?.proofStatus == "validated" ? 150 : 0
+            return validation.nativeCertificate?.certificate?.proofStatus == "validated" ? 150 : 0
         }
-        if qualification.proofValidation?.status == "validated" {
+        if validation.proofValidation?.status == "validated" {
             return 1_000
         }
-        return qualification.nativeCertificate?.certificate?.proofStatus == "validated" ? 500 : -1_000
+        return validation.nativeCertificate?.certificate?.proofStatus == "validated" ? 500 : -1_000
     }
 
-    private func nativeCertificateContribution(_ qualification: XcircuiteSymbolicPlannerSolverQualificationResult) -> Int {
-        guard let certificate = qualification.nativeCertificate else {
-            return qualification.requireNativeCertificate ? -1_000 : 0
+    private func nativeCertificateContribution(_ validation: XcircuiteSymbolicPlannerSolverValidationResult) -> Int {
+        guard let certificate = validation.nativeCertificate else {
+            return validation.requireNativeCertificate ? -1_000 : 0
         }
         if certificate.status != "parsed" {
-            return qualification.requireNativeCertificate ? -1_500 : -250
+            return validation.requireNativeCertificate ? -1_500 : -250
         }
         let errorCount = certificate.diagnostics.filter { $0.severity == "error" }.count
         let claimCount = certificate.certificate?.claims.count ?? 0
         return 500 + min(500, claimCount * 50) - (errorCount * 250)
     }
 
-    private func optimalityContribution(_ qualification: XcircuiteSymbolicPlannerSolverQualificationResult) -> Int {
-        let optimalityStatus = qualification.nativeCertificate?.certificate?.optimalityStatus
-            ?? qualification.solverMetadata?.optimalityStatus
+    private func optimalityContribution(_ validation: XcircuiteSymbolicPlannerSolverValidationResult) -> Int {
+        let optimalityStatus = validation.nativeCertificate?.certificate?.optimalityStatus
+            ?? validation.solverMetadata?.optimalityStatus
         guard optimalityStatus == "optimal" else {
-            return qualification.requireOptimality ? -750 : 0
+            return validation.requireOptimality ? -750 : 0
         }
-        return qualification.requireOptimality ? 750 : 250
+        return validation.requireOptimality ? 750 : 250
     }
 
     private func costContribution(_ cost: Double?) -> Int {
@@ -420,10 +398,10 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     }
 
     private func costBoundContribution(
-        qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
+        validation: XcircuiteSymbolicPlannerSolverValidationResult,
         evaluatedCost: Double?
     ) -> Int {
-        guard let maximumSolverCost = qualification.maximumSolverCost else {
+        guard let maximumSolverCost = validation.maximumSolverCost else {
             return 0
         }
         guard let evaluatedCost, evaluatedCost.isFinite else {
@@ -438,8 +416,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
         return (-250 * errorCount) + (-25 * warningCount)
     }
 
-    private struct QualificationInput {
+    private struct ValidationInput {
         var reference: ArtifactReference?
-        var qualification: XcircuiteSymbolicPlannerSolverQualificationResult
+        var validation: XcircuiteSymbolicPlannerSolverValidationResult
     }
 }

@@ -50,7 +50,10 @@ struct SimulationFlowStageExecutorTests {
                 ]
             ),
             toolRegistry: ToolRegistry(descriptors: [
-                SignoffToolDescriptors.coreSpiceSimulation(level: .smokeChecked),
+                QualifiedToolFixtures.descriptor(
+                    SignoffToolDescriptors.coreSpiceSimulation(),
+                    qualifiedAt: .smokeChecked
+                ),
             ]),
             healthResults: [
                 "corespice": QualifiedToolFixtures.health(toolID: "corespice", level: .smokeChecked),
@@ -125,7 +128,7 @@ struct SimulationFlowStageExecutorTests {
         #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
             $0.path.contains(".xcircuite/runs/run-sim/stages/010-sim/raw")
         })
-        #expect(artifacts.allSatisfy { $0.sha256.isEmpty == false })
+        #expect(artifacts.allSatisfy { $0.digest.hexadecimalValue.isEmpty == false })
     }
 
     @Test func missingAnalysisDirectiveFailsWithoutOperatingPointFallback() async throws {

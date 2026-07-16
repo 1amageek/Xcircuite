@@ -525,10 +525,10 @@ extension XcircuiteFlowRuntimeTests {
         )
     }
 
-    func writeRuntimeSpec(_ spec: XcircuiteFlowRuntimeSpec, root: URL) throws -> URL {
+    func writeRuntimeSpec(_ spec: XcircuiteFlowRuntimeSpec, root: URL) async throws -> URL {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try QualifiedToolFixtures.materializeEvidence(
-            for: spec.makeToolBindings().descriptors,
+            for: try await spec.makeToolBindings(projectRoot: root).descriptors,
             in: root
         )
         let url = root.appending(path: "runtime.json")

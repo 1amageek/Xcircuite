@@ -160,7 +160,6 @@ struct XcircuiteFlowScaffoldRunCLITests {
         for executor in runtimeSpec.executors {
             let descriptor = executor.makeDescriptor()
             #expect(descriptor.trustProfile.level == .unknown)
-            #expect(executor.makeHealthResult().evidence.isEmpty)
         }
     }
 

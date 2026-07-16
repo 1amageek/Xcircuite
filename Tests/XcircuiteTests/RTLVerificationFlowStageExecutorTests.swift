@@ -214,9 +214,9 @@ struct RTLVerificationFlowStageExecutorTests {
             executablePath: "/tmp/independent-rtl-oracle",
             version: "1.0.0",
             analysis: .lint,
-            proofView: .rtlToRtlStructural,
-            level: .oracleChecked
+            proofView: .rtlToRtlStructural
         )
+        descriptor.trustProfile.level = .oracleChecked
         descriptor.trustProfile.evidence = QualifiedToolFixtures.evidenceSupporting(
             level: .oracleChecked,
             toolID: oracleToolID
@@ -297,9 +297,9 @@ struct RTLVerificationFlowStageExecutorTests {
             executablePath: "/tmp/diverging-rtl-oracle",
             version: "1.0.0",
             analysis: .lint,
-            proofView: .rtlToRtlStructural,
-            level: .oracleChecked
+            proofView: .rtlToRtlStructural
         )
+        descriptor.trustProfile.level = .oracleChecked
         descriptor.trustProfile.evidence = QualifiedToolFixtures.evidenceSupporting(
             level: .oracleChecked,
             toolID: oracleToolID

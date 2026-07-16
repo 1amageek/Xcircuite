@@ -12,6 +12,15 @@ enum QualifiedToolFixtures {
 
     private static let checkedAt = Date(timeIntervalSince1970: 1_784_000_000)
 
+    static func descriptor(
+        _ descriptor: ToolDescriptor,
+        qualifiedAt level: ToolQualificationLevel
+    ) -> ToolDescriptor {
+        var qualifiedDescriptor = descriptor
+        qualifiedDescriptor.trustProfile.level = level
+        return qualifiedDescriptor
+    }
+
     static func runtime(
         spec: XcircuiteFlowRuntimeSpec,
         projectRoot: URL

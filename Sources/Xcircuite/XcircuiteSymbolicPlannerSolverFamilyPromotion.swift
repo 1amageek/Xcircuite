@@ -9,7 +9,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
     public var selectedCandidateIndex: Int
     public var selectedToolID: String
     public var sourceComparisonArtifact: ArtifactReference?
-    public var sourceQualificationArtifact: ArtifactReference?
+    public var sourceValidationArtifact: ArtifactReference?
     public var promotedCandidatePlanArtifact: ArtifactReference
     public var promotedSolverPlanArtifact: ArtifactReference?
     public var promotedPlanReplayValidationArtifact: ArtifactReference?
@@ -26,7 +26,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
         selectedCandidateIndex: Int,
         selectedToolID: String,
         sourceComparisonArtifact: ArtifactReference?,
-        sourceQualificationArtifact: ArtifactReference?,
+        sourceValidationArtifact: ArtifactReference?,
         promotedCandidatePlanArtifact: ArtifactReference,
         promotedSolverPlanArtifact: ArtifactReference?,
         promotedPlanReplayValidationArtifact: ArtifactReference?,
@@ -42,7 +42,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotion: Codable, Sendable, 
         self.selectedCandidateIndex = selectedCandidateIndex
         self.selectedToolID = selectedToolID
         self.sourceComparisonArtifact = sourceComparisonArtifact
-        self.sourceQualificationArtifact = sourceQualificationArtifact
+        self.sourceValidationArtifact = sourceValidationArtifact
         self.promotedCandidatePlanArtifact = promotedCandidatePlanArtifact
         self.promotedSolverPlanArtifact = promotedSolverPlanArtifact
         self.promotedPlanReplayValidationArtifact = promotedPlanReplayValidationArtifact

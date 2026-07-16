@@ -243,7 +243,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func qualifySymbolicPlannerSolver(arguments: [String]) async throws -> String {
+    static func validateSymbolicPlannerSolver(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -257,7 +257,7 @@ extension XcircuiteFlowCLICommand {
         var maximumSolverCost: Double?
         var requireNativeCertificate = false
         var requireProofValidation = false
-        var policyID = "symbolic-planner-solver-qualification-v1"
+        var policyID = "symbolic-planner-solver-validation-v1"
         var domainArtifactID: String?
         var domainPath: String?
         var problemArtifactID: String?
@@ -354,7 +354,7 @@ extension XcircuiteFlowCLICommand {
             case "--pretty":
                 pretty = true
             case "--help", "-h":
-                return qualifySymbolicPlannerSolverHelpText
+                return validateSymbolicPlannerSolverHelpText
             default:
                 throw XcircuiteFlowCLIError.unknownOption(argument)
             }
@@ -371,11 +371,11 @@ extension XcircuiteFlowCLICommand {
         }
 
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        let result = try await XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+        ).validate(
+            request: XcircuiteSymbolicPlannerSolverValidationRequest(
                 runID: runID,
                 toolID: toolID,
                 executablePath: executablePath,
@@ -416,9 +416,9 @@ extension XcircuiteFlowCLICommand {
         var projectRoot: URL?
         var runID: String?
         var comparisonID = "solver-family-1"
-        var qualificationArtifactIDs: [String] = []
-        var qualificationPaths: [String] = []
-        var selectionPolicy = "prefer-qualified-health-replay-goals-proof-optimality-cost"
+        var validationArtifactIDs: [String] = []
+        var validationPaths: [String] = []
+        var selectionPolicy = "prefer-passing-validation-replay-goals-proof-optimality-cost"
         var pretty = false
 
         while let argument = parser.next() {
@@ -429,10 +429,10 @@ extension XcircuiteFlowCLICommand {
                 runID = try parser.requiredValue(after: argument)
             case "--comparison-id":
                 comparisonID = try parser.requiredValue(after: argument)
-            case "--qualification-artifact-id":
-                qualificationArtifactIDs.append(try parser.requiredValue(after: argument))
-            case "--qualification-path":
-                qualificationPaths.append(try parser.requiredValue(after: argument))
+            case "--validation-artifact-id":
+                validationArtifactIDs.append(try parser.requiredValue(after: argument))
+            case "--validation-path":
+                validationPaths.append(try parser.requiredValue(after: argument))
             case "--selection-policy":
                 selectionPolicy = try parser.requiredValue(after: argument)
             case "--pretty":
@@ -451,15 +451,15 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        let result = try await XcircuiteSymbolicPlannerSolverFamilyComparator(
+        let result = try await XcircuiteSymbolicPlannerSolverFamilySelector(
             workspaceStore: workspaceStore,
             artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
         ).compare(
             request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest(
                 runID: runID,
                 comparisonID: comparisonID,
-                qualificationArtifactIDs: qualificationArtifactIDs,
-                qualificationPaths: qualificationPaths,
+                validationArtifactIDs: validationArtifactIDs,
+                validationPaths: validationPaths,
                 selectionPolicy: selectionPolicy
             ),
             projectRoot: projectRoot
@@ -475,7 +475,7 @@ extension XcircuiteFlowCLICommand {
         var comparisonArtifactID: String?
         var comparisonPath: String?
         var selectedCandidateIndex: Int?
-        var requireQualified = true
+        var requirePassingValidation = true
         var verifyPromotedPlan = true
         var pretty = false
 
@@ -497,8 +497,8 @@ extension XcircuiteFlowCLICommand {
                     throw XcircuiteFlowCLIError.invalidValue(option: argument, value: value)
                 }
                 selectedCandidateIndex = parsed
-            case "--allow-unqualified":
-                requireQualified = false
+            case "--allow-failing-validation":
+                requirePassingValidation = false
             case "--skip-verification":
                 verifyPromotedPlan = false
             case "--pretty":
@@ -527,7 +527,7 @@ extension XcircuiteFlowCLICommand {
                 comparisonArtifactID: comparisonArtifactID,
                 comparisonPath: comparisonPath,
                 selectedCandidateIndex: selectedCandidateIndex,
-                requireQualified: requireQualified,
+                requirePassingValidation: requirePassingValidation,
                 verifyPromotedPlan: verifyPromotedPlan
             ),
             projectRoot: projectRoot
@@ -541,7 +541,7 @@ extension XcircuiteFlowCLICommand {
         var specPath: String?
         var comparisonID: String?
         var promoteSelectedPlan: Bool?
-        var requireQualifiedPromotion: Bool?
+        var requirePassingValidationForPromotion: Bool?
         var verifyPromotedPlan: Bool?
         var pretty = false
 
@@ -555,8 +555,8 @@ extension XcircuiteFlowCLICommand {
                 comparisonID = try parser.requiredValue(after: argument)
             case "--no-promote":
                 promoteSelectedPlan = false
-            case "--allow-unqualified-promotion":
-                requireQualifiedPromotion = false
+            case "--allow-failing-validation-promotion":
+                requirePassingValidationForPromotion = false
             case "--skip-promotion-verification":
                 verifyPromotedPlan = false
             case "--pretty":
@@ -585,8 +585,8 @@ extension XcircuiteFlowCLICommand {
         if let promoteSelectedPlan {
             request.promoteSelectedPlan = promoteSelectedPlan
         }
-        if let requireQualifiedPromotion {
-            request.requireQualifiedPromotion = requireQualifiedPromotion
+        if let requirePassingValidationForPromotion {
+            request.requirePassingValidationForPromotion = requirePassingValidationForPromotion
         }
         if let verifyPromotedPlan {
             request.verifyPromotedPlan = verifyPromotedPlan
@@ -608,10 +608,10 @@ extension XcircuiteFlowCLICommand {
         var projectRoot: URL?
         var runID: String?
         var laneID = "installed-symbolic-planner-solvers"
-        var selectionPolicy = "prefer-qualified-health-replay-goals-proof-optimality-cost"
+        var selectionPolicy = "prefer-passing-validation-replay-goals-proof-optimality-cost"
         var searchPaths: [String] = []
         var promoteSelectedPlan = false
-        var requireQualifiedPromotion = true
+        var requirePassingValidationForPromotion = true
         var verifyPromotedPlan = true
         var batchSpecOutputPath: String?
         var pretty = false
@@ -630,8 +630,8 @@ extension XcircuiteFlowCLICommand {
                 searchPaths.append(try parser.requiredValue(after: argument))
             case "--promote-selected-plan":
                 promoteSelectedPlan = true
-            case "--allow-unqualified-promotion":
-                requireQualifiedPromotion = false
+            case "--allow-failing-validation-promotion":
+                requirePassingValidationForPromotion = false
             case "--skip-promotion-verification":
                 verifyPromotedPlan = false
             case "--batch-spec-output-path":
@@ -662,7 +662,7 @@ extension XcircuiteFlowCLICommand {
                 selectionPolicy: selectionPolicy,
                 searchPaths: searchPaths,
                 promoteSelectedPlan: promoteSelectedPlan,
-                requireQualifiedPromotion: requireQualifiedPromotion,
+                requirePassingValidationForPromotion: requirePassingValidationForPromotion,
                 verifyPromotedPlan: verifyPromotedPlan
             ),
             projectRoot: projectRoot
@@ -679,7 +679,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func qualifySymbolicPlannerSolverCorpus(arguments: [String]) async throws -> String {
+    static func assessSymbolicPlannerSolverCorpus(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var suiteSpecPath: String?
@@ -762,7 +762,7 @@ extension XcircuiteFlowCLICommand {
             case "--pretty":
                 pretty = true
             case "--help", "-h":
-                return qualifySymbolicPlannerSolverCorpusHelpText
+                return assessSymbolicPlannerSolverCorpusHelpText
             default:
                 throw XcircuiteFlowCLIError.unknownOption(argument)
             }
@@ -772,7 +772,7 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--project-root")
         }
 
-        let request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest
+        let request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest
         if let suiteSpecPath {
             guard suiteID == nil,
                   toolID == nil,
@@ -794,13 +794,13 @@ extension XcircuiteFlowCLICommand {
                   requireGoalCoverage else {
                 throw XcircuiteFlowCLIError.invalidValue(
                     option: "--suite-spec",
-                    value: "cannot be combined with per-suite qualification options"
+                    value: "cannot be combined with per-suite validation options"
                 )
             }
             request = try JSONDecoder().decode(
                 XcircuiteSymbolicPlannerSolverCorpusSuiteSpec.self,
                 from: Data(contentsOf: URL(filePath: suiteSpecPath))
-            ).qualificationRequest
+            ).assessmentRequest
         } else {
             guard let suiteID else {
                 throw XcircuiteFlowCLIError.missingOption("--suite-id")
@@ -824,13 +824,13 @@ extension XcircuiteFlowCLICommand {
                     proofPath: proofPathByCaseID[caseID]
                 )
             }
-            request = XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+            request = XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
                 suiteID: suiteID,
                 toolID: toolID ?? "external-symbolic-planner",
                 executablePath: executablePath,
                 arguments: solverArguments,
                 timeoutSeconds: timeoutSeconds ?? 300,
-                policyID: policyID ?? "symbolic-planner-solver-corpus-qualification-v1",
+                policyID: policyID ?? "symbolic-planner-solver-corpus-assessment-v1",
                 requiredCoverageTags: requiredCoverageTags,
                 requireProofValidation: requireProofValidation,
                 proofCheckerExecutablePath: proofCheckerExecutablePath,
@@ -843,13 +843,13 @@ extension XcircuiteFlowCLICommand {
 
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
-        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+        let result = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
             artifactStore: artifactStore,
-            caseQualifier: XcircuiteSymbolicPlannerSolverQualifier(
+            caseValidator: XcircuiteSymbolicPlannerSolverValidator(
                 workspaceStore: workspaceStore,
                 artifactStore: artifactStore
             )
-        ).qualify(
+        ).assess(
             request: request,
             projectRoot: projectRoot
         )

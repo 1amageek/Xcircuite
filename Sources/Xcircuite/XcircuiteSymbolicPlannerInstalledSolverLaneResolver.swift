@@ -155,7 +155,7 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneResolver: Sendable {
                 )
             },
             promoteSelectedPlan: request.promoteSelectedPlan,
-            requireQualifiedPromotion: request.requireQualifiedPromotion,
+            requirePassingValidationForPromotion: request.requirePassingValidationForPromotion,
             verifyPromotedPlan: request.verifyPromotedPlan
         )
     }

@@ -109,7 +109,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
                 manifest: pdkReference,
                 processID: "fixture",
                 version: "1",
-                digest: pdkReference.sha256
+                digest: pdkReference.digest.hexadecimalValue
             ),
             inputLayout: PhysicalDesignReference(
                 layoutArtifact: layoutFoundationReference,

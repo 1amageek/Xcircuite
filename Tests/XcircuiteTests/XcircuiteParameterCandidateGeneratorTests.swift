@@ -39,7 +39,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
         let searchTraceArtifact = try #require(result.searchTraceArtifact)
         #expect(artifact.artifactID == XcircuitePlanningArtifactStore.parameterCandidatesArtifactID)
         #expect(artifact.path == ".xcircuite/runs/run-1/planning/parameter-candidates.jsonl")
-        #expect(!artifact.sha256.isEmpty)
+        #expect(!artifact.digest.hexadecimalValue.isEmpty)
         #expect(artifact.byteCount > 0)
         #expect(searchTraceArtifact.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSearchTraceArtifactID)
         #expect(searchTraceArtifact.path == ".xcircuite/runs/run-1/planning/parameter-candidate-search-trace.json")
@@ -62,12 +62,12 @@ struct XcircuiteParameterCandidateGeneratorTests {
         let ledger = try await store.loadRunLedger(runID: "run-1")
         #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidatesArtifactID
-                && $0.sha256 == artifact.sha256
+                && $0.digest == artifact.digest
                 && artifact.byteCount == $0.byteCount
         })
         #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSearchTraceArtifactID
-                && $0.sha256 == searchTraceArtifact.sha256
+                && $0.digest == searchTraceArtifact.digest
                 && searchTraceArtifact.byteCount == $0.byteCount
         })
     }

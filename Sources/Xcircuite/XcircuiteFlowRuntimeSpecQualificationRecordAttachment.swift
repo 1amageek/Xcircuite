@@ -35,7 +35,7 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .rtlVerification(let spec): spec.stageID
         case .logicSynthesis(let spec): spec.stageID
         case .logicEquivalence(let spec): spec.stageID
-        case .logicQualification(let spec): spec.stageID
+        case .logicEvidenceValidation(let spec): spec.stageID
         case .dft(let spec): spec.stageID
         case .physicalReview(let spec): spec.stageID
         case .pdkDiscovery(let spec): spec.stageID
@@ -65,7 +65,7 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .rtlVerification(var spec): spec.tool.qualificationRecord = reference; return .rtlVerification(spec)
         case .logicSynthesis(var spec): spec.tool.qualificationRecord = reference; return .logicSynthesis(spec)
         case .logicEquivalence(var spec): spec.tool.qualificationRecord = reference; return .logicEquivalence(spec)
-        case .logicQualification(var spec): spec.tool.qualificationRecord = reference; return .logicQualification(spec)
+        case .logicEvidenceValidation(var spec): spec.tool.qualificationRecord = reference; return .logicEvidenceValidation(spec)
         case .dft(var spec): spec.tool.qualificationRecord = reference; return .dft(spec)
         case .physicalReview(var spec): spec.tool.qualificationRecord = reference; return .physicalReview(spec)
         case .pdkDiscovery(var spec): spec.tool.qualificationRecord = reference; return .pdkDiscovery(spec)

@@ -45,21 +45,21 @@ public struct XcircuitePlanningArtifactStore: Sendable {
     public static let symbolicPlannerSolverStdoutRelativePath = "planning/symbolic-planner/solver-stdout.txt"
     public static let symbolicPlannerSolverStderrArtifactID = "planning-symbolic-planner-solver-stderr"
     public static let symbolicPlannerSolverStderrRelativePath = "planning/symbolic-planner/solver-stderr.txt"
-    public static let symbolicPlannerSolverQualificationArtifactID = "planning-symbolic-planner-solver-qualification"
-    public static let symbolicPlannerSolverQualificationRelativePath = "planning/symbolic-planner/solver-qualification.json"
+    public static let symbolicPlannerSolverValidationArtifactID = "planning-symbolic-planner-solver-validation"
+    public static let symbolicPlannerSolverValidationRelativePath = "planning/symbolic-planner/solver-validation.json"
     public static let symbolicPlannerSolverFamilyComparisonArtifactID = "planning-symbolic-planner-solver-family-comparison"
     public static let symbolicPlannerSolverFamilyComparisonRelativePath = "planning/symbolic-planner/solver-family/solver-family-comparison.json"
     public static let symbolicPlannerSolverFamilyPromotionArtifactID = "planning-symbolic-planner-solver-family-promotion"
     public static let symbolicPlannerSolverFamilyPromotionRelativePath = "planning/symbolic-planner/solver-family/solver-family-promotion.json"
     public static let symbolicPlannerSolverFamilyBatchArtifactID = "planning-symbolic-planner-solver-family-batch"
     public static let symbolicPlannerSolverFamilyBatchRelativePath = "planning/symbolic-planner/solver-family/solver-family-batch.json"
-    public static let symbolicPlannerSolverFamilyQualificationArtifactID = "planning-symbolic-planner-solver-family-qualification"
+    public static let symbolicPlannerSolverFamilyValidationArtifactID = "planning-symbolic-planner-solver-family-validation"
     public static let symbolicPlannerSolverFamilySolverPlanArtifactID = "planning-symbolic-planner-solver-family-solver-plan"
     public static let symbolicPlannerSolverFamilyCertificateArtifactID = "planning-symbolic-planner-solver-family-certificate"
     public static let symbolicPlannerInstalledSolverLaneArtifactID = "planning-symbolic-planner-installed-solver-lane"
     public static let symbolicPlannerInstalledSolverLaneRelativePath = "planning/symbolic-planner/installed-solver-lane.json"
-    public static let symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID = "planning-symbolic-planner-solver-qualification-corpus-suite-spec"
-    public static let symbolicPlannerSolverQualificationCorpusArtifactID = "planning-symbolic-planner-solver-qualification-corpus"
+    public static let symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID = "planning-symbolic-planner-solver-corpus-assessment-suite-spec"
+    public static let symbolicPlannerSolverCorpusAssessmentArtifactID = "planning-symbolic-planner-solver-corpus-assessment"
     public static let parameterCandidatesArtifactID = "planning-parameter-candidates"
     public static let parameterCandidatesRelativePath = "planning/parameter-candidates.jsonl"
     public static let parameterCandidateSearchTraceArtifactID = "planning-parameter-candidate-search-trace"
@@ -223,9 +223,9 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return XcircuiteSymbolicPlannerSolverArtifactSet(runArtifact: run, standardOutputArtifact: stdout, standardErrorArtifact: stderr)
     }
 
-    public func persistSymbolicPlannerSolverQualification(_ value: XcircuiteSymbolicPlannerSolverQualificationResult, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+    public func persistSymbolicPlannerSolverValidation(_ value: XcircuiteSymbolicPlannerSolverValidationResult, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
-        return try await persistRunJSON(value.detachingQualificationArtifactReferencesForPersistence(), id: Self.symbolicPlannerSolverQualificationArtifactID, path: Self.symbolicPlannerSolverQualificationRelativePath, runID: runID, projectRoot: projectRoot)
+        return try await persistRunJSON(value.detachingValidationArtifactReferencesForPersistence(), id: Self.symbolicPlannerSolverValidationArtifactID, path: Self.symbolicPlannerSolverValidationRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
     public func persistSymbolicPlannerSolverFamilyComparison(_ value: XcircuiteSymbolicPlannerSolverFamilyComparison, runID: String, projectRoot: URL) async throws -> ArtifactReference {
@@ -259,12 +259,12 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunJSON(value, id: id, path: Self.symbolicPlannerInstalledSolverLaneRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    public func persistSymbolicPlannerSolverFamilyQualification(_ value: XcircuiteSymbolicPlannerSolverQualificationResult, runID: String, comparisonID: String, candidateID: String, projectRoot: URL) async throws -> ArtifactReference {
+    public func persistSymbolicPlannerSolverFamilyValidation(_ value: XcircuiteSymbolicPlannerSolverValidationResult, runID: String, comparisonID: String, candidateID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateFamilyIdentifiers(runID: runID, comparisonID: comparisonID, candidateID: candidateID)
         try validateRun(value.runID, expected: runID)
-        let path = familyCandidatePath(comparisonID: comparisonID, candidateID: candidateID, fileName: "solver-qualification.json")
-        let id = familyArtifactID(Self.symbolicPlannerSolverFamilyQualificationArtifactID, comparisonID: comparisonID, candidateID: candidateID)
-        return try await persistRunJSON(value.detachingQualificationArtifactReferencesForPersistence(), id: id, path: path, runID: runID, projectRoot: projectRoot)
+        let path = familyCandidatePath(comparisonID: comparisonID, candidateID: candidateID, fileName: "solver-validation.json")
+        let id = familyArtifactID(Self.symbolicPlannerSolverFamilyValidationArtifactID, comparisonID: comparisonID, candidateID: candidateID)
+        return try await persistRunJSON(value.detachingValidationArtifactReferencesForPersistence(), id: id, path: path, runID: runID, projectRoot: projectRoot)
     }
 
     public func persistSymbolicPlannerSolverFamilySolverPlan(_ text: String, runID: String, comparisonID: String, candidateID: String, projectRoot: URL) async throws -> ArtifactReference {
@@ -282,16 +282,16 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunJSON(value, id: id, path: path, runID: runID, projectRoot: projectRoot)
     }
 
-    public func persistSymbolicPlannerSolverQualificationCorpusSuiteSpec(_ value: XcircuiteSymbolicPlannerSolverCorpusSuiteSpec, projectRoot: URL) async throws -> ArtifactReference {
+    public func persistSymbolicPlannerSolverCorpusAssessmentSuiteSpec(_ value: XcircuiteSymbolicPlannerSolverCorpusSuiteSpec, projectRoot: URL) async throws -> ArtifactReference {
         try FlowIdentifierValidator().validate(value.suiteID, kind: .artifactID)
-        let path = "\(XcircuiteWorkspaceLayout.directoryName)/qualification/symbolic-planner/\(value.suiteID)/solver-qualification-corpus-suite.json"
-        return try await persistProjectJSON(value, id: Self.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID, path: path, projectRoot: projectRoot)
+        let path = "\(XcircuiteWorkspaceLayout.directoryName)/assessments/symbolic-planner/\(value.suiteID)/solver-corpus-assessment-suite.json"
+        return try await persistProjectJSON(value, id: Self.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID, path: path, projectRoot: projectRoot)
     }
 
-    public func persistSymbolicPlannerSolverQualificationCorpus(_ value: XcircuiteSymbolicPlannerSolverCorpusQualificationResult, projectRoot: URL) async throws -> ArtifactReference {
+    public func persistSymbolicPlannerSolverCorpusAssessment(_ value: XcircuiteSymbolicPlannerSolverCorpusAssessment, projectRoot: URL) async throws -> ArtifactReference {
         try FlowIdentifierValidator().validate(value.suiteID, kind: .artifactID)
-        let path = "\(XcircuiteWorkspaceLayout.directoryName)/qualification/symbolic-planner/\(value.suiteID)/solver-qualification-corpus.json"
-        return try await persistProjectJSON(value, id: Self.symbolicPlannerSolverQualificationCorpusArtifactID, path: path, projectRoot: projectRoot)
+        let path = "\(XcircuiteWorkspaceLayout.directoryName)/assessments/symbolic-planner/\(value.suiteID)/solver-corpus-assessment.json"
+        return try await persistProjectJSON(value, id: Self.symbolicPlannerSolverCorpusAssessmentArtifactID, path: path, projectRoot: projectRoot)
     }
 
     public func persistPlanVerification(_ value: XcircuitePlanVerification, runID: String, projectRoot: URL) async throws -> ArtifactReference {

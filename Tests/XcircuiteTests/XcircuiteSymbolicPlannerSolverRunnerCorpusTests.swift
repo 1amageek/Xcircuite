@@ -2,7 +2,6 @@ import Foundation
 import CircuiteFoundation
 import DesignFlowKernel
 import Testing
-import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
 
@@ -11,7 +10,7 @@ import Darwin
 #endif
 
 extension XcircuiteSymbolicPlannerSolverRunnerTests {
-@Test func qualifySymbolicPlannerSolverCorpusCLIProducesAggregatePassingHealth() async throws {
+@Test func assessSymbolicPlannerSolverCorpusCLIProducesAggregatePassingHealth() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-corpus-pass")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -35,7 +34,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
     let json = try await XcircuiteFlowCLICommand.run(
         arguments: [
-            "qualify-symbolic-planner-solver-corpus",
+            "assess-symbolic-planner-solver-corpus",
             "--project-root",
             root.path(percentEncoded: false),
             "--suite-id",
@@ -53,46 +52,44 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let data = try #require(json.data(using: .utf8))
     let result = try JSONDecoder().decode(
-        XcircuiteSymbolicPlannerSolverCorpusQualificationResult.self,
+        XcircuiteSymbolicPlannerSolverCorpusAssessment.self,
         from: data
     )
 
-    #expect(result.status == "qualified")
-    #expect(result.qualifiedCaseCount == 2)
+    #expect(result.status == "passed")
+    #expect(result.passedCaseCount == 2)
     #expect(result.failedCaseCount == 0)
-    #expect(result.toolHealth.status == .passed)
-    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
-    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
+    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
+    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentArtifactID)
     #expect(result.caseResults.count == 2)
-    #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
 
     let projectManifest = try await workspaceStore.loadManifest()
     #expect(projectManifest.files.contains {
-        $0.path == ".xcircuite/qualification/symbolic-planner/basic-symbolic-corpus/solver-qualification-corpus-suite.json"
+        $0.path == ".xcircuite/assessments/symbolic-planner/basic-symbolic-corpus/solver-corpus-assessment-suite.json"
     })
     #expect(projectManifest.files.contains {
-        $0.path == ".xcircuite/qualification/symbolic-planner/basic-symbolic-corpus/solver-qualification-corpus.json"
+        $0.path == ".xcircuite/assessments/symbolic-planner/basic-symbolic-corpus/solver-corpus-assessment.json"
     })
     let persisted = try await workspaceStore.readJSON(
-        XcircuiteSymbolicPlannerSolverCorpusQualificationResult.self,
-        from: ".xcircuite/qualification/symbolic-planner/basic-symbolic-corpus/solver-qualification-corpus.json"
+        XcircuiteSymbolicPlannerSolverCorpusAssessment.self,
+        from: ".xcircuite/assessments/symbolic-planner/basic-symbolic-corpus/solver-corpus-assessment.json"
     )
-    #expect(persisted.status == "qualified")
-    #expect(persisted.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
+    #expect(persisted.status == "passed")
+    #expect(persisted.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
     #expect(persisted.corpusArtifact == nil)
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusRejectsEmptyCaseList() async throws {
+@Test func assessSymbolicPlannerSolverCorpusRejectsEmptyCaseList() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-empty-corpus")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
     let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+        ).assess(
+            request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
                 suiteID: "empty-symbolic-corpus",
                 toolID: "mock-empty-planner",
                 executablePath: "/bin/false",
@@ -100,16 +97,16 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             ),
             projectRoot: root
         )
-        Issue.record("Expected empty corpus qualification to fail.")
+        Issue.record("Expected empty corpus validation to fail.")
     } catch let error as XcircuiteSymbolicPlannerSolverError {
-        guard case .emptyQualificationCorpus = error else {
-            Issue.record("Expected emptyQualificationCorpus, got \(error).")
+        guard case .emptySolverCorpusAssessment = error else {
+            Issue.record("Expected emptySolverCorpusAssessment, got \(error).")
             return
         }
     }
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusCLIReadsSuiteSpec() async throws {
+@Test func assessSymbolicPlannerSolverCorpusCLIReadsSuiteSpec() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-corpus-suite-spec")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -158,7 +155,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
     let json = try await XcircuiteFlowCLICommand.run(
         arguments: [
-            "qualify-symbolic-planner-solver-corpus",
+            "assess-symbolic-planner-solver-corpus",
             "--project-root",
             root.path(percentEncoded: false),
             "--suite-spec",
@@ -168,11 +165,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let data = try #require(json.data(using: .utf8))
     let result = try JSONDecoder().decode(
-        XcircuiteSymbolicPlannerSolverCorpusQualificationResult.self,
+        XcircuiteSymbolicPlannerSolverCorpusAssessment.self,
         from: data
     )
 
-    #expect(result.status == "qualified")
+    #expect(result.status == "passed")
     #expect(result.suiteID == "suite-spec-corpus")
     #expect(result.toolID == "mock-suite-spec-planner")
     #expect(result.requiredCoverageTags == ["symbolic.expected-action-coverage", "symbolic.multi-case"])
@@ -180,19 +177,18 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.coverageTagCounts["symbolic.expected-action-coverage"] == 1)
     #expect(result.coverageTagCounts["symbolic.multi-case"] == 1)
     #expect(result.coveredCoverageTags.count == result.requiredCoverageTags.count)
-    #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
-    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
-    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
+    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
+    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentArtifactID)
     let persistedSuiteSpec = try await workspaceStore.readJSON(
         XcircuiteSymbolicPlannerSolverCorpusSuiteSpec.self,
-        from: ".xcircuite/qualification/symbolic-planner/suite-spec-corpus/solver-qualification-corpus-suite.json"
+        from: ".xcircuite/assessments/symbolic-planner/suite-spec-corpus/solver-corpus-assessment-suite.json"
     )
     #expect(persistedSuiteSpec.suiteID == "suite-spec-corpus")
     #expect(persistedSuiteSpec.requiredCoverageTags == ["symbolic.expected-action-coverage", "symbolic.multi-case"])
     #expect(persistedSuiteSpec.cases.map(\.caseID) == ["case-a", "case-b"])
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain() async throws {
+@Test func assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-drc-repair-domain-corpus")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -229,14 +225,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let solverURL = root.appending(path: "drc-repair-domain-symbolic-planner.sh")
     try writeDRCRepairMockPlanner(to: solverURL)
 
-    let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+    let result = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
         artifactStore: artifactStore,
-        caseQualifier: XcircuiteSymbolicPlannerSolverQualifier(
+        caseValidator: XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         )
-    ).qualify(
-        request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+    ).assess(
+        request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
             suiteID: "drc-repair-domain-corpus",
             toolID: "mock-drc-repair-planner",
             executablePath: solverURL.path(percentEncoded: false),
@@ -350,8 +346,8 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         projectRoot: root
     )
 
-    #expect(result.status == "qualified")
-    #expect(result.qualifiedCaseCount == 10)
+    #expect(result.status == "passed")
+    #expect(result.passedCaseCount == 10)
     #expect(result.failedCaseCount == 0)
     #expect(result.missingRequiredCoverageTags == [])
     #expect(result.coverageTagCounts["symbolic.drc-repair-domain"] == 10)
@@ -364,15 +360,13 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.coverageTagCounts["symbolic.drc-cut-repair-domain"] == 1)
     #expect(result.caseResults.map(\.observedActionIDs) == fixtures.map { [$0.actionID] })
     #expect(result.caseResults.allSatisfy { $0.goalCoverageStatus == "covered" })
-    #expect(result.toolHealth.status == .passed)
     #expect(result.coveredCoverageTags.count == result.requiredCoverageTags.count)
-    #expect(result.qualifiedCaseCount == result.caseResults.count)
-    #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
-    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
-    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
+    #expect(result.passedCaseCount == result.caseResults.count)
+    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
+    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentArtifactID)
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusFailsWhenRequiredCoverageIsMissing() async throws {
+@Test func assessSymbolicPlannerSolverCorpusFailsWhenRequiredCoverageIsMissing() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-corpus-missing-coverage")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -388,14 +382,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let solverURL = root.appending(path: "coverage-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
 
-    let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+    let result = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
         artifactStore: artifactStore,
-        caseQualifier: XcircuiteSymbolicPlannerSolverQualifier(
+        caseValidator: XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         )
-    ).qualify(
-        request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+    ).assess(
+        request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
             suiteID: "missing-coverage-corpus",
             toolID: "mock-coverage-planner",
             executablePath: solverURL.path(percentEncoded: false),
@@ -416,28 +410,26 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     #expect(result.status == "failed")
-    #expect(result.qualifiedCaseCount == 1)
+    #expect(result.passedCaseCount == 1)
     #expect(result.failedCaseCount == 0)
     #expect(result.coverageTagCounts["symbolic.expected-action-coverage"] == 1)
     #expect(result.missingRequiredCoverageTags == ["symbolic.goal-coverage"])
     #expect(result.failureCodes == ["required-coverage-missing"])
-    #expect(result.toolHealth.status == .failed)
     #expect(result.coveredCoverageTags.count == 1)
     #expect(result.missingRequiredCoverageTags.count == 1)
-    #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusRejectsUnknownCoverageTags() async throws {
+@Test func assessSymbolicPlannerSolverCorpusRejectsUnknownCoverageTags() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-corpus-unknown-coverage")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
     let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+        ).assess(
+            request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
                 suiteID: "unknown-coverage-corpus",
                 toolID: "mock-coverage-planner",
                 executablePath: "/bin/false",
@@ -474,7 +466,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     }
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusAcceptsNativeCertificateCoverageTags() async throws {
+@Test func assessSymbolicPlannerSolverCorpusAcceptsNativeCertificateCoverageTags() async throws {
     let implementedTags = XcircuiteSymbolicPlannerFeatureMatrixProvider()
         .currentMatrix()
         .implementedCoverageTags
@@ -486,7 +478,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     ])
 }
 
-@Test func qualifySymbolicPlannerSolverCorpusFailsWhenAnyCaseFails() async throws {
+@Test func assessSymbolicPlannerSolverCorpusFailsWhenAnyCaseFails() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-corpus-fail")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -508,14 +500,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let solverURL = root.appending(path: "corpus-failing-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
 
-    let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+    let result = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
         artifactStore: artifactStore,
-        caseQualifier: XcircuiteSymbolicPlannerSolverQualifier(
+        caseValidator: XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         )
-    ).qualify(
-        request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+    ).assess(
+        request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
             suiteID: "mixed-symbolic-corpus",
             toolID: "mock-corpus-planner",
             executablePath: solverURL.path(percentEncoded: false),
@@ -536,14 +528,12 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     #expect(result.status == "failed")
-    #expect(result.qualifiedCaseCount == 1)
+    #expect(result.passedCaseCount == 1)
     #expect(result.failedCaseCount == 1)
-    #expect(result.toolHealth.status == .failed)
     #expect(result.failureCodes == ["expected-actions-missing"])
-    #expect(result.caseResults.map(\.status) == ["qualified", "failed"])
-    #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
-    #expect(result.qualifiedCaseCount == result.failedCaseCount)
-    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
-    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
+    #expect(result.caseResults.map(\.status) == ["passed", "failed"])
+    #expect(result.passedCaseCount == result.failedCaseCount)
+    #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
+    #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentArtifactID)
 }
 }

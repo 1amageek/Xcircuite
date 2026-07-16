@@ -373,7 +373,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
         case "run-numeric-repair-loop":
             ["--problem-artifact-id"]
         case "compare-symbolic-planner-solver-family":
-            ["--qualification-artifact-id"]
+            ["--validation-artifact-id"]
         case "promote-symbolic-planner-solver-family-selection":
             ["--comparison-artifact-id"]
         case "generate-improvement-artifacts":
@@ -413,7 +413,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
         case "run-numeric-repair-loop":
             ["--problem-path"]
         case "compare-symbolic-planner-solver-family":
-            ["--qualification-path"]
+            ["--validation-path"]
         case "promote-symbolic-planner-solver-family-selection":
             ["--comparison-path"]
         case "generate-improvement-artifacts":
@@ -466,7 +466,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
         case "synthesize-parameter-candidate-plan":
             ["--include-rejected-candidates"]
         case "promote-symbolic-planner-solver-family-selection":
-            ["--allow-unqualified", "--skip-verification"]
+            ["--allow-failing-validation", "--skip-verification"]
         default:
             []
         }

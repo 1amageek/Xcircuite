@@ -69,7 +69,7 @@ extension XcircuiteFlowRuntimeTests {
         let data = try JSONEncoder().encode(spec)
         let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
         try decoded.validate()
-        let runtime = try decoded.makeRuntime(
+        let runtime = try await decoded.makeRuntime(
             projectRoot: FileManager.default.temporaryDirectory
                 .appending(path: "rtl-oracle-runtime-\(UUID().uuidString)")
         )
@@ -233,8 +233,8 @@ extension XcircuiteFlowRuntimeTests {
                         requestPath: ".xcircuite/runs/current/logic-equivalence-request.json"
                     )
                 ),
-                .logicQualification(
-                    XcircuiteFlowStageExecutorSpec.LogicQualification(
+                .logicEvidenceValidation(
+                    XcircuiteFlowStageExecutorSpec.LogicEvidenceValidation(
                         reportPath: "qualification/logic-report.json"
                     )
                 ),
@@ -255,14 +255,14 @@ extension XcircuiteFlowRuntimeTests {
         }
         #expect(synthesis.stageID == "logic.synthesize")
         #expect(equivalence.stageID == "logic.equivalence")
-        guard case .logicQualification(let qualification) = decoded.executors[2] else {
-            Issue.record("Expected logic qualification executor")
+        guard case .logicEvidenceValidation(let qualification) = decoded.executors[2] else {
+            Issue.record("Expected logic evidence validation executor")
             return
         }
-        #expect(qualification.stageID == "logic.qualification")
+        #expect(qualification.stageID == "logic.evidence-validation")
         #expect(decoded.executors[0].makeDescriptor().toolID == "logic-synthesis")
         #expect(decoded.executors[1].makeDescriptor().toolID == "native-rtl-verification")
-        #expect(decoded.executors[2].makeDescriptor().toolID == "logic-qualification")
+        #expect(decoded.executors[2].makeDescriptor().toolID == "logic-evidence-validation")
     }
 
     @Test func runtimeSpecRoundTripsLayoutCommandStandardExportsAndLVSInputs() async throws {
@@ -1170,7 +1170,7 @@ extension XcircuiteFlowRuntimeTests {
         )
 
         try spec.validate()
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try await spec.makeRuntime(projectRoot: root)
 
         #expect(runtime.toolRegistry.descriptors.count == 1)
         #expect(runtime.toolRegistry.descriptor(toolID: "native-drc")?.trustProfile.level == .unknown)

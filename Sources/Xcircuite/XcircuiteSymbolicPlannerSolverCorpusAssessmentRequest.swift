@@ -1,4 +1,4 @@
-public struct XcircuiteSymbolicPlannerSolverCorpusQualificationRequest: Codable, Sendable, Hashable {
+public struct XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest: Codable, Sendable, Hashable {
     public var suiteID: String
     public var toolID: String
     public var executablePath: String
@@ -35,7 +35,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationRequest: Codable,
         executablePath: String,
         arguments: [String] = [],
         timeoutSeconds: Double = 300,
-        policyID: String = "symbolic-planner-solver-corpus-qualification-v1",
+        policyID: String = "symbolic-planner-solver-corpus-assessment-v1",
         requiredCoverageTags: [String] = [],
         requireProofValidation: Bool = false,
         proofCheckerExecutablePath: String? = nil,

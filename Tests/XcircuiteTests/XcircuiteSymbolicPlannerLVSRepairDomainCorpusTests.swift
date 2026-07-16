@@ -6,7 +6,7 @@ import Xcircuite
 
 @Suite("Xcircuite symbolic planner LVS repair-domain corpus")
 struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
-    @Test func qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain() async throws {
+    @Test func assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain() async throws {
         let root = try makeTemporaryRoot("symbolic-planner-lvs-repair-domain-corpus")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -43,10 +43,10 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
         let solverURL = root.appending(path: "lvs-repair-domain-symbolic-planner.sh")
         try writeLVSRepairMockPlanner(to: solverURL)
 
-        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+        let result = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+        ).assess(
+            request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
                 suiteID: "lvs-repair-domain-corpus",
                 toolID: "mock-lvs-repair-planner",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -170,8 +170,8 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
             projectRoot: root
         )
 
-        #expect(result.status == "qualified")
-        #expect(result.qualifiedCaseCount == 11)
+        #expect(result.status == "passed")
+        #expect(result.passedCaseCount == 11)
         #expect(result.failedCaseCount == 0)
         #expect(result.missingRequiredCoverageTags == [])
         #expect(result.coverageTagCounts["symbolic.lvs-repair-domain"] == 11)
@@ -185,11 +185,8 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
         #expect(result.coverageTagCounts["symbolic.lvs-parasitic-device-repair-domain"] == 1)
         #expect(result.caseResults.map(\.observedActionIDs) == fixtures.map { [$0.actionID] })
         #expect(result.caseResults.allSatisfy { $0.goalCoverageStatus == "covered" })
-        #expect(result.toolHealth.status == .passed)
-        #expect(result.toolHealth.evidence.first?.kind == .corpus)
-        #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
-        #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
-        #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
+        #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
+        #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentArtifactID)
     }
 
     private func prepareRun(
@@ -425,7 +422,7 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
             goalAtom: "lvs-policy-mutation-fixed",
             target: "policy-mutation-covered",
             objectiveDescription: "Repair LVS policy mutation mismatch.",
-            actionReason: "Select a qualified LVS matching policy mutation."
+            actionReason: "Select a validated LVS matching policy mutation."
         )
 
         static let blackBoxHierarchy = LVSRepairFixture(

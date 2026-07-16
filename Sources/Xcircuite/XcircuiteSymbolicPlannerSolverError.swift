@@ -8,7 +8,7 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
     case missingDomainReference
     case missingProblemReference
     case missingPDDLExportReference
-    case emptyQualificationCorpus
+    case emptySolverCorpusAssessment
     case emptySolverFamilyComparison
     case invalidSolverFamilyCandidateID(index: Int, candidateID: String)
     case invalidSolverFamilyCandidateToolID(index: Int, toolID: String)
@@ -16,10 +16,10 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
     case invalidSolverFamilyCandidateExecutablePath(index: Int)
     case invalidSolverFamilyCandidateTimeout(index: Int, timeoutSeconds: Double)
     case invalidSolverFamilyCandidateReference(index: Int, field: String, value: String)
-    case qualificationRunMismatch(expected: String, actual: String)
+    case validationRunMismatch(expected: String, actual: String)
     case invalidSolverFamilyCandidateIndex(index: Int, candidateCount: Int)
-    case missingSelectedSolverFamilyQualificationArtifact
-    case selectedSolverFamilyQualificationNotQualified(toolID: String, status: String)
+    case missingSelectedSolverFamilyValidationArtifact
+    case selectedSolverFamilyValidationFailed(toolID: String, status: String)
     case missingSelectedSolverFamilyImportedPlan(toolID: String)
     case solverFamilyComparisonIDMismatch(expected: String, actual: String)
     case duplicateArtifactReference(runID: String, artifactID: String, count: Int)
@@ -33,9 +33,9 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
         status: FlowArtifactVerificationStatus,
         message: String
     )
-    case invalidSolverQualificationReference(field: String, value: String)
-    case invalidSolverQualificationPath(field: String, value: String)
-    case invalidSolverQualificationExecutablePath(field: String, value: String)
+    case invalidSolverValidationReference(field: String, value: String)
+    case invalidSolverValidationPath(field: String, value: String)
+    case invalidSolverValidationExecutablePath(field: String, value: String)
     case unknownCoverageTags(tags: [String], knownTags: [String])
     case unimplementedCoverageTags(tags: [String], implementedTags: [String])
     case artifactNotFound(runID: String, artifactID: String)
@@ -57,10 +57,10 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
             "Symbolic planner solver requires a PDDL problem artifact ID or path."
         case .missingPDDLExportReference:
             "Symbolic planner solver import requires a PDDL export artifact ID or path."
-        case .emptyQualificationCorpus:
-            "Symbolic planner solver qualification corpus requires at least one case."
+        case .emptySolverCorpusAssessment:
+            "Symbolic planner solver validation corpus requires at least one case."
         case .emptySolverFamilyComparison:
-            "Symbolic planner solver family comparison requires at least one qualification artifact ID or path."
+            "Symbolic planner solver family comparison requires at least one validation artifact ID or path."
         case .invalidSolverFamilyCandidateID(let index, let candidateID):
             "Symbolic planner solver family candidate \(index) has invalid candidate ID \(candidateID)."
         case .invalidSolverFamilyCandidateToolID(let index, let toolID):
@@ -73,16 +73,16 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
             "Symbolic planner solver family candidate \(index) timeout must be positive finite seconds, got \(timeoutSeconds)."
         case .invalidSolverFamilyCandidateReference(let index, let field, let value):
             "Symbolic planner solver family candidate \(index) has invalid \(field) reference \(value)."
-        case .qualificationRunMismatch(let expected, let actual):
-            "Symbolic planner solver family comparison expected qualification for run \(expected), got \(actual)."
+        case .validationRunMismatch(let expected, let actual):
+            "Symbolic planner solver family comparison expected validation for run \(expected), got \(actual)."
         case .invalidSolverFamilyCandidateIndex(let index, let candidateCount):
             "Symbolic planner solver family candidate index \(index) is outside 0..<\(candidateCount)."
-        case .missingSelectedSolverFamilyQualificationArtifact:
-            "Selected symbolic planner solver family candidate does not reference a qualification artifact."
-        case .selectedSolverFamilyQualificationNotQualified(let toolID, let status):
-            "Selected symbolic planner solver family qualification for \(toolID) has status \(status), but promotion requires a qualified certificate."
+        case .missingSelectedSolverFamilyValidationArtifact:
+            "Selected symbolic planner solver family candidate does not reference a validation artifact."
+        case .selectedSolverFamilyValidationFailed(let toolID, let status):
+            "Selected symbolic planner solver family validation for \(toolID) has status \(status), but promotion requires a validated certificate."
         case .missingSelectedSolverFamilyImportedPlan(let toolID):
-            "Selected symbolic planner solver family qualification for \(toolID) does not contain an imported candidate plan to promote."
+            "Selected symbolic planner solver family validation for \(toolID) does not contain an imported candidate plan to promote."
         case .solverFamilyComparisonIDMismatch(let expected, let actual):
             "Symbolic planner solver family promotion expected comparison ID \(expected), got \(actual)."
         case .duplicateArtifactReference(let runID, let artifactID, let count):
@@ -95,12 +95,12 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
             "Symbolic planner solver artifact reference \(field) expected producer run \(expected), got \(actual ?? "nil")."
         case .artifactIntegrityFailed(let field, let artifactID, let path, let status, let message):
             "Symbolic planner solver artifact reference \(field) \(artifactID ?? path) failed integrity verification at \(path) with status \(status.rawValue): \(message)"
-        case .invalidSolverQualificationReference(let field, let value):
-            "Symbolic planner solver qualification request has invalid \(field) reference \(value)."
-        case .invalidSolverQualificationPath(let field, let value):
-            "Symbolic planner solver qualification request has unsafe project-relative \(field) path \(value)."
-        case .invalidSolverQualificationExecutablePath(let field, let value):
-            "Symbolic planner solver qualification request requires a non-empty \(field), got \(value)."
+        case .invalidSolverValidationReference(let field, let value):
+            "Symbolic planner solver validation request has invalid \(field) reference \(value)."
+        case .invalidSolverValidationPath(let field, let value):
+            "Symbolic planner solver validation request has unsafe project-relative \(field) path \(value)."
+        case .invalidSolverValidationExecutablePath(let field, let value):
+            "Symbolic planner solver validation request requires a non-empty \(field), got \(value)."
         case .unknownCoverageTags(let tags, let knownTags):
             "Symbolic planner solver corpus references unknown coverage tags \(tags.joined(separator: ", ")). Known tags: \(knownTags.joined(separator: ", "))."
         case .unimplementedCoverageTags(let tags, let implementedTags):

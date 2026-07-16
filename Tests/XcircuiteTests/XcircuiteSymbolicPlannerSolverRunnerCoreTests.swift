@@ -2,7 +2,6 @@ import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import Testing
-import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
 
@@ -378,6 +377,13 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
+    )
+    _ = try await store.persistCancellationRequest(
+        FlowRunCancellationRequest(
+            runID: "run-pddl",
+            requestedBy: "unreadable-cancellation-test",
+            reason: "Exercise cancellation artifact failure handling."
+        )
     )
     try await store.write(
         Data("{".utf8),

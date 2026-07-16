@@ -2,23 +2,23 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparisonRequest: Codable, Se
     public var schemaVersion: Int
     public var runID: String
     public var comparisonID: String
-    public var qualificationArtifactIDs: [String]
-    public var qualificationPaths: [String]
+    public var validationArtifactIDs: [String]
+    public var validationPaths: [String]
     public var selectionPolicy: String
 
     public init(
         schemaVersion: Int = 1,
         runID: String,
         comparisonID: String = "solver-family-1",
-        qualificationArtifactIDs: [String] = [],
-        qualificationPaths: [String] = [],
-        selectionPolicy: String = "prefer-qualified-health-replay-goals-proof-optimality-cost"
+        validationArtifactIDs: [String] = [],
+        validationPaths: [String] = [],
+        selectionPolicy: String = "prefer-passing-validation-replay-goals-proof-optimality-cost"
     ) {
         self.schemaVersion = schemaVersion
         self.runID = runID
         self.comparisonID = comparisonID
-        self.qualificationArtifactIDs = qualificationArtifactIDs
-        self.qualificationPaths = qualificationPaths
+        self.validationArtifactIDs = validationArtifactIDs
+        self.validationPaths = validationPaths
         self.selectionPolicy = selectionPolicy
     }
 
@@ -26,8 +26,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparisonRequest: Codable, Se
         case schemaVersion
         case runID
         case comparisonID
-        case qualificationArtifactIDs
-        case qualificationPaths
+        case validationArtifactIDs
+        case validationPaths
         case selectionPolicy
     }
 
@@ -43,9 +43,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparisonRequest: Codable, Se
         }
         runID = try container.decode(String.self, forKey: .runID)
         comparisonID = try container.decode(String.self, forKey: .comparisonID)
-        qualificationArtifactIDs = try container.decode([String].self, forKey: .qualificationArtifactIDs)
-        qualificationPaths = try container.decode([String].self, forKey: .qualificationPaths)
+        validationArtifactIDs = try container.decode([String].self, forKey: .validationArtifactIDs)
+        validationPaths = try container.decode([String].self, forKey: .validationPaths)
         selectionPolicy = try container.decodeIfPresent(String.self, forKey: .selectionPolicy)
-            ?? "prefer-qualified-health-replay-goals-proof-optimality-cost"
+            ?? "prefer-passing-validation-replay-goals-proof-optimality-cost"
     }
 }

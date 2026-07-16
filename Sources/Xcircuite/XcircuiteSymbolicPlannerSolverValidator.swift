@@ -1,10 +1,9 @@
 import Foundation
 import CircuiteFoundation
 import SignoffToolSupport
-import ToolQualification
 import DesignFlowKernel
 
-public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
+public struct XcircuiteSymbolicPlannerSolverValidator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let solverRunner: XcircuiteSymbolicPlannerSolving
@@ -29,12 +28,12 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         )
     }
 
-    public func qualify(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+    public func validate(
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         projectRoot: URL
-    ) async throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
+    ) async throws -> XcircuiteSymbolicPlannerSolverValidationResult {
         try FlowIdentifierValidator().validate(request.runID, kind: .runID)
-        try await validateQualificationRequest(request)
+        try await validateValidationRequest(request)
         if let maximumSolverCost = request.maximumSolverCost,
            (!maximumSolverCost.isFinite || maximumSolverCost < 0) {
             throw XcircuiteSymbolicPlannerSolverError.invalidMaximumSolverCost(maximumSolverCost)
@@ -140,8 +139,8 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 diagnostics.append(
                     XcircuiteSymbolicPlannerSolverDiagnostic(
                         severity: "error",
-                        code: "goal-coverage-not-qualified",
-                        message: "Qualified symbolic planner solver output must cover objective goal atoms."
+                        code: "goal-coverage-not-validated",
+                        message: "Validated symbolic planner solver output must cover objective goal atoms."
                     )
                 )
             }
@@ -158,7 +157,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "error",
                     code: "candidate-plan-not-imported",
-                    message: "Solver qualification requires a typed candidate plan imported from the solver output."
+                    message: "Solver validation requires a typed candidate plan imported from the solver output."
                 )
             )
         }
@@ -173,7 +172,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             )
         }
 
-        let status = diagnostics.contains(where: { $0.severity == "error" }) ? "failed" : "qualified"
+        let status = diagnostics.contains(where: { $0.severity == "error" }) ? "failed" : "passed"
         let result = makeResult(
             status: status,
             request: request,
@@ -189,21 +188,21 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             nativeCertificateArtifact: nativeCertificateResult.artifact,
             proofValidationArtifact: proofValidationResult.artifact,
             planVerificationArtifact: planVerificationArtifact,
-            qualificationArtifact: nil,
+            validationArtifact: nil,
             diagnostics: diagnostics
         )
-        let qualificationArtifact = try await artifactStore.persistSymbolicPlannerSolverQualification(
+        let validationArtifact = try await artifactStore.persistSymbolicPlannerSolverValidation(
             result,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        return result.attachingQualificationArtifact(
-            qualificationArtifact
+        return result.attachingValidationArtifact(
+            validationArtifact
         )
     }
 
-    private func validateQualificationRequest(
-        _ request: XcircuiteSymbolicPlannerSolverQualificationRequest
+    private func validateValidationRequest(
+        _ request: XcircuiteSymbolicPlannerSolverValidationRequest
     ) async throws {
         let validator = FlowIdentifierValidator()
         try validateIdentifier(request.toolID, field: "toolID", kind: .toolID, validator: validator)
@@ -250,7 +249,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         do {
             try validator.validate(value, kind: kind)
         } catch {
-            throw XcircuiteSymbolicPlannerSolverError.invalidSolverQualificationReference(
+            throw XcircuiteSymbolicPlannerSolverError.invalidSolverValidationReference(
                 field: field,
                 value: value
             )
@@ -265,7 +264,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         do {
             _ = try await workspaceStore.url(for: value)
         } catch {
-            throw XcircuiteSymbolicPlannerSolverError.invalidSolverQualificationPath(
+            throw XcircuiteSymbolicPlannerSolverError.invalidSolverValidationPath(
                 field: field,
                 value: value
             )
@@ -274,7 +273,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
 
     private func validateExecutablePath(_ value: String, field: String) throws {
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw XcircuiteSymbolicPlannerSolverError.invalidSolverQualificationExecutablePath(
+            throw XcircuiteSymbolicPlannerSolverError.invalidSolverValidationExecutablePath(
                 field: field,
                 value: value
             )
@@ -350,7 +349,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func appendSolverMetadataDiagnostics(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         solverMetadata: XcircuiteSymbolicPlannerSolverMetadata?,
         nativeCertificate: XcircuiteSymbolicPlannerSolverCertificateParseResult?,
         planCostEvaluation: XcircuiteSymbolicPlannerPlanCostEvaluation?,
@@ -362,8 +361,8 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "error",
-                    code: "optimality-not-qualified",
-                    message: "Qualified symbolic planner solver output must include an optimality claim."
+                    code: "optimality-not-validated",
+                    message: "Validated symbolic planner solver output must include an optimality claim."
                 )
             )
         }
@@ -400,7 +399,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "error",
                     code: "invalid-solver-cost-bound",
-                    message: "Solver qualification maximum cost must be finite and non-negative."
+                    message: "Solver validation maximum cost must be finite and non-negative."
                 )
             )
             return
@@ -410,7 +409,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "error",
                     code: "solver-cost-missing",
-                    message: "Qualified symbolic planner solver output must import a candidate plan so LSI can evaluate cost when a maximum cost is configured."
+                    message: "Validated symbolic planner solver output must import a candidate plan so LSI can evaluate cost when a maximum cost is configured."
                 )
             )
             return
@@ -450,7 +449,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func nativeCertificate(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         projectRoot: URL
     ) async throws -> NativeCertificateRunResult {
@@ -505,7 +504,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "error",
-                    code: "native-certificate-not-qualified",
+                    code: "native-certificate-not-validated",
                     message: "Native solver certificate was required but could not be parsed into trusted claims."
                 )
             )
@@ -527,7 +526,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func certificateArtifact(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         manifest: FlowRunManifest,
         projectRoot: URL
@@ -567,7 +566,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func appendNativeCertificateDiagnostics(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         nativeCertificate: XcircuiteSymbolicPlannerSolverCertificateParseResult?,
         observedActionIDs: [String],
         goalCoverageStatus: String?,
@@ -693,7 +692,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func proofValidation(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         projectRoot: URL
     ) async throws -> ProofValidationRunResult {
@@ -850,7 +849,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func proofArtifact(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> ArtifactReference? {
@@ -1109,7 +1108,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
 
     private func makeResult(
         status: String,
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest,
+        request: XcircuiteSymbolicPlannerSolverValidationRequest,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         observedActionIDs: [String],
         goalCoverageStatus: String?,
@@ -1122,84 +1121,11 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         nativeCertificateArtifact: ArtifactReference?,
         proofValidationArtifact: ArtifactReference?,
         planVerificationArtifact: ArtifactReference?,
-        qualificationArtifact: ArtifactReference?,
+        validationArtifact: ArtifactReference?,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
-    ) -> XcircuiteSymbolicPlannerSolverQualificationResult {
-        let healthStatus: ToolHealthStatus = status == "qualified" ? .passed : .failed
+    ) -> XcircuiteSymbolicPlannerSolverValidationResult {
         let solverMetadata = solverResult.solverMetadata
-        var observedMetrics: [String: Double] = [:]
-        if let planCost = solverMetadata?.planCost {
-            observedMetrics["solverClaimPlanCost"] = planCost
-        }
-        if let evaluatedCost = planCostEvaluation?.evaluatedCost {
-            observedMetrics["evaluatedPlanCost"] = evaluatedCost
-        }
-        if let replayEvaluatedCost = planReplayValidation?.evaluatedCost {
-            observedMetrics["replayEvaluatedPlanCost"] = replayEvaluatedCost
-        }
-        if let proofCheckerTimeoutSeconds = proofValidation?.proofCheckerTimeoutSeconds {
-            observedMetrics["proofCheckerTimeoutSeconds"] = proofCheckerTimeoutSeconds
-        }
-        if let makespan = solverMetadata?.makespan {
-            observedMetrics["solverMakespan"] = makespan
-        }
-        if let maximumSolverCost = request.maximumSolverCost {
-            observedMetrics["maximumSolverCost"] = maximumSolverCost
-        }
-        if let certifiedPlanCost = nativeCertificate?.certificate?.planCost {
-            observedMetrics["nativeCertificatePlanCost"] = certifiedPlanCost
-        }
-        if let certifiedLowerBound = nativeCertificate?.certificate?.lowerBound {
-            observedMetrics["nativeCertificateLowerBound"] = certifiedLowerBound
-        }
-        if let certifiedUpperBound = nativeCertificate?.certificate?.upperBound {
-            observedMetrics["nativeCertificateUpperBound"] = certifiedUpperBound
-        }
-        var observedCounts: [String: Int] = [:]
-        observedCounts["expectedActionCount"] = request.expectedActionIDs.count
-        observedCounts["observedActionCount"] = observedActionIDs.count
-        observedCounts["missingGoalAtomCount"] = missingGoalAtoms.count
-        observedCounts["solverCostClaimCount"] = solverMetadata?.planCost == nil ? 0 : 1
-        observedCounts["solverOptimalityClaimCount"] = solverMetadata?.optimalityStatus == "optimal" ? 1 : 0
-        observedCounts["solverMetadataEvidenceLineCount"] = solverMetadata?.evidenceLines.count ?? 0
-        observedCounts["nativeCertificateParseCount"] = nativeCertificate?.status == "parsed" ? 1 : 0
-        observedCounts["nativeCertificateClaimCount"] = nativeCertificate?.certificate?.claims.count ?? 0
-        observedCounts["nativeCertificateOptimalityClaimCount"] = nativeCertificate?.certificate?.optimalityStatus == "optimal" ? 1 : 0
-        observedCounts["nativeCertificateProofValidatedCount"] = nativeCertificate?.certificate?.proofStatus == "validated" ? 1 : 0
-        observedCounts["nativeCertificateErrorCount"] = nativeCertificate?.diagnostics.filter { $0.severity == "error" }.count ?? 0
-        observedCounts["evaluatedPlanLength"] = planCostEvaluation?.planLength ?? 0
-        observedCounts["planReplayStepCount"] = planReplayValidation?.steps.count ?? 0
-        observedCounts["planReplayErrorCount"] = planReplayValidation?.diagnostics.filter { $0.severity == "error" }.count ?? 0
-        observedCounts["planReplayMissingPreconditionAtomCount"] = planReplayValidation?.steps.reduce(0) { $0 + $1.missingPreconditionAtoms.count } ?? 0
-        observedCounts["planReplayMissingGoalAtomCount"] = planReplayValidation?.missingGoalAtoms.count ?? 0
-        observedCounts["proofValidationAttemptCount"] = proofValidation == nil ? 0 : 1
-        observedCounts["proofValidationErrorCount"] = proofValidation?.diagnostics.filter { $0.severity == "error" }.count ?? 0
-        observedCounts["proofValidationValidatedCount"] = proofValidation?.status == "validated" ? 1 : 0
-        if let proofCheckerExitCode = proofValidation?.exitCode {
-            observedCounts["proofCheckerExitCode"] = Int(proofCheckerExitCode)
-        }
-        if let planLength = solverMetadata?.planLength {
-            observedCounts["solverPlanLength"] = planLength
-        }
-        let evidence = ToolEvidence(
-            evidenceID: "\(request.toolID)-symbolic-planner-qualification",
-            kind: .corpus,
-            artifact: qualificationArtifact,
-            checkedAt: Date()
-        )
-        let toolHealth = ToolHealthCheckResult(
-            toolID: request.toolID,
-            status: healthStatus,
-            diagnostics: diagnostics.map { diagnostic in
-                ToolDiagnostic(
-                    severity: diagnostic.severity == "error" ? .error : .warning,
-                    code: diagnostic.code,
-                    message: diagnostic.message
-                )
-            },
-            evidence: [evidence]
-        )
-        return XcircuiteSymbolicPlannerSolverQualificationResult(
+        return XcircuiteSymbolicPlannerSolverValidationResult(
             status: status,
             runID: request.runID,
             toolID: request.toolID,
@@ -1223,8 +1149,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             proofValidationArtifact: proofValidationArtifact,
             nativeCertificateArtifact: nativeCertificateArtifact,
             planVerificationArtifact: planVerificationArtifact,
-            qualificationArtifact: qualificationArtifact,
-            toolHealth: toolHealth,
+            validationArtifact: validationArtifact,
             diagnostics: diagnostics
         )
     }

@@ -36,7 +36,10 @@ struct PEXFlowStageExecutorTests {
                 ]
             ),
             toolRegistry: ToolRegistry(descriptors: [
-                SignoffToolDescriptors.pexBackend(backendID: "test-fixture", level: .smokeChecked),
+                QualifiedToolFixtures.descriptor(
+                    SignoffToolDescriptors.pexBackend(backendID: "test-fixture"),
+                    qualifiedAt: .smokeChecked
+                ),
             ]),
             healthResults: [
                 "pex-test-fixture": QualifiedToolFixtures.health(
@@ -825,7 +828,7 @@ struct PEXFlowStageExecutorTests {
 
     private static func makeFixturePEXEngine() -> DefaultPEXEngine {
         DefaultPEXEngine(
-            adapterRegistry: PEXAdapterRegistry(adapters: [FixturePEXAdapter()]),
+            adapterRegistry: PEXAdapterRegistry(adapters: [FixturePEXExtractor()]),
             parserRegistry: PEXDefaultParsers.makeRegistry()
         )
     }
@@ -907,7 +910,7 @@ struct PEXFlowStageExecutorTests {
         evaluation.channelResults.first { $0.channelID == channelID }
     }
 
-    private struct FixturePEXAdapter: PEXAdapter {
+    private struct FixturePEXExtractor: PEXExtracting {
         let backendID = "test-fixture"
         let capabilities = PEXBackendCapabilities(
             supportsCouplingCaps: true,
@@ -933,7 +936,7 @@ struct PEXFlowStageExecutorTests {
             *DESIGN "\(context.topCell)"
             *DATE "2026-01-01"
             *VENDOR "XcircuiteTests"
-            *PROGRAM "FixturePEXAdapter"
+            *PROGRAM "FixturePEXExtractor"
             *VERSION "1.0"
             *DESIGN_FLOW "EXTERNAL"
             *DIVIDER /

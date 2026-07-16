@@ -27,7 +27,10 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )]
         )
 
         let result = try await runtime.run(
@@ -105,7 +108,10 @@ extension XcircuiteFlowRuntimeTests {
                     )
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.postLayoutComparison(level: .smokeChecked)]
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.postLayoutComparison(),
+                qualifiedAt: .smokeChecked
+            )]
         )
 
         let result = try await runtime.run(
@@ -134,7 +140,7 @@ extension XcircuiteFlowRuntimeTests {
         let reportArtifact = try #require(comparisonStage.artifacts.first {
             $0.artifactID == "post-layout-comparison" && $0.kind == .report && $0.format == .json
         })
-        #expect(reportArtifact.sha256.isEmpty == false)
+        #expect(reportArtifact.digest.hexadecimalValue.isEmpty == false)
         #expect(reportArtifact.byteCount > 0)
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let report = try await store.readJSON(
@@ -164,7 +170,10 @@ extension XcircuiteFlowRuntimeTests {
                     engine: FlakyDRCEngine(state: engineState)
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )]
         )
 
         let result = try await runtime.run(
@@ -242,7 +251,10 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )]
         )
 
         _ = try await runtime.run(
@@ -358,7 +370,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(planningArtifact.path == snapshotPath)
         #expect(planningArtifact.kind == .other)
         #expect(planningArtifact.format == .json)
-        #expect(planningArtifact.sha256.isEmpty == false)
+        #expect(planningArtifact.digest.hexadecimalValue.isEmpty == false)
         #expect(planningArtifact.byteCount > 0)
 
         let bundle = try await DefaultFlowRunReviewBundler(
@@ -397,7 +409,10 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )],
             toolchainProfile: toolchainProfile
         )
 
@@ -471,7 +486,10 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )]
         )
         let initial = try await runtime.run(
             request: FlowOperationRequest(
@@ -540,7 +558,10 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )]
         )
         _ = try await runtime.run(
             request: FlowOperationRequest(
@@ -677,7 +698,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(stage.artifacts.contains { $0.kind == .other && $0.format == .json })
 
         let layoutArtifact = try #require(stage.artifacts.first { $0.kind == .layout })
-        let layoutDigest = layoutArtifact.sha256
+        let layoutDigest = layoutArtifact.digest.hexadecimalValue
         #expect(!layoutDigest.isEmpty)
         let layoutURL = root.appending(path: layoutArtifact.path)
         let layoutData = try Data(contentsOf: layoutURL)

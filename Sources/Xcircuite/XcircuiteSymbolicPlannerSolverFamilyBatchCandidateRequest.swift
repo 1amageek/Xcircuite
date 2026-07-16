@@ -73,7 +73,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateRequest: Codable
         maximumSolverCost: Double? = nil,
         requireNativeCertificate: Bool = false,
         requireProofValidation: Bool = false,
-        policyID: String = "symbolic-planner-solver-qualification-v1",
+        policyID: String = "symbolic-planner-solver-validation-v1",
         domainArtifactID: String? = nil,
         domainPath: String? = nil,
         problemArtifactID: String? = nil,
@@ -158,8 +158,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateRequest: Codable
         )
     }
 
-    public func qualificationRequest(runID: String) -> XcircuiteSymbolicPlannerSolverQualificationRequest {
-        XcircuiteSymbolicPlannerSolverQualificationRequest(
+    public func validationRequest(runID: String) -> XcircuiteSymbolicPlannerSolverValidationRequest {
+        XcircuiteSymbolicPlannerSolverValidationRequest(
             runID: runID,
             toolID: toolID,
             executablePath: executablePath,

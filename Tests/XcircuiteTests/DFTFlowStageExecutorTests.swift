@@ -114,9 +114,7 @@ struct DFTFlowStageExecutorTests {
             )
         )
         #expect(throws: XcircuiteFlowRuntimeSpecError.self) {
-            try XcircuiteFlowRuntimeSpec(executors: [missing]).validate(
-                requireCompleteToolEvidence: false
-            )
+            try XcircuiteFlowRuntimeSpec(executors: [missing]).validate()
         }
 
         let stageBound = XcircuiteFlowStageExecutorSpec.dft(
@@ -133,9 +131,7 @@ struct DFTFlowStageExecutorTests {
                 releaseDownstreamEvidencePath: "dft-downstream.json"
             )
         )
-        try XcircuiteFlowRuntimeSpec(executors: [stageBound]).validate(
-            requireCompleteToolEvidence: false
-        )
+        try XcircuiteFlowRuntimeSpec(executors: [stageBound]).validate()
     }
 
     @Test("downstream evidence bundle blocks when a required domain is absent")

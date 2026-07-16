@@ -560,20 +560,20 @@ extension XcircuiteFlowRuntimeTests {
             $0.artifactID == "layout-gds"
         })
         #expect(gdsArtifact.format == .gdsii)
-        #expect(!gdsArtifact.sha256.isEmpty)
+        #expect(!gdsArtifact.digest.hexadecimalValue.isEmpty)
         #expect(gdsArtifact.byteCount > 0)
         let oasisArtifact = try #require(oasisCaseResult.sourceArtifactRefs.first {
             $0.artifactID == "layout-oasis"
         })
         #expect(oasisArtifact.format == .oasis)
-        #expect(!oasisArtifact.sha256.isEmpty)
+        #expect(!oasisArtifact.digest.hexadecimalValue.isEmpty)
         #expect(oasisArtifact.byteCount > 0)
         for caseResult in report.caseResults {
             let drcLayoutArtifact = try #require(caseResult.sourceArtifactRefs.first {
                 $0.artifactID == "drc-layout"
             })
             #expect(drcLayoutArtifact.format == .json)
-            #expect(!drcLayoutArtifact.sha256.isEmpty)
+            #expect(!drcLayoutArtifact.digest.hexadecimalValue.isEmpty)
             #expect(drcLayoutArtifact.byteCount > 0)
         }
         #expect(report.caseResults.allSatisfy { caseResult in
@@ -598,7 +598,7 @@ extension XcircuiteFlowRuntimeTests {
             $0.artifactID == "drc-layout"
         })
         #expect(gdsDRCLayoutArtifact.format == .json)
-        #expect(!gdsDRCLayoutArtifact.sha256.isEmpty)
+        #expect(!gdsDRCLayoutArtifact.digest.hexadecimalValue.isEmpty)
         #expect(gdsDRCLayoutArtifact.byteCount > 0)
 
         let requestURL = root.appending(path: "generated-layout-signoff-corpus-request.json")
@@ -1430,7 +1430,10 @@ extension XcircuiteFlowRuntimeTests {
                     engine: AlwaysFailingDRCEngine()
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )],
             projectRoot: retryRoot
         )
 

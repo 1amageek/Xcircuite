@@ -5,7 +5,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotionRequest: Codable, Sen
     public var comparisonArtifactID: String?
     public var comparisonPath: String?
     public var selectedCandidateIndex: Int?
-    public var requireQualified: Bool
+    public var requirePassingValidation: Bool
     public var verifyPromotedPlan: Bool
 
     public init(
@@ -15,7 +15,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotionRequest: Codable, Sen
         comparisonArtifactID: String? = nil,
         comparisonPath: String? = nil,
         selectedCandidateIndex: Int? = nil,
-        requireQualified: Bool = true,
+        requirePassingValidation: Bool = true,
         verifyPromotedPlan: Bool = true
     ) {
         self.schemaVersion = schemaVersion
@@ -24,7 +24,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotionRequest: Codable, Sen
         self.comparisonArtifactID = comparisonArtifactID
         self.comparisonPath = comparisonPath
         self.selectedCandidateIndex = selectedCandidateIndex
-        self.requireQualified = requireQualified
+        self.requirePassingValidation = requirePassingValidation
         self.verifyPromotedPlan = verifyPromotedPlan
     }
 
@@ -35,7 +35,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotionRequest: Codable, Sen
         case comparisonArtifactID
         case comparisonPath
         case selectedCandidateIndex
-        case requireQualified
+        case requirePassingValidation
         case verifyPromotedPlan
     }
 
@@ -54,7 +54,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotionRequest: Codable, Sen
         comparisonArtifactID = try container.decodeIfPresent(String.self, forKey: .comparisonArtifactID)
         comparisonPath = try container.decodeIfPresent(String.self, forKey: .comparisonPath)
         selectedCandidateIndex = try container.decodeIfPresent(Int.self, forKey: .selectedCandidateIndex)
-        requireQualified = try container.decode(Bool.self, forKey: .requireQualified)
+        requirePassingValidation = try container.decode(Bool.self, forKey: .requirePassingValidation)
         verifyPromotedPlan = try container.decode(Bool.self, forKey: .verifyPromotedPlan)
     }
 }

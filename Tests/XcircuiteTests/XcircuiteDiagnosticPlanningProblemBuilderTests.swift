@@ -91,7 +91,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         })
         #expect(reference.artifactID == XcircuitePlanningArtifactStore.problemArtifactID)
         #expect(reference.path == ".xcircuite/runs/run-1/planning/problem.json")
-        #expect(!reference.sha256.isEmpty)
+        #expect(!reference.digest.hexadecimalValue.isEmpty)
         #expect(reference.byteCount > 0)
 
         let ledger = try await store.loadRunLedger(runID: "run-1")

@@ -178,9 +178,7 @@ struct PDKFlowStageExecutorTests {
                 from: data
             )
             #expect(decoded == spec)
-            try XcircuiteFlowRuntimeSpec(executors: [decoded]).validate(
-                requireCompleteToolEvidence: false
-            )
+            try XcircuiteFlowRuntimeSpec(executors: [decoded]).validate()
         }
     }
 

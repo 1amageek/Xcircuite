@@ -11,7 +11,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusCaseResult: Codable, Sendable,
     public var goalCoverageStatus: String?
     public var missingGoalAtoms: [String]
     public var failureCodes: [String]
-    public var qualificationArtifact: ArtifactReference?
+    public var validationArtifact: ArtifactReference?
     public var planVerificationArtifact: ArtifactReference?
 
     public init(
@@ -24,7 +24,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusCaseResult: Codable, Sendable,
         goalCoverageStatus: String?,
         missingGoalAtoms: [String],
         failureCodes: [String],
-        qualificationArtifact: ArtifactReference?,
+        validationArtifact: ArtifactReference?,
         planVerificationArtifact: ArtifactReference?
     ) {
         self.caseID = caseID
@@ -36,7 +36,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusCaseResult: Codable, Sendable,
         self.goalCoverageStatus = goalCoverageStatus
         self.missingGoalAtoms = missingGoalAtoms
         self.failureCodes = failureCodes
-        self.qualificationArtifact = qualificationArtifact
+        self.validationArtifact = validationArtifact
         self.planVerificationArtifact = planVerificationArtifact
     }
 }

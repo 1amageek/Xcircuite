@@ -32,13 +32,13 @@ extension XcircuiteFlowCLICommand {
           xcircuite-flow run-symbolic-planner-family --project-root <path> --run-id <id> [--family-run-id <id>] [--problem-artifact-id <id>] [--problem-path <path>] [--rejected-plans-artifact-id <id>] [--rejected-plans-path <path>] [--metric-threshold-profile-artifact-id <id>] [--metric-threshold-profile-path <path>] [--cost-calibration-artifact-id <id>] [--cost-calibration-path <path>] [--pareto-candidates-artifact-id <id>] [--pareto-candidates-path <path>] [--strategy <name> ...] [--calibration-policy <disabled|cp7-feedback>] [--selection-policy <name>] [--pretty]
           xcircuite-flow export-symbolic-planner-problem --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--action-domain-artifact-id <id>] [--action-domain-path <path>] [--pretty]
           xcircuite-flow run-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--arg <value> ...] [--timeout-seconds <seconds>] [--domain-artifact-id <id>] [--domain-path <path>] [--problem-artifact-id <id>] [--problem-path <path>] [--pddl-export-artifact-id <id>] [--pddl-export-path <path>] [--working-directory-path <path>] [--solver-plan-output-path <path>] [--no-import] [--pretty]
-          xcircuite-flow qualify-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--expected-action-id <id> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-native-certificate] [--certificate-artifact-id <id>] [--certificate-path <path>] [--certificate-format <auto|generic-json|generic-text|fast-downward-text|metric-ff-text|optic-text|madagascar-text>] [--require-proof-validation] [--proof-artifact-id <id>] [--proof-path <path>] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--policy-id <id>] [--domain-artifact-id <id>] [--domain-path <path>] [--problem-artifact-id <id>] [--problem-path <path>] [--pddl-export-artifact-id <id>] [--pddl-export-path <path>] [--working-directory-path <path>] [--solver-plan-output-path <path>] [--pretty]
-          xcircuite-flow discover-installed-symbolic-planner-solvers --project-root <path> --run-id <id> [--lane-id <id>] [--search-path <path> ...] [--selection-policy <id>] [--promote-selected-plan] [--allow-unqualified-promotion] [--skip-promotion-verification] [--batch-spec-output-path <path>] [--pretty]
-          xcircuite-flow run-symbolic-planner-solver-family --project-root <path> --spec <path> [--comparison-id <id>] [--no-promote] [--allow-unqualified-promotion] [--skip-promotion-verification] [--pretty]
-          xcircuite-flow compare-symbolic-planner-solver-family --project-root <path> --run-id <id> [--comparison-id <id>] [--qualification-artifact-id <id> ...] [--qualification-path <path> ...] [--selection-policy <id>] [--pretty]
-          xcircuite-flow promote-symbolic-planner-solver-family-selection --project-root <path> --run-id <id> [--comparison-id <id>] [--comparison-artifact-id <id>] [--comparison-path <path>] [--candidate-index <n>] [--allow-unqualified] [--skip-verification] [--pretty]
-          xcircuite-flow qualify-symbolic-planner-solver-corpus --project-root <path> --suite-spec <path> [--pretty]
-          xcircuite-flow qualify-symbolic-planner-solver-corpus --project-root <path> --suite-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--policy-id <id>] [--required-coverage-tag <tag> ...] [--case-coverage <case-id:tag[,tag]> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-proof-validation] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--case-proof <case-id:path> ...] --case <run-id:expected-action-ids> [--case <run-id:expected-action-ids> ...] [--pretty]
+          xcircuite-flow validate-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--expected-action-id <id> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-native-certificate] [--certificate-artifact-id <id>] [--certificate-path <path>] [--certificate-format <auto|generic-json|generic-text|fast-downward-text|metric-ff-text|optic-text|madagascar-text>] [--require-proof-validation] [--proof-artifact-id <id>] [--proof-path <path>] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--policy-id <id>] [--domain-artifact-id <id>] [--domain-path <path>] [--problem-artifact-id <id>] [--problem-path <path>] [--pddl-export-artifact-id <id>] [--pddl-export-path <path>] [--working-directory-path <path>] [--solver-plan-output-path <path>] [--pretty]
+          xcircuite-flow discover-installed-symbolic-planner-solvers --project-root <path> --run-id <id> [--lane-id <id>] [--search-path <path> ...] [--selection-policy <id>] [--promote-selected-plan] [--allow-failing-validation-promotion] [--skip-promotion-verification] [--batch-spec-output-path <path>] [--pretty]
+          xcircuite-flow run-symbolic-planner-solver-family --project-root <path> --spec <path> [--comparison-id <id>] [--no-promote] [--allow-failing-validation-promotion] [--skip-promotion-verification] [--pretty]
+          xcircuite-flow compare-symbolic-planner-solver-family --project-root <path> --run-id <id> [--comparison-id <id>] [--validation-artifact-id <id> ...] [--validation-path <path> ...] [--selection-policy <id>] [--pretty]
+          xcircuite-flow promote-symbolic-planner-solver-family-selection --project-root <path> --run-id <id> [--comparison-id <id>] [--comparison-artifact-id <id>] [--comparison-path <path>] [--candidate-index <n>] [--allow-failing-validation] [--skip-verification] [--pretty]
+          xcircuite-flow assess-symbolic-planner-solver-corpus --project-root <path> --suite-spec <path> [--pretty]
+          xcircuite-flow assess-symbolic-planner-solver-corpus --project-root <path> --suite-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--policy-id <id>] [--required-coverage-tag <tag> ...] [--case-coverage <case-id:tag[,tag]> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-proof-validation] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--case-proof <case-id:path> ...] --case <run-id:expected-action-ids> [--case <run-id:expected-action-ids> ...] [--pretty]
           xcircuite-flow symbolic-planner-feature-matrix [--pretty]
           xcircuite-flow import-symbolic-planner-plan --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--pddl-export-artifact-id <id>] [--pddl-export-path <path>] [--solver-plan-artifact-id <id>] [--solver-plan-path <path>] [--pretty]
           xcircuite-flow generate-parameter-candidates --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--rejected-plans-artifact-id <id>] [--rejected-plans-path <path>] [--previous-parameter-candidates-artifact-id <id>] [--previous-parameter-candidates-path <path>] [--metric-threshold-profile-artifact-id <id>] [--metric-threshold-profile-path <path>] [--cost-calibration-artifact-id <id>] [--cost-calibration-path <path>] [--pareto-candidates-artifact-id <id>] [--pareto-candidates-path <path>] [--strategy <name>] [--max-candidates <count>] [--pretty]
@@ -434,58 +434,58 @@ extension XcircuiteFlowCLICommand {
         """
     }
 
-    public static var qualifySymbolicPlannerSolverHelpText: String {
+    public static var validateSymbolicPlannerSolverHelpText: String {
         """
         Usage:
-          xcircuite-flow qualify-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--expected-action-id <id> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-native-certificate] [--certificate-artifact-id <id>] [--certificate-path <path>] [--certificate-format <auto|generic-json|generic-text|fast-downward-text|metric-ff-text|optic-text|madagascar-text>] [--require-proof-validation] [--proof-artifact-id <id>] [--proof-path <path>] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--policy-id <id>] [--domain-artifact-id <id>] [--domain-path <path>] [--problem-artifact-id <id>] [--problem-path <path>] [--pddl-export-artifact-id <id>] [--pddl-export-path <path>] [--working-directory-path <path>] [--solver-plan-output-path <path>] [--pretty]
+          xcircuite-flow validate-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--expected-action-id <id> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-native-certificate] [--certificate-artifact-id <id>] [--certificate-path <path>] [--certificate-format <auto|generic-json|generic-text|fast-downward-text|metric-ff-text|optic-text|madagascar-text>] [--require-proof-validation] [--proof-artifact-id <id>] [--proof-path <path>] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--policy-id <id>] [--domain-artifact-id <id>] [--domain-path <path>] [--problem-artifact-id <id>] [--problem-path <path>] [--pddl-export-artifact-id <id>] [--pddl-export-path <path>] [--working-directory-path <path>] [--solver-plan-output-path <path>] [--pretty]
 
-        Runs an external symbolic planner on the run's PDDL artifacts, imports the solver plan, verifies goal coverage, optionally parses a native solver certificate from an explicit certificate artifact/path or the solver stdout artifact, validates a solver proof artifact with an external checker, writes planning/symbolic-planner/solver-certificate.json plus solver-qualification.json, and returns a ToolHealthCheckResult-compatible qualification result.
+        Runs an external symbolic planner on the run's PDDL artifacts, imports the solver plan, verifies goal coverage, optionally parses a native solver certificate from an explicit certificate artifact/path or the solver stdout artifact, validates a solver proof artifact with an external checker, and writes planning/symbolic-planner/solver-certificate.json plus solver-validation.json. The result is domain validation evidence, not a tool qualification decision.
         """
     }
 
     public static var discoverInstalledSymbolicPlannerSolversHelpText: String {
         """
         Usage:
-          xcircuite-flow discover-installed-symbolic-planner-solvers --project-root <path> --run-id <id> [--lane-id <id>] [--search-path <path> ...] [--selection-policy <id>] [--promote-selected-plan] [--allow-unqualified-promotion] [--skip-promotion-verification] [--batch-spec-output-path <path>] [--pretty]
+          xcircuite-flow discover-installed-symbolic-planner-solvers --project-root <path> --run-id <id> [--lane-id <id>] [--search-path <path> ...] [--selection-policy <id>] [--promote-selected-plan] [--allow-failing-validation-promotion] [--skip-promotion-verification] [--batch-spec-output-path <path>] [--pretty]
 
-        Discovers installed symbolic planner binaries for known solver families, writes planning/symbolic-planner/installed-solver-lane.json, and returns a batch request containing only available candidates so Agent/CI can run solver-family qualification when binaries are present.
+        Discovers installed symbolic planner binaries for known solver families, writes planning/symbolic-planner/installed-solver-lane.json, and returns a batch request containing only available candidates so Agent/CI can run solver-family validation when binaries are present.
         """
     }
 
     public static var runSymbolicPlannerSolverFamilyHelpText: String {
         """
         Usage:
-          xcircuite-flow run-symbolic-planner-solver-family --project-root <path> --spec <path> [--comparison-id <id>] [--no-promote] [--allow-unqualified-promotion] [--skip-promotion-verification] [--pretty]
+          xcircuite-flow run-symbolic-planner-solver-family --project-root <path> --spec <path> [--comparison-id <id>] [--no-promote] [--allow-failing-validation-promotion] [--skip-promotion-verification] [--pretty]
 
-        Loads a solver-family batch spec, qualifies each external symbolic planner, snapshots candidate certificates under planning/symbolic-planner/solver-family/<comparison-id>/candidates/<candidate-id>/, compares the resulting certificates, optionally promotes the selected plan, writes solver-family-batch.json, and returns all comparison/promotion artifacts.
+        Loads a solver-family batch spec, validates each external symbolic planner against the requested domain constraints, snapshots candidate certificates under planning/symbolic-planner/solver-family/<comparison-id>/candidates/<candidate-id>/, compares the resulting certificates, optionally promotes the selected plan, writes solver-family-batch.json, and returns all comparison/promotion artifacts.
         """
     }
 
     public static var compareSymbolicPlannerSolverFamilyHelpText: String {
         """
         Usage:
-          xcircuite-flow compare-symbolic-planner-solver-family --project-root <path> --run-id <id> [--comparison-id <id>] [--qualification-artifact-id <id> ...] [--qualification-path <path> ...] [--selection-policy <id>] [--pretty]
+          xcircuite-flow compare-symbolic-planner-solver-family --project-root <path> --run-id <id> [--comparison-id <id>] [--validation-artifact-id <id> ...] [--validation-path <path> ...] [--selection-policy <id>] [--pretty]
 
-        Compares existing symbolic planner solver qualification certificates, scores correctness and trust evidence, writes planning/symbolic-planner/solver-family/<comparison-id>/solver-family-comparison.json, and returns the selected certificate with score components.
+        Compares existing symbolic planner solver validation certificates, scores domain correctness and replay evidence, writes planning/symbolic-planner/solver-family/<comparison-id>/solver-family-comparison.json, and returns the selected certificate with score components.
         """
     }
 
     public static var promoteSymbolicPlannerSolverFamilySelectionHelpText: String {
         """
         Usage:
-          xcircuite-flow promote-symbolic-planner-solver-family-selection --project-root <path> --run-id <id> [--comparison-id <id>] [--comparison-artifact-id <id>] [--comparison-path <path>] [--candidate-index <n>] [--allow-unqualified] [--skip-verification] [--pretty]
+          xcircuite-flow promote-symbolic-planner-solver-family-selection --project-root <path> --run-id <id> [--comparison-id <id>] [--comparison-artifact-id <id>] [--comparison-path <path>] [--candidate-index <n>] [--allow-failing-validation] [--skip-verification] [--pretty]
 
-        Promotes the selected solver-family qualification certificate into canonical planning/candidate-plan.json, optionally re-promotes replay evidence, verifies the promoted candidate plan, writes planning/symbolic-planner/solver-family/<comparison-id>/solver-family-promotion.json, and returns the promotion artifact.
+        Promotes the selected solver-family validation certificate into canonical planning/candidate-plan.json, optionally re-promotes replay evidence, verifies the promoted candidate plan, writes planning/symbolic-planner/solver-family/<comparison-id>/solver-family-promotion.json, and returns the promotion artifact.
         """
     }
 
-    public static var qualifySymbolicPlannerSolverCorpusHelpText: String {
+    public static var assessSymbolicPlannerSolverCorpusHelpText: String {
         """
         Usage:
-          xcircuite-flow qualify-symbolic-planner-solver-corpus --project-root <path> --suite-spec <path> [--pretty]
-          xcircuite-flow qualify-symbolic-planner-solver-corpus --project-root <path> --suite-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--policy-id <id>] [--required-coverage-tag <tag> ...] [--case-coverage <case-id:tag[,tag]> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-proof-validation] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--case-proof <case-id:path> ...] --case <run-id:expected-action-ids> [--case <run-id:expected-action-ids> ...] [--pretty]
+          xcircuite-flow assess-symbolic-planner-solver-corpus --project-root <path> --suite-spec <path> [--pretty]
+          xcircuite-flow assess-symbolic-planner-solver-corpus --project-root <path> --suite-id <id> --executable-path <path> [--tool-id <id>] [--arg <value> ...] [--timeout-seconds <seconds>] [--policy-id <id>] [--required-coverage-tag <tag> ...] [--case-coverage <case-id:tag[,tag]> ...] [--allow-missing-goal-coverage] [--require-optimality] [--max-solver-cost <number>] [--require-proof-validation] [--proof-checker-executable-path <path>] [--proof-checker-arg <value> ...] [--proof-checker-timeout-seconds <seconds>] [--proof-checker-working-directory-path <path>] [--case-proof <case-id:path> ...] --case <run-id:expected-action-ids> [--case <run-id:expected-action-ids> ...] [--pretty]
 
-        Runs symbolic planner qualification across multiple prepared run cases, writes per-run solver qualification artifacts, writes .xcircuite/qualification/symbolic-planner/<suite-id>/solver-qualification-corpus-suite.json and solver-qualification-corpus.json, checks required coverage tags against qualified cases, and returns aggregate ToolHealthCheckResult-compatible corpus evidence.
+        Runs symbolic planner validation across multiple prepared run cases, writes per-run solver validation artifacts, writes .xcircuite/assessments/symbolic-planner/<suite-id>/solver-corpus-assessment-suite.json and solver-corpus-assessment.json, checks required coverage tags against passing cases, and returns aggregate domain assessment evidence. Tool qualification records are issued and validated only by ToolQualification.
         """
     }
 

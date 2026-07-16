@@ -61,8 +61,8 @@ public enum XcircuiteFlowCLICommand {
             return try await exportSymbolicPlannerProblem(arguments: Array(arguments.dropFirst()))
         case "run-symbolic-planner-solver":
             return try await runSymbolicPlannerSolver(arguments: Array(arguments.dropFirst()))
-        case "qualify-symbolic-planner-solver":
-            return try await qualifySymbolicPlannerSolver(arguments: Array(arguments.dropFirst()))
+        case "validate-symbolic-planner-solver":
+            return try await validateSymbolicPlannerSolver(arguments: Array(arguments.dropFirst()))
         case "run-symbolic-planner-solver-family":
             return try await runSymbolicPlannerSolverFamily(arguments: Array(arguments.dropFirst()))
         case "discover-installed-symbolic-planner-solvers":
@@ -71,8 +71,8 @@ public enum XcircuiteFlowCLICommand {
             return try await compareSymbolicPlannerSolverFamily(arguments: Array(arguments.dropFirst()))
         case "promote-symbolic-planner-solver-family-selection":
             return try await promoteSymbolicPlannerSolverFamilySelection(arguments: Array(arguments.dropFirst()))
-        case "qualify-symbolic-planner-solver-corpus":
-            return try await qualifySymbolicPlannerSolverCorpus(arguments: Array(arguments.dropFirst()))
+        case "assess-symbolic-planner-solver-corpus":
+            return try await assessSymbolicPlannerSolverCorpus(arguments: Array(arguments.dropFirst()))
         case "symbolic-planner-feature-matrix":
             return try symbolicPlannerFeatureMatrix(arguments: Array(arguments.dropFirst()))
         case "import-symbolic-planner-plan":

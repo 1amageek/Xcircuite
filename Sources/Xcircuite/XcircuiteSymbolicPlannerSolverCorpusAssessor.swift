@@ -1,26 +1,25 @@
 import Foundation
-import ToolQualification
 import DesignFlowKernel
 
-public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
+public struct XcircuiteSymbolicPlannerSolverCorpusAssessor: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let caseQualifier: XcircuiteSymbolicPlannerSolverQualifier?
+    private let caseValidator: XcircuiteSymbolicPlannerSolverValidator?
     private let coverageTagValidator: XcircuiteSymbolicPlannerCoverageTagValidator
 
     public init(
         artifactStore: XcircuitePlanningArtifactStore,
-        caseQualifier: XcircuiteSymbolicPlannerSolverQualifier? = nil,
+        caseValidator: XcircuiteSymbolicPlannerSolverValidator? = nil,
         coverageTagValidator: XcircuiteSymbolicPlannerCoverageTagValidator = XcircuiteSymbolicPlannerCoverageTagValidator()
     ) {
         self.artifactStore = artifactStore
-        self.caseQualifier = caseQualifier
+        self.caseValidator = caseValidator
         self.coverageTagValidator = coverageTagValidator
     }
 
-    public func qualify(
-        request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest,
+    public func assess(
+        request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest,
         projectRoot: URL
-    ) async throws -> XcircuiteSymbolicPlannerSolverCorpusQualificationResult {
+    ) async throws -> XcircuiteSymbolicPlannerSolverCorpusAssessment {
         let identifierValidator = FlowIdentifierValidator()
         try identifierValidator.validate(request.suiteID, kind: .artifactID)
         for coverageTag in request.requiredCoverageTags {
@@ -28,14 +27,14 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         }
         try coverageTagValidator.validateImplementedCoverageTags(request.requiredCoverageTags)
         guard !request.cases.isEmpty else {
-            throw XcircuiteSymbolicPlannerSolverError.emptyQualificationCorpus
+            throw XcircuiteSymbolicPlannerSolverError.emptySolverCorpusAssessment
         }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        let caseQualifier = caseQualifier ?? XcircuiteSymbolicPlannerSolverQualifier(
+        let caseValidator = caseValidator ?? XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         )
-        let suiteSpecArtifact = try await artifactStore.persistSymbolicPlannerSolverQualificationCorpusSuiteSpec(
+        let suiteSpecArtifact = try await artifactStore.persistSymbolicPlannerSolverCorpusAssessmentSuiteSpec(
             XcircuiteSymbolicPlannerSolverCorpusSuiteSpec(request: request),
             projectRoot: projectRoot
         )
@@ -47,8 +46,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
                 try identifierValidator.validate(coverageTag, kind: .artifactID)
             }
             try coverageTagValidator.validateImplementedCoverageTags(corpusCase.coverageTags)
-            let qualification = try await caseQualifier.qualify(
-                request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+            let validation = try await caseValidator.validate(
+                request: XcircuiteSymbolicPlannerSolverValidationRequest(
                     runID: corpusCase.runID,
                     toolID: request.toolID,
                     executablePath: request.executablePath,
@@ -78,22 +77,22 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
                 ),
                 projectRoot: projectRoot
             )
-            let failureCodes = qualification.diagnostics
+            let failureCodes = validation.diagnostics
                 .filter { $0.severity == "error" }
                 .map(\.code)
             caseResults.append(
                 XcircuiteSymbolicPlannerSolverCorpusCaseResult(
                     caseID: corpusCase.caseID,
                     runID: corpusCase.runID,
-                    status: qualification.status,
+                    status: validation.status,
                     expectedActionIDs: corpusCase.expectedActionIDs,
-                    observedActionIDs: qualification.observedActionIDs,
+                    observedActionIDs: validation.observedActionIDs,
                     coverageTags: corpusCase.coverageTags,
-                    goalCoverageStatus: qualification.goalCoverageStatus,
-                    missingGoalAtoms: qualification.missingGoalAtoms,
+                    goalCoverageStatus: validation.goalCoverageStatus,
+                    missingGoalAtoms: validation.missingGoalAtoms,
                     failureCodes: failureCodes,
-                    qualificationArtifact: qualification.qualificationArtifact,
-                    planVerificationArtifact: qualification.planVerificationArtifact
+                    validationArtifact: validation.validationArtifact,
+                    planVerificationArtifact: validation.planVerificationArtifact
                 )
             )
         }
@@ -104,8 +103,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
             requiredCoverageTags: request.requiredCoverageTags,
             coveredCoverageTags: coveredCoverageTags
         )
-        let status = caseResults.allSatisfy { $0.status == "qualified" } && missingRequiredCoverageTags.isEmpty
-            ? "qualified"
+        let status = caseResults.allSatisfy { $0.status == "passed" } && missingRequiredCoverageTags.isEmpty
+            ? "passed"
             : "failed"
         let result = makeResult(
             suiteID: request.suiteID,
@@ -120,7 +119,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
             suiteSpecArtifact: suiteSpecArtifact,
             corpusArtifact: nil
         )
-        let corpusArtifact = try await artifactStore.persistSymbolicPlannerSolverQualificationCorpus(
+        let corpusArtifact = try await artifactStore.persistSymbolicPlannerSolverCorpusAssessment(
             result,
             projectRoot: projectRoot
         )
@@ -151,40 +150,21 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         coverageTagCounts: [String: Int],
         suiteSpecArtifact: ArtifactReference?,
         corpusArtifact: ArtifactReference?
-    ) -> XcircuiteSymbolicPlannerSolverCorpusQualificationResult {
+    ) -> XcircuiteSymbolicPlannerSolverCorpusAssessment {
         var failureCodes = unique(caseResults.flatMap(\.failureCodes))
         if !missingRequiredCoverageTags.isEmpty {
             failureCodes = unique(failureCodes + ["required-coverage-missing"])
         }
-        let qualifiedCaseCount = caseResults.filter { $0.status == "qualified" }.count
-        let failedCaseCount = caseResults.count - qualifiedCaseCount
-        let healthStatus: ToolHealthStatus = status == "qualified" ? .passed : .failed
+        let passedCaseCount = caseResults.filter { $0.status == "passed" }.count
+        let failedCaseCount = caseResults.count - passedCaseCount
         let requiredCoverageTags = unique(requiredCoverageTags)
-        let evidence = ToolEvidence(
-            evidenceID: "\(toolID)-symbolic-planner-corpus-\(suiteID)",
-            kind: .corpus,
-            artifact: corpusArtifact ?? suiteSpecArtifact,
-            checkedAt: Date()
-        )
-        let toolHealth = ToolHealthCheckResult(
-            toolID: toolID,
-            status: healthStatus,
-            diagnostics: failureCodes.map { code in
-                ToolDiagnostic(
-                    severity: .error,
-                    code: code,
-                    message: "Symbolic planner corpus qualification observed failure code \(code)."
-                )
-            },
-            evidence: [evidence]
-        )
-        return XcircuiteSymbolicPlannerSolverCorpusQualificationResult(
+        return XcircuiteSymbolicPlannerSolverCorpusAssessment(
             suiteID: suiteID,
             status: status,
             toolID: toolID,
             policyID: policyID,
             caseResults: caseResults,
-            qualifiedCaseCount: qualifiedCaseCount,
+            passedCaseCount: passedCaseCount,
             failedCaseCount: failedCaseCount,
             requiredCoverageTags: requiredCoverageTags,
             coveredCoverageTags: coveredCoverageTags,
@@ -192,14 +172,13 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
             coverageTagCounts: coverageTagCounts,
             failureCodes: failureCodes,
             suiteSpecArtifact: suiteSpecArtifact,
-            corpusArtifact: corpusArtifact,
-            toolHealth: toolHealth
+            corpusArtifact: corpusArtifact
         )
     }
 
     private func makeCoverageTagCounts(_ caseResults: [XcircuiteSymbolicPlannerSolverCorpusCaseResult]) -> [String: Int] {
         var counts: [String: Int] = [:]
-        for caseResult in caseResults where caseResult.status == "qualified" {
+        for caseResult in caseResults where caseResult.status == "passed" {
             for coverageTag in unique(caseResult.coverageTags) {
                 counts[coverageTag, default: 0] += 1
             }

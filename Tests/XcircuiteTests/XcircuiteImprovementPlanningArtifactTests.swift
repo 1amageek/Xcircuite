@@ -44,7 +44,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
         #expect(paretoRef.path == ".xcircuite/runs/run-1/planning/pareto-candidates.jsonl")
         #expect(loopRef.path == ".xcircuite/runs/run-1/planning/improvement-loop.json")
         #expect([thresholdRef, calibrationRef, paretoRef, loopRef].allSatisfy {
-            $0.sha256.utf8.count == 64 && $0.byteCount > 0
+            $0.digest.hexadecimalValue.utf8.count == 64 && $0.byteCount > 0
         })
 
         let persistedProfile = try await workspaceStore.readJSON(
@@ -81,7 +81,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
             let manifestReference = manifest.artifacts.first {
                 $0.artifactID == reference.artifactID && $0.path == reference.path
             }
-            #expect(manifestReference?.sha256 == reference.sha256)
+            #expect(manifestReference?.digest == reference.digest)
             #expect(manifestReference?.byteCount == reference.byteCount)
         }
     }
@@ -326,7 +326,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
                 $0.artifactID == reference.id.rawValue
                     && $0.path == reference.locator.location.value
             }
-            #expect(manifestReference?.sha256 == reference.digest.hexadecimalValue)
+            #expect(manifestReference?.digest == reference.digest)
             #expect(reference.byteCount == manifestReference?.byteCount)
         }
     }
@@ -402,7 +402,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.rejectedFeedbackLearningReportArtifactID
                 && $0.path == learningRef.locator.location.value
-                && $0.sha256 == learningRef.digest.hexadecimalValue
+                && $0.digest == learningRef.digest
                 && learningRef.byteCount == $0.byteCount
         })
     }

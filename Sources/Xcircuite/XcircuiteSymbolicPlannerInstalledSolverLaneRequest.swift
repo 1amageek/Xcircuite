@@ -6,18 +6,18 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneRequest: Codable, Senda
     public var searchPaths: [String]
     public var candidates: [XcircuiteSymbolicPlannerInstalledSolverCandidateSpec]
     public var promoteSelectedPlan: Bool
-    public var requireQualifiedPromotion: Bool
+    public var requirePassingValidationForPromotion: Bool
     public var verifyPromotedPlan: Bool
 
     public init(
         schemaVersion: Int = 1,
         runID: String,
         laneID: String = "installed-symbolic-planner-solvers",
-        selectionPolicy: String = "prefer-qualified-health-replay-goals-proof-optimality-cost",
+        selectionPolicy: String = "prefer-passing-validation-replay-goals-proof-optimality-cost",
         searchPaths: [String] = [],
         candidates: [XcircuiteSymbolicPlannerInstalledSolverCandidateSpec] = [],
         promoteSelectedPlan: Bool = false,
-        requireQualifiedPromotion: Bool = true,
+        requirePassingValidationForPromotion: Bool = true,
         verifyPromotedPlan: Bool = true
     ) {
         self.schemaVersion = schemaVersion
@@ -27,7 +27,7 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneRequest: Codable, Senda
         self.searchPaths = searchPaths
         self.candidates = candidates
         self.promoteSelectedPlan = promoteSelectedPlan
-        self.requireQualifiedPromotion = requireQualifiedPromotion
+        self.requirePassingValidationForPromotion = requirePassingValidationForPromotion
         self.verifyPromotedPlan = verifyPromotedPlan
     }
 }

@@ -236,7 +236,10 @@ extension XcircuiteFlowRuntimeTests {
         }
         let runtime = try QualifiedToolFixtures.runtime(
             executors: executors,
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
+            descriptors: [QualifiedToolFixtures.descriptor(
+                SignoffToolDescriptors.nativeDRC(),
+                qualifiedAt: .corpusChecked
+            )],
             projectRoot: root
         )
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)

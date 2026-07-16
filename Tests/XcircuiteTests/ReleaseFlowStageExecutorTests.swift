@@ -120,7 +120,7 @@ struct ReleaseFlowStageExecutorTests {
             .releaseTapeout(.init(requestPath: "requests/tapeout.json")),
         ]
         let runtimeSpec = XcircuiteFlowRuntimeSpec(executors: specs)
-        try runtimeSpec.validate(requireCompleteToolEvidence: false)
+        try runtimeSpec.validate()
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

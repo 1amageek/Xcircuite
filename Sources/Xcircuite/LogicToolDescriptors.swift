@@ -44,15 +44,15 @@ public enum LogicToolDescriptors {
         )
     }
 
-    public static func qualification() -> ToolDescriptor {
+    public static func evidenceValidation() -> ToolDescriptor {
         ToolDescriptor(
-            toolID: "logic-qualification",
-            displayName: "Logic Qualification Promotion Gate",
+            toolID: "logic-evidence-validation",
+            displayName: "Logic Evidence Validation",
             kind: .reporting,
             version: "1.0.0",
             capabilities: [
                 ToolCapability(
-                    operationID: "logic-qualify",
+                    operationID: "logic-evidence-validate",
                     inputFormats: [.json],
                     outputFormats: [.json]
                 ),

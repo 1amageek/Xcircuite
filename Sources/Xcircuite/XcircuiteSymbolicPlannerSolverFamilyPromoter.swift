@@ -29,7 +29,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         let comparisonInput = try await loadComparison(request: request, projectRoot: projectRoot)
         let comparison = comparisonInput.comparison
         guard comparison.runID == request.runID else {
-            throw XcircuiteSymbolicPlannerSolverError.qualificationRunMismatch(
+            throw XcircuiteSymbolicPlannerSolverError.validationRunMismatch(
                 expected: request.runID,
                 actual: comparison.runID
             )
@@ -48,35 +48,35 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             )
         }
         let selectedCandidate = comparison.candidates[selectedIndex]
-        guard let qualificationArtifact = selectedCandidate.qualificationArtifact else {
-            throw XcircuiteSymbolicPlannerSolverError.missingSelectedSolverFamilyQualificationArtifact
+        guard let validationArtifact = selectedCandidate.validationArtifact else {
+            throw XcircuiteSymbolicPlannerSolverError.missingSelectedSolverFamilyValidationArtifact
         }
-        let qualification = try await loadQualification(
-            artifact: qualificationArtifact,
+        let validation = try await loadValidation(
+            artifact: validationArtifact,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        guard qualification.runID == request.runID else {
-            throw XcircuiteSymbolicPlannerSolverError.qualificationRunMismatch(
+        guard validation.runID == request.runID else {
+            throw XcircuiteSymbolicPlannerSolverError.validationRunMismatch(
                 expected: request.runID,
-                actual: qualification.runID
+                actual: validation.runID
             )
         }
-        if request.requireQualified, qualification.status != "qualified" {
-            throw XcircuiteSymbolicPlannerSolverError.selectedSolverFamilyQualificationNotQualified(
-                toolID: qualification.toolID,
-                status: qualification.status
+        if request.requirePassingValidation, validation.status != "passed" {
+            throw XcircuiteSymbolicPlannerSolverError.selectedSolverFamilyValidationFailed(
+                toolID: validation.toolID,
+                status: validation.status
             )
         }
-        guard let importResult = qualification.solverResult.importResult else {
+        guard let importResult = validation.solverResult.importResult else {
             throw XcircuiteSymbolicPlannerSolverError.missingSelectedSolverFamilyImportedPlan(
-                toolID: qualification.toolID
+                toolID: validation.toolID
             )
         }
 
         var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
         let promotedSolverPlanArtifact = try await promoteSolverPlanIfAvailable(
-            qualification: qualification,
+            validation: validation,
             runID: request.runID,
             projectRoot: projectRoot,
             diagnostics: &diagnostics
@@ -87,7 +87,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             projectRoot: projectRoot
         )
         let promotedPlanReplayValidationArtifact: ArtifactReference?
-        if let planReplayValidation = qualification.planReplayValidation {
+        if let planReplayValidation = validation.planReplayValidation {
             promotedPlanReplayValidationArtifact = try await artifactStore.persistSymbolicPlannerPlanReplayValidation(
                 planReplayValidation,
                 runID: request.runID,
@@ -131,9 +131,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             runID: request.runID,
             comparisonID: comparison.comparisonID,
             selectedCandidateIndex: selectedIndex,
-            selectedToolID: qualification.toolID,
+            selectedToolID: validation.toolID,
             sourceComparisonArtifact: comparisonInput.reference,
-            sourceQualificationArtifact: qualificationArtifact,
+            sourceValidationArtifact: validationArtifact,
             promotedCandidatePlanArtifact: promotedCandidatePlanArtifact,
             promotedSolverPlanArtifact: promotedSolverPlanArtifact,
             promotedPlanReplayValidationArtifact: promotedPlanReplayValidationArtifact,
@@ -193,15 +193,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         return ComparisonInput(reference: reference, comparison: comparison)
     }
 
-    private func loadQualification(
+    private func loadValidation(
         artifact: ArtifactReference,
         runID: String,
         projectRoot: URL
-    ) async throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
+    ) async throws -> XcircuiteSymbolicPlannerSolverValidationResult {
         let integrity = LocalArtifactVerifier().verify(artifact, relativeTo: projectRoot)
         guard !integrity.isVerified else {
             return try await workspaceStore.readJSON(
-                XcircuiteSymbolicPlannerSolverQualificationResult.self,
+                XcircuiteSymbolicPlannerSolverValidationResult.self,
                 from: artifact.path
             )
         }
@@ -218,7 +218,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             issue.detail ?? issue.location ?? issue.code.rawValue
         }.joined(separator: "; ")
         throw XcircuiteSymbolicPlannerSolverError.artifactIntegrityFailed(
-            field: "qualificationArtifact",
+            field: "validationArtifact",
             artifactID: artifact.id.rawValue,
             path: artifact.path,
             status: status,
@@ -227,12 +227,12 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     }
 
     private func promoteSolverPlanIfAvailable(
-        qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
+        validation: XcircuiteSymbolicPlannerSolverValidationResult,
         runID: String,
         projectRoot: URL,
         diagnostics: inout [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) async throws -> ArtifactReference? {
-        guard let solverPlanArtifact = qualification.solverResult.solverPlanArtifact else {
+        guard let solverPlanArtifact = validation.solverResult.solverPlanArtifact else {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "warning",
@@ -258,7 +258,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         }
         return try await artifactStore.persistSymbolicPlannerSolverPlan(
             solverPlanText,
-            runID: qualification.runID,
+            runID: validation.runID,
             projectRoot: projectRoot
         )
     }

@@ -8,7 +8,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRun: Codable, Sendable, H
     public var comparisonID: String
     public var selectionPolicy: String
     public var candidateCount: Int
-    public var qualifiedCandidateCount: Int
+    public var passedCandidateCount: Int
     public var failedCandidateCount: Int
     public var candidates: [XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult]
     public var comparisonArtifact: ArtifactReference
@@ -22,7 +22,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRun: Codable, Sendable, H
         comparisonID: String,
         selectionPolicy: String,
         candidateCount: Int,
-        qualifiedCandidateCount: Int,
+        passedCandidateCount: Int,
         failedCandidateCount: Int,
         candidates: [XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult],
         comparisonArtifact: ArtifactReference,
@@ -35,7 +35,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRun: Codable, Sendable, H
         self.comparisonID = comparisonID
         self.selectionPolicy = selectionPolicy
         self.candidateCount = candidateCount
-        self.qualifiedCandidateCount = qualifiedCandidateCount
+        self.passedCandidateCount = passedCandidateCount
         self.failedCandidateCount = failedCandidateCount
         self.candidates = candidates
         self.comparisonArtifact = comparisonArtifact

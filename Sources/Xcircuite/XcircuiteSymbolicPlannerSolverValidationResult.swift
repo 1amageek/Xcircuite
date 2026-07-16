@@ -1,9 +1,8 @@
 import CircuiteFoundation
 import Foundation
-import ToolQualification
 import DesignFlowKernel
 
-public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendable, Hashable {
+public struct XcircuiteSymbolicPlannerSolverValidationResult: Codable, Sendable, Hashable {
     public var schemaVersion: Int
     public var status: String
     public var runID: String
@@ -28,45 +27,22 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
     public var proofValidationArtifact: ArtifactReference?
     public var nativeCertificateArtifact: ArtifactReference?
     public var planVerificationArtifact: ArtifactReference?
-    public var qualificationArtifact: ArtifactReference?
-    public var toolHealth: ToolHealthCheckResult
+    public var validationArtifact: ArtifactReference?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
 
-    func attachingQualificationArtifact(
+    func attachingValidationArtifact(
         _ artifact: ArtifactReference
-    ) -> XcircuiteSymbolicPlannerSolverQualificationResult {
+    ) -> XcircuiteSymbolicPlannerSolverValidationResult {
         var result = self
-        result.qualificationArtifact = artifact
-        result.toolHealth.evidence = result.toolHealth.evidence.map { evidence in
-            guard evidence.evidenceID == "\(toolID)-symbolic-planner-qualification" else {
-                return evidence
-            }
-            return ToolEvidence(
-                evidenceID: evidence.evidenceID,
-                kind: evidence.kind,
-                artifact: artifact,
-                checkedAt: evidence.checkedAt
-            )
-        }
+        result.validationArtifact = artifact
         return result
     }
 
-    func detachingQualificationArtifactReferencesForPersistence()
-        -> XcircuiteSymbolicPlannerSolverQualificationResult
+    func detachingValidationArtifactReferencesForPersistence()
+        -> XcircuiteSymbolicPlannerSolverValidationResult
     {
         var result = self
-        result.qualificationArtifact = nil
-        result.toolHealth.evidence = result.toolHealth.evidence.map { evidence in
-            guard evidence.evidenceID == "\(toolID)-symbolic-planner-qualification" else {
-                return evidence
-            }
-            return ToolEvidence(
-                evidenceID: evidence.evidenceID,
-                kind: evidence.kind,
-                artifact: nil,
-                checkedAt: evidence.checkedAt
-            )
-        }
+        result.validationArtifact = nil
         return result
     }
 
@@ -95,8 +71,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
         case proofValidationArtifact
         case nativeCertificateArtifact
         case planVerificationArtifact
-        case qualificationArtifact
-        case toolHealth
+        case validationArtifact
         case diagnostics
     }
 
@@ -125,8 +100,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
         proofValidationArtifact: ArtifactReference? = nil,
         nativeCertificateArtifact: ArtifactReference? = nil,
         planVerificationArtifact: ArtifactReference?,
-        qualificationArtifact: ArtifactReference? = nil,
-        toolHealth: ToolHealthCheckResult,
+        validationArtifact: ArtifactReference? = nil,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) {
         self.schemaVersion = schemaVersion
@@ -153,8 +127,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
         self.proofValidationArtifact = proofValidationArtifact
         self.nativeCertificateArtifact = nativeCertificateArtifact
         self.planVerificationArtifact = planVerificationArtifact
-        self.qualificationArtifact = qualificationArtifact
-        self.toolHealth = toolHealth
+        self.validationArtifact = validationArtifact
         self.diagnostics = diagnostics
     }
 
@@ -165,7 +138,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
             throw DecodingError.dataCorruptedError(
                 forKey: .schemaVersion,
                 in: container,
-                debugDescription: "Unsupported symbolic planner solver qualification schema version: \(schemaVersion)."
+                debugDescription: "Unsupported symbolic planner solver validation schema version: \(schemaVersion)."
             )
         }
         self.init(
@@ -220,11 +193,10 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
                 ArtifactReference.self,
                 forKey: .planVerificationArtifact
             ),
-            qualificationArtifact: try container.decodeIfPresent(
+            validationArtifact: try container.decodeIfPresent(
                 ArtifactReference.self,
-                forKey: .qualificationArtifact
+                forKey: .validationArtifact
             ),
-            toolHealth: try container.decode(ToolHealthCheckResult.self, forKey: .toolHealth),
             diagnostics: try container.decode(
                 [XcircuiteSymbolicPlannerSolverDiagnostic].self,
                 forKey: .diagnostics

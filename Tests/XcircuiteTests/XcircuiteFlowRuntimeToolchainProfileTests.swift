@@ -461,7 +461,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtimeURL = try writeRuntimeSpec(
+        let runtimeURL = try await writeRuntimeSpec(
             runtimeSpecWithProfile(
                 XcircuiteFlowToolchainProfile(
                     profileID: "local-signoff",
@@ -509,7 +509,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtimeURL = try writeRuntimeSpec(
+        let runtimeURL = try await writeRuntimeSpec(
             runtimeSpecWithProfile(
                 XcircuiteFlowToolchainProfile(
                     profileID: "local-signoff",
@@ -557,7 +557,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtimeURL = try writeRuntimeSpec(
+        let runtimeURL = try await writeRuntimeSpec(
             runtimeSpecWithProfile(
                 XcircuiteFlowToolchainProfile(
                     profileID: "local-signoff",
@@ -595,7 +595,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func inspectToolchainProfileCLIReportsMissingOptionalProfile() async throws {
         let root = try makeTemporaryRoot("runtime-cli-inspect-profile-not-present")
         defer { removeTemporaryRoot(root) }
-        let runtimeURL = try writeRuntimeSpec(
+        let runtimeURL = try await writeRuntimeSpec(
             XcircuiteFlowRuntimeSpec(
                 executors: [
                     .coreSpiceSimulation(
@@ -734,7 +734,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtimeURL = try writeRuntimeSpec(
+        let runtimeURL = try await writeRuntimeSpec(
             runtimeSpecWithProfile(
                 XcircuiteFlowToolchainProfile(
                     profileID: "local-signoff",

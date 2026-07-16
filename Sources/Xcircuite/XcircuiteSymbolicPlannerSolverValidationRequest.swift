@@ -1,4 +1,4 @@
-public struct XcircuiteSymbolicPlannerSolverQualificationRequest: Codable, Sendable, Hashable {
+public struct XcircuiteSymbolicPlannerSolverValidationRequest: Codable, Sendable, Hashable {
     public var runID: String
     public var toolID: String
     public var executablePath: String
@@ -73,7 +73,7 @@ public struct XcircuiteSymbolicPlannerSolverQualificationRequest: Codable, Senda
         maximumSolverCost: Double? = nil,
         requireNativeCertificate: Bool = false,
         requireProofValidation: Bool = false,
-        policyID: String = "symbolic-planner-solver-qualification-v1",
+        policyID: String = "symbolic-planner-solver-validation-v1",
         domainArtifactID: String? = nil,
         domainPath: String? = nil,
         problemArtifactID: String? = nil,

@@ -7,13 +7,13 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparison: Codable, Sendable,
     public var runID: String
     public var comparisonID: String
     public var selectionPolicy: String
-    public var requestedQualificationArtifactIDs: [String]
-    public var requestedQualificationPaths: [String]
+    public var requestedValidationArtifactIDs: [String]
+    public var requestedValidationPaths: [String]
     public var selectedCandidateIndex: Int
     public var selectedToolID: String
-    public var selectedQualificationArtifact: ArtifactReference?
+    public var selectedValidationArtifact: ArtifactReference?
     public var candidateCount: Int
-    public var qualifiedCandidateCount: Int
+    public var passedCandidateCount: Int
     public var failedCandidateCount: Int
     public var candidates: [XcircuiteSymbolicPlannerSolverFamilyCandidateResult]
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
@@ -24,13 +24,13 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparison: Codable, Sendable,
         runID: String,
         comparisonID: String,
         selectionPolicy: String,
-        requestedQualificationArtifactIDs: [String],
-        requestedQualificationPaths: [String],
+        requestedValidationArtifactIDs: [String],
+        requestedValidationPaths: [String],
         selectedCandidateIndex: Int,
         selectedToolID: String,
-        selectedQualificationArtifact: ArtifactReference?,
+        selectedValidationArtifact: ArtifactReference?,
         candidateCount: Int,
-        qualifiedCandidateCount: Int,
+        passedCandidateCount: Int,
         failedCandidateCount: Int,
         candidates: [XcircuiteSymbolicPlannerSolverFamilyCandidateResult],
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
@@ -40,13 +40,13 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparison: Codable, Sendable,
         self.runID = runID
         self.comparisonID = comparisonID
         self.selectionPolicy = selectionPolicy
-        self.requestedQualificationArtifactIDs = requestedQualificationArtifactIDs
-        self.requestedQualificationPaths = requestedQualificationPaths
+        self.requestedValidationArtifactIDs = requestedValidationArtifactIDs
+        self.requestedValidationPaths = requestedValidationPaths
         self.selectedCandidateIndex = selectedCandidateIndex
         self.selectedToolID = selectedToolID
-        self.selectedQualificationArtifact = selectedQualificationArtifact
+        self.selectedValidationArtifact = selectedValidationArtifact
         self.candidateCount = candidateCount
-        self.qualifiedCandidateCount = qualifiedCandidateCount
+        self.passedCandidateCount = passedCandidateCount
         self.failedCandidateCount = failedCandidateCount
         self.candidates = candidates
         self.diagnostics = diagnostics

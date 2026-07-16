@@ -8,8 +8,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Send
     public var selectionScore: Int
     public var scoreComponents: [XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent]
     public var toolID: String
-    public var qualificationStatus: String
-    public var toolHealthStatus: String
+    public var validationStatus: String
     public var solverRunStatus: String
     public var expectedActionIDs: [String]
     public var observedActionIDs: [String]
@@ -25,7 +24,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Send
     public var solverExitCode: Int32?
     public var didTimeout: Bool
     public var didCancel: Bool
-    public var qualificationArtifact: ArtifactReference?
+    public var validationArtifact: ArtifactReference?
     public var nativeCertificateArtifact: ArtifactReference?
     public var planVerificationArtifact: ArtifactReference?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
@@ -37,8 +36,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Send
         selectionScore: Int,
         scoreComponents: [XcircuiteSymbolicPlannerSolverFamilySelectionScoreComponent],
         toolID: String,
-        qualificationStatus: String,
-        toolHealthStatus: String,
+        validationStatus: String,
         solverRunStatus: String,
         expectedActionIDs: [String],
         observedActionIDs: [String],
@@ -54,7 +52,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Send
         solverExitCode: Int32?,
         didTimeout: Bool,
         didCancel: Bool,
-        qualificationArtifact: ArtifactReference?,
+        validationArtifact: ArtifactReference?,
         nativeCertificateArtifact: ArtifactReference? = nil,
         planVerificationArtifact: ArtifactReference?,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
@@ -65,8 +63,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Send
         self.selectionScore = selectionScore
         self.scoreComponents = scoreComponents
         self.toolID = toolID
-        self.qualificationStatus = qualificationStatus
-        self.toolHealthStatus = toolHealthStatus
+        self.validationStatus = validationStatus
         self.solverRunStatus = solverRunStatus
         self.expectedActionIDs = expectedActionIDs
         self.observedActionIDs = observedActionIDs
@@ -82,7 +79,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyCandidateResult: Codable, Send
         self.solverExitCode = solverExitCode
         self.didTimeout = didTimeout
         self.didCancel = didCancel
-        self.qualificationArtifact = qualificationArtifact
+        self.validationArtifact = validationArtifact
         self.nativeCertificateArtifact = nativeCertificateArtifact
         self.planVerificationArtifact = planVerificationArtifact
         self.diagnostics = diagnostics

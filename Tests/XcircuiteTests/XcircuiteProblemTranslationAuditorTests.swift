@@ -79,7 +79,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         #expect(result.audit.nextActions == ["validate-planning-problem"])
         #expect(result.auditArtifact.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID)
         #expect(result.auditArtifact.path == ".xcircuite/runs/run-audit/planning/problem-translation-audit.json")
-        #expect(!result.auditArtifact.sha256.isEmpty)
+        #expect(!result.auditArtifact.digest.hexadecimalValue.isEmpty)
         #expect(result.auditArtifact.byteCount > 0)
 
         let persisted = try await store.readJSON(

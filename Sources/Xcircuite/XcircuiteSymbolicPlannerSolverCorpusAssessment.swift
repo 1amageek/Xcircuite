@@ -1,14 +1,14 @@
-import ToolQualification
+import CircuiteFoundation
 import DesignFlowKernel
 
-public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, Sendable, Hashable {
+public struct XcircuiteSymbolicPlannerSolverCorpusAssessment: Codable, Sendable, Hashable {
     public var schemaVersion: Int
     public var suiteID: String
     public var status: String
     public var toolID: String
     public var policyID: String
     public var caseResults: [XcircuiteSymbolicPlannerSolverCorpusCaseResult]
-    public var qualifiedCaseCount: Int
+    public var passedCaseCount: Int
     public var failedCaseCount: Int
     public var requiredCoverageTags: [String]
     public var coveredCoverageTags: [String]
@@ -17,7 +17,6 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
     public var failureCodes: [String]
     public var suiteSpecArtifact: ArtifactReference?
     public var corpusArtifact: ArtifactReference?
-    public var toolHealth: ToolHealthCheckResult
 
     public init(
         schemaVersion: Int = 1,
@@ -26,7 +25,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
         toolID: String,
         policyID: String,
         caseResults: [XcircuiteSymbolicPlannerSolverCorpusCaseResult],
-        qualifiedCaseCount: Int,
+        passedCaseCount: Int,
         failedCaseCount: Int,
         requiredCoverageTags: [String] = [],
         coveredCoverageTags: [String] = [],
@@ -34,8 +33,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
         coverageTagCounts: [String: Int] = [:],
         failureCodes: [String],
         suiteSpecArtifact: ArtifactReference? = nil,
-        corpusArtifact: ArtifactReference? = nil,
-        toolHealth: ToolHealthCheckResult
+        corpusArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suiteID = suiteID
@@ -43,7 +41,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
         self.toolID = toolID
         self.policyID = policyID
         self.caseResults = caseResults
-        self.qualifiedCaseCount = qualifiedCaseCount
+        self.passedCaseCount = passedCaseCount
         self.failedCaseCount = failedCaseCount
         self.requiredCoverageTags = requiredCoverageTags
         self.coveredCoverageTags = coveredCoverageTags
@@ -52,7 +50,6 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
         self.failureCodes = failureCodes
         self.suiteSpecArtifact = suiteSpecArtifact
         self.corpusArtifact = corpusArtifact
-        self.toolHealth = toolHealth
     }
 }
 import CircuiteFoundation

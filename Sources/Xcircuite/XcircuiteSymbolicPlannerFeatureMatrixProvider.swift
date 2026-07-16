@@ -45,25 +45,25 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.expected-action-coverage",
-                category: "qualification",
+                category: "validation",
                 capability: "Compare expected candidate action IDs against actions observed from imported solver output.",
                 maturity: "implemented",
                 requiredForCorpusTrust: true,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverQualifier",
-                    "planning/symbolic-planner/solver-qualification.json",
+                    "XcircuiteSymbolicPlannerSolverValidator",
+                    "planning/symbolic-planner/solver-validation.json",
                 ]
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.plan-replay-validation",
-                category: "qualification",
+                category: "validation",
                 capability: "Replay imported PDDL solver plans over initial atoms, action preconditions, effects, goals, and action costs before accepting solver output.",
                 maturity: "implemented",
                 requiredForCorpusTrust: true,
                 evidence: [
                     "XcircuiteSymbolicPlannerPlanReplayValidator",
                     "planning/symbolic-planner/plan-replay-validation.json",
-                    "planning/symbolic-planner/solver-qualification.json",
+                    "planning/symbolic-planner/solver-validation.json",
                 ],
                 remainingWork: [
                     "Extend replay beyond the current additive STRIPS subset when negative effects or numeric fluents become part of exported domains.",
@@ -71,7 +71,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.goal-coverage",
-                category: "qualification",
+                category: "validation",
                 capability: "Verify that imported solver plans cover explicit objective goal atoms through the normal candidate-plan verifier.",
                 maturity: "implemented",
                 requiredForCorpusTrust: true,
@@ -82,30 +82,30 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.multi-case",
-                category: "qualification",
-                capability: "Aggregate multiple prepared run cases into one corpus result with pass rate, per-case refs, and ToolHealth evidence.",
+                category: "validation",
+                capability: "Aggregate multiple prepared run cases into a domain assessment with pass rate and per-case artifact references.",
                 maturity: "implemented",
                 requiredForCorpusTrust: true,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverCorpusQualifier",
-                    "qualification/symbolic-planner/<suite-id>/solver-qualification-corpus.json",
+                    "XcircuiteSymbolicPlannerSolverCorpusAssessor",
+                    "assessments/symbolic-planner/<suite-id>/solver-corpus-assessment.json",
                 ]
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.suite-spec-provenance",
-                category: "qualification",
+                category: "validation",
                 capability: "Persist reproducible corpus suite input including solver, timeout, policy, required coverage tags, and case definitions.",
                 maturity: "implemented",
                 requiredForCorpusTrust: true,
                 evidence: [
                     "XcircuiteSymbolicPlannerSolverCorpusSuiteSpec",
-                    "qualification/symbolic-planner/<suite-id>/solver-qualification-corpus-suite.json",
+                    "assessments/symbolic-planner/<suite-id>/solver-corpus-assessment-suite.json",
                 ]
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.required-coverage-gate",
-                category: "qualification",
-                capability: "Fail a corpus when required coverage tags are not covered by qualified cases.",
+                category: "validation",
+                capability: "Fail a corpus when required coverage tags are not covered by validated cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: true,
                 evidence: [
@@ -120,7 +120,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-repair-domain",
                 ],
                 remainingWork: [
@@ -135,7 +135,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-overlap-repair-domain",
                 ],
                 remainingWork: [
@@ -149,7 +149,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-density-repair-domain",
                 ],
                 remainingWork: [
@@ -163,7 +163,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-antenna-repair-domain",
                 ],
                 remainingWork: [
@@ -177,7 +177,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-routing-repair-domain",
                 ],
                 remainingWork: [
@@ -191,7 +191,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-notch-repair-domain",
                 ],
                 remainingWork: [
@@ -205,7 +205,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-grid-repair-domain",
                 ],
                 remainingWork: [
@@ -219,7 +219,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerSolverRunnerTests/qualifySymbolicPlannerSolverCorpusCoversDRCRepairDomain",
+                    "XcircuiteSymbolicPlannerSolverRunnerTests/assessSymbolicPlannerSolverCorpusCoversDRCRepairDomain",
                     "symbolic.drc-cut-repair-domain",
                 ],
                 remainingWork: [
@@ -233,7 +233,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-repair-domain",
                 ],
                 remainingWork: [
@@ -247,7 +247,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-device-repair-domain",
                 ],
                 remainingWork: [
@@ -261,7 +261,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-terminal-equivalence-repair-domain",
                 ],
                 remainingWork: [
@@ -275,7 +275,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-hierarchy-repair-domain",
                 ],
                 remainingWork: [
@@ -289,7 +289,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-global-net-repair-domain",
                 ],
                 remainingWork: [
@@ -303,7 +303,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-policy-mutation-repair-domain",
                 ],
                 remainingWork: [
@@ -317,7 +317,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-black-box-hierarchy-repair-domain",
                 ],
                 remainingWork: [
@@ -331,7 +331,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-arrayed-device-repair-domain",
                 ],
                 remainingWork: [
@@ -345,7 +345,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain",
+                    "XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversLVSRepairDomain",
                     "symbolic.lvs-parasitic-device-repair-domain",
                 ],
                 remainingWork: [
@@ -359,7 +359,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversPEXRepairDomain",
+                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversPEXRepairDomain",
                     "symbolic.pex-repair-domain",
                 ],
                 remainingWork: [
@@ -373,7 +373,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversPEXRepairDomain",
+                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversPEXRepairDomain",
                     "symbolic.pex-multi-corner-repair-domain",
                 ],
                 remainingWork: [
@@ -387,7 +387,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversPEXRepairDomain",
+                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversPEXRepairDomain",
                     "symbolic.pex-rc-network-repair-domain",
                 ],
                 remainingWork: [
@@ -401,7 +401,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
-                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/qualifySymbolicPlannerSolverCorpusCoversPEXRepairDomain",
+                    "XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests/assessSymbolicPlannerSolverCorpusCoversPEXRepairDomain",
                     "symbolic.pex-post-layout-simulation-repair-domain",
                 ],
                 remainingWork: [
@@ -416,8 +416,8 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 requiredForCorpusTrust: false,
                 evidence: [
                     "XcircuiteSymbolicPlannerSolverMetadataParser",
-                    "XcircuiteSymbolicPlannerSolverQualifier",
-                    "planning/symbolic-planner/solver-qualification.json",
+                    "XcircuiteSymbolicPlannerSolverValidator",
+                    "planning/symbolic-planner/solver-validation.json",
                 ],
                 remainingWork: [
                     "Broaden parser patterns for additional installed planner families.",
@@ -426,14 +426,14 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             ),
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.independent-plan-cost",
-                category: "qualification",
+                category: "validation",
                 capability: "Evaluate imported solver plan length and PDDL action cost inside LSI and compare solver cost claims against that independent evaluation.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
                     "XcircuiteSymbolicPlannerPlanCostEvaluator",
-                    "XcircuiteSymbolicPlannerSolverQualifier",
-                    "planning/symbolic-planner/solver-qualification.json",
+                    "XcircuiteSymbolicPlannerSolverValidator",
+                    "planning/symbolic-planner/solver-validation.json",
                 ],
                 remainingWork: [
                     "Calibrate domain-specific proof requirements for solver families that can emit machine-checkable certificates.",
@@ -442,14 +442,14 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.solver-proof-validation",
                 category: "solver-integration",
-                capability: "Run an external proof checker against solver proof or certificate artifacts and persist typed proof-validation evidence in solver qualification.",
+                capability: "Run an external proof checker against solver proof or certificate artifacts and persist typed proof-validation evidence in solver validation.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
                     "XcircuiteSymbolicPlannerProofValidation",
-                    "xcircuite-flow qualify-symbolic-planner-solver --require-proof-validation",
+                    "xcircuite-flow validate-symbolic-planner-solver --require-proof-validation",
                     "planning/symbolic-planner/proof-validation.json",
-                    "planning/symbolic-planner/solver-qualification.json",
+                    "planning/symbolic-planner/solver-validation.json",
                 ],
                 remainingWork: [
                     "Add real planner-family proof checker fixtures beyond the generic external checker adapter.",
@@ -459,7 +459,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.solver-native-certificate-parsing",
                 category: "solver-integration",
-                capability: "Parse planner-native JSON/text certificate claims, including Fast Downward, Metric-FF, OPTIC, and Madagascar text fixtures, persist structured certificate evidence, and compare certificate cost, length, optimality, proof, action, and goal-coverage claims against independent qualification results.",
+                capability: "Parse planner-native JSON/text certificate claims, including Fast Downward, Metric-FF, OPTIC, and Madagascar text fixtures, persist structured certificate evidence, and compare certificate cost, length, optimality, proof, action, and goal-coverage claims against independent validation results.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -467,12 +467,12 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                     "XcircuiteSymbolicPlannerSolverCertificateParseResult",
                     "XcircuiteSymbolicPlannerSolverRunnerTests/solverCertificateParserRecognizesPlannerFamilyTextFixtures",
                     "XcircuiteSymbolicPlannerSolverRunnerTests/runSymbolicPlannerSolverFamilyBatchPersistsPlannerFamilyCertificateFixtures",
-                    "xcircuite-flow qualify-symbolic-planner-solver --require-native-certificate",
+                    "xcircuite-flow validate-symbolic-planner-solver --require-native-certificate",
                     "planning/symbolic-planner/solver-certificate.json",
-                    "planning/symbolic-planner/solver-qualification.json",
+                    "planning/symbolic-planner/solver-validation.json",
                 ],
                 remainingWork: [
-                    "Connect Fast Downward, Metric-FF, Madagascar, and OPTIC fixtures to installed local solver binary qualification lanes when those binaries are present.",
+                    "Connect Fast Downward, Metric-FF, Madagascar, and OPTIC fixtures to installed local solver binary validation lanes when those binaries are present.",
                     "Extend parser contracts for solver-specific certificate sections that go beyond the current JSON/text claim schema.",
                 ]
             ),

@@ -5,8 +5,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult: Codable,
     public var candidateIndex: Int
     public var candidateID: String
     public var toolID: String
-    public var qualificationStatus: String
-    public var qualificationArtifact: ArtifactReference
+    public var validationStatus: String
+    public var validationArtifact: ArtifactReference
     public var solverPlanArtifact: ArtifactReference?
     public var nativeCertificateArtifact: ArtifactReference?
     public var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
@@ -15,8 +15,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult: Codable,
         candidateIndex: Int,
         candidateID: String,
         toolID: String,
-        qualificationStatus: String,
-        qualificationArtifact: ArtifactReference,
+        validationStatus: String,
+        validationArtifact: ArtifactReference,
         solverPlanArtifact: ArtifactReference?,
         nativeCertificateArtifact: ArtifactReference? = nil,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
@@ -24,8 +24,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchCandidateResult: Codable,
         self.candidateIndex = candidateIndex
         self.candidateID = candidateID
         self.toolID = toolID
-        self.qualificationStatus = qualificationStatus
-        self.qualificationArtifact = qualificationArtifact
+        self.validationStatus = validationStatus
+        self.validationArtifact = validationArtifact
         self.solverPlanArtifact = solverPlanArtifact
         self.nativeCertificateArtifact = nativeCertificateArtifact
         self.diagnostics = diagnostics

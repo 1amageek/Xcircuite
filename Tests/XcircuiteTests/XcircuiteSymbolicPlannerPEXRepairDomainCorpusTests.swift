@@ -6,7 +6,7 @@ import Xcircuite
 
 @Suite("Xcircuite symbolic planner PEX repair-domain corpus")
 struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
-    @Test func qualifySymbolicPlannerSolverCorpusCoversPEXRepairDomain() async throws {
+    @Test func assessSymbolicPlannerSolverCorpusCoversPEXRepairDomain() async throws {
         let root = try makeTemporaryRoot("symbolic-planner-pex-repair-domain-corpus")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -38,10 +38,10 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
         let solverURL = root.appending(path: "pex-repair-domain-symbolic-planner.sh")
         try writePEXRepairMockPlanner(to: solverURL)
 
-        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+        let result = try await XcircuiteSymbolicPlannerSolverCorpusAssessor(
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
+        ).assess(
+            request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
                 suiteID: "pex-repair-domain-corpus",
                 toolID: "mock-pex-repair-planner",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -115,8 +115,8 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
             projectRoot: root
         )
 
-        #expect(result.status == "qualified")
-        #expect(result.qualifiedCaseCount == 6)
+        #expect(result.status == "passed")
+        #expect(result.passedCaseCount == 6)
         #expect(result.failedCaseCount == 0)
         #expect(result.missingRequiredCoverageTags == [])
         #expect(result.coverageTagCounts["symbolic.pex-repair-domain"] == 6)
@@ -125,11 +125,8 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
         #expect(result.coverageTagCounts["symbolic.pex-post-layout-simulation-repair-domain"] == 1)
         #expect(result.caseResults.map(\.observedActionIDs) == fixtures.map { [$0.actionID] })
         #expect(result.caseResults.allSatisfy { $0.goalCoverageStatus == "covered" })
-        #expect(result.toolHealth.status == .passed)
-        #expect(result.toolHealth.evidence.first?.kind == .corpus)
-        #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
-        #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
-        #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
+        #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentSuiteSpecArtifactID)
+        #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCorpusAssessmentArtifactID)
     }
 
     private func prepareRun(

@@ -2,7 +2,6 @@ import Foundation
 import CircuiteFoundation
 import DesignFlowKernel
 import Testing
-import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
 
@@ -11,7 +10,7 @@ import Darwin
 #endif
 
 extension XcircuiteSymbolicPlannerSolverRunnerTests {
-@Test func qualifySymbolicPlannerSolverRejectsInvalidStandaloneArtifactIDReference() async throws {
+@Test func validateSymbolicPlannerSolverRejectsInvalidStandaloneArtifactIDReference() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-invalid-artifact-id")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -26,11 +25,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\n")
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+        ).validate(
+            request: XcircuiteSymbolicPlannerSolverValidationRequest(
                 runID: "run-pddl",
                 toolID: "mock-invalid-artifact-id-planner",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -38,17 +37,17 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             ),
             projectRoot: root
         )
-        Issue.record("Expected invalid solver qualification reference.")
+        Issue.record("Expected invalid solver validation reference.")
     } catch let error as XcircuiteSymbolicPlannerSolverError {
-        #expect(error == .invalidSolverQualificationReference(
+        #expect(error == .invalidSolverValidationReference(
             field: "domainArtifactID",
             value: "../domain"
         ))
     }
 }
 
-@Test func qualifySymbolicPlannerSolverCLIProducesPassingToolHealth() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-qualification")
+@Test func validateSymbolicPlannerSolverCLIProducesDomainValidationArtifact() async throws {
+    let root = try makeTemporaryRoot("symbolic-planner-solver-validation")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
     let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
@@ -65,18 +64,18 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let solverURL = root.appending(path: "qualified-symbolic-planner.sh")
+    let solverURL = root.appending(path: "validated-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
 
     let json = try await XcircuiteFlowCLICommand.run(
         arguments: [
-            "qualify-symbolic-planner-solver",
+            "validate-symbolic-planner-solver",
             "--project-root",
             root.path(percentEncoded: false),
             "--run-id",
             "run-pddl",
             "--tool-id",
-            "mock-qualified-planner",
+            "mock-validated-planner",
             "--executable-path",
             solverURL.path(percentEncoded: false),
             "--expected-action-id",
@@ -86,37 +85,31 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let data = try #require(json.data(using: .utf8))
     let result = try JSONDecoder().decode(
-        XcircuiteSymbolicPlannerSolverQualificationResult.self,
+        XcircuiteSymbolicPlannerSolverValidationResult.self,
         from: data
     )
 
-    #expect(result.status == "qualified")
-    #expect(result.toolHealth.status == .passed)
+    #expect(result.status == "passed")
     #expect(result.observedActionIDs == ["fix-m1-width"])
     #expect(result.goalCoverageStatus == "covered")
     #expect(result.missingGoalAtoms == [])
-    #expect(result.qualificationArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationArtifactID)
-    let evidence = try #require(result.toolHealth.evidence.first)
-    #expect(evidence.kind == .corpus)
-    #expect(evidence.hasVerifiableArtifactBinding)
-    #expect(evidence.artifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationArtifactID)
+    #expect(result.validationArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverValidationArtifactID)
 
     let manifest = try await workspaceStore.loadRunLedger(runID: "run-pddl").runManifest
-    let manifestQualificationArtifact = try #require(manifest.artifacts.first {
-        $0.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationArtifactID
+    let manifestValidationArtifact = try #require(manifest.artifacts.first {
+        $0.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverValidationArtifactID
     })
-    #expect(manifestQualificationArtifact.sha256.utf8.count == 64)
-    #expect(manifestQualificationArtifact.byteCount > 0)
+    #expect(manifestValidationArtifact.digest.hexadecimalValue.utf8.count == 64)
+    #expect(manifestValidationArtifact.byteCount > 0)
 
     let persisted = try await workspaceStore.readJSON(
-        XcircuiteSymbolicPlannerSolverQualificationResult.self,
-        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-qualification.json"
+        XcircuiteSymbolicPlannerSolverValidationResult.self,
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-validation.json"
     )
-    #expect(persisted.qualificationArtifact == nil)
-    #expect(persisted.toolHealth.evidence.first?.artifact == nil)
+    #expect(persisted.validationArtifact == nil)
 }
 
-@Test func qualifySymbolicPlannerSolverEnforcesOptimalityAndCostPolicy() async throws {
+@Test func validateSymbolicPlannerSolverEnforcesOptimalityAndCostPolicy() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-optimality-policy")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -142,7 +135,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
     let json = try await XcircuiteFlowCLICommand.run(
         arguments: [
-            "qualify-symbolic-planner-solver",
+            "validate-symbolic-planner-solver",
             "--project-root",
             root.path(percentEncoded: false),
             "--run-id",
@@ -161,11 +154,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let data = try #require(json.data(using: .utf8))
     let result = try JSONDecoder().decode(
-        XcircuiteSymbolicPlannerSolverQualificationResult.self,
+        XcircuiteSymbolicPlannerSolverValidationResult.self,
         from: data
     )
 
-    #expect(result.status == "qualified")
+    #expect(result.status == "passed")
     #expect(result.requireOptimality == true)
     #expect(result.maximumSolverCost == 1)
     #expect(result.solverMetadata?.optimalityStatus == "optimal")
@@ -178,15 +171,13 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.planReplayValidation?.status == "validated")
     #expect(result.planReplayValidation?.evaluatedCost == 1)
     #expect(result.planReplayValidationArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerPlanReplayValidationArtifactID)
-    let evidence = try #require(result.toolHealth.evidence.first)
-    #expect(evidence.hasVerifiableArtifactBinding)
     #expect(result.planReplayValidation?.steps.count == 1)
     #expect(result.planReplayValidation?.diagnostics.isEmpty == true)
     #expect(result.diagnostics.isEmpty)
 
     let persisted = try await workspaceStore.readJSON(
-        XcircuiteSymbolicPlannerSolverQualificationResult.self,
-        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-qualification.json"
+        XcircuiteSymbolicPlannerSolverValidationResult.self,
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-validation.json"
     )
     #expect(persisted.solverMetadata?.optimalityStatus == "optimal")
     #expect(persisted.solverMetadata?.planCost == 1)
@@ -201,7 +192,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(persistedReplay.steps.map(\.actionID) == ["fix-m1-width"])
 }
 
-@Test func qualifySymbolicPlannerSolverParsesNativeCertificateClaims() async throws {
+@Test func validateSymbolicPlannerSolverParsesNativeCertificateClaims() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-native-certificate")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -247,7 +238,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
     let json = try await XcircuiteFlowCLICommand.run(
         arguments: [
-            "qualify-symbolic-planner-solver",
+            "validate-symbolic-planner-solver",
             "--project-root",
             root.path(percentEncoded: false),
             "--run-id",
@@ -269,11 +260,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     let data = try #require(json.data(using: .utf8))
     let result = try JSONDecoder().decode(
-        XcircuiteSymbolicPlannerSolverQualificationResult.self,
+        XcircuiteSymbolicPlannerSolverValidationResult.self,
         from: data
     )
 
-    #expect(result.status == "qualified")
+    #expect(result.status == "passed")
     #expect(result.requireNativeCertificate == true)
     #expect(result.nativeCertificate?.status == "parsed")
     #expect(result.nativeCertificate?.detectedFormat == "generic-json")
@@ -281,8 +272,6 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.nativeCertificate?.certificate?.proofStatus == "validated")
     #expect(result.nativeCertificate?.certificate?.planCost == 1)
     #expect(result.nativeCertificateArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCertificateArtifactID)
-    let evidence = try #require(result.toolHealth.evidence.first)
-    #expect(evidence.hasVerifiableArtifactBinding)
     #expect(result.nativeCertificate?.certificate?.claims.count == 7)
     #expect(result.diagnostics.isEmpty)
 
@@ -302,8 +291,8 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             "run-pddl",
             "--comparison-id",
             "native-certificate-comparison",
-            "--qualification-artifact-id",
-            XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationArtifactID,
+            "--validation-artifact-id",
+            XcircuitePlanningArtifactStore.symbolicPlannerSolverValidationArtifactID,
             "--pretty",
         ]
     )
@@ -320,7 +309,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     })
 }
 
-@Test func qualifySymbolicPlannerSolverFailsWhenNativeCertificateCostDiffers() async throws {
+@Test func validateSymbolicPlannerSolverFailsWhenNativeCertificateCostDiffers() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-native-certificate-cost-fail")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -362,11 +351,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         to: certificatePath
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+    let result = try await XcircuiteSymbolicPlannerSolverValidator(
         workspaceStore: workspaceStore,
         artifactStore: artifactStore
-    ).qualify(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+    ).validate(
+        request: XcircuiteSymbolicPlannerSolverValidationRequest(
             runID: "run-pddl",
             toolID: "mock-native-certificate-cost-fail-planner",
             executablePath: solverURL.path(percentEncoded: false),
@@ -383,10 +372,9 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.nativeCertificate?.status == "parsed")
     #expect(result.nativeCertificateArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverCertificateArtifactID)
     #expect(result.diagnostics.contains { $0.code == "native-certificate-cost-mismatch" })
-    #expect(result.toolHealth.status == .failed)
 }
 
-@Test func qualifySymbolicPlannerSolverUsesStdoutAsNativeCertificateWhenPathIsMissing() async throws {
+@Test func validateSymbolicPlannerSolverUsesStdoutAsNativeCertificateWhenPathIsMissing() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-stdout-certificate")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -419,11 +407,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         """
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+    let result = try await XcircuiteSymbolicPlannerSolverValidator(
         workspaceStore: workspaceStore,
         artifactStore: artifactStore
-    ).qualify(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+    ).validate(
+        request: XcircuiteSymbolicPlannerSolverValidationRequest(
             runID: "run-pddl",
             toolID: "fast-downward-stdout-fixture",
             executablePath: solverURL.path(percentEncoded: false),
@@ -435,7 +423,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         projectRoot: root
     )
 
-    #expect(result.status == "qualified")
+    #expect(result.status == "passed")
     #expect(result.nativeCertificate?.sourceArtifact.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverStdoutArtifactID)
     #expect(result.nativeCertificate?.certificate?.solverFamily == "fast-downward")
     #expect(result.nativeCertificate?.certificate?.optimalityStatus == "optimal")
@@ -443,7 +431,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.nativeCertificate?.certificate?.planLength == 1)
 }
 
-@Test func qualifySymbolicPlannerSolverRejectsAmbiguousCanonicalManifest() async throws {
+@Test func validateSymbolicPlannerSolverRejectsAmbiguousCanonicalManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-duplicate-certificate-artifact")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -498,11 +486,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+        ).validate(
+            request: XcircuiteSymbolicPlannerSolverValidationRequest(
                 runID: "run-pddl",
                 toolID: "mock-duplicate-certificate-planner",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -523,7 +511,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     }
 }
 
-@Test func qualifySymbolicPlannerSolverRejectsTamperedPDDLExportArtifact() async throws {
+@Test func validateSymbolicPlannerSolverRejectsTamperedPDDLExportArtifact() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-tampered-pddl-export")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -550,11 +538,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+        ).validate(
+            request: XcircuiteSymbolicPlannerSolverValidationRequest(
                 runID: "run-pddl",
                 toolID: "mock-tampered-pddl-export-planner",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -574,7 +562,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     }
 }
 
-@Test func qualifySymbolicPlannerSolverRejectsTamperedProofArtifact() async throws {
+@Test func validateSymbolicPlannerSolverRejectsTamperedProofArtifact() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-tampered-proof")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -618,11 +606,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+        ).validate(
+            request: XcircuiteSymbolicPlannerSolverValidationRequest(
                 runID: "run-pddl",
                 toolID: "mock-tampered-proof-planner",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -644,7 +632,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     }
 }
 
-@Test func qualifySymbolicPlannerSolverRegistersExplicitProofPathInRunManifest() async throws {
+@Test func validateSymbolicPlannerSolverRegistersExplicitProofPathInRunManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-proof-path-registration")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -669,11 +657,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
     try await workspaceStore.writeWorkspaceText("valid-proof\n", to: proofPath)
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+    let result = try await XcircuiteSymbolicPlannerSolverValidator(
         workspaceStore: workspaceStore,
         artifactStore: artifactStore
-    ).qualify(
-        request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+    ).validate(
+        request: XcircuiteSymbolicPlannerSolverValidationRequest(
             runID: "run-pddl",
             toolID: "mock-registered-proof-planner",
             executablePath: solverURL.path(percentEncoded: false),
@@ -698,7 +686,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(persistedValidation.proofArtifact == proofArtifact)
 }
 
-@Test func qualifySymbolicPlannerSolverRejectsExplicitProofPathThatConflictsWithRunManifest() async throws {
+@Test func validateSymbolicPlannerSolverRejectsExplicitProofPathThatConflictsWithRunManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-conflicting-proof-path")
     defer { removeTemporaryRoot(root) }
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -739,11 +727,11 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try await workspaceStore.writeWorkspaceText("valid-proof\n", to: explicitProofPath)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverQualifier(
+        _ = try await XcircuiteSymbolicPlannerSolverValidator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
-        ).qualify(
-            request: XcircuiteSymbolicPlannerSolverQualificationRequest(
+        ).validate(
+            request: XcircuiteSymbolicPlannerSolverValidationRequest(
                 runID: "run-pddl",
                 toolID: "mock-conflicting-proof-planner",
                 executablePath: solverURL.path(percentEncoded: false),
