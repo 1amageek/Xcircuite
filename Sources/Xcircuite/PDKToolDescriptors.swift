@@ -64,16 +64,6 @@ public enum PDKToolDescriptors {
         )
     }
 
-    public static func qualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
-        descriptor(
-            toolID: "pdk-qualification",
-            displayName: "PDK local qualification",
-            operationID: "pdk-qualify",
-            inputFormats: [.json],
-            level: level
-        )
-    }
-
     private static func descriptor(
         toolID: String,
         displayName: String,

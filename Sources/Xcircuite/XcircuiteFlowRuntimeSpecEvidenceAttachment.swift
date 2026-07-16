@@ -74,8 +74,6 @@ public extension XcircuiteFlowStageExecutorSpec {
             spec.stageID
         case .pdkOracle(let spec):
             spec.stageID
-        case .pdkQualification(let spec):
-            spec.stageID
         case .releaseAuthorization(let spec):
             spec.stageID
         case .releaseSignoff(let spec):
@@ -152,9 +150,6 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .pdkOracle(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .pdkOracle(spec)
-        case .pdkQualification(var spec):
-            spec.tool = spec.tool.attachingEvidence(evidence)
-            return .pdkQualification(spec)
         case .releaseAuthorization(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .releaseAuthorization(spec)

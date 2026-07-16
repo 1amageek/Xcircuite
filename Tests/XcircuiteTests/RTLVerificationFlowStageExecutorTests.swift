@@ -408,10 +408,12 @@ private struct OracleNativeVerificationEngine: RTLVerificationExecuting {
             schemaVersion: RTLVerificationRequest.currentSchemaVersion,
             runID: request.runID,
             status: .completed,
-            metadata: RTLExecutionMetadata(
-                engineID: request.analysis.stageID,
-                implementationID: "native-fixture-engine",
-                implementationVersion: "1.0.0",
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "native-fixture-engine",
+                    version: "1.0.0"
+                ),
                 startedAt: now,
                 completedAt: now
             ),
@@ -467,10 +469,13 @@ private struct FixtureOracleProcessRunner: RTLExternalToolProcessRunning {
             schemaVersion: RTLVerificationRequest.currentSchemaVersion,
             runID: request.runID,
             status: .completed,
-            metadata: RTLExecutionMetadata(
-                engineID: request.analysis.stageID,
-                implementationID: toolID,
-                implementationVersion: "1.0.0",
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: request.analysis.stageID,
+                    version: "1.0.0",
+                    build: toolID
+                ),
                 startedAt: now,
                 completedAt: now
             ),
@@ -497,10 +502,12 @@ private struct ResumeVerificationEngine: RTLVerificationExecuting {
             schemaVersion: RTLVerificationRequest.currentSchemaVersion,
             runID: request.runID,
             status: .completed,
-            metadata: RTLExecutionMetadata(
-                engineID: request.analysis.stageID,
-                implementationID: "resume-test-engine",
-                implementationVersion: "1",
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "resume-test-engine",
+                    version: "1"
+                ),
                 startedAt: now,
                 completedAt: now
             ),
@@ -537,10 +544,12 @@ private struct EvidenceCaptureEngine: RTLVerificationExecuting {
             schemaVersion: RTLVerificationRequest.currentSchemaVersion,
             runID: request.runID,
             status: .completed,
-            metadata: RTLExecutionMetadata(
-                engineID: request.analysis.stageID,
-                implementationID: "evidence-capture",
-                implementationVersion: "1",
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "evidence-capture",
+                    version: "1"
+                ),
                 startedAt: now,
                 completedAt: now
             ),

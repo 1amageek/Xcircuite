@@ -99,7 +99,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy: Codable,
             String.self,
             forKey: .policyID
         ) ?? "generated-layout-signoff-corpus-production-gate"
-        self.minimumCaseCount = try container.decodeIfPresent(Int.self, forKey: .minimumCaseCount) ?? 1
+        self.minimumCaseCount = try container.decode(Int.self, forKey: .minimumCaseCount)
         self.requiredCoverageTags = try container.decodeIfPresent(
             [String].self,
             forKey: .requiredCoverageTags
@@ -116,8 +116,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy: Codable,
             [XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleReadinessStatus].self,
             forKey: .acceptedOracleReadinessStatuses
         ) ?? [.ready]
-        self.requireReportPassed = try container.decodeIfPresent(Bool.self, forKey: .requireReportPassed) ?? true
-        self.requireArtifactHashes = try container.decodeIfPresent(Bool.self, forKey: .requireArtifactHashes) ?? true
+        self.requireReportPassed = try container.decode(Bool.self, forKey: .requireReportPassed)
+        self.requireArtifactHashes = try container.decode(Bool.self, forKey: .requireArtifactHashes)
         self.requireArtifactByteCounts = try container.decodeIfPresent(
             Bool.self,
             forKey: .requireArtifactByteCounts

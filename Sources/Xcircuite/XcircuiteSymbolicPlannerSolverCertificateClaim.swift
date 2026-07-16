@@ -38,9 +38,9 @@ public struct XcircuiteSymbolicPlannerSolverCertificateClaim: Codable, Sendable,
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            claimID: try container.decodeIfPresent(String.self, forKey: .claimID) ?? "claim",
+            claimID: try container.decode(String.self, forKey: .claimID),
             kind: try container.decode(String.self, forKey: .kind),
-            status: try container.decodeIfPresent(String.self, forKey: .status) ?? "claimed",
+            status: try container.decode(String.self, forKey: .status),
             value: try container.decodeIfPresent(String.self, forKey: .value),
             numericValue: try container.decodeIfPresent(Double.self, forKey: .numericValue),
             unit: try container.decodeIfPresent(String.self, forKey: .unit),

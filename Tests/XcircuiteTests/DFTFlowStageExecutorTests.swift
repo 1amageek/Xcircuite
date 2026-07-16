@@ -223,10 +223,12 @@ struct DFTFlowStageExecutorTests {
                 schemaVersion: DFTRequest.currentSchemaVersion,
                 runID: "native-case-run",
                 status: .completed,
-                metadata: DFTExecutionMetadata(
-                    engineID: "qualified-scan",
-                    implementationID: "qualified-scan",
-                    implementationVersion: "1.0.0",
+                provenance: try ExecutionProvenance(
+                    producer: ProducerIdentity(
+                        kind: .engine,
+                        identifier: "qualified-scan",
+                        version: "1.0.0"
+                    ),
                     startedAt: now.addingTimeInterval(-2),
                     completedAt: now.addingTimeInterval(-1)
                 ),
@@ -404,10 +406,12 @@ struct DFTFlowStageExecutorTests {
             runID: request.runID,
             status: .completed,
             artifacts: [transformedArtifact, diffArtifact],
-            metadata: DFTExecutionMetadata(
-                engineID: "qualified-scan",
-                implementationID: "qualified-scan",
-                implementationVersion: "1.0.0",
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "qualified-scan",
+                    version: "1.0.0"
+                ),
                 startedAt: now.addingTimeInterval(-5),
                 completedAt: now.addingTimeInterval(-4)
             ),

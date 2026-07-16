@@ -13,7 +13,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
     private let resultInput: XcircuiteFlowInputReference
     private let downstreamEvidenceInput: XcircuiteFlowInputReference
     private let processQualificationEvidenceInput: XcircuiteFlowInputReference
-    private let processQualificationEvidenceValidator: any DFTProcessQualificationEvidenceValidating
+    private let processQualificationEvidenceValidator: any ToolProcessQualificationEvidenceValidating
     private let verifier: LocalArtifactVerifier
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -24,7 +24,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         downstreamEvidenceInput: XcircuiteFlowInputReference,
         processQualificationEvidenceInput: XcircuiteFlowInputReference,
         toolID: String = "dft-release-gate",
-        processQualificationEvidenceValidator: any DFTProcessQualificationEvidenceValidating = DFTProcessQualificationEvidenceValidator()
+        processQualificationEvidenceValidator: any ToolProcessQualificationEvidenceValidating = ToolProcessQualificationEvidenceValidator()
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -62,12 +62,19 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
                 from: processQualificationEvidenceInput,
                 context: context
             )
-            try processQualificationEvidenceValidator.validate(
-                processEvidence,
-                request: request,
-                result: result,
-                at: Date()
-            )
+            do {
+                try await processQualificationEvidenceValidator.validate(
+                    processEvidence,
+                    reading: LocalToolQualificationArtifactReader(workspaceRoot: context.projectRoot),
+                    at: Date()
+                )
+                try validateEvidenceBindings(processEvidence, request: request, result: result)
+            } catch {
+                return blocked(
+                    code: "DFT_RELEASE_PROCESS_EVIDENCE_INVALID",
+                    message: error.localizedDescription
+                )
+            }
 
             let downstreamEvidence = try load(
                 [DFTReleaseDownstreamEvidence].self,
@@ -143,8 +150,6 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
-        } catch let error as DFTProcessQualificationEvidenceValidationError {
-            return blocked(code: "DFT_RELEASE_PROCESS_EVIDENCE_INVALID", message: error.localizedDescription)
         } catch {
             return blocked(code: "DFT_RELEASE_VALIDATION_FAILED", message: error.localizedDescription)
         }
@@ -198,6 +203,39 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             throw XcircuiteRuntimeError.invalidConfiguration("DFT downstream evidence must contain one artifact for each required domain.")
         }
         try verify(evidence.map(\.artifact), context: context)
+    }
+
+    private func validateEvidenceBindings(
+        _ evidence: ToolProcessQualificationEvidence,
+        request: DFTRequest,
+        result: DFTResult
+    ) throws {
+        let producer = result.provenance.producer
+        let implementationID = producer.build ?? producer.identifier
+        guard evidence.toolID == producer.identifier else {
+            throw XcircuiteRuntimeError.invalidConfiguration(
+                "DFT qualification evidence tool does not match the result producer."
+            )
+        }
+        guard evidence.scope.implementationID == implementationID else {
+            throw XcircuiteRuntimeError.invalidConfiguration(
+                "DFT qualification evidence implementation does not match the result producer."
+            )
+        }
+        guard evidence.scope.processProfileID == request.pdk.processID,
+              evidence.scope.pdkDigest?.caseInsensitiveCompare(request.pdk.digest) == .orderedSame else {
+            throw XcircuiteRuntimeError.invalidConfiguration(
+                "DFT qualification evidence does not match the requested process and PDK digest."
+            )
+        }
+        let requiredModelIDs = Set(
+            result.payload.coverageEvidence?.outcomes.compactMap(\.modelID) ?? []
+        )
+        guard requiredModelIDs.isSubset(of: Set(evidence.qualifiedModelIDs)) else {
+            throw XcircuiteRuntimeError.invalidConfiguration(
+                "DFT qualification evidence does not cover every model used by the result."
+            )
+        }
     }
 
     private func verify(_ artifacts: [ArtifactReference], context: FlowExecutionContext) throws {

@@ -1,6 +1,7 @@
 import DesignFlowKernel
 import Foundation
 import LogicDesign
+import LogicIR
 import Testing
 import ToolQualification
 @testable import Xcircuite

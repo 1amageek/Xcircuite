@@ -1,6 +1,9 @@
 import Foundation
 import CircuiteFoundation
+import PDKCore
 import PDKKit
+import PDKStandardViews
+import PDKValidation
 
 public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewResultProviding {
     private let support: PDKExternalInspectionProcessProviderSupport
@@ -65,18 +68,21 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
         artifacts: [ArtifactReference],
         finding: PDKValidationFinding
     ) throws -> Data {
+        let timestamp = Date()
         let result = PDKStandardViewInspectionResult(
             schemaVersion: PDKStandardViewInspectionRequest.currentSchemaVersion,
             runID: request.runID,
             status: .failed,
             diagnostics: [PDKStandardViewDiagnosticMapper.map(finding)],
-            artifacts: artifacts.map(\.locator),
-            metadata: PDKExecutionMetadata(
-                engineID: "PDKStandardViewInspection",
-                implementationID: "ExternalPDKStandardViewProcessProvider",
-                implementationVersion: "1",
-                startedAt: Date(),
-                completedAt: Date()
+            artifacts: artifacts,
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "ExternalPDKStandardViewProcessProvider",
+                    version: "1"
+                ),
+                startedAt: timestamp,
+                completedAt: timestamp
             ),
             payload: PDKStandardViewInspectionPayload(
                 isValid: false,

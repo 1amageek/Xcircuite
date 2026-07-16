@@ -34,7 +34,7 @@ public struct LayoutCommandDRCExportSpec: Sendable, Hashable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         technologyID = try container.decode(String.self, forKey: .technologyID)
         topCell = try container.decode(String.self, forKey: .topCell)
-        unit = try container.decodeIfPresent(String.self, forKey: .unit) ?? "micrometer"
+        unit = try container.decode(String.self, forKey: .unit)
         viaDefinitions = try container.decodeIfPresent(
             [LayoutCommandDRCViaDefinition].self,
             forKey: .viaDefinitions

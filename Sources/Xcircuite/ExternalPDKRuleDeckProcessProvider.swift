@@ -1,6 +1,9 @@
 import Foundation
 import CircuiteFoundation
+import PDKCore
 import PDKKit
+import PDKStandardViews
+import PDKValidation
 
 public struct ExternalPDKRuleDeckProcessProvider: PDKExternalRuleDeckResultProviding {
     private let support: PDKExternalInspectionProcessProviderSupport
@@ -65,18 +68,21 @@ public struct ExternalPDKRuleDeckProcessProvider: PDKExternalRuleDeckResultProvi
         artifacts: [ArtifactReference],
         finding: PDKValidationFinding
     ) throws -> Data {
+        let timestamp = Date()
         let result = PDKRuleDeckInspectionResult(
             schemaVersion: PDKRuleDeckInspectionRequest.currentSchemaVersion,
             runID: request.runID,
             status: .failed,
             diagnostics: [PDKStandardViewDiagnosticMapper.map(finding)],
-            artifacts: artifacts.map(\.locator),
-            metadata: PDKExecutionMetadata(
-                engineID: "PDKRuleDeckInspection",
-                implementationID: "ExternalPDKRuleDeckProcessProvider",
-                implementationVersion: "1",
-                startedAt: Date(),
-                completedAt: Date()
+            artifacts: artifacts,
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "ExternalPDKRuleDeckProcessProvider",
+                    version: "1"
+                ),
+                startedAt: timestamp,
+                completedAt: timestamp
             ),
             payload: PDKRuleDeckInspectionPayload(
                 isValid: false,

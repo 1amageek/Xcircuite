@@ -12,7 +12,6 @@ public enum XcircuiteEnginePackageCatalog {
                 "pdk.validate-corpus",
                 "pdk.inspect-standard-view",
                 "pdk.compare-oracle",
-                "pdk.qualify",
             ],
             inputArtifactRoles: roles([
                 "pdk-manifest",
@@ -28,7 +27,6 @@ public enum XcircuiteEnginePackageCatalog {
                 "pdk-corpus-report",
                 "pdk-standard-view-report",
                 "pdk-oracle-report",
-                "pdk-qualification-report",
             ])
         ),
         XcircuiteEnginePackageDescriptor(

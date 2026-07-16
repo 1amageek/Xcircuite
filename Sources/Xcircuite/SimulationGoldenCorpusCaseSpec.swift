@@ -49,8 +49,8 @@ public struct SimulationGoldenCorpusCaseSpec: Codable, Sendable, Hashable {
             SimulationGoldenComparisonOptions.self,
             forKey: .options
         ) ?? SimulationGoldenComparisonOptions()
-        coverageTags = try container.decodeIfPresent([String].self, forKey: .coverageTags) ?? []
-        expectedGateStatus = try container.decodeIfPresent(String.self, forKey: .expectedGateStatus) ?? "passed"
+        coverageTags = try container.decode([String].self, forKey: .coverageTags)
+        expectedGateStatus = try container.decode(String.self, forKey: .expectedGateStatus)
         expectedDiagnosticSubstrings = try container.decodeIfPresent(
             [String].self,
             forKey: .expectedDiagnosticSubstrings

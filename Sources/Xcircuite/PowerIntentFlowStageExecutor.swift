@@ -2,6 +2,8 @@ import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import LogicDesign
+import LogicIR
+import PowerIntent
 
 public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -105,7 +107,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                     runID: result.runID,
                     status: result.status,
                     diagnostics: result.diagnostics,
-                    metadata: result.metadata,
+                    provenance: result.provenance,
                     payload: payload
                 )
                 artifacts.append(intentReference)

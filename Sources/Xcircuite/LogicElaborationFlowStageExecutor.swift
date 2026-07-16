@@ -2,6 +2,8 @@ import DesignFlowKernel
 import CircuiteFoundation
 import Foundation
 import LogicDesign
+import LogicIR
+import SystemVerilogFrontend
 
 public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
@@ -85,8 +87,8 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     provenance: LogicDesignProvenance(
                         sourceDesignDigest: designDigest,
                         transformationID: "systemverilog-elaboration",
-                        producerID: persistedResult.metadata.engineID,
-                        producerVersion: persistedResult.metadata.implementationVersion,
+                        producerID: persistedResult.provenance.producer.identifier,
+                        producerVersion: persistedResult.provenance.producer.version,
                         runID: context.runID
                     )
                 )
@@ -95,7 +97,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     runID: persistedResult.runID,
                     status: persistedResult.status,
                     diagnostics: persistedResult.diagnostics,
-                    metadata: persistedResult.metadata,
+                    provenance: persistedResult.provenance,
                     payload: payload
                 )
                 resultArtifacts.append(snapshotReference)

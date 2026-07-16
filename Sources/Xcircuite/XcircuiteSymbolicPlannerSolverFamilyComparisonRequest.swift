@@ -42,9 +42,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparisonRequest: Codable, Se
             )
         }
         runID = try container.decode(String.self, forKey: .runID)
-        comparisonID = try container.decodeIfPresent(String.self, forKey: .comparisonID) ?? "solver-family-1"
-        qualificationArtifactIDs = try container.decodeIfPresent([String].self, forKey: .qualificationArtifactIDs) ?? []
-        qualificationPaths = try container.decodeIfPresent([String].self, forKey: .qualificationPaths) ?? []
+        comparisonID = try container.decode(String.self, forKey: .comparisonID)
+        qualificationArtifactIDs = try container.decode([String].self, forKey: .qualificationArtifactIDs)
+        qualificationPaths = try container.decode([String].self, forKey: .qualificationPaths)
         selectionPolicy = try container.decodeIfPresent(String.self, forKey: .selectionPolicy)
             ?? "prefer-qualified-health-replay-goals-proof-optimality-cost"
     }

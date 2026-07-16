@@ -1,6 +1,7 @@
 import CircuiteFoundation
 import Foundation
 import PDKKit
+import PDKStandardViews
 import SignoffToolSupport
 
 struct PDKExternalInspectionProcessRun: Sendable {
@@ -246,7 +247,7 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         _ = resultType
         var result = try JSONDecoder().decode(PDKRuleDeckInspectionResult.self, from: data)
         let existing = Set(result.artifacts)
-        result.artifacts.append(contentsOf: artifacts.map(\.locator).filter { !existing.contains($0) })
+        result.artifacts.append(contentsOf: artifacts.filter { !existing.contains($0) })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(result)
@@ -260,7 +261,7 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         _ = resultType
         var result = try JSONDecoder().decode(PDKStandardViewInspectionResult.self, from: data)
         let existing = Set(result.artifacts)
-        result.artifacts.append(contentsOf: artifacts.map(\.locator).filter { !existing.contains($0) })
+        result.artifacts.append(contentsOf: artifacts.filter { !existing.contains($0) })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(result)

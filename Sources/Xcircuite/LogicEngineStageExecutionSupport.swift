@@ -2,6 +2,7 @@ import DesignFlowKernel
 import CircuiteFoundation
 import Foundation
 import LogicEngineCore
+import LogicIR
 import RTLVerificationCore
 
 struct LogicEngineStageExecutionSupport: Sendable {

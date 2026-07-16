@@ -545,7 +545,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                     evidence.evidenceArtifact,
                 ]
             ),
-            metadata: native.metadata,
+            provenance: native.provenance,
             payload: payload
         )
     }
@@ -567,7 +567,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             status: .blocked,
             diagnostics: diagnostics,
             artifacts: native.artifacts,
-            metadata: native.metadata,
+            provenance: native.provenance,
             payload: native.payload
         )
     }

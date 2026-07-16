@@ -1,6 +1,10 @@
 import Foundation
 import DesignFlowKernel
 import PDKKit
+import PDKCore
+import PDKDiscovery
+import PDKStandardViews
+import PDKValidation
 import Testing
 import ToolQualification
 @testable import Xcircuite
@@ -13,7 +17,7 @@ struct PDKExternalInspectionProcessProviderTests {
         defer { removeRoot(root) }
         let fixtureRoot = try makeFixtureProject(root: root)
         let manifestURL = fixtureRoot.appending(path: "valid-pdk/pdk.json")
-        let manifest = try PDKManifestCodec.decode(contentsOf: manifestURL).manifest
+        let manifest = try PDKManifestCodec.decode(contentsOf: manifestURL)
         let asset = try #require(manifest.assets.first { $0.assetID == "cells" })
         let resolved = try LocalPDKAssetResolver().resolve(asset, relativeTo: manifestURL)
         let request = PDKStandardViewInspectionRequest(
@@ -48,8 +52,8 @@ struct PDKExternalInspectionProcessProviderTests {
         #expect(envelope.status == .completed, "\(envelope.diagnostics)")
         #expect(envelope.payload.isValid)
         #expect(envelope.artifacts.count >= 5)
-        #expect(envelope.artifacts.contains { $0.location.value.hasSuffix("/execution.json") })
-        #expect(envelope.artifacts.contains { $0.location.value.hasSuffix("/stderr.txt") })
+        #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/execution.json") })
+        #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/stderr.txt") })
 
         let executionURL = root
             .appending(path: ".xcircuite/runs/pdk-external-standard-view/stages/pdk.external-standard-view/raw/external-pdk/execution.json")
@@ -121,7 +125,7 @@ struct PDKExternalInspectionProcessProviderTests {
         defer { removeRoot(root) }
         let fixtureRoot = try makeFixtureProject(root: root)
         let manifestURL = fixtureRoot.appending(path: "valid-pdk/pdk.json")
-        let manifest = try PDKManifestCodec.decode(contentsOf: manifestURL).manifest
+        let manifest = try PDKManifestCodec.decode(contentsOf: manifestURL)
         let asset = try #require(manifest.assets.first { $0.assetID == "cells" })
         let resolved = try LocalPDKAssetResolver().resolve(asset, relativeTo: manifestURL)
         let runID = "pdk-external-stage"
@@ -172,7 +176,7 @@ struct PDKExternalInspectionProcessProviderTests {
             from: rawData
         )
         #expect(envelope.status == .completed)
-        #expect(envelope.artifacts.contains { $0.location.value.hasSuffix("/execution.json") })
+        #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/execution.json") })
         #expect(FileManager.default.fileExists(atPath: context.runDirectory
             .appending(path: "stages")
             .appending(path: stageID)

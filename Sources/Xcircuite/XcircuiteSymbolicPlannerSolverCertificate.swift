@@ -90,8 +90,8 @@ public struct XcircuiteSymbolicPlannerSolverCertificate: Codable, Sendable, Hash
             certificateID: try container.decodeIfPresent(String.self, forKey: .certificateID),
             solverName: try container.decodeIfPresent(String.self, forKey: .solverName),
             solverFamily: try container.decodeIfPresent(String.self, forKey: .solverFamily),
-            certificateFormat: try container.decodeIfPresent(String.self, forKey: .certificateFormat) ?? "generic-json",
-            status: try container.decodeIfPresent(String.self, forKey: .status) ?? "parsed",
+            certificateFormat: try container.decode(String.self, forKey: .certificateFormat),
+            status: try container.decode(String.self, forKey: .status),
             optimalityStatus: try container.decodeIfPresent(String.self, forKey: .optimalityStatus),
             proofStatus: try container.decodeIfPresent(String.self, forKey: .proofStatus),
             planCost: try container.decodeIfPresent(Double.self, forKey: .planCost),
@@ -101,10 +101,10 @@ public struct XcircuiteSymbolicPlannerSolverCertificate: Codable, Sendable, Hash
             lowerBound: try container.decodeIfPresent(Double.self, forKey: .lowerBound),
             upperBound: try container.decodeIfPresent(Double.self, forKey: .upperBound),
             goalCoverageStatus: try container.decodeIfPresent(String.self, forKey: .goalCoverageStatus),
-            expectedActionIDs: try container.decodeIfPresent([String].self, forKey: .expectedActionIDs) ?? [],
-            observedActionIDs: try container.decodeIfPresent([String].self, forKey: .observedActionIDs) ?? [],
-            claims: try container.decodeIfPresent([XcircuiteSymbolicPlannerSolverCertificateClaim].self, forKey: .claims) ?? [],
-            evidenceLines: try container.decodeIfPresent([String].self, forKey: .evidenceLines) ?? []
+            expectedActionIDs: try container.decode([String].self, forKey: .expectedActionIDs),
+            observedActionIDs: try container.decode([String].self, forKey: .observedActionIDs),
+            claims: try container.decode([XcircuiteSymbolicPlannerSolverCertificateClaim].self, forKey: .claims),
+            evidenceLines: try container.decode([String].self, forKey: .evidenceLines)
         )
         guard schemaVersion == 1 else {
             throw DecodingError.dataCorruptedError(

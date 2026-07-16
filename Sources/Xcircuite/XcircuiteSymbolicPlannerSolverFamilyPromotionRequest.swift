@@ -50,11 +50,11 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromotionRequest: Codable, Sen
             )
         }
         runID = try container.decode(String.self, forKey: .runID)
-        comparisonID = try container.decodeIfPresent(String.self, forKey: .comparisonID) ?? "solver-family-1"
+        comparisonID = try container.decode(String.self, forKey: .comparisonID)
         comparisonArtifactID = try container.decodeIfPresent(String.self, forKey: .comparisonArtifactID)
         comparisonPath = try container.decodeIfPresent(String.self, forKey: .comparisonPath)
         selectedCandidateIndex = try container.decodeIfPresent(Int.self, forKey: .selectedCandidateIndex)
-        requireQualified = try container.decodeIfPresent(Bool.self, forKey: .requireQualified) ?? true
-        verifyPromotedPlan = try container.decodeIfPresent(Bool.self, forKey: .verifyPromotedPlan) ?? true
+        requireQualified = try container.decode(Bool.self, forKey: .requireQualified)
+        verifyPromotedPlan = try container.decode(Bool.self, forKey: .verifyPromotedPlan)
     }
 }

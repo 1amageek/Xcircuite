@@ -9,7 +9,9 @@ import LayoutCommands
 import LayoutCore
 import LayoutIO
 import LVSEngine
+import PDKCore
 import PDKKit
+import PDKStandardViews
 import PEXEngine
 import PhysicalDesignCore
 import ToolQualification
@@ -34,7 +36,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case pdkStandardView(PDKStandardView)
     case pdkRuleDeck(PDKRuleDeck)
     case pdkOracle(PDKOracle)
-    case pdkQualification(PDKQualification)
     case releaseAuthorization(ReleaseAuthorization)
     case releaseSignoff(ReleaseSignoff)
     case releaseTapeout(ReleaseTapeout)
@@ -164,28 +165,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         ) {
             self.stageID = stageID
             self.manifestInput = manifestInput
-            self.oracleInput = oracleInput
-            self.tool = tool
-        }
-    }
-
-    public struct PDKQualification: Sendable, Hashable, Codable {
-        public var stageID: String
-        public var manifestInput: XcircuiteFlowInputReference
-        public var corpusInput: XcircuiteFlowInputReference
-        public var oracleInput: XcircuiteFlowInputReference
-        public var tool: XcircuiteFlowToolSpec
-
-        public init(
-            stageID: String = PDKKitAPI.qualificationStageID,
-            manifestInput: XcircuiteFlowInputReference,
-            corpusInput: XcircuiteFlowInputReference,
-            oracleInput: XcircuiteFlowInputReference,
-            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
-        ) {
-            self.stageID = stageID
-            self.manifestInput = manifestInput
-            self.corpusInput = corpusInput
             self.oracleInput = oracleInput
             self.tool = tool
         }
@@ -823,7 +802,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case pdkStandardView
         case pdkRuleDeck
         case pdkOracle
-        case pdkQualification
         case releaseAuthorization
         case releaseSignoff
         case releaseTapeout
@@ -875,8 +853,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .pdkRuleDeck(try container.decode(PDKRuleDeck.self, forKey: .value))
         case .pdkOracle:
             self = .pdkOracle(try container.decode(PDKOracle.self, forKey: .value))
-        case .pdkQualification:
-            self = .pdkQualification(try container.decode(PDKQualification.self, forKey: .value))
         case .releaseAuthorization:
             self = .releaseAuthorization(try container.decode(ReleaseAuthorization.self, forKey: .value))
         case .releaseSignoff:
@@ -953,9 +929,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             try container.encode(value, forKey: .value)
         case .pdkOracle(let value):
             try container.encode(Kind.pdkOracle, forKey: .kind)
-            try container.encode(value, forKey: .value)
-        case .pdkQualification(let value):
-            try container.encode(Kind.pdkQualification, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .releaseAuthorization(let value):
             try container.encode(Kind.releaseAuthorization, forKey: .kind)
@@ -1201,13 +1174,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 manifestInput: spec.manifestInput,
                 oracleInput: spec.oracleInput
             )
-        case .pdkQualification(let spec):
-            return PDKQualificationFlowStageExecutor.local(
-                stageID: spec.stageID,
-                manifestInput: spec.manifestInput,
-                corpusInput: spec.corpusInput,
-                oracleInput: spec.oracleInput
-            )
         case .releaseAuthorization(let spec):
             return ReleaseAuthorizationFlowStageExecutor(
                 stageID: spec.stageID,
@@ -1379,8 +1345,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             PDKToolDescriptors.ruleDeck(level: spec.tool.qualificationLevel)
         case .pdkOracle(let spec):
             PDKToolDescriptors.oracle(level: spec.tool.qualificationLevel)
-        case .pdkQualification(let spec):
-            PDKToolDescriptors.qualification(level: spec.tool.qualificationLevel)
         case .releaseAuthorization(let spec):
             ReleaseToolDescriptors.authorization(level: spec.tool.qualificationLevel)
         case .releaseSignoff(let spec):
@@ -1466,8 +1430,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .pdkRuleDeck(let spec):
             spec.tool
         case .pdkOracle(let spec):
-            spec.tool
-        case .pdkQualification(let spec):
             spec.tool
         case .releaseAuthorization(let spec):
             spec.tool

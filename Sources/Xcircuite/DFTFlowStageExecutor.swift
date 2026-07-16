@@ -61,10 +61,7 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                 artifactID: "dft-result-envelope",
                 context: context
             )
-            let foundationEvidence = try DFTFoundationEvidence(
-                result: result,
-                provenance: try foundationProvenance(for: result, request: request)
-            )
+            let foundationEvidence = try DFTFoundationEvidence(result: result)
             let foundationArtifact = try await support.persistFoundationEvidence(
                 foundationEvidence,
                 stageID: stage.stageID,
@@ -164,27 +161,6 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         case .failed:
             return .failed
         }
-    }
-
-    private func foundationProvenance(
-        for result: DFTResult,
-        request: DFTRequest
-    ) throws -> ExecutionProvenance {
-        try ExecutionProvenance(
-            producer: try ProducerIdentity(
-                kind: .engine,
-                identifier: result.metadata.engineID,
-                version: result.metadata.implementationVersion
-            ),
-            inputs: try request.inputs.map(DFTFoundationEvidence.artifactReference(from:)),
-            designRevision: try ContentDigest(
-                algorithm: .sha256,
-                hexadecimalValue: request.design.designDigest
-            ),
-            randomSeed: result.metadata.seed,
-            startedAt: result.metadata.startedAt,
-            completedAt: result.metadata.completedAt
-        )
     }
 
     private func blockedResult(

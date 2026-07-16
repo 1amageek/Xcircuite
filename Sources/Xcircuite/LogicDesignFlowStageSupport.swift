@@ -2,6 +2,7 @@ import DesignFlowKernel
 import CircuiteFoundation
 import Foundation
 import LogicDesign
+import LogicIR
 import DesignFlowKernel
 
 struct LogicDesignFlowStageSupport: Sendable {

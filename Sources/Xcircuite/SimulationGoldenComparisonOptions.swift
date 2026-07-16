@@ -39,8 +39,8 @@ public struct SimulationGoldenComparisonOptions: Sendable, Hashable, Codable {
             Double.self,
             forKey: .relativeDeltaDenominatorFloor
         )
-        requiredVariables = try container.decodeIfPresent([String].self, forKey: .requiredVariables) ?? []
-        comparedVariables = try container.decodeIfPresent([String].self, forKey: .comparedVariables) ?? []
-        allowInterpolation = try container.decodeIfPresent(Bool.self, forKey: .allowInterpolation) ?? true
+        requiredVariables = try container.decode([String].self, forKey: .requiredVariables)
+        comparedVariables = try container.decode([String].self, forKey: .comparedVariables)
+        allowInterpolation = try container.decode(Bool.self, forKey: .allowInterpolation)
     }
 }

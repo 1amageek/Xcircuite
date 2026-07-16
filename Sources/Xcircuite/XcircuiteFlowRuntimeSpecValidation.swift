@@ -277,10 +277,6 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .pdkOracle(let spec):
             try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
             try validateInput(spec.oracleInput, stageID: spec.stageID, field: "oracleInput")
-        case .pdkQualification(let spec):
-            try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
-            try validateInput(spec.corpusInput, stageID: spec.stageID, field: "corpusInput")
-            try validateInput(spec.oracleInput, stageID: spec.stageID, field: "oracleInput")
         case .releaseAuthorization(let spec):
             try validateRequestPath(spec.requestPath, stageID: spec.stageID)
         case .releaseSignoff(let spec):
@@ -543,8 +539,6 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .pdkRuleDeck(let spec):
             spec.tool
         case .pdkOracle(let spec):
-            spec.tool
-        case .pdkQualification(let spec):
             spec.tool
         case .releaseAuthorization(let spec):
             spec.tool

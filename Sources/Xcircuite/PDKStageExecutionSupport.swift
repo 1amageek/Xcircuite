@@ -15,7 +15,6 @@ protocol PDKStageExecutionResult: Sendable {
 extension PDKDiscoveryResult: PDKStageExecutionResult {}
 extension PDKValidationExecutionResult: PDKStageExecutionResult {}
 extension PDKCorpusValidationExecutionResult: PDKStageExecutionResult {}
-extension PDKQualificationExecutionResult: PDKStageExecutionResult {}
 extension PDKOracleComparisonResult: PDKStageExecutionResult {}
 extension PDKRuleDeckInspectionResult: PDKStageExecutionResult {}
 extension PDKManifestViewInspectionResult: PDKStageExecutionResult {}
