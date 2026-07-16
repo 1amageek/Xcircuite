@@ -7,7 +7,7 @@ extension XcircuiteWorkspaceStore {
     public func persistDesignDiff(_ diff: DesignDiff) async throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try await persistArtifact(
+        return try persistRunArtifact(
             content: encoder.encode(diff),
             id: ArtifactID(rawValue: "design-diff"),
             locator: ArtifactLocator(
@@ -19,7 +19,10 @@ extension XcircuiteWorkspaceStore {
                 format: .json
             ),
             runID: diff.runID,
-            mode: .replaceable
+            mode: .replaceable,
+            updatingLedger: { ledger in
+                ledger.designDiff = diff
+            }
         )
     }
 

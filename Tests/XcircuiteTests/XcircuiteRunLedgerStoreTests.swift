@@ -37,6 +37,58 @@ struct XcircuiteRunLedgerPersistenceTests {
 
         let reloaded = try await store.loadRunLedger(runID: "run-1")
         #expect(reloaded == transitioned)
+
+        let projectManifest = try await store.loadManifest()
+        #expect(projectManifest.runs == [
+            FlowRunReference(
+                runID: "run-1",
+                manifestPath: ".xcircuite/runs/run-1/manifest.json"
+            )
+        ])
+    }
+
+    @Test
+    func concurrentRunCreationRetainsEveryProjectManifestReference() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let first = try XcircuiteWorkspaceStore(projectRoot: root)
+        let second = try XcircuiteWorkspaceStore(projectRoot: root)
+
+        async let firstSave: Void = first.saveRunLedger(try makeLedger(runID: "run-a"))
+        async let secondSave: Void = second.saveRunLedger(try makeLedger(runID: "run-b"))
+        _ = try await (firstSave, secondSave)
+
+        let projectManifest = try await first.loadManifest()
+        #expect(projectManifest.runs.map(\.runID) == ["run-a", "run-b"])
+    }
+
+    @Test
+    func persistingDesignDiffUpdatesCanonicalLedgerField() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.saveRunLedger(try makeLedger(runID: "run-diff"))
+        let diff = DesignDiff(
+            runID: "run-diff",
+            title: "Layout repair",
+            actor: "test",
+            changes: [
+                DesignDiffChange(
+                    changeID: "change-1",
+                    domain: .layout,
+                    operation: .replace,
+                    path: "layout/top.gds",
+                    summary: "Replace repaired layout"
+                )
+            ]
+        )
+
+        let reference = try await store.persistDesignDiff(diff)
+        let ledger = try await store.loadRunLedger(runID: "run-diff")
+
+        #expect(ledger.designDiff == diff)
+        #expect(ledger.artifacts.contains(reference))
+        #expect(ledger.runManifest.revision == 1)
     }
 
     @Test

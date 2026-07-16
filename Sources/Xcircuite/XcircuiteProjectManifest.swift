@@ -165,7 +165,7 @@ public struct XcircuiteProjectManifest: Sendable, Hashable, Codable {
         }
     }
 
-    private static func runManifestPath(for runID: String) -> String {
+    static func runManifestPath(for runID: String) -> String {
         "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/manifest.json"
     }
 }

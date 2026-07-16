@@ -124,7 +124,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let path = ledgerRelativePath(for: ledger.runID)
-        try ensureWorkspace()
+        try createWorkspace()
         try ensureWorkspaceDirectory(at: ".xcircuite/runs/\(ledger.runID)")
         let ledgerURL = try workspaceURL(relativePath: path)
         let manifestURL = try workspaceURL(relativePath: runManifestRelativePath(for: ledger.runID))
@@ -197,7 +197,35 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             }
             try encoder.encode(storedLedger.runManifest).write(to: manifestURL, options: .atomic)
             try encoder.encode(storedLedger).write(to: ledgerURL, options: .atomic)
+            try registerRunReference(for: storedLedger.runID, encoder: encoder)
         }
+    }
+
+    /// Makes every persisted run discoverable from the canonical project
+    /// manifest. The update shares the ledger writer lock so concurrent stores
+    /// cannot lose run registrations while appending independent runs.
+    private func registerRunReference(
+        for runID: String,
+        encoder: JSONEncoder
+    ) throws {
+        let projectManifestURL = XcircuiteWorkspaceLayout(projectRoot: projectRoot).manifestURL
+        let data = try Data(contentsOf: projectManifestURL, options: [.mappedIfSafe])
+        var projectManifest: XcircuiteProjectManifest
+        do {
+            projectManifest = try JSONDecoder().decode(XcircuiteProjectManifest.self, from: data)
+        } catch {
+            throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
+        }
+
+        let reference = FlowRunReference(
+            runID: runID,
+            manifestPath: XcircuiteProjectManifest.runManifestPath(for: runID)
+        )
+        projectManifest.runs.removeAll { $0.runID == runID }
+        projectManifest.runs.append(reference)
+        projectManifest.runs.sort { $0.runID < $1.runID }
+        try projectManifest.validate()
+        try encoder.encode(projectManifest).write(to: projectManifestURL, options: .atomic)
     }
 
     private func persistDecisionProjections(
@@ -275,7 +303,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         ) { _ in }
     }
 
-    private func persistRunArtifact(
+    func persistRunArtifact(
         content: Data,
         id: ArtifactID?,
         locator: ArtifactLocator,
