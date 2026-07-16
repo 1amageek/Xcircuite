@@ -1,63 +1,91 @@
 # Engine Package Integration
 
-Electrical signoff integration uses the following canonical path:
+Xcircuite composes independent domain engines into a persistent design flow.
 
-```text
-LEF + DEF/GDSII/OASIS + SPEF/ParasiticIR
-              ↓
-standard-layout import / verified source loading
-              ↓
-ElectricalSignoffRunResult (all corners and axes)
-              ↓
-qualification + independent-oracle evidence
-              ↓
-release gate + ElectricalSignoffReleaseArtifactBundle
-              ↓
-human review / approval / resume
+Domain packages own their algorithms, typed requests, typed results,
+diagnostics, and raw evidence. Xcircuite owns the concrete `.xcircuite`
+workspace and the `FlowStageExecutor` implementations that connect those
+domain protocols to `DesignFlowKernel`.
+
+```mermaid
+flowchart LR
+    Input["Verified Foundation artifacts"] --> Stage["Xcircuite FlowStageExecutor"]
+    Stage --> Engine["Injected domain engine protocol"]
+    Engine --> Result["Typed domain result"]
+    Result --> Ledger[".xcircuite run artifacts"]
+    Ledger --> Review["Agent and human review"]
 ```
 
-The release bundle is persisted under `.xcircuite/runs/<run-id>/electrical-signoff/release-artifact-bundle.json` and every referenced file must carry a verified SHA-256 digest and byte count. GDSII/OASIS geometry without explicit routed electrical connectivity remains blocked.
+Every concrete stage executor conforms directly to
+`DesignFlowKernel.FlowStageExecutor` and invokes the public protocol of its
+domain package. No additional runtime protocol, wrapper result, facade, or
+re-export is part of this contract.
 
-## Role of Xcircuite
+## Ownership
 
-Xcircuite is the central composition layer for semiconductor design execution. Domain packages own algorithms, typed requests, typed payloads and domain artifacts. Xcircuite owns stage construction, artifact resolution, tool qualification policy, persistence, repair-loop coordination, approval and resume.
-
-```text
-Domain package protocol
-        ↓
-XcircuiteEngineStageAdapting
-        ↓
-DesignFlowKernel.FlowStageExecutor
-        ↓
-.xcircuite run ledger and review artifacts
-```
+| Owner | Responsibility |
+|---|---|
+| `CircuiteFoundation` | Artifact identity, role, kind, format, digest, byte count, diagnostics, evidence, and execution provenance |
+| Domain package | Domain request, execution protocol, algorithm, typed result, diagnostics, and raw observations |
+| `ToolQualification` | Tool descriptors, retained-evidence reconstruction, capability and trust decisions, and known limitations |
+| `DesignFlowKernel` | Stage lifecycle, trust requirements, retry, approval, waiver, cancellation, review, and resume |
+| `Xcircuite` | Project-root-bound storage, artifact resolution, stage construction, concrete ledger persistence, and engine composition |
+| `ReleaseEngine` | Fail-closed signoff aggregation, tapeout packaging, and final release authorization |
+| `circuit-studio` | Human review and intervention over the same ledger and artifacts |
 
 ## Dependency rule
 
-- Xcircuite depends on every domain package.
-- Domain packages depend on Xcircuite workspace contracts where needed.
-- Domain packages never depend on Xcircuite or circuit-studio.
-- circuit-studio depends on Xcircuite and presents the retained artifacts.
+Domain packages depend on CircuiteFoundation and their explicit domain
+dependencies. They do not depend on Xcircuite or circuit-studio. Xcircuite
+depends on the published domain products it composes, and circuit-studio depends
+on Xcircuite to present the retained ledger and artifacts.
 
-## Adapter responsibilities
+## Stage execution contract
 
-Each adapter must resolve and verify inputs, evaluate ToolQualification requirements, invoke one injected domain protocol, persist returned artifacts, map diagnostics into FlowStageResult and bind the result to design, PDK and tool digests.
+A stage executor resolves and verifies inputs, builds the domain request,
+invokes one injected domain protocol, persists the typed result and Foundation
+artifacts, maps diagnostics into `FlowStageResult`, and binds the result to the
+design, PDK, tool, and execution provenance.
 
-The PDK standard-view and rule-deck adapters additionally expose an explicit
-external-process path. `PDKExternalInspectionProcessConfiguration` is carried
+The PDK standard-view and rule-deck stages additionally expose an explicit
+external-process provider. `PDKExternalInspectionProcessConfiguration` is carried
 in the agent-facing runtime spec, `TimedPDKExternalInspectionProcessRunner`
 uses `SignoffToolSupport` for timeout and cancellation-aware execution, and the
 provider persists request/result/stdout/stderr/execution artifacts under the
-run stage before `PDKKit` validates the returned envelope. This boundary is
+run stage before `PDKKit` validates the typed result. This boundary is
 process execution and evidence retention, not tool qualification: the
 `ToolQualification` descriptor and any independent process evidence remain a
 separate trust gate.
 
 ## Stage registration
 
-XcircuiteEnginePackageCatalog is the canonical scaffold catalog for package, product, stage and artifact-role ownership. Implementation agents must update the catalog and integration tests when adding or changing a stage.
+`XcircuiteEnginePackageCatalog` is the machine-readable inventory of domain
+package products, stage IDs, and input/output artifact roles. A stage change is
+complete only when the catalog, runtime construction, and integration tests
+agree.
 
-RTLVerificationEngine is registered as `rtl.lint`, `rtl.cdc`, `rtl.rdc` and `rtl.equivalence`. `RTLVerificationFlowStageExecutor` resolves digest-bearing RTL, reference and optional SDC inputs, carries frontend/policy/proof-view/assumption state into the request, invokes the native or injected protocol, persists the envelope and a separate qualification artifact under the run stage, and maps blocked/failed/completed status to the flow gate. ToolQualification selection remains a separate gate from execution status.
+| Domain package | Xcircuite stage family |
+|---|---|
+| `PDKKit` | discovery, validation, corpus, standard-view inspection, oracle comparison |
+| `LogicDesign` | elaboration and power intent |
+| `LogicEngine` | lowering, functional simulation, synthesis, and equivalence |
+| `RTLVerificationEngine` | lint, CDC, RDC, and formal equivalence |
+| `DFTEngine` | scan insertion, ATPG, and BIST |
+| `PhysicalDesignEngine` | floorplan, placement, power, CTS, routing, ECO, antenna, DFM, repair, and review |
+| `TimingEngine` | STA and signal-integrity analysis |
+| `ElectricalSignoffEngine` | standard-layout import, electrical axes, corpus observations, and repair revisions |
+| `ReleaseEngine` | authorization, signoff bundle generation, and tapeout handoff |
+
+`RTLVerificationEngine` is registered as `rtl.lint`, `rtl.cdc`, `rtl.rdc`, and
+`rtl.equivalence`. `RTLVerificationFlowStageExecutor` resolves digest-bearing
+RTL, reference, and optional SDC inputs; invokes the native or injected
+`RTLVerificationExecuting` protocol; and persists the typed result and proof
+artifacts. Oracle execution produces raw correlation evidence. ToolQualification
+alone evaluates the retained evidence and issues a trust decision.
+
+DRC, LVS, PEX, layout-command, CoreSpice simulation, and post-layout comparison
+executors use the same direct `FlowStageExecutor` contract even though they are
+not entries in the engine-package scaffold catalog.
 
 ElectricalSignoffEngine is registered for standard-layout import, electrical
 analysis, corpus observation, and repair-revision stages.
@@ -69,6 +97,26 @@ ToolQualification. `ElectricalSignoffRepairRevisionFlowStageExecutor` applies a
 provenance-checked repair candidate to a new revision. DesignFlowKernel owns
 approval and resume; ReleaseEngine owns release authorization.
 
+## Electrical signoff path
+
+```mermaid
+flowchart TD
+    Standard["LEF + DEF/GDSII/OASIS + SPEF or ParasiticIR"] --> Import["Verified standard-layout import"]
+    Import --> Electrical["ElectricalSignoffRunResult"]
+    Electrical --> Raw["Raw corpus and independent-oracle observations"]
+    Raw --> Trust["ToolQualification decision"]
+    Electrical --> Signoff["ReleaseEngine SignoffBundle"]
+    Trust --> Signoff
+    Approval["DesignFlowKernel human approval"] --> Authorization["Release authorization"]
+    Signoff --> Authorization
+    Authorization --> Review["Human review, resume, or tapeout"]
+```
+
+Geometry without explicit routed electrical connectivity remains blocked.
+Xcircuite persists the electrical result, repair candidates, signoff bundle,
+trust inputs, and approval references as separate immutable artifacts so no
+domain result can approve or qualify itself.
+
 PhysicalDesignEngine also exposes `PhysicalDesignReviewFlowStageExecutor` as
 the Xcircuite human-review boundary. It persists the native immutable review
 packet under the run stage, lets `DesignFlowKernel` record the approval, and
@@ -77,12 +125,14 @@ run resumes through `PhysicalDesignReviewGate`. This retained boundary proves
 review/approval/resume integrity; it remains separate from DRC/LVS/PEX, timing,
 external-oracle correlation, and process qualification.
 
-## Completion rule
+## Completion evidence
 
-A package implementation is not platform-complete until Xcircuite can execute it headlessly, persist its artifacts, expose structured failure reasons, resume after approval or repair, and include the result in the appropriate signoff profile.
+A package integration is complete only when it can be executed headlessly,
+retains canonical inputs and outputs, exposes typed failure reasons, survives
+artifact integrity checks, and can participate in review and resume without UI
+state becoming authoritative.
 
-The latest complete Xcircuite regression passed 557 test cases in 59 suites.
-This is package-integration evidence for these adapters, not foundry or process
-qualification. The regression used an isolated SwiftPM scratch path and a
-bounded parallel runner; a serial rerun remains a developer reproducibility
-option when shared-worktree processes are active.
+The current retained Xcircuite workspace verification executed 571 tests from
+the current Xcircuite HEAD with all eight declared shards passing. That result
+proves package-integration behavior; it is not foundry, process, or tool
+qualification evidence.
