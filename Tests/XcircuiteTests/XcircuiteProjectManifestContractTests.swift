@@ -6,9 +6,11 @@ import Testing
 struct XcircuiteProjectManifestContractTests {
     @Test
     func canonicalFixtureDecodesAndRoundTrips() throws {
-        let fixtureURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .appending(path: "Fixtures/ProjectManifest/xcircuite-project-manifest-v2.json")
+        let fixtureURL = try #require(Bundle.module.url(
+            forResource: "xcircuite-project-manifest-v2",
+            withExtension: "json",
+            subdirectory: "Fixtures/ProjectManifest"
+        ))
         let data = try Data(contentsOf: fixtureURL)
         let manifest = try JSONDecoder().decode(XcircuiteProjectManifest.self, from: data)
 
