@@ -1,4 +1,5 @@
 import Testing
+import CircuiteFoundation
 @testable import Xcircuite
 
 @Suite("Engine package catalog")

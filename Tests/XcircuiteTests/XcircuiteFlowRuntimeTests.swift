@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LayoutIO

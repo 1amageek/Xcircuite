@@ -1,4 +1,5 @@
 import Testing
+import CircuiteFoundation
 @testable import Xcircuite
 
 @Suite("Electrical signoff package authority boundary")

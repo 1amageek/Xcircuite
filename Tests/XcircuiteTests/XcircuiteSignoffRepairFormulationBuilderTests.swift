@@ -1,4 +1,5 @@
 import DRCEngine
+import CircuiteFoundation
 import Foundation
 import LVSEngine
 import Testing

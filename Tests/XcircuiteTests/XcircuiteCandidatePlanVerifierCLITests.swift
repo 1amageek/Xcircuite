@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import LayoutAutoGen
 import LayoutCore
 import LayoutIO

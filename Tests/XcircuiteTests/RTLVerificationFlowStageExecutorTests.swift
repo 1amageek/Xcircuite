@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import LogicIR
 import RTLVerificationCore
