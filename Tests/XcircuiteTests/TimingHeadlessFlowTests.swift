@@ -55,7 +55,9 @@ struct TimingHeadlessFlowTests {
         let executor = TimingSTAFlowStageExecutor(inputs: inputs)
 
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        let runtime = XcircuiteFlowRuntime(
+        try await workspaceStore.createWorkspace()
+        let workspaceID = try await workspaceID(for: workspaceStore)
+        let runtime = try XcircuiteFlowRuntime(
             toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [executor],
@@ -63,7 +65,7 @@ struct TimingHeadlessFlowTests {
         )
         let blocked = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: projectRoot,
+                workspaceID: workspaceID,
                 runID: runID,
                 intent: "Run timing STA with human review",
                 stages: [
@@ -83,7 +85,7 @@ struct TimingHeadlessFlowTests {
         )
         let bundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
-            projectRoot: projectRoot
+            workspaceID: workspaceID
         )
         let timingArtifact = try #require(bundle.artifacts.first {
             $0.stageID == "timing.sta"
@@ -100,7 +102,7 @@ struct TimingHeadlessFlowTests {
             ledgerPersistence: workspaceStore
         ).recordApproval(
             FlowGateApprovalRequest(
-                projectRoot: projectRoot,
+                workspaceID: workspaceID,
                 runID: runID,
                 stageID: "timing.sta",
                 verdict: .approved,
@@ -110,7 +112,7 @@ struct TimingHeadlessFlowTests {
         #expect(approval.approval.stageID == "timing.sta")
 
         let resumed = try await runtime.resume(
-            request: FlowRunResumeRequest(projectRoot: projectRoot, runID: runID)
+            request: FlowRunResumeRequest(workspaceID: workspaceID, runID: runID)
         )
         #expect(resumed.result.status == .succeeded)
         #expect(resumed.summary.approvalCount == 1)
@@ -121,7 +123,7 @@ struct TimingHeadlessFlowTests {
 
         let resumedBundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
-            projectRoot: projectRoot
+            workspaceID: workspaceID
         )
         #expect(resumedBundle.artifacts.first(where: {
             $0.stageID == "timing.sta"
@@ -178,16 +180,22 @@ struct TimingHeadlessFlowTests {
 
     private func makeContext(projectRoot: URL, runID: String) async throws -> FlowExecutionContext {
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
         return FlowExecutionContext(
-            projectRoot: projectRoot,
+            workspaceID: try await workspaceID(for: workspaceStore),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
+    }
+
+    private func workspaceID(
+        for workspaceStore: XcircuiteWorkspaceStore
+    ) async throws -> FlowWorkspaceID {
+        let manifest = try await workspaceStore.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private func writeSTAInputs(to projectRoot: URL) throws {
@@ -225,3 +233,4 @@ struct TimingHeadlessFlowTests {
         return FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
     }
 }
+import CircuiteFoundation

@@ -32,7 +32,7 @@ func artifactReference(
 }
 
 extension XcircuiteFlowRuntimeTests {
-    struct NoopDRCEngine: DRCExecuting {
+    struct NoopDRCEngine: Xcircuite.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             DRCExecutionResult(
                 request: request,
@@ -47,7 +47,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    struct FlakyDRCEngine: DRCExecuting {
+    struct FlakyDRCEngine: Xcircuite.DRCExecuting {
         let state: FlakyDRCEngineState
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -55,7 +55,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    struct AlwaysFailingDRCEngine: DRCExecuting {
+    struct AlwaysFailingDRCEngine: Xcircuite.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             throw DRCError.backendUnavailable("Persistent native DRC startup failure.")
         }
@@ -185,23 +185,6 @@ extension XcircuiteFlowRuntimeTests {
             minimumLevel: .smokeChecked,
             requiredInputFormats: [requiredLayoutFormat, .spice, .json],
             requiredOutputFormats: [.spef, .json]
-        )
-    }
-
-    func mockPEXContractRequirement(requiredLayoutFormat: ArtifactFormat = .gdsii) -> ToolTrustRequirement {
-        ToolTrustRequirement(
-            kind: .pex,
-            operationID: "run-pex",
-            minimumLevel: .unknown,
-            requiredInputFormats: [requiredLayoutFormat, .spice, .json],
-            requiredOutputFormats: [.spef, .json]
-        )
-    }
-
-    func mockPEXContractToolSpec() -> XcircuiteFlowToolSpec {
-        XcircuiteFlowToolSpec(
-            qualificationLevel: .unknown,
-            healthStatus: .passed
         )
     }
 

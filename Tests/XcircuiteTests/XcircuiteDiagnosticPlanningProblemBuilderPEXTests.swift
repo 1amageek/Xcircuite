@@ -421,3 +421,4 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         _ = try await retainTestArtifact(reference, runID: runID, store: store, projectRoot: root)
     }
 }
+import CircuiteFoundation

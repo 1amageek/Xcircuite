@@ -55,10 +55,10 @@ public struct XcircuiteFlowRunSpec: Sendable, Hashable, Codable {
         return spec
     }
 
-    public func makeRequest(projectRoot: URL) throws -> FlowOperationRequest {
+    public func makeRequest(workspaceID: FlowWorkspaceID) throws -> FlowOperationRequest {
         try validate()
         return FlowOperationRequest(
-            projectRoot: projectRoot,
+            workspaceID: workspaceID,
             runID: runID,
             intent: intent,
             stages: stages

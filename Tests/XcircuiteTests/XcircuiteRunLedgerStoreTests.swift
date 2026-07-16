@@ -32,7 +32,7 @@ struct XcircuiteRunLedgerPersistenceTests {
             runID: "run-1",
             to: .running
         )
-        #expect(transitioned.runResult.status == .running)
+        #expect(transitioned.runManifest.status == .running)
         #expect(transitioned.runManifest.revision == 1)
 
         let reloaded = try await store.loadRunLedger(runID: "run-1")
@@ -170,6 +170,39 @@ struct XcircuiteRunLedgerPersistenceTests {
     }
 
     @Test
+    func concurrentProgressAppendsPersistEveryEventWithUniqueSequence() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let firstStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let secondStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await firstStore.saveRunLedger(try makeLedger(runID: "run-progress"))
+        let firstProgress = FlowRunProgressStore(persistence: firstStore)
+        let secondProgress = FlowRunProgressStore(persistence: secondStore)
+
+        async let first = firstProgress.appendEvent(
+            runID: "run-progress",
+            kind: .runStarted,
+            runStatus: .running,
+            message: "first writer"
+        )
+        async let second = secondProgress.appendEvent(
+            runID: "run-progress",
+            kind: .runStarted,
+            runStatus: .running,
+            message: "second writer"
+        )
+        let events = try await [first, second]
+
+        #expect(Set(events.map(\.sequence)) == [1, 2])
+        let persistedEvents = try await firstProgress.loadProgressEvents(runID: "run-progress")
+        #expect(persistedEvents.count == 2)
+        #expect(persistedEvents.map(\.sequence) == [1, 2])
+        #expect(Set(persistedEvents.map(\.message)) == ["first writer", "second writer"])
+        let ledger = try await firstStore.loadRunLedger(runID: "run-progress")
+        #expect(ledger.progressEvents == persistedEvents)
+    }
+
+    @Test
     func revalidatesRetainedArtifactsOnLoad() async throws {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
@@ -201,6 +234,121 @@ struct XcircuiteRunLedgerPersistenceTests {
                 return
             }
             #expect(failedPath == path)
+        }
+    }
+
+    @Test
+    func recoversInterruptedRunLedgerGenerationBeforeReading() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.saveRunLedger(try makeLedger(runID: "run-recovery"))
+        let interruptedStore = try XcircuiteWorkspaceStore(
+            projectRoot: root,
+            transactionFault: .afterOperation(0)
+        )
+        let proposal = try makeLedger(runID: "run-recovery", revision: 1)
+
+        await #expect(throws: XcircuiteWorkspaceTransactionError.injectedFailure(.afterOperation(0))) {
+            try await interruptedStore.saveRunLedger(proposal)
+        }
+
+        let recovered = try await store.loadRunLedger(runID: "run-recovery")
+        #expect(recovered == proposal)
+        let transactionDirectory = root.appending(path: ".xcircuite/transactions")
+        let remaining = try FileManager.default.contentsOfDirectory(
+            at: transactionDirectory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.pathExtension == "json" }
+        #expect(remaining.isEmpty)
+    }
+
+    @Test
+    func rejectsDifferentEmbeddedRunIdentifier() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.saveRunLedger(try makeLedger(runID: "run-identity"))
+        var corrupted = try await store.loadRunLedger(runID: "run-identity")
+        corrupted.runManifest = try FlowRunManifest(
+            runID: "different-run",
+            status: .created,
+            revision: 0,
+            actor: FlowRunActor(kind: .system, identifier: "test"),
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        try writeRawLedger(corrupted, root: root)
+
+        await #expect(throws: FlowRunLedgerPersistenceError.runIdentifierMismatch(
+            requested: "run-identity",
+            stored: "different-run"
+        )) {
+            _ = try await store.loadRunLedger(runID: "run-identity")
+        }
+    }
+
+    @Test
+    func rejectsDifferentCanonicalAndEmbeddedManifests() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.saveRunLedger(try makeLedger(runID: "run-manifest"))
+        let differentManifest = try FlowRunManifest(
+            runID: "run-manifest",
+            status: .running,
+            revision: 1,
+            actor: FlowRunActor(kind: .system, identifier: "test"),
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let manifestURL = root.appending(path: ".xcircuite/runs/run-manifest/manifest.json")
+        try sortedEncoder().encode(differentManifest).write(to: manifestURL, options: .atomic)
+
+        do {
+            _ = try await store.loadRunLedger(runID: "run-manifest")
+            Issue.record("Expected canonical manifest mismatch.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .decodingFailed(let message) = error else {
+                Issue.record("Unexpected ledger error: \(error.localizedDescription)")
+                return
+            }
+            #expect(message.contains("Canonical and embedded run manifests differ"))
+        }
+    }
+
+    @Test
+    func rejectsDifferentLedgerAndManifestArtifactSets() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.saveRunLedger(try makeLedger(runID: "run-artifacts"))
+        let artifactPath = ".xcircuite/runs/run-artifacts/report.json"
+        let artifactData = Data("retained".utf8)
+        try artifactData.write(to: root.appending(path: artifactPath), options: .atomic)
+        let reference = try LocalArtifactReferencer().reference(
+            ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: artifactPath),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            relativeTo: root
+        )
+        var corrupted = try await store.loadRunLedger(runID: "run-artifacts")
+        corrupted.artifacts = [reference]
+        try writeRawLedger(corrupted, root: root)
+
+        do {
+            _ = try await store.loadRunLedger(runID: "run-artifacts")
+            Issue.record("Expected artifact-set mismatch.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .decodingFailed(let message) = error else {
+                Issue.record("Unexpected ledger error: \(error.localizedDescription)")
+                return
+            }
+            #expect(message.contains("different artifact sets"))
         }
     }
 
@@ -242,6 +390,17 @@ struct XcircuiteRunLedgerPersistenceTests {
             runStatus: .running,
             message: "writer-\(sequence)"
         )
+    }
+
+    private func writeRawLedger(_ ledger: FlowRunLedger, root: URL) throws {
+        let url = root.appending(path: ".xcircuite/runs/\(ledger.runID)/ledger.json")
+        try sortedEncoder().encode(ledger).write(to: url, options: .atomic)
+    }
+
+    private func sortedEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
     }
 
     private func capture(

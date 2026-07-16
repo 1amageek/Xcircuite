@@ -34,7 +34,8 @@ struct LogicDesignFlowStageExecutorTests {
         #expect(result.artifacts.allSatisfy {
             LocalArtifactVerifier().verify($0, relativeTo: root).isVerified
         })
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: root
+            .appending(path: ".xcircuite/runs/logic-elaboration-adapter")
             .appending(path: "stages/logic.elaborate/raw/logic-design.json").path))
     }
 
@@ -104,17 +105,18 @@ struct LogicDesignFlowStageExecutorTests {
         #expect(result.artifacts.allSatisfy {
             LocalArtifactVerifier().verify($0, relativeTo: root).isVerified
         })
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: root
+            .appending(path: ".xcircuite/runs/logic-power-adapter")
             .appending(path: "stages/logic.power-intent/raw/power-intent.json").path))
     }
 
     private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         return FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]

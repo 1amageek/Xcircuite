@@ -42,12 +42,12 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let sourceURL = try sourceInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let designURL = try designInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let source = try String(contentsOf: sourceURL, encoding: .utf8)
             let snapshot = try LogicDesignSnapshotCodec.decode(Data(contentsOf: designURL))
@@ -59,13 +59,13 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             }
             let sourceReference = try support.artifactBuilder.reference(
                 for: sourceURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: ArtifactKind.powerIntent,
                 format: format == .upf ? ArtifactFormat.upf : ArtifactFormat.cpf
             )
             let designReference = try support.artifactBuilder.reference(
                 for: designURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: ArtifactKind.rtl,
                 format: ArtifactFormat.json
             )
@@ -76,7 +76,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                     designReference.locator,
                 ],
                 design: LogicDesignReference(
-                    artifact: designReference.locator,
+                    artifact: designReference,
                     topDesignName: topDesignName,
                     designDigest: designDigest
                 ),
@@ -99,21 +99,21 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                 )
                 var payload = result.payload
                 payload.reference = PowerIntentReference(
-                    artifact: intentReference.locator,
+                    artifact: intentReference,
                     designDigest: designDigest
                 )
                 persistedResult = PowerIntentParsingResult(
                     schemaVersion: result.schemaVersion,
                     runID: result.runID,
                     status: result.status,
-                    diagnostics: result.diagnostics,
+                    logicDiagnostics: result.logicDiagnostics,
                     provenance: result.provenance,
                     payload: payload
                 )
                 artifacts.append(intentReference)
             }
             let resultArtifact = try await persistResult(persistedResult, context: context)
-            return makeStageResult(
+            return try makeStageResult(
                 result: persistedResult,
                 resultArtifact: resultArtifact,
                 artifacts: artifacts,
@@ -149,7 +149,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
         resultArtifact: ArtifactReference,
         artifacts: [ArtifactReference],
         context: FlowExecutionContext
-    ) -> FlowStageResult {
+    ) throws -> FlowStageResult {
         let diagnostics = result.diagnostics.map { diagnostic in
             let severity: FlowDiagnosticSeverity
             switch diagnostic.severity {
@@ -159,14 +159,14 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             }
             return FlowDiagnostic(
                 severity: severity,
-                code: diagnostic.code,
-                message: diagnostic.message
+                code: diagnostic.code.rawValue,
+                message: diagnostic.summary
             )
         }
         let allArtifacts = artifacts + [resultArtifact]
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: allArtifacts,
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         )
         let gateStatus: FlowGateStatus
         let stageStatus: FlowStageStatus

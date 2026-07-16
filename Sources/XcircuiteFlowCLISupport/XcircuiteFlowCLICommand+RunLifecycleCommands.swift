@@ -7,11 +7,12 @@ extension XcircuiteFlowCLICommand {
     static func inspectRun(arguments: [String]) async throws -> String {
         let options = try parseRunLifecycleOptions(arguments)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let summary = try await DefaultFlowRunLedgerInspector(
             reviewBundler: makeReviewBundler(store: store)
         ).inspectRun(
             runID: options.runID,
-            projectRoot: options.projectRoot
+            workspaceID: workspaceID
         )
         return try encode(summary, pretty: options.pretty)
     }
@@ -19,9 +20,10 @@ extension XcircuiteFlowCLICommand {
     static func reviewRun(arguments: [String]) async throws -> String {
         let options = try parseRunLifecycleOptions(arguments)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let bundle = try await makeReviewBundler(store: store).makeReviewBundle(
             runID: options.runID,
-            projectRoot: options.projectRoot
+            workspaceID: workspaceID
         )
         return try encode(bundle, pretty: options.pretty)
     }
@@ -29,30 +31,33 @@ extension XcircuiteFlowCLICommand {
     static func buildStageArtifactLadder(arguments: [String]) async throws -> String {
         let options = try parseRunLifecycleOptions(arguments)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunStageArtifactLadderBuilder(
             loader: store,
             reviewBundler: makeReviewBundler(store: store),
             persistence: store
-        ).buildStageArtifactLadder(runID: options.runID, projectRoot: options.projectRoot)
+        ).buildStageArtifactLadder(runID: options.runID, workspaceID: workspaceID)
         return try encode(result, pretty: options.pretty)
     }
 
     static func buildDecisionPacket(arguments: [String]) async throws -> String {
         let options = try parseRunLifecycleOptions(arguments)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunDecisionPacketBuilder(
             reviewBundler: makeReviewBundler(store: store),
             persistence: store
-        ).buildDecisionPacket(runID: options.runID, projectRoot: options.projectRoot)
+        ).buildDecisionPacket(runID: options.runID, workspaceID: workspaceID)
         return try encode(result, pretty: options.pretty)
     }
 
     static func validateDecisionPacket(arguments: [String]) async throws -> String {
         let options = try parseRunLifecycleOptions(arguments)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await makeDecisionPacketValidator(store: store).validateDecisionPacket(
             runID: options.runID,
-            projectRoot: options.projectRoot
+            workspaceID: workspaceID
         )
         return try encode(result, pretty: options.pretty)
     }
@@ -74,13 +79,14 @@ extension XcircuiteFlowCLICommand {
         }
         let options = try requireRunOptions(root: root, runID: runID, pretty: pretty)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunReleaseEnvelopeBuilder(
             decisionPacketValidator: makeDecisionPacketValidator(store: store),
             loader: store,
             persistence: store
         ).buildReleaseEnvelope(
             runID: options.runID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             maxEvidenceAgeDays: maximumAge
         )
         return try encode(result, pretty: options.pretty)
@@ -107,6 +113,7 @@ extension XcircuiteFlowCLICommand {
         guard let dashboardPath else { throw XcircuiteFlowCLIError.missingOption("--signoff-dashboard") }
         guard let contractPath else { throw XcircuiteFlowCLIError.missingOption("--contract-report") }
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let dashboard = try await store.makeArtifactReference(
             forProjectRelativePath: try workspacePath(dashboardPath, projectRoot: options.projectRoot),
             artifactID: "release-signoff-dashboard-input",
@@ -123,7 +130,7 @@ extension XcircuiteFlowCLICommand {
         )
         let result = try await DefaultFlowRunReleaseEvidenceCollector(persistence: store).collectReleaseEvidence(
             runID: options.runID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             signoffDashboard: dashboard,
             contractReport: contract
         )
@@ -165,6 +172,7 @@ extension XcircuiteFlowCLICommand {
         guard let retentionDays else { throw XcircuiteFlowCLIError.missingOption("--retention-days") }
         guard let minimumRetentionDays else { throw XcircuiteFlowCLIError.missingOption("--minimum-retention-days") }
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let dashboard = try await store.makeArtifactReference(
             forProjectRelativePath: try workspacePath(dashboardPath, projectRoot: options.projectRoot),
             artifactID: "retention-source-dashboard",
@@ -186,7 +194,7 @@ extension XcircuiteFlowCLICommand {
         ).build(
             runID: options.runID,
             workflowRunID: workflowRunID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             sourceDashboard: dashboard,
             history: history,
             previousEntryCount: previousEntryCount,
@@ -227,6 +235,7 @@ extension XcircuiteFlowCLICommand {
         }
         let options = try requireRunOptions(root: root, runID: runID, pretty: pretty)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let reference = try await store.makeArtifactReference(
             forProjectRelativePath: ".xcircuite/runs/\(options.runID)/qualification/retention-index.json",
             artifactID: "qualification-retention-index",
@@ -238,7 +247,7 @@ extension XcircuiteFlowCLICommand {
         let result = try await DefaultFlowRunReleaseRetentionIndexValidator(persistence: store).validate(
             index: index,
             runID: options.runID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             currentDate: Date(),
             maximumAgeSeconds: maximumAge.map { TimeInterval($0) * 86_400 }
         )
@@ -276,6 +285,7 @@ extension XcircuiteFlowCLICommand {
         guard let verdict else { throw XcircuiteFlowCLIError.missingOption("--verdict") }
         guard let reviewer else { throw XcircuiteFlowCLIError.missingOption("--reviewer") }
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let inspector = DefaultFlowRunLedgerInspector(
             reviewBundler: makeReviewBundler(store: store)
         )
@@ -284,7 +294,7 @@ extension XcircuiteFlowCLICommand {
             inspector: inspector,
             ledgerPersistence: store
         ).recordApproval(FlowGateApprovalRequest(
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             runID: options.runID,
             stageID: stageID,
             verdict: verdict,
@@ -315,10 +325,11 @@ extension XcircuiteFlowCLICommand {
         guard let requestedBy else { throw XcircuiteFlowCLIError.missingOption("--requested-by") }
         guard let reason else { throw XcircuiteFlowCLIError.missingOption("--reason") }
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunCancellationRecorder(
             progressStore: FlowRunProgressStore(persistence: store)
         ).requestCancellation(
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             runID: options.runID,
             requestedBy: requestedBy,
             reason: reason
@@ -349,8 +360,9 @@ extension XcircuiteFlowCLICommand {
         }
         let options = try requireRunOptions(root: root, runID: runID, pretty: pretty)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let request = FlowRunProgressSubscriptionRequest(
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             runID: options.runID,
             afterSequence: sequence,
             waitForNewEvents: wait,
@@ -418,6 +430,14 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.invalidValue(option: option, value: value)
         }
         return date
+    }
+
+    private static func workspaceID(
+        for store: XcircuiteWorkspaceStore
+    ) async throws -> FlowWorkspaceID {
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private static func workspacePath(_ value: String, projectRoot: URL) throws -> String {

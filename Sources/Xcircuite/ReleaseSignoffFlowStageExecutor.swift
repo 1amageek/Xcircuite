@@ -32,8 +32,8 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let data = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()
@@ -43,10 +43,10 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
                 return support.failureResult(stageID: stage.stageID, code: "RELEASE_SIGNOFF_RUN_ID_MISMATCH", message: "Signoff request run ID does not match the flow run.")
             }
             if let projectRoot = request.projectRoot,
-               URL(fileURLWithPath: projectRoot).standardizedFileURL != context.projectRoot.standardizedFileURL {
+               URL(fileURLWithPath: projectRoot).standardizedFileURL != (try context.xcircuiteProjectRoot()).standardizedFileURL {
                 return support.failureResult(stageID: stage.stageID, code: "RELEASE_SIGNOFF_PROJECT_ROOT_MISMATCH", message: "Signoff request project root does not match the flow context.")
             }
-            request.projectRoot = context.projectRoot.path
+            request.projectRoot = try context.xcircuiteProjectRoot().path
             let result = try await engine.execute(request)
             try await context.checkCancellation()
             let artifact = try await support.persistResult(

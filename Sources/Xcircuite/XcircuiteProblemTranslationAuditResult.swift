@@ -27,3 +27,4 @@ public struct XcircuiteProblemTranslationAuditResult: Codable, Sendable, Hashabl
         self.auditArtifact = auditArtifact
     }
 }
+import CircuiteFoundation

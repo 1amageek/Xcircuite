@@ -55,3 +55,4 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
         self.toolHealth = toolHealth
     }
 }
+import CircuiteFoundation

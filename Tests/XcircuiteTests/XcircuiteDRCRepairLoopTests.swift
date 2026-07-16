@@ -746,3 +746,4 @@ struct XcircuiteDRCRepairLoopTests {
         }
     }
 }
+import CircuiteFoundation

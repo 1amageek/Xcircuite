@@ -12,7 +12,7 @@ import Testing
 import ToolQualification
 @testable import Xcircuite
 
-@Suite("Electrical signoff flow adapter")
+@Suite("Electrical signoff flow executor")
 struct ElectricalSignoffFlowStageExecutorTests {
     @Test("maps completed per-axis envelopes to passed flow gates", .timeLimit(.minutes(1)))
     func mapsCompletedEnvelopes() async throws {
@@ -32,15 +32,15 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(result.status == FlowStageStatus.succeeded)
         #expect(result.gates.map(\.status) == [FlowGateStatus.passed, .passed, .passed])
         #expect(result.gates.map(\.gateID) == ["erc", "esd", "artifact-integrity"])
-        let evidenceReference = try #require(
-            result.artifacts.first { $0.artifactID == "electrical-signoff-foundation-evidence" }
+        let runResultReference = try #require(
+            result.artifacts.first { $0.artifactID == "electrical-signoff-run-result" }
         )
-        #expect(evidenceReference.sha256.count == 64)
-        let foundationEvidence = try JSONDecoder().decode(
-            ElectricalSignoffFoundationEvidence.self,
-            from: try await store.read(from: evidenceReference.path)
+        #expect(runResultReference.sha256.count == 64)
+        let persistedRunResult = try JSONDecoder().decode(
+            ElectricalSignoffRunResult.self,
+            from: try await store.read(from: runResultReference.path)
         )
-        #expect(foundationEvidence.evidence.provenance.inputs.count == 3)
+        #expect(persistedRunResult.evidence.provenance.inputs.count == 3)
     }
 
     @Test("failed electrical axes retain a typed repair plan artifact", .timeLimit(.minutes(1)))
@@ -388,11 +388,11 @@ struct ElectricalSignoffFlowStageExecutorTests {
         runID: String
     ) async throws -> (store: XcircuiteWorkspaceStore, context: FlowExecutionContext) {
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: store)
+        _ = try await prepareTestRun(runID: runID, store: store)
+        let manifest = try await store.loadManifest()
         let context = FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
@@ -429,7 +429,7 @@ struct ElectricalSignoffFlowStageExecutorTests {
         return ElectricalSignoffRequest(
             runID: runID,
             inputs: [reference],
-            design: LogicDesignReference(artifact: reference.locator, topDesignName: "top", designDigest: "design"),
+            design: LogicDesignReference(artifact: reference, topDesignName: "top", designDigest: "design"),
             physicalDesign: PhysicalDesignReference(layoutArtifact: layoutReference, topCell: "top", layoutDigest: "layout"),
             pdk: PDKReference(manifest: pdkReference, processID: "fixture", version: "1", digest: pdkReference.sha256)
         )
@@ -468,12 +468,17 @@ private struct StubElectricalSignoffEngine: ElectricalSignoffExecuting {
                 schemaVersion: 1,
                 runID: request.runID,
                 status: .completed,
-                metadata: metadata,
+                provenance: metadata,
                 payload: payload
             )
             return (axis, result)
         })
-        return ElectricalSignoffRunResult(runID: request.runID, status: .completed, axisResults: results)
+        return ElectricalSignoffRunResult(
+            runID: request.runID,
+            status: .completed,
+            axisResults: results,
+            provenance: metadata
+        )
     }
 }
 
@@ -499,11 +504,16 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
                 schemaVersion: 1,
                 runID: request.runID,
                 status: .completed,
-                metadata: metadata,
+                provenance: metadata,
                 payload: payload
             ))
         })
-        return ElectricalSignoffRunResult(runID: request.runID, status: .completed, axisResults: results)
+        return ElectricalSignoffRunResult(
+            runID: request.runID,
+            status: .completed,
+            axisResults: results,
+            provenance: metadata
+        )
     }
 }
 

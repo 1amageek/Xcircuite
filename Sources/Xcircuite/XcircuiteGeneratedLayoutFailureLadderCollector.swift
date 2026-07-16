@@ -29,7 +29,12 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     ) async throws -> XcircuiteGeneratedLayoutFailureLadderReport {
         try validate(request)
         let ledger = try await ledgerLoader.loadRunLedger(runID: request.runID)
-        let bundle = try await reviewBundler.makeReviewBundle(runID: request.runID, projectRoot: projectRoot)
+        let manifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: manifest.identity.projectID)
+        let bundle = try await reviewBundler.makeReviewBundle(
+            runID: request.runID,
+            workspaceID: workspaceID
+        )
         let stageNodes = makeStageNodes(
             request: request,
             ledger: ledger,
@@ -141,7 +146,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
         return XcircuiteGeneratedLayoutFailureLadderReport(
             ladderID: request.ladderID,
             runID: request.runID,
-            runStatus: ledger.runResult.status,
+            runStatus: ledger.runManifest.status,
             summary: XcircuiteGeneratedLayoutFailureLadderReport.Summary(
                 stageCount: stageNodes.count,
                 failingStageCount: stageNodes.filter { $0.status == .failed }.count,
@@ -443,3 +448,4 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
         return left.path < right.path
     }
 }
+import CircuiteFoundation

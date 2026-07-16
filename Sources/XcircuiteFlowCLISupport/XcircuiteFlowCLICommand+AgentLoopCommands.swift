@@ -11,12 +11,13 @@ extension XcircuiteFlowCLICommand {
         let options = try parseAgentLoopOptions(arguments: arguments)
         let profile = try loadAgentLoopProfile(from: options.profileURL)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunLoopSnapshotBuilder(
             loader: store,
             evidencePersistence: store
         ).summarizeLoop(
             runID: options.runID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             profile: profile,
             persist: options.persist
         )
@@ -30,6 +31,7 @@ extension XcircuiteFlowCLICommand {
         let options = try parseAgentLoopOptions(arguments: arguments)
         let profile = try loadAgentLoopProfile(from: options.profileURL)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let snapshotBuilder = DefaultFlowRunLoopSnapshotBuilder(
             loader: store,
             evidencePersistence: store
@@ -39,7 +41,7 @@ extension XcircuiteFlowCLICommand {
             persistence: store
         ).evaluateRunGuard(
             runID: options.runID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             profile: profile,
             persist: options.persist
         )
@@ -53,12 +55,13 @@ extension XcircuiteFlowCLICommand {
         let options = try parseEvaluationOptions(arguments: arguments)
         let profile = try loadEvaluationProfile(from: options.profileURL)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunCrossArtifactEvaluator(
             loader: store,
             evidencePersistence: store
         ).compareArtifacts(
             runID: options.runID,
-            projectRoot: options.projectRoot,
+            workspaceID: workspaceID,
             profile: profile,
             persist: options.persist
         )
@@ -207,6 +210,14 @@ extension XcircuiteFlowCLICommand {
             from: url,
             option: "--profile"
         )
+    }
+
+    private static func workspaceID(
+        for store: XcircuiteWorkspaceStore
+    ) async throws -> FlowWorkspaceID {
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 }
 

@@ -32,7 +32,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Run DRC",
                 stages: [
@@ -110,7 +110,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-post-layout-artifact-input",
                 intent: "Compare stage-produced pre/post layout waveforms",
                 stages: [
@@ -169,7 +169,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-drc-retry",
                 intent: "Retry transient DRC executor failure",
                 stages: [
@@ -224,7 +224,7 @@ extension XcircuiteFlowRuntimeTests {
             persistence: store
         ).makeReviewBundle(
             runID: "run-drc-retry",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
@@ -247,7 +247,7 @@ extension XcircuiteFlowRuntimeTests {
 
         _ = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Run DRC and persist planning capabilities",
                 stages: [
@@ -366,7 +366,7 @@ extension XcircuiteFlowRuntimeTests {
             persistence: store
         ).makeReviewBundle(
             runID: "run-1",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(bundle.artifacts.first(where: {
             $0.purpose == .planningActionDomain
@@ -403,7 +403,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let initial = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Run DRC with approval",
                 stages: [
@@ -426,7 +426,7 @@ extension XcircuiteFlowRuntimeTests {
             ledgerPersistence: store
         ).recordApproval(
             FlowGateApprovalRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 stageID: "007-drc",
                 verdict: .approved,
@@ -435,7 +435,10 @@ extension XcircuiteFlowRuntimeTests {
         )
 
         let resumed = try await runtime.resume(
-            request: FlowRunResumeRequest(projectRoot: root, runID: "run-1")
+            request: FlowRunResumeRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-1"
+            )
         )
 
         #expect(resumed.result.status == .succeeded)
@@ -452,6 +455,147 @@ extension XcircuiteFlowRuntimeTests {
             from: ".xcircuite/runs/run-1/toolchain-profile.json"
         )
         #expect(persistedProfile.profileID == "resume-profile")
+    }
+
+    @Test func runtimeResumesPersistedPlanAfterWaiverWithAuditableDiagnostic() async throws {
+        let root = try makeTemporaryRoot("runtime-waiver-resume")
+        defer { removeTemporaryRoot(root) }
+        let layoutURL = try writeLayout(cleanLayout(), root: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
+            executors: [
+                DRCFlowStageExecutor.native(
+                    stageID: "007-drc",
+                    layoutURL: layoutURL,
+                    topCell: "TOP"
+                ),
+            ],
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+        )
+        let initial = try await runtime.run(
+            request: FlowOperationRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-waiver",
+                intent: "Run DRC with a reviewed waiver",
+                stages: [
+                    FlowStageDefinition(
+                        stageID: "007-drc",
+                        displayName: "DRC",
+                        requiredTool: drcRequirement(),
+                        requiresApproval: true
+                    ),
+                ]
+            )
+        )
+        #expect(initial.status == .blocked)
+
+        let reviewBundler = DefaultFlowRunReviewBundler(loader: store, persistence: store)
+        let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
+        _ = try await DefaultFlowGateApprovalRecorder(
+            loader: store,
+            inspector: inspector,
+            ledgerPersistence: store
+        ).recordApproval(
+            FlowGateApprovalRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-waiver",
+                stageID: "007-drc",
+                verdict: .waived,
+                reviewer: "reviewer-1",
+                note: "Reviewed exception accepted for this retained run."
+            )
+        )
+
+        let resumed = try await runtime.resume(
+            request: FlowRunResumeRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-waiver"
+            )
+        )
+
+        #expect(resumed.result.status == .succeeded)
+        let stage = try #require(resumed.result.stages.first { $0.stageID == "007-drc" })
+        #expect(stage.gates.contains { $0.gateID == "approval" && $0.status == .waived })
+        #expect(stage.diagnostics.contains { $0.code == "STAGE_WAIVED" })
+        let persisted = try await store.loadRunLedger(runID: "run-waiver")
+        #expect(persisted.approvals.contains {
+            $0.stageID == "007-drc"
+                && $0.verdict == .waived
+                && $0.note == "Reviewed exception accepted for this retained run."
+        })
+    }
+
+    @Test func runtimeResumeRejectsTamperingInAnyRetainedArtifact() async throws {
+        let root = try makeTemporaryRoot("runtime-attested-resume")
+        defer { removeTemporaryRoot(root) }
+        let layoutURL = try writeLayout(cleanLayout(), root: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
+            executors: [
+                DRCFlowStageExecutor.native(
+                    stageID: "007-drc",
+                    layoutURL: layoutURL,
+                    topCell: "TOP"
+                ),
+            ],
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
+        )
+        _ = try await runtime.run(
+            request: FlowOperationRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-tampered",
+                intent: "Retain and attest every resume artifact",
+                stages: [
+                    FlowStageDefinition(
+                        stageID: "007-drc",
+                        displayName: "DRC",
+                        requiredTool: drcRequirement(),
+                        requiresApproval: true
+                    ),
+                ]
+            )
+        )
+        let reviewBundler = DefaultFlowRunReviewBundler(loader: store, persistence: store)
+        let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
+        _ = try await DefaultFlowGateApprovalRecorder(
+            loader: store,
+            inspector: inspector,
+            ledgerPersistence: store
+        ).recordApproval(
+            FlowGateApprovalRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-tampered",
+                stageID: "007-drc",
+                verdict: .approved,
+                reviewer: "reviewer-1"
+            )
+        )
+        let ledger = try await store.loadRunLedger(runID: "run-tampered")
+        let retained = try #require(ledger.artifacts.first {
+            $0.id.rawValue == "action-ledger"
+        })
+        try Data("tampered".utf8).write(
+            to: root.appending(path: retained.path),
+            options: .atomic
+        )
+
+        do {
+            _ = try await runtime.resume(
+                request: FlowRunResumeRequest(
+                    workspaceID: try await workspaceID(projectRoot: root),
+                    runID: "run-tampered"
+                )
+            )
+            Issue.record("Expected retained artifact attestation failure.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .artifactIntegrityFailure(let path, _) = error else {
+                Issue.record("Unexpected ledger error: \(error.localizedDescription)")
+                return
+            }
+            #expect(path == retained.path)
+        }
     }
 
     @Test func runtimeSpecBuildsRuntimeForDRCExecutor() async throws {
@@ -474,7 +618,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Run DRC",
                 stages: [
@@ -512,7 +656,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Apply layout commands",
                 stages: [
@@ -563,6 +707,13 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: projectRoot,
             toolchainProfile: toolchainProfile
         )
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
 }

@@ -9,7 +9,6 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func runtimeToolchainProfileFeedsDefaultSignoffTechnologyInputs() async throws {
@@ -100,8 +99,8 @@ extension XcircuiteFlowRuntimeTests {
                         tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
@@ -115,7 +114,13 @@ extension XcircuiteFlowRuntimeTests {
                         sourceNetlistPath: "circuits/top.spice",
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
-                        tool: mockPEXContractToolSpec()
+                        backendSelection: PEXBackendSelection(
+                            backendID: "magic",
+                            executablePath: root
+                                .appending(path: "missing-magic")
+                                .path(percentEncoded: false)
+                        ),
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "pex-magic")
                     )
                 ),
             ]
@@ -124,7 +129,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Apply a shared signoff toolchain profile",
                 stages: [
@@ -146,25 +151,26 @@ extension XcircuiteFlowRuntimeTests {
                     FlowStageDefinition(
                         stageID: "009-pex",
                         displayName: "PEX",
-                        requiredTool: mockPEXContractRequirement()
+                        requiredTool: pexRequirement()
                     ),
                 ]
             )
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == .blocked)
         let drcStage = try #require(result.stages.first { $0.stageID == "007-drc" })
         let lvsStage = try #require(result.stages.first { $0.stageID == "008-lvs" })
         let pexStage = try #require(result.stages.first { $0.stageID == "009-pex" })
         #expect(drcStage.gates.contains { $0.gateID == "drc" && $0.status == .passed })
         #expect(lvsStage.gates.contains { $0.gateID == "lvs" && $0.status == .passed })
-        #expect(pexStage.gates.contains { $0.gateID == "pex" && $0.status == .passed })
+        #expect(pexStage.status == .blocked)
+        #expect(pexStage.gates.contains { $0.gateID == "pex" && $0.status == .blocked })
+        #expect(pexStage.diagnostics.contains { $0.code == "PEX_BACKEND_UNAVAILABLE" })
         #expect(drcStage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(lvsStage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
-        #expect(pexStage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(drcStage.artifacts.contains { $0.artifactID == "drc-summary" })
         #expect(lvsStage.artifacts.contains { $0.artifactID == "lvs-summary" })
-        #expect(pexStage.artifacts.contains { $0.artifactID == "pex-summary" })
+        #expect(pexStage.artifacts.contains { $0.artifactID == "pex-summary" } == false)
 
         let toolchain = try await readToolchainManifest(in: root, runID: "run-1")
         #expect(toolchain.profile?.profileID == "local-signoff")
@@ -175,6 +181,13 @@ extension XcircuiteFlowRuntimeTests {
         #expect(toolchain.profile?.drcTechnologyInput == .path("tech/process.json"))
         #expect(toolchain.profile?.lvsTechnologyInput == .path("tech/process.json"))
         #expect(toolchain.profile?.pexTechnology == .jsonFile(path: "tech/pex.json"))
+        let pexToolchainStage = try #require(
+            toolchain.stages.first { $0.stageID == "009-pex" }
+        )
+        #expect(pexToolchainStage.selectedToolID == "pex-magic")
+        #expect(pexToolchainStage.selectedDecision?.status == .eligible)
+        #expect(pexToolchainStage.selectedHealth?.status == .passed)
+        #expect(pexToolchainStage.selectedDescriptor?.trustProfile.level == .smokeChecked)
 
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let persistedProfile = try await store.readJSON(
@@ -190,7 +203,7 @@ extension XcircuiteFlowRuntimeTests {
         let reviewBundler = DefaultFlowRunReviewBundler(loader: store, persistence: store)
         let summary = try await DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler).inspectRun(
             runID: "run-1",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(summary.toolchain?.profileID == "local-signoff")
         #expect(summary.toolchain?.technologyCatalogPath == "tech/catalog.json")
@@ -198,7 +211,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let bundle = try await reviewBundler.makeReviewBundle(
             runID: "run-1",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(bundle.artifacts.first(where: {
             $0.purpose == .toolchainProfile
@@ -222,14 +235,15 @@ extension XcircuiteFlowRuntimeTests {
                 ]
             ),
             executors: [
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutPath: "layout/top.gds",
                         layoutFormat: .gds,
                         sourceNetlistPath: "circuits/top.spice",
                         topCell: "top",
-                        corners: [PEXCorner(id: "tt")]
+                        corners: [PEXCorner(id: "tt")],
+                        backendSelection: PEXBackendSelection(backendID: "magic")
                     )
                 ),
             ]
@@ -854,6 +868,13 @@ extension XcircuiteFlowRuntimeTests {
         #expect(inventory.catalogCount == 1)
         #expect(inventory.failedCatalogCount == 1)
         #expect(inventory.catalogs.first?.issues.map(\.code) == ["missing-project-root"])
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
 }

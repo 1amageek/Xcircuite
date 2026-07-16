@@ -31,3 +31,4 @@ public struct XcircuiteRepairPlanFormulationCompilationResult: Codable, Sendable
         self.diagnosticCodes = diagnosticCodes
     }
 }
+import CircuiteFoundation

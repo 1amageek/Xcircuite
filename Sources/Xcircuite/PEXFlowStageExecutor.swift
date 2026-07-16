@@ -110,70 +110,6 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
-    public static func mock(
-        stageID: String,
-        layoutURL: URL,
-        layoutFormat: LayoutFormat,
-        sourceNetlistURL: URL,
-        sourceNetlistFormat: NetlistFormat = .spice,
-        topCell: String,
-        corners: [PEXCorner],
-        technology: TechnologyInput,
-        technologyByCorner: [String: TechnologyInput] = [:],
-        processProfile: PEXProcessProfileReference? = nil,
-        options: PEXRunOptions = .default
-    ) -> PEXFlowStageExecutor {
-        PEXFlowStageExecutor(
-            stageID: stageID,
-            toolID: "mock-pex",
-            request: PEXRunRequest(
-                layoutURL: layoutURL,
-                layoutFormat: layoutFormat,
-                sourceNetlistURL: sourceNetlistURL,
-                sourceNetlistFormat: sourceNetlistFormat,
-                topCell: topCell,
-                corners: corners,
-                technology: technology,
-                technologyByCorner: technologyByCorner,
-                processProfile: processProfile,
-                backendSelection: .mock(),
-                options: options
-            ),
-            engine: DefaultPEXEngine.withDefaults()
-        )
-    }
-
-    public static func mock(
-        stageID: String,
-        layoutInput: XcircuiteFlowInputReference,
-        layoutFormat: LayoutFormat,
-        sourceNetlistInput: XcircuiteFlowInputReference,
-        sourceNetlistFormat: NetlistFormat = .spice,
-        topCell: String,
-        corners: [PEXCorner],
-        technology: XcircuitePEXTechnologySpec,
-        technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
-        processProfile: PEXProcessProfileReference? = nil,
-        options: PEXRunOptions = .default
-    ) -> PEXFlowStageExecutor {
-        PEXFlowStageExecutor(
-            stageID: stageID,
-            toolID: "mock-pex",
-            layoutInput: layoutInput,
-            layoutFormat: layoutFormat,
-            sourceNetlistInput: sourceNetlistInput,
-            sourceNetlistFormat: sourceNetlistFormat,
-            topCell: topCell,
-            corners: corners,
-            technology: technology,
-            technologyByCorner: technologyByCorner,
-            processProfile: processProfile,
-            backendSelection: .mock(),
-            options: options,
-            engine: DefaultPEXEngine.withDefaults()
-        )
-    }
-
     public func execute(
         stage: FlowStageDefinition,
         context: FlowExecutionContext
@@ -181,7 +117,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let rawDirectory = context.runDirectory
+            let rawDirectory = try context.xcircuiteRunDirectory()
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
@@ -200,7 +136,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             let artifactCompleteness = try artifactCompletenessReport(
                 from: runResult,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let pexDiagnostics = flowDiagnostics(
                 from: runResult,
@@ -215,11 +151,11 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 let flowArtifactGate = StageArtifactManifestCoverageGateBuilder().pexGate(
                     manifestURL: runResult.manifestURL,
                     artifacts: artifacts,
-                    projectRoot: context.projectRoot
+                    projectRoot: try context.xcircuiteProjectRoot()
                 )
                 let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                     for: artifacts,
-                    projectRoot: context.projectRoot
+                    projectRoot: try context.xcircuiteProjectRoot()
                 )
                 let blockedDiagnostic = FlowDiagnostic(
                     severity: .error,
@@ -253,7 +189,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             }
             let persistedSummary = try persistSummaryArtifact(
                 from: runResult,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             try await context.checkCancellation()
             var artifacts = try artifactReferences(
@@ -267,12 +203,12 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             )
             let preEnvelopeArtifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let preEnvelopeFlowArtifactGate = StageArtifactManifestCoverageGateBuilder().pexGate(
                 manifestURL: runResult.manifestURL,
                 artifacts: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             if preEnvelopeArtifactIntegrityGate.status != .passed {
                 let diagnostics = pexDiagnostics
@@ -312,7 +248,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             artifacts.append(envelopeArtifact)
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let flowArtifactGate = preEnvelopeFlowArtifactGate
             let diagnostics = pexDiagnostics
@@ -418,7 +354,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
     }
 
     private func blockedErrorKind(from result: PEXRunResult) -> PEXErrorKind? {
-        if let failureKind = result.artifacts.corners
+        if let failureKind = result.artifactManifest.corners
             .compactMap({ $0.failure?.failureKind })
             .first(where: isBlocked)
         {
@@ -434,7 +370,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         for result: PEXRunResult,
         kind: PEXErrorKind
     ) -> String {
-        if let failure = result.artifacts.corners
+        if let failure = result.artifactManifest.corners
             .compactMap(\.failure)
             .first(where: { $0.failureKind == kind })
         {
@@ -485,24 +421,24 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
     ) throws -> PEXRunRequest {
         PEXRunRequest(
             layoutURL: try layoutInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             layoutFormat: layoutFormat,
             sourceNetlistURL: try sourceNetlistInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             sourceNetlistFormat: sourceNetlistFormat,
             topCell: topCell,
             corners: corners,
             technology: try technology.makeTechnologyInput(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             technologyByCorner: try resolvedTechnologyByCorner(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             processProfile: processProfile,
             backendSelection: backendSelection,
@@ -555,7 +491,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         var artifacts = [
             try artifactBuilder.reference(
                 for: result.manifestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
                 format: .json
             ),
@@ -563,14 +499,14 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         if let summaryURL {
             artifacts.append(try artifactBuilder.reference(
                 for: summaryURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "pex-summary",
                 kind: .report,
                 format: .json
             ))
         }
 
-        for artifact in result.artifacts.artifacts where artifact.availability == .available {
+        for artifact in result.artifactManifest.artifacts where artifact.availability == .available {
             let url = pexRunDirectory.appending(path: artifact.locator.location.value)
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
@@ -592,7 +528,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         do {
             return try artifactBuilder.reference(
                 for: url,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: artifact.id.rawValue,
                 kind: artifact.locator.kind,
                 format: artifact.locator.format
@@ -623,7 +559,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         }
         let relativePath = try lexicalProjectRelativePath(
             for: url,
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         )
         let locator = ArtifactLocator(
             location: try ArtifactLocation(workspaceRelativePath: relativePath),

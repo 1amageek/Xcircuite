@@ -157,7 +157,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let rawDirectory = context.runDirectory
+            let rawDirectory = try context.xcircuiteRunDirectory()
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
@@ -176,7 +176,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             let persistedSummary = try persistSummaryArtifact(
                 from: executionResult,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             try await context.checkCancellation()
             var artifacts = try artifactReferences(
@@ -199,12 +199,12 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             artifacts.append(envelopeArtifact)
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let artifactManifestGate = StageArtifactManifestCoverageGateBuilder().lvsGate(
                 manifestURL: executionResult.artifactManifestURL,
                 artifacts: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let diagnostics = flowDiagnostics
                 + artifactManifestGate.diagnostics
@@ -312,39 +312,39 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
     ) throws -> LVSRequest {
         LVSRequest(
             layoutNetlistURL: try layoutNetlistInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             layoutGDSURL: try layoutGDSInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             layoutFormat: layoutFormat,
             schematicNetlistURL: try schematicNetlistInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             topCell: topCell,
             technologyURL: try technologyInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             extractionDeckURL: try extractionDeckInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             processProfileID: processProfileID,
             waiverURL: try waiverInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             modelEquivalenceURL: try modelEquivalenceInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             terminalEquivalenceURL: try terminalEquivalenceInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             workingDirectory: workingDirectory,
             backendSelection: backendSelection,
@@ -370,7 +370,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         if let reportURL = executionResult.reportURL {
             artifacts.append(try artifactBuilder.reference(
                 for: reportURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
                 format: .json
             ))
@@ -378,14 +378,14 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         if let manifestURL = executionResult.artifactManifestURL {
             artifacts.append(try artifactBuilder.reference(
                 for: manifestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
                 format: .json
             ))
         }
         artifacts.append(try artifactBuilder.reference(
             for: summaryURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "lvs-summary",
             kind: .report,
             format: .json
@@ -399,7 +399,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         }
         if let log = try artifactBuilder.optionalReference(
             for: executionResult.result.logPath,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             kind: .report,
             format: .text
         ) {
@@ -408,7 +408,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         if let extracted = executionResult.extractedLayoutNetlistURL {
             artifacts.append(try artifactBuilder.reference(
                 for: extracted,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .netlist,
                 format: .spice
             ))
@@ -416,7 +416,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         if let correspondenceURL = executionResult.correspondenceURL {
             artifacts.append(try artifactBuilder.reference(
                 for: correspondenceURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "lvs-correspondence",
                 kind: .report,
                 format: .json
@@ -425,7 +425,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         if let extractionReportURL = executionResult.extractionReportURL {
             artifacts.append(try artifactBuilder.reference(
                 for: extractionReportURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "lvs-extraction-report",
                 kind: .report,
                 format: .json
@@ -434,7 +434,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         if let transformLedgerURL = executionResult.transformLedgerURL {
             artifacts.append(try artifactBuilder.reference(
                 for: transformLedgerURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "lvs-transform-ledger",
                 kind: .report,
                 format: .json
@@ -479,7 +479,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         try data.write(to: reportURL, options: .atomic)
         return try artifactBuilder.reference(
             for: reportURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "lvs-device-policy-application-report",
             kind: .report,
             format: .json

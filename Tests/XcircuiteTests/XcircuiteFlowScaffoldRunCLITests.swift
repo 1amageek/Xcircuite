@@ -6,8 +6,8 @@ import XcircuiteFlowCLISupport
 
 /// `scaffold-run` is the authoring entry point for flow specs: it
 /// writes a run-spec + runtime-config pair that decodes through the real
-/// spec types, passes `validate` unchanged, keeps the mock PEX stage at
-/// the runtime's mock contract and never fabricates qualification evidence.
+/// spec types, passes `validate` unchanged, configures a production PEX
+/// backend, and never fabricates qualification evidence.
 @Suite("xcircuite-flow scaffold-run", .timeLimit(.minutes(3)))
 struct XcircuiteFlowScaffoldRunCLITests {
 
@@ -65,7 +65,7 @@ struct XcircuiteFlowScaffoldRunCLITests {
         #expect(summary.runID == "scaffold-run-001")
         #expect(summary.stageIDs == [
             "001-core-spice-simulation",
-            "002-mock-pex",
+            "002-pex",
             "003-post-layout-comparison",
         ])
         #expect(!summary.placeholderPaths.isEmpty)
@@ -104,8 +104,8 @@ struct XcircuiteFlowScaffoldRunCLITests {
     }
 
     @Test
-    func scaffoldedMockPEXStageKeepsMockContract() async throws {
-        let root = try makeTemporaryRoot("mock-contract")
+    func scaffoldedPEXStageUsesProductionBackendWithoutFabricatedQualification() async throws {
+        let root = try makeTemporaryRoot("pex-production-contract")
         defer { removeTemporaryRoot(root) }
         let runSpecURL = root.appending(path: "run.json")
         let runtimeConfigURL = root.appending(path: "runtime.json")
@@ -113,32 +113,33 @@ struct XcircuiteFlowScaffoldRunCLITests {
         _ = try await XcircuiteFlowCLICommand.run(arguments: [
             "scaffold-run",
             "--project-root", root.path(percentEncoded: false),
-            "--run-id", "scaffold-run-mock",
+            "--run-id", "scaffold-run-pex",
             "--out-run-spec", runSpecURL.path(percentEncoded: false),
             "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),
         ])
 
         let runSpec = try XcircuiteFlowRunSpec.load(from: runSpecURL)
-        let mockStage = try #require(runSpec.stages.first { $0.stageID == "002-mock-pex" })
-        let mockRequirement = try #require(mockStage.requiredTool)
-        #expect(mockRequirement.minimumLevel == .unknown)
-        #expect(mockRequirement.requiredQualifiedEvidenceKinds.isEmpty)
-        #expect(mockRequirement.kind == .pex)
-        #expect(mockRequirement.operationID == "run-pex")
+        let pexStage = try #require(runSpec.stages.first { $0.stageID == "002-pex" })
+        let pexRequirement = try #require(pexStage.requiredTool)
+        #expect(pexRequirement.minimumLevel == .unknown)
+        #expect(pexRequirement.requiredQualifiedEvidenceKinds.isEmpty)
+        #expect(pexRequirement.kind == .pex)
+        #expect(pexRequirement.operationID == "run-pex")
 
         let runtimeSpec = try XcircuiteFlowRuntimeSpec.load(from: runtimeConfigURL)
-        let mockExecutor = try #require(runtimeSpec.executors.first { executor in
-            if case .mockPEX = executor {
+        let pexExecutor = try #require(runtimeSpec.executors.first { executor in
+            if case .pex = executor {
                 return true
             }
             return false
         })
-        guard case .mockPEX(let mockSpec) = mockExecutor else {
-            Issue.record("Expected a mockPEX executor")
+        guard case .pex(let pexSpec) = pexExecutor else {
+            Issue.record("Expected a PEX executor")
             return
         }
-        #expect(mockSpec.tool.qualificationLevel == .unknown)
-        #expect(mockSpec.tool.evidence.isEmpty)
+        #expect(pexSpec.backendSelection.backendID == "magic")
+        #expect(pexSpec.tool.qualificationLevel == .unknown)
+        #expect(pexSpec.tool.evidence.isEmpty)
     }
 
     @Test

@@ -53,8 +53,8 @@ public struct PDKValidationFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let manifestURL = try manifestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
             let request = PDKValidationRequest(

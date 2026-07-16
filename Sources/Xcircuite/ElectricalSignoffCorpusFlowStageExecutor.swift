@@ -41,8 +41,8 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage, context: context)
             let specURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let specInputReference = try inputReference(
                 requestInput,
@@ -190,8 +190,8 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
         switch input {
         case .artifact(let suppliedReference):
             _ = try input.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             return ArtifactReference(
                 id: try ArtifactID(rawValue: artifactID),
@@ -207,16 +207,16 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
             )
         case .path, .stageArtifact, .stageRawArtifact:
             let url = try input.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
-            let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
+            let path = try projectRelativePath(for: url, projectRoot: try context.xcircuiteProjectRoot())
             return try foundationReference(
                 forProjectRelativePath: path,
                 artifactID: artifactID,
                 kind: .report,
                 format: .json,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
         }
     }
@@ -254,11 +254,11 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
             at: outputURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let workingDirectory = configuration.resolvedWorkingDirectory(projectRoot: context.projectRoot)
+        let workingDirectory = configuration.resolvedWorkingDirectory(projectRoot: try context.xcircuiteProjectRoot())
         let arguments = configuration.expandedArguments(
             specPath: specURL.path(percentEncoded: false),
             outputPath: outputURL.path(percentEncoded: false),
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             runID: context.runID
         )
         let startedAt = Date()
@@ -359,8 +359,8 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
         path: String,
         context: FlowExecutionContext
     ) throws -> URL {
-        let url = context.projectRoot.appending(path: path).standardizedFileURL
-        guard ProjectPathBoundary().contains(url, projectRoot: context.projectRoot) else {
+        let url = try context.xcircuiteProjectRoot().appending(path: path).standardizedFileURL
+        guard ProjectPathBoundary().contains(url, projectRoot: try context.xcircuiteProjectRoot()) else {
             throw ElectricalSignoffCorpusFlowError.oracleOutsideProject(
                 url.path(percentEncoded: false)
             )

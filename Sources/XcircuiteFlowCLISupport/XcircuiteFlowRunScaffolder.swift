@@ -14,15 +14,15 @@ struct XcircuiteFlowRunScaffolder: Sendable {
 
     enum StageKind: String, CaseIterable, Sendable {
         case coreSpiceSimulation
-        case mockPEX
+        case pex
         case postLayoutComparison
 
         var slug: String {
             switch self {
             case .coreSpiceSimulation:
                 "core-spice-simulation"
-            case .mockPEX:
-                "mock-pex"
+            case .pex:
+                "pex"
             case .postLayoutComparison:
                 "post-layout-comparison"
             }
@@ -32,8 +32,8 @@ struct XcircuiteFlowRunScaffolder: Sendable {
             switch self {
             case .coreSpiceSimulation:
                 "CoreSpice simulation"
-            case .mockPEX:
-                "Mock PEX extraction"
+            case .pex:
+                "PEX extraction"
             case .postLayoutComparison:
                 "Post-layout waveform comparison"
             }
@@ -49,7 +49,7 @@ struct XcircuiteFlowRunScaffolder: Sendable {
 
     static let defaultStageKinds: [StageKind] = [
         .coreSpiceSimulation,
-        .mockPEX,
+        .pex,
         .postLayoutComparison,
     ]
 
@@ -120,10 +120,7 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 requiredQualifiedEvidenceKinds: [],
                 requirePassingHealthCheck: false
             )
-        case .mockPEX:
-            // The runtime's mock contract: a mock executor cannot declare a
-            // qualified tool, so the stage requirement stays at `unknown`
-            // and demands no qualified evidence.
+        case .pex:
             ToolTrustRequirement(
                 kind: .pex,
                 operationID: "run-pex",
@@ -168,8 +165,8 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 ],
                 tool: XcircuiteFlowToolSpec()
             ))
-        case .mockPEX:
-            return .mockPEX(XcircuiteFlowStageExecutorSpec.MockPEX(
+        case .pex:
+            return .pex(XcircuiteFlowStageExecutorSpec.PEX(
                 stageID: stageID,
                 layoutPath: Self.placeholderLayoutPath,
                 layoutFormat: .gds,
@@ -178,6 +175,7 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 topCell: Self.placeholderTopCell,
                 corners: [PEXCorner(id: "tt_25c_1v0")],
                 technology: .jsonFile(path: Self.placeholderPEXTechnologyPath),
+                backendSelection: PEXBackendSelection(backendID: "magic"),
                 tool: XcircuiteFlowToolSpec(
                     qualificationLevel: .unknown,
                     healthStatus: .notChecked
@@ -202,7 +200,7 @@ struct XcircuiteFlowRunScaffolder: Sendable {
         switch kind {
         case .coreSpiceSimulation:
             [Self.placeholderNetlistPath]
-        case .mockPEX:
+        case .pex:
             [
                 Self.placeholderLayoutPath,
                 Self.placeholderNetlistPath,

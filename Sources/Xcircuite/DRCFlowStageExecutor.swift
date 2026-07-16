@@ -109,7 +109,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let rawDirectory = context.runDirectory
+            let rawDirectory = try context.xcircuiteRunDirectory()
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
@@ -131,7 +131,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             let persistedSummary = try persistSummaryArtifact(
                 from: executionResult,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             try await context.checkCancellation()
             var artifacts = try artifactReferences(
@@ -154,12 +154,12 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             artifacts.append(envelopeArtifact)
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let artifactManifestGate = StageArtifactManifestCoverageGateBuilder().drcGate(
                 manifestURL: executionResult.artifactManifestURL,
                 artifacts: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let diagnostics = flowDiagnostics
                 + artifactManifestGate.diagnostics
@@ -257,14 +257,14 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
     ) throws -> DRCRequest {
         DRCRequest(
             layoutURL: try layoutInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             topCell: topCell,
             layoutFormat: layoutFormat,
             technologyURL: try technologyInput?.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             ),
             workingDirectory: workingDirectory,
             backendSelection: backendSelection,
@@ -289,7 +289,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         if let reportURL = executionResult.reportURL {
             artifacts.append(try artifactBuilder.reference(
                 for: reportURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
                 format: .json
             ))
@@ -297,14 +297,14 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         if let manifestURL = executionResult.artifactManifestURL {
             artifacts.append(try artifactBuilder.reference(
                 for: manifestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
                 format: .json
             ))
         }
         artifacts.append(try artifactBuilder.reference(
             for: summaryURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "drc-summary",
             kind: .report,
             format: .json
@@ -316,7 +316,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         ))
         if let log = try artifactBuilder.optionalReference(
             for: executionResult.result.logPath,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             kind: .report,
             format: .text
         ) {
@@ -362,7 +362,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         try data.write(to: url, options: .atomic)
         return try artifactBuilder.reference(
             for: url,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "drc-repair-hints",
             kind: .report,
             format: .json

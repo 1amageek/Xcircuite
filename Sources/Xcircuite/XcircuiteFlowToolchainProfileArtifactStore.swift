@@ -41,3 +41,4 @@ public struct XcircuiteFlowToolchainProfileArtifactStore: Sendable {
         )
     }
 }
+import CircuiteFoundation

@@ -42,26 +42,6 @@ struct ReleaseStageExecutionSupport: Sendable {
         )
     }
 
-    func persistFoundationEvidence<Evidence: Encodable>(
-        _ evidence: Evidence,
-        stageID: String,
-        artifactID: String,
-        context: FlowExecutionContext
-    ) async throws -> ArtifactReference {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        return try await context.persistArtifact(
-            encoder.encode(evidence),
-            artifactID: artifactID,
-            stageID: stageID,
-            fileName: "foundation-evidence.json",
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json,
-            mode: .replaceable
-        )
-    }
-
     func stageResult<Result: ReleaseStageExecutionResult>(
         result: Result,
         stageID: String,

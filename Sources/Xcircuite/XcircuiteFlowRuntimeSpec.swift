@@ -60,7 +60,7 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
         }
         let toolBindings = try makeToolBindings()
 
-        return XcircuiteFlowRuntime(
+        return try XcircuiteFlowRuntime(
             toolRegistry: try ToolRegistry(validating: toolBindings.descriptors),
             healthResults: toolBindings.healthResults,
             executors: executors,

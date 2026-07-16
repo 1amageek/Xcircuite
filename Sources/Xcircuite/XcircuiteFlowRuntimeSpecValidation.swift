@@ -54,11 +54,6 @@ private extension XcircuiteFlowStageExecutorSpec {
             try spec.validateTechnologyInput(toolchainProfile: toolchainProfile)
             try spec.validateTechnologyByCornerInput(toolchainProfile: toolchainProfile)
             try spec.validateBackendSelection()
-        case .mockPEX(let spec):
-            try spec.validateLayoutInputs()
-            try spec.validateSourceNetlistInputs()
-            try spec.validateTechnologyInput(toolchainProfile: toolchainProfile)
-            try spec.validateTechnologyByCornerInput(toolchainProfile: toolchainProfile)
         case .postLayoutComparison(let spec):
             try spec.validatePreLayoutWaveformInputs()
             try spec.validatePostLayoutWaveformInputs()
@@ -429,13 +424,6 @@ private extension XcircuiteFlowStageExecutorSpec {
                 requireCompleteEvidence: requireCompleteEvidence
             )
         }
-        if case .mockPEX(let spec) = self,
-           spec.tool.qualificationLevel != .unknown {
-            throw XcircuiteFlowRuntimeSpecError.mockExecutorCannotDeclareQualifiedTool(
-                stageID: spec.stageID,
-                level: spec.tool.qualificationLevel.rawValue
-            )
-        }
         for evidence in toolSpec.evidence {
             try evidence.validateForRuntimeToolSpec(stageID: stageID)
         }
@@ -509,8 +497,6 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .nativeLVS(let spec):
             spec.tool
         case .pex(let spec):
-            spec.tool
-        case .mockPEX(let spec):
             spec.tool
         case .coreSpiceSimulation(let spec):
             spec.tool
@@ -670,81 +656,6 @@ private extension XcircuiteFlowStageExecutorSpec.NativeLVS {
                 stageID: stageID,
                 fields: technologyFields
             )
-        }
-    }
-
-    func presentFields(_ fields: [(String, Bool)]) -> [String] {
-        fields.compactMap { field in
-            field.1 ? field.0 : nil
-        }
-    }
-}
-
-private extension XcircuiteFlowStageExecutorSpec.MockPEX {
-    func validateLayoutInputs() throws {
-        let layoutFields = presentFields([
-            ("layoutPath", layoutPath != nil),
-            ("layoutInput", layoutInput != nil),
-        ])
-        guard !layoutFields.isEmpty else {
-            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                stageID: stageID,
-                field: "layoutPath or layoutInput"
-            )
-        }
-        guard layoutFields.count == 1 else {
-            throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
-                stageID: stageID,
-                fields: layoutFields
-            )
-        }
-    }
-
-    func validateSourceNetlistInputs() throws {
-        let sourceNetlistFields = presentFields([
-            ("sourceNetlistPath", sourceNetlistPath != nil),
-            ("sourceNetlistInput", sourceNetlistInput != nil),
-        ])
-        guard !sourceNetlistFields.isEmpty else {
-            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                stageID: stageID,
-                field: "sourceNetlistPath or sourceNetlistInput"
-            )
-        }
-        guard sourceNetlistFields.count == 1 else {
-            throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
-                stageID: stageID,
-                fields: sourceNetlistFields
-            )
-        }
-    }
-
-    func validateTechnologyInput(toolchainProfile: XcircuiteFlowToolchainProfile?) throws {
-        guard technology != nil || toolchainProfile?.pexTechnology != nil else {
-            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                stageID: stageID,
-                field: "technology or toolchainProfile.pexTechnology"
-            )
-        }
-    }
-
-    func validateTechnologyByCornerInput(
-        toolchainProfile: XcircuiteFlowToolchainProfile?
-    ) throws {
-        var values = toolchainProfile?.pexTechnologyByCorner ?? [:]
-        for (cornerID, technology) in technologyByCorner {
-            values[cornerID] = technology
-        }
-        let cornerIDs = Set(corners.map { $0.id.value })
-        for cornerID in values.keys.sorted() {
-            guard !cornerID.isEmpty,
-                  cornerID == cornerID.trimmingCharacters(in: .whitespacesAndNewlines),
-                  cornerIDs.contains(cornerID) else {
-                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                    stageID: stageID,
-                    field: "technologyByCorner[\(cornerID)] must match a declared corner ID"
-                )
-            }
         }
     }
 

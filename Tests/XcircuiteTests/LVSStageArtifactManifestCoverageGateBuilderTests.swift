@@ -328,3 +328,4 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         var artifacts: [ArtifactReference]
     }
 }
+import CircuiteFoundation

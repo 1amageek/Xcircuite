@@ -703,3 +703,4 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
         var refWithoutByteCount: Int
     }
 }
+import CircuiteFoundation

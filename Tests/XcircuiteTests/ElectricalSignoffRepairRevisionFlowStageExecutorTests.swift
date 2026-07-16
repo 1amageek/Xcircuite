@@ -19,7 +19,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         let runID = "electrical-repair-revision-run"
         let designDigest = String(repeating: "d", count: 64)
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: store)
+        _ = try await prepareTestRun(runID: runID, store: store)
         let snapshot = PhysicalDesignSnapshot(
             topCell: "top",
             die: PhysicalDesignSnapshot.Rect(x: 0, y: 0, width: 100_000, height: 100_000),
@@ -97,7 +97,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: designReference.locator,
+                artifact: designReference,
                 topDesignName: "top",
                 designDigest: designDigest
             ),
@@ -129,9 +129,10 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             physicalDesignRequest: physicalRequest
         )
         let context = FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(
+                rawValue: (try await store.loadManifest()).identity.projectID
+            ),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]

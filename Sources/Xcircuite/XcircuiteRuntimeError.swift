@@ -11,6 +11,7 @@ public enum XcircuiteRuntimeError: Error, LocalizedError, Equatable {
     case invalidInputReference(String)
     case inputReferenceMissing(String)
     case invalidConfiguration(String)
+    case invalidFlowInfrastructure(actualType: String)
     case stageMismatch(expected: String, actual: String)
 
     public var errorDescription: String? {
@@ -35,6 +36,8 @@ public enum XcircuiteRuntimeError: Error, LocalizedError, Equatable {
             "Flow input reference does not exist: \(path)"
         case .invalidConfiguration(let detail):
             "Invalid Xcircuite runtime configuration: \(detail)"
+        case .invalidFlowInfrastructure(let actualType):
+            "Flow execution requires XcircuiteWorkspaceStore infrastructure, got \(actualType)."
         case .stageMismatch(let expected, let actual):
             "Stage executor mismatch: expected \(expected), got \(actual)"
         }

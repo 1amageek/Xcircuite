@@ -32,8 +32,8 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             var request = try JSONDecoder().decode(
                 LogicLoweringRequest.self,
@@ -47,17 +47,22 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
                     message: "Logic lowering request run ID does not match the flow run."
                 )
             }
-            let rawDirectory = context.runDirectory
+            let rawDirectory = try context.xcircuiteRunDirectory()
                 .appending(path: "stages")
                 .appending(path: stageID)
                 .appending(path: "raw")
             request.artifactDirectory = rawDirectory.path(percentEncoded: false)
-            let engine = injectedEngine ?? NativeLogicLoweringEngine(
-                artifactStore: FileSystemLogicArtifactStore(
-                    rootDirectory: context.projectRoot,
-                    defaultOutputDirectory: rawDirectory
+            let engine: any LogicLoweringExecuting
+            if let injectedEngine {
+                engine = injectedEngine
+            } else {
+                engine = NativeLogicLoweringEngine(
+                    artifactStore: FileSystemLogicArtifactStore(
+                        rootDirectory: try context.xcircuiteProjectRoot(),
+                        defaultOutputDirectory: rawDirectory
+                    )
                 )
-            )
+            }
             let result = try await engine.execute(request)
             try await context.checkCancellation()
             let resultArtifact = try await support.persistResult(
@@ -67,7 +72,7 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
                 stageID: stageID,
                 context: context
             )
-            return support.result(
+            return try support.result(
                 status: result.status,
                 diagnostics: result.diagnostics,
                 artifacts: result.artifacts,

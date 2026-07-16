@@ -1,9 +1,9 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
-import DesignFlowKernel
 
 /// Simulation as a flow stage at DRC/LVS/PEX maturity: the netlist's
 /// own analysis runs in-process, the gate judges declared measurement
@@ -32,7 +32,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim",
                 intent: "Run simulation",
                 stages: [
@@ -144,7 +144,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-missing-analysis",
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -176,7 +176,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-empty-expectations",
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -207,7 +207,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-retry",
                 intent: "Retry transient simulation executor failure",
                 stages: [
@@ -264,7 +264,7 @@ struct SimulationFlowStageExecutorTests {
             persistence: store
         ).makeReviewBundle(
             runID: "run-sim-retry",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
@@ -287,7 +287,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-waveform-names",
                 intent: "Run named-node simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -321,7 +321,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-netlist-output-name-collision",
                 intent: "Run simulation with an output-like netlist filename",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -401,9 +401,8 @@ struct SimulationFlowStageExecutorTests {
         ).execute(
             stage: FlowStageDefinition(stageID: "010-sim", displayName: "Simulation"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-input-digest",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -428,7 +427,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-fail",
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -480,7 +479,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-missing",
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -525,7 +524,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-cancel",
                 intent: "Run cancellable simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -570,7 +569,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-ac",
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -621,7 +620,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-dc",
                 intent: "Run DC sweep simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -740,7 +739,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-tf",
                 intent: "Run transfer function simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -789,7 +788,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-sens",
                 intent: "Run sensitivity simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -835,7 +834,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-noise",
                 intent: "Run noise simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -882,7 +881,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-pz",
                 intent: "Run pole-zero simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -934,7 +933,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-four",
                 intent: "Run Fourier simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -983,7 +982,7 @@ struct SimulationFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-sim-mc",
                 intent: "Run Monte Carlo simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
@@ -1062,8 +1061,20 @@ struct SimulationFlowStageExecutorTests {
         return DefaultFlowOrchestrator(
             infrastructure: store,
             ledgerPersistence: store,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: FlowRunProgressStore(persistence: store)
         )
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {
@@ -1087,10 +1098,12 @@ struct SimulationFlowStageExecutorTests {
 
         func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome {
             let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            try await store.createWorkspace()
+            let manifest = try await store.loadManifest()
             _ = try await DefaultFlowRunCancellationRecorder(
                 progressStore: FlowRunProgressStore(persistence: store)
             ).requestCancellation(
-                projectRoot: projectRoot,
+                workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
                 runID: runID,
                 requestedBy: "corespice",
                 reason: "cooperative simulation cancellation checkpoint"

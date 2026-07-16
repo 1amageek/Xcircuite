@@ -30,8 +30,8 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let requestURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let requestData = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()
@@ -44,35 +44,32 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                     message: "DFT request run ID \(request.runID) does not match flow run \(context.runID)."
                 )
             }
-            let engine = injectedEngine
-                ?? DefaultDFTEngine(
-                    artifactStore: FileSystemDFTArtifactStore(rootURL: context.projectRoot),
-                    designLoader: FileSystemDFTDesignLoader(rootURL: context.projectRoot),
-                    cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: context.projectRoot)
+            let engine: any DFTEngineExecuting
+            if let injectedEngine {
+                engine = injectedEngine
+            } else {
+                engine = DefaultDFTEngine(
+                    artifactStore: FileSystemDFTArtifactStore(rootURL: try context.xcircuiteProjectRoot()),
+                    designLoader: FileSystemDFTDesignLoader(rootURL: try context.xcircuiteProjectRoot()),
+                    cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: try context.xcircuiteProjectRoot())
                 )
+            }
             let result = try await engine.execute(request)
             try await context.checkCancellation()
-            let diagnostics = result.diagnostics.map(flowDiagnostic)
+            let diagnostics = result.dftDiagnostics.map(flowDiagnostic)
             let gateStatus = gateStatus(for: result.status)
             let support = ReleaseStageExecutionSupport()
             let resultArtifact = try await support.persistResult(
                 result,
                 stageID: stage.stageID,
-                artifactID: "dft-result-envelope",
-                context: context
-            )
-            let foundationEvidence = try DFTFoundationEvidence(result: result)
-            let foundationArtifact = try await support.persistFoundationEvidence(
-                foundationEvidence,
-                stageID: stage.stageID,
-                artifactID: "dft-foundation-evidence",
+                artifactID: "dft-result",
                 context: context
             )
             let persistedArtifacts = result.artifacts
-                + [resultArtifact, foundationArtifact]
+                + [resultArtifact]
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: persistedArtifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let allDiagnostics = diagnostics + integrityGate.diagnostics
             let status: FlowStageStatus

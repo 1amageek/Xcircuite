@@ -254,3 +254,4 @@ public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Ha
         }
     }
 }
+import CircuiteFoundation

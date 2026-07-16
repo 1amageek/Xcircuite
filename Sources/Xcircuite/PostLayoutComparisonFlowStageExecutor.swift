@@ -50,12 +50,12 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let preLayoutWaveformURL = try preLayoutWaveformInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let postLayoutWaveformURL = try postLayoutWaveformInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let preLayoutCSV = try String(contentsOf: preLayoutWaveformURL, encoding: .utf8)
             let postLayoutCSV = try String(contentsOf: postLayoutWaveformURL, encoding: .utf8)
@@ -78,7 +78,7 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
             let artifacts = [reportArtifact]
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let stageStatus: FlowStageStatus = gateStatus == .passed
                 && artifactIntegrityGate.status == .passed

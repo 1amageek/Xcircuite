@@ -43,7 +43,7 @@ struct LogicDesignFlowStageSupport: Sendable {
         stageID: String,
         artifacts: [ArtifactReference],
         context: FlowExecutionContext
-    ) -> FlowStageResult {
+    ) throws -> FlowStageResult {
         let flowDiagnostics = diagnostics.map { diagnostic in
             let severity: FlowDiagnosticSeverity
             switch diagnostic.severity {
@@ -60,7 +60,7 @@ struct LogicDesignFlowStageSupport: Sendable {
         let allArtifacts = artifacts + [resultArtifact]
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: allArtifacts,
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         )
         let domainStageStatus: FlowStageStatus
         let gateStatus: FlowGateStatus

@@ -5,7 +5,6 @@ import PDKCore
 import PDKDiscovery
 import PDKStandardViews
 import PDKValidation
-import DesignFlowKernel
 
 protocol PDKStageExecutionResult: Sendable {
     var status: PDKExecutionStatus { get }
@@ -13,8 +12,8 @@ protocol PDKStageExecutionResult: Sendable {
 }
 
 extension PDKDiscoveryResult: PDKStageExecutionResult {}
-extension PDKValidationExecutionResult: PDKStageExecutionResult {}
-extension PDKCorpusValidationExecutionResult: PDKStageExecutionResult {}
+extension PDKValidationResult: PDKStageExecutionResult {}
+extension PDKCorpusValidationResult: PDKStageExecutionResult {}
 extension PDKOracleComparisonResult: PDKStageExecutionResult {}
 extension PDKRuleDeckInspectionResult: PDKStageExecutionResult {}
 extension PDKManifestViewInspectionResult: PDKStageExecutionResult {}
@@ -31,7 +30,7 @@ struct PDKStageExecutionSupport: Sendable {
         stageID: String,
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
-        let stageDirectory = context.runDirectory
+        let stageDirectory = try context.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
@@ -42,7 +41,7 @@ struct PDKStageExecutionSupport: Sendable {
         try encoder.encode(result).write(to: outputURL, options: .atomic)
         return try artifactBuilder.reference(
             for: outputURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "pdk-result",
             kind: .report,
             format: .json
@@ -58,7 +57,7 @@ struct PDKStageExecutionSupport: Sendable {
     ) throws -> ArtifactReference {
         try artifactBuilder.reference(
             for: url,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: artifactID,
             role: .input,
             kind: kind,

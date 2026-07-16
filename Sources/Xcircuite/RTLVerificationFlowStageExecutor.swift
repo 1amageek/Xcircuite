@@ -106,12 +106,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let resolvedRTL = try rtlInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let rtlReference = try artifactBuilder.reference(
                 for: resolvedRTL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "rtl-input",
                 role: .input,
                 kind: ArtifactKind.rtl,
@@ -119,12 +119,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             )
             let additionalRTLReferences = try additionalRTLInputs.enumerated().map { index, input in
                 let resolvedInput = try input.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 return try artifactBuilder.reference(
                     for: resolvedInput,
-                    projectRoot: context.projectRoot,
+                    projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-input-\(index + 1)",
                     role: .input,
                     kind: ArtifactKind.rtl,
@@ -134,19 +134,19 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             let referenceDesign: LogicDesignReference?
             if let referenceInput {
                 let resolvedReference = try referenceInput.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 let reference = try artifactBuilder.reference(
                     for: resolvedReference,
-                    projectRoot: context.projectRoot,
+                    projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-reference",
                     role: .input,
                     kind: ArtifactKind.rtl,
                     format: format(for: resolvedReference)
                 )
                 referenceDesign = LogicDesignReference(
-                    artifact: reference.locator,
+                    artifact: reference,
                     topDesignName: topModuleName,
                     designDigest: reference.sha256
                 )
@@ -155,12 +155,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             }
             let additionalReferenceReferences = try additionalReferenceInputs.enumerated().map { index, input in
                 let resolvedInput = try input.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 return try artifactBuilder.reference(
                     for: resolvedInput,
-                    projectRoot: context.projectRoot,
+                    projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-reference-\(index + 1)",
                     role: .input,
                     kind: ArtifactKind.rtl,
@@ -171,12 +171,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             let constraintArtifact: ArtifactReference?
             if let constraintsInput {
                 let resolvedConstraints = try constraintsInput.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 let artifact = try artifactBuilder.reference(
                     for: resolvedConstraints,
-                    projectRoot: context.projectRoot,
+                    projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-constraints",
                     role: .input,
                     kind: ArtifactKind.constraint,
@@ -195,12 +195,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             let evidenceArtifact: ArtifactReference?
             if let evidenceInput {
                 let resolvedEvidence = try evidenceInput.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 evidenceArtifact = try artifactBuilder.reference(
                     for: resolvedEvidence,
-                    projectRoot: context.projectRoot,
+                    projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-evidence-input",
                     role: .input,
                     kind: ArtifactKind.report,
@@ -210,7 +210,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 do {
                     try RTLVerificationEvidenceInputArtifactAuditor().audit(
                         loadedEvidence,
-                        reader: FileSystemRTLArtifactReader(projectRoot: context.projectRoot)
+                        reader: FileSystemRTLArtifactReader(projectRoot: try context.xcircuiteProjectRoot())
                     )
                 } catch {
                     return blockedResult(
@@ -234,7 +234,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 runID: context.runID,
                 inputs: requestInputs,
                 design: LogicDesignReference(
-                    artifact: rtlReference.locator,
+                    artifact: rtlReference,
                     topDesignName: topModuleName,
                     designDigest: rtlReference.sha256
                 ),
@@ -265,8 +265,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 verificationEngine = engine
             } else {
                 let environment = RTLVerificationEnvironment(
-                    reader: FileSystemRTLArtifactReader(projectRoot: context.projectRoot),
-                    writer: FileSystemRTLArtifactStore(projectRoot: context.projectRoot)
+                    reader: FileSystemRTLArtifactReader(projectRoot: try context.xcircuiteProjectRoot()),
+                    writer: FileSystemRTLArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
                 )
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
@@ -281,9 +281,16 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                         context: context
                     )
                     let requestDigest = try RTLVerificationRequestDigest.make(request)
-                    let builder = oracleEvidenceBuilder ?? RTLVerificationOracleEvidenceBuilder(
-                        writer: FileSystemRTLArtifactStore(projectRoot: context.projectRoot)
-                    )
+                    let builder: any RTLVerificationOracleEvidenceBuilding
+                    if let oracleEvidenceBuilder {
+                        builder = oracleEvidenceBuilder
+                    } else {
+                        builder = RTLVerificationOracleEvidenceBuilder(
+                            writer: FileSystemRTLArtifactStore(
+                                projectRoot: try context.xcircuiteProjectRoot()
+                            )
+                        )
+                    }
                     let evidence = try await builder.build(
                         caseID: analysis.stageID,
                         requestDigest: requestDigest,
@@ -454,7 +461,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         }
         let resolvedExecutablePath = try XcircuiteFlowRuntimeSpec.resolvePath(
             executablePath,
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         ).path(percentEncoded: false)
         let externalDescriptor = RTLExternalToolDescriptor(
             toolID: descriptor.toolID,
@@ -512,7 +519,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         )
         var payload = native.payload
         payload.record = assessment
-        var diagnostics = native.diagnostics
+        var diagnostics = native.rtlDiagnostics
         let correlationPassed = evidence.evidence.report.matched
             && evidence.evidence.report.independenceVerified
         if !correlationPassed {
@@ -554,7 +561,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         native: RTLVerificationResult,
         error: Error
     ) -> RTLVerificationResult {
-        var diagnostics = native.diagnostics
+        var diagnostics = native.rtlDiagnostics
         diagnostics.append(RTLDiagnostic(
             severity: .error,
             code: "RTL_ORACLE_CORRELATION_EXECUTION_FAILED",
@@ -745,7 +752,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
               review.analysis == envelope.payload.analysis,
               review.status == envelope.status,
               review.findings == envelope.payload.findings,
-              review.diagnostics == envelope.diagnostics,
+              review.diagnostics == envelope.rtlDiagnostics,
               review.appliedWaivers == envelope.payload.appliedWaivers,
               review.record == envelope.payload.record else {
             throw RTLVerificationExecutionError.invalidArtifact(
@@ -806,7 +813,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         _ envelope: RTLVerificationResult
     ) -> RTLVerificationReviewArtifact {
         let findingActions = envelope.payload.findings.flatMap(\.suggestedActions)
-        let diagnosticActions = envelope.diagnostics.flatMap(\.suggestedActions)
+        let diagnosticActions = envelope.rtlDiagnostics.flatMap(\.suggestedActions)
         let suggestedActions = Array(Set(findingActions + diagnosticActions)).sorted()
         let approvalRequired = envelope.status != .completed
             || !envelope.payload.findings.isEmpty
@@ -817,7 +824,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             analysis: envelope.payload.analysis,
             status: envelope.status,
             findings: envelope.payload.findings,
-            diagnostics: envelope.diagnostics,
+            diagnostics: envelope.rtlDiagnostics,
             appliedWaivers: envelope.payload.appliedWaivers,
             record: envelope.payload.record,
             approvalRequired: approvalRequired,
@@ -837,7 +844,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         envelope: RTLVerificationResult,
         resultArtifacts: [ArtifactReference]
     ) -> FlowStageResult {
-        let diagnostics = envelope.diagnostics.map(flowDiagnostic)
+        let diagnostics = envelope.rtlDiagnostics.map(flowDiagnostic)
         let gate = FlowGateResult(
             gateID: stageID,
             status: gateStatus(for: envelope.status),

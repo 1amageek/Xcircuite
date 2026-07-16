@@ -20,7 +20,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: try fixtureLocator(path: "inputs/design.json", kind: .netlist, format: .json),
+                artifact: try fixtureReference(path: "inputs/design.json", kind: .netlist, format: .json),
                 topDesignName: "adapter_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
@@ -44,16 +44,14 @@ struct PhysicalDesignFlowStageExecutorTests {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         try encoder.encode(request).write(to: requestURL, options: [.atomic])
-        let runDirectory = root
-            .appending(path: XcircuiteWorkspaceLayout.directoryName)
-            .appending(path: "runs")
-            .appending(path: runID)
-        try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         let context = FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
-            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -81,7 +79,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: try fixtureLocator(path: "inputs/design.json", kind: .netlist, format: .json),
+                artifact: try fixtureReference(path: "inputs/design.json", kind: .netlist, format: .json),
                 topDesignName: "adapter_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
@@ -100,13 +98,14 @@ struct PhysicalDesignFlowStageExecutorTests {
         )
         let requestURL = root.appending(path: "request.json")
         try JSONEncoder().encode(request).write(to: requestURL, options: [.atomic])
-        let runDirectory = root.appending(path: XcircuiteWorkspaceLayout.directoryName).appending(path: "runs").appending(path: runID)
-        try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         let context = FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
-            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -132,7 +131,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             runID: runID,
             inputs: [],
             design: LogicDesignReference(
-                artifact: try fixtureLocator(path: "inputs/design.json", kind: .netlist, format: .json),
+                artifact: try fixtureReference(path: "inputs/design.json", kind: .netlist, format: .json),
                 topDesignName: "review_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
@@ -172,16 +171,24 @@ struct PhysicalDesignFlowStageExecutorTests {
                 requiresApproval: true
             )
         ]
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        let manifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: manifest.identity.projectID)
         let operation = FlowOperationRequest(
-            projectRoot: root,
+            workspaceID: workspaceID,
             runID: runID,
             intent: "Run physical design and obtain human review.",
             stages: stages
         )
-        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         let orchestrator = DefaultFlowOrchestrator(
             infrastructure: workspaceStore,
             ledgerPersistence: workspaceStore,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: FlowRunProgressStore(persistence: workspaceStore)
         )
         let reviewBundler = DefaultFlowRunReviewBundler(
@@ -208,7 +215,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             ledgerPersistence: workspaceStore
         ).recordApproval(
             FlowGateApprovalRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: runID,
                 stageID: "physical.review",
                 verdict: .approved,
@@ -222,7 +229,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             inspector: ledgerInspector,
             artifactPersistence: workspaceStore
         ).resumeRun(
-            request: FlowRunResumeRequest(projectRoot: root, runID: runID),
+            request: FlowRunResumeRequest(workspaceID: workspaceID, runID: runID),
             toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: executors

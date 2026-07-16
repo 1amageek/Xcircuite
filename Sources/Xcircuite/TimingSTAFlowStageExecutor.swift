@@ -8,7 +8,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     public let inputs: TimingSTAFlowInputs
-    public let engine: (any STAFoundationEngine)?
+    public let engine: (any STAExecuting)?
 
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -16,7 +16,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         inputs: TimingSTAFlowInputs,
         stageID: String = "timing.sta",
         toolID: String = "native-sta",
-        engine: (any STAFoundationEngine)? = nil
+        engine: (any STAExecuting)? = nil
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -33,12 +33,12 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
-            let executingEngine: any STAFoundationEngine
+            let executingEngine: any STAExecuting
             if let engine {
                 executingEngine = engine
             } else {
                 executingEngine = NativeSTAEngine(
-                    reader: ProjectTimingArtifactReader(projectRoot: context.projectRoot),
+                    reader: ProjectTimingArtifactReader(projectRoot: try context.xcircuiteProjectRoot()),
                     artifactStore: nil
                 )
             }
@@ -74,7 +74,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> STAFoundationRequest {
+    private func makeRequest(context: FlowExecutionContext) throws -> STARequest {
         let design = try reference(
             input: inputs.design,
             context: context,
@@ -90,7 +90,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
                 kind: .timingLibrary,
                 formatFallback: .liberty
             )
-            return STAFoundationLibraryReference(artifact: reference, cornerIDs: inputs.cornerIDs)
+            return TimingLibraryReference(artifact: reference, cornerIDs: inputs.cornerIDs)
         }
         let constraints = try reference(
             input: inputs.constraints,
@@ -115,7 +115,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
                 formatFallback: .spef
             )
         }
-        return STAFoundationRequest(
+        return STARequest(
             runID: context.runID,
             design: design,
             topDesignName: inputs.topDesignName,
@@ -140,8 +140,8 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         kind: ArtifactKind,
         formatFallback: ArtifactFormat
     ) throws -> ArtifactReference {
-        let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
-        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: context.projectRoot)
+        let url = try input.resolveExisting(projectRoot: try context.xcircuiteProjectRoot(), runDirectory: try context.xcircuiteRunDirectory())
+        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: try context.xcircuiteProjectRoot())
         let data = try Data(contentsOf: url)
         return ArtifactReference(
             id: try ArtifactID(rawValue: artifactID),

@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import DRCEngine
 import Foundation
@@ -11,7 +12,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func nativeDRCExecutorRunsThroughDesignFlowKernel() async throws {
         let root = try makeTemporaryRoot("drc-pass")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let layoutURL = try writeLayout(
             NativeDRCLayout(
@@ -31,7 +32,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -92,7 +93,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorForcesFlowManagedWorkingDirectory() async throws {
         let root = try makeTemporaryRoot("drc-forced-workdir")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let externalDirectory = try makeTemporaryRoot("external-drc-workdir")
         defer { removeTemporaryRoot(externalDirectory) }
 
@@ -112,7 +113,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -146,12 +147,12 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorCooperativelyCancelsAfterEngineCheckpoint() async throws {
         let root = try makeTemporaryRoot("drc-cooperative-cancel")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let layoutURL = try writeText("layout", name: "layout.oas", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc-cancel",
                 intent: "Run cancellable DRC",
                 stages: [
@@ -172,7 +173,7 @@ struct SignoffFlowStageExecutorTests {
                     ),
                     engine: CancellingDRCStubEngine(
                         cancellationRecorder: services.cancellationRecorder,
-                        projectRoot: root,
+                        workspaceID: services.workspaceID,
                         runID: "run-drc-cancel"
                     )
                 ),
@@ -193,13 +194,13 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorPreservesStandardInputRequestAndIndexesManifest() async throws {
         let root = try makeTemporaryRoot("drc-standard-input")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let layoutURL = try writeText("layout", name: "layout.oas", root: root)
         let technologyURL = try writeText("{}", name: "tech.json", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run standard DRC",
                 stages: [
@@ -238,13 +239,13 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorFailsManifestGateWhenOutputIsNotIndexed() async throws {
         let root = try makeTemporaryRoot("drc-manifest-coverage")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let layoutURL = try writeText("layout", name: "layout.oas", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -279,13 +280,13 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorFailsManifestGateWhenFlowArtifactsDuplicatePath() async throws {
         let root = try makeTemporaryRoot("drc-manifest-duplicate-path")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let layoutURL = try writeText("layout", name: "layout.oas", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -320,7 +321,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorFailsArtifactIntegrityGateWhenArtifactEscapesProject() async throws {
         let root = try makeTemporaryRoot("drc-artifact-integrity")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let externalRoot = try makeTemporaryRoot("drc-artifact-integrity-external")
         defer { removeTemporaryRoot(externalRoot) }
 
@@ -329,7 +330,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -365,7 +366,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorRejectsExternalManifestBeforeWritingSummaryArtifacts() async throws {
         let root = try makeTemporaryRoot("drc-external-manifest")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let externalRoot = try makeTemporaryRoot("drc-external-manifest-target")
         defer { removeTemporaryRoot(externalRoot) }
 
@@ -374,7 +375,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -409,7 +410,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func nativeDRCExecutorFailsGateOnViolation() async throws {
         let root = try makeTemporaryRoot("drc-fail")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let layoutURL = try writeLayout(
             NativeDRCLayout(
@@ -427,7 +428,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc",
                 intent: "Run DRC",
                 stages: [
@@ -473,7 +474,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func drcExecutorPersistsMinimumCutRepairHintsForFlowReview() async throws {
         let root = try makeTemporaryRoot("drc-minimum-cut-repair-hints")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let layoutURL = try writeLayout(
             NativeDRCLayout(
@@ -524,7 +525,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-drc-minimum-cut",
                 intent: "Run minimum-cut DRC",
                 stages: [
@@ -568,7 +569,7 @@ struct SignoffFlowStageExecutorTests {
 
         let bundle = try await services.reviewBundler.makeReviewBundle(
             runID: "run-drc-minimum-cut",
-            projectRoot: root
+            workspaceID: services.workspaceID
         )
         #expect(bundle.artifacts.first(where: {
             $0.stageID == "007-drc"
@@ -586,14 +587,14 @@ struct SignoffFlowStageExecutorTests {
     @Test func nativeLVSExecutorRunsThroughDesignFlowKernel() async throws {
         let root = try makeTemporaryRoot("lvs-pass")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
         let layoutURL = try writeNetlist(matchingNetlist(), name: "layout.spice", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run LVS",
                 stages: [
@@ -658,7 +659,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorPersistsDevicePolicyReportForFlowReview() async throws {
         let root = try makeTemporaryRoot("lvs-policy-report")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
         let layoutURL = try writeNetlist(matchingNetlist(), name: "layout.spice", root: root)
@@ -712,7 +713,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs-policy-report",
                 intent: "Run LVS with device policy evidence",
                 stages: [
@@ -779,7 +780,7 @@ struct SignoffFlowStageExecutorTests {
 
         let bundle = try await services.reviewBundler.makeReviewBundle(
             runID: "run-lvs-policy-report",
-            projectRoot: root
+            workspaceID: services.workspaceID
         )
         #expect(bundle.artifacts.first(where: {
             $0.stageID == "008-lvs"
@@ -797,7 +798,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func nativeLVSExecutorFailsGateOnModelMismatch() async throws {
         let root = try makeTemporaryRoot("lvs-fail")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let layoutURL = try writeNetlist(matchingNetlist(), name: "layout.spice", root: root)
         let schematicURL = try writeNetlist(
@@ -813,7 +814,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run LVS",
                 stages: [
@@ -862,7 +863,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorRetriesTransientFailureAndPersistsAttempts() async throws {
         let root = try makeTemporaryRoot("lvs-retry")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
 
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
         let layoutURL = try writeNetlist(matchingNetlist(), name: "layout.spice", root: root)
@@ -870,7 +871,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs-retry",
                 intent: "Retry transient LVS executor failure",
                 stages: [
@@ -922,7 +923,7 @@ struct SignoffFlowStageExecutorTests {
         #expect(ledger.progressEvents.map(\.kind).contains(.stageRetryScheduled))
         let bundle = try await services.reviewBundler.makeReviewBundle(
             runID: "run-lvs-retry",
-            projectRoot: root
+            workspaceID: services.workspaceID
         )
         let summary = bundle.summary
         #expect(summary.stages.first?.attemptCount == 2)
@@ -934,13 +935,13 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorCooperativelyCancelsAfterEngineCheckpoint() async throws {
         let root = try makeTemporaryRoot("lvs-cooperative-cancel")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs-cancel",
                 intent: "Run cancellable LVS",
                 stages: [
@@ -962,7 +963,7 @@ struct SignoffFlowStageExecutorTests {
                     ),
                     engine: CancellingLVSStubEngine(
                         cancellationRecorder: services.cancellationRecorder,
-                        projectRoot: root,
+                        workspaceID: services.workspaceID,
                         runID: "run-lvs-cancel"
                     )
                 ),
@@ -983,7 +984,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorPreservesStandardInputRequestAndIndexesManifest() async throws {
         let root = try makeTemporaryRoot("lvs-standard-input")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
         let technologyURL = try writeText("{}", name: "tech.json", root: root)
@@ -1000,7 +1001,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run standard LVS",
                 stages: [
@@ -1044,13 +1045,13 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorFailsManifestGateWhenOutputIsNotIndexed() async throws {
         let root = try makeTemporaryRoot("lvs-manifest-coverage")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run LVS",
                 stages: [
@@ -1086,13 +1087,13 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorFailsManifestGateWhenFlowArtifactsDuplicatePath() async throws {
         let root = try makeTemporaryRoot("lvs-manifest-duplicate-path")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run LVS",
                 stages: [
@@ -1128,7 +1129,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorFailsArtifactIntegrityGateWhenArtifactEscapesProject() async throws {
         let root = try makeTemporaryRoot("lvs-artifact-integrity")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let externalRoot = try makeTemporaryRoot("lvs-artifact-integrity-external")
         defer { removeTemporaryRoot(externalRoot) }
 
@@ -1138,7 +1139,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run LVS",
                 stages: [
@@ -1175,7 +1176,7 @@ struct SignoffFlowStageExecutorTests {
     @Test func lvsExecutorRejectsExternalManifestBeforeWritingSummaryArtifacts() async throws {
         let root = try makeTemporaryRoot("lvs-external-manifest")
         defer { removeTemporaryRoot(root) }
-        let services = try makeFlowServices(root: root)
+        let services = try await makeFlowServices(root: root)
         let externalRoot = try makeTemporaryRoot("lvs-external-manifest-target")
         defer { removeTemporaryRoot(externalRoot) }
 
@@ -1185,7 +1186,7 @@ struct SignoffFlowStageExecutorTests {
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: services.workspaceID,
                 runID: "run-lvs",
                 intent: "Run LVS",
                 stages: [
@@ -1219,17 +1220,26 @@ struct SignoffFlowStageExecutorTests {
 
     private struct FlowServices {
         let store: XcircuiteWorkspaceStore
+        let workspaceID: FlowWorkspaceID
         let orchestrator: DefaultFlowOrchestrator
         let reviewBundler: DefaultFlowRunReviewBundler
         let cancellationRecorder: DefaultFlowRunCancellationRecorder
     }
 
-    private func makeFlowServices(root: URL) throws -> FlowServices {
+    private func makeFlowServices(root: URL) async throws -> FlowServices {
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: manifest.identity.projectID)
         let progressStore = FlowRunProgressStore(persistence: store)
         let orchestrator = DefaultFlowOrchestrator(
             infrastructure: store,
             ledgerPersistence: store,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: progressStore
         )
         let reviewBundler = DefaultFlowRunReviewBundler(
@@ -1238,6 +1248,7 @@ struct SignoffFlowStageExecutorTests {
         )
         return FlowServices(
             store: store,
+            workspaceID: workspaceID,
             orchestrator: orchestrator,
             reviewBundler: reviewBundler,
             cancellationRecorder: DefaultFlowRunCancellationRecorder(progressStore: progressStore)
@@ -1371,7 +1382,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct StandardDRCStubEngine: DRCExecuting {
+    private struct StandardDRCStubEngine: Xcircuite.DRCExecuting {
         let expectedTechnologyURL: URL
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -1457,14 +1468,14 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct CancellingDRCStubEngine: DRCExecuting {
+    private struct CancellingDRCStubEngine: Xcircuite.DRCExecuting {
         let cancellationRecorder: DefaultFlowRunCancellationRecorder
-        let projectRoot: URL
+        let workspaceID: FlowWorkspaceID
         let runID: String
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             _ = try await cancellationRecorder.requestCancellation(
-                projectRoot: projectRoot,
+                workspaceID: workspaceID,
                 runID: runID,
                 requestedBy: "native-drc",
                 reason: "cooperative DRC cancellation checkpoint"
@@ -1526,7 +1537,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct UnindexedManifestOutputDRCStubEngine: DRCExecuting {
+    private struct UnindexedManifestOutputDRCStubEngine: Xcircuite.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let reportURL = workingDirectory.appending(path: "drc-report.json")
@@ -1594,7 +1605,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct DuplicateArtifactPathDRCStubEngine: DRCExecuting {
+    private struct DuplicateArtifactPathDRCStubEngine: Xcircuite.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let manifestURL = workingDirectory.appending(path: "drc-artifact-manifest.json")
@@ -1644,7 +1655,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct EscapingArtifactDRCStubEngine: DRCExecuting {
+    private struct EscapingArtifactDRCStubEngine: Xcircuite.DRCExecuting {
         let externalManifestURL: URL
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -1674,7 +1685,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct ExternalManifestDRCStubEngine: DRCExecuting {
+    private struct ExternalManifestDRCStubEngine: Xcircuite.DRCExecuting {
         let externalManifestURL: URL
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -1699,7 +1710,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct StandardLVSStubEngine: LVSExecuting {
+    private struct StandardLVSStubEngine: Xcircuite.LVSExecuting {
         let expectedTechnologyURL: URL
         let expectedTerminalEquivalenceURL: URL?
 
@@ -1812,7 +1823,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct DevicePolicyReportLVSStubEngine: LVSExecuting {
+    private struct DevicePolicyReportLVSStubEngine: Xcircuite.LVSExecuting {
         let devicePolicyReport: LVSDevicePolicyApplicationReport
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
@@ -1901,14 +1912,14 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct CancellingLVSStubEngine: LVSExecuting {
+    private struct CancellingLVSStubEngine: Xcircuite.LVSExecuting {
         let cancellationRecorder: DefaultFlowRunCancellationRecorder
-        let projectRoot: URL
+        let workspaceID: FlowWorkspaceID
         let runID: String
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
             _ = try await cancellationRecorder.requestCancellation(
-                projectRoot: projectRoot,
+                workspaceID: workspaceID,
                 runID: runID,
                 requestedBy: "native-lvs",
                 reason: "cooperative LVS cancellation checkpoint"
@@ -1973,7 +1984,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct FlakyLVSStubEngine: LVSExecuting {
+    private struct FlakyLVSStubEngine: Xcircuite.LVSExecuting {
         let state: FlakyLVSStubEngineState
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
@@ -1997,7 +2008,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct UnindexedManifestOutputLVSStubEngine: LVSExecuting {
+    private struct UnindexedManifestOutputLVSStubEngine: Xcircuite.LVSExecuting {
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let reportURL = workingDirectory.appending(path: "lvs-report.json")
@@ -2068,7 +2079,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct DuplicateArtifactPathLVSStubEngine: LVSExecuting {
+    private struct DuplicateArtifactPathLVSStubEngine: Xcircuite.LVSExecuting {
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let manifestURL = workingDirectory.appending(path: "lvs-artifact-manifest.json")
@@ -2121,7 +2132,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct EscapingArtifactLVSStubEngine: LVSExecuting {
+    private struct EscapingArtifactLVSStubEngine: Xcircuite.LVSExecuting {
         let externalManifestURL: URL
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
@@ -2152,7 +2163,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct ExternalManifestLVSStubEngine: LVSExecuting {
+    private struct ExternalManifestLVSStubEngine: Xcircuite.LVSExecuting {
         let externalManifestURL: URL
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {

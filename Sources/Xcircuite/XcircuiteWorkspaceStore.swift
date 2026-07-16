@@ -7,11 +7,12 @@ import DesignFlowKernel
 /// The store owns filesystem access only. Flow lifecycle and run semantics remain
 /// in DesignFlowKernel and are injected through its persistence protocols.
 public actor XcircuiteWorkspaceStore {
-    public let projectRoot: URL
-    public let workspaceRoot: URL
+    public nonisolated let projectRoot: URL
+    public nonisolated let workspaceRoot: URL
 
     let pathBoundary = ProjectPathBoundary()
     let fileManager = FileManager.default
+    let transactionFault: XcircuiteWorkspaceTransactionFault?
 
     public init(projectRoot: URL) throws {
         guard projectRoot.isFileURL, projectRoot.path(percentEncoded: false).hasPrefix("/") else {
@@ -26,6 +27,26 @@ public actor XcircuiteWorkspaceStore {
 
         self.projectRoot = normalizedRoot
         self.workspaceRoot = normalizedRoot.appending(path: ".xcircuite", directoryHint: .isDirectory)
+        self.transactionFault = nil
+    }
+
+    init(
+        projectRoot: URL,
+        transactionFault: XcircuiteWorkspaceTransactionFault
+    ) throws {
+        guard projectRoot.isFileURL, projectRoot.path(percentEncoded: false).hasPrefix("/") else {
+            throw XcircuiteWorkspaceStoreError.projectRootIsNotAbsolute
+        }
+
+        let normalizedRoot = projectRoot.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: normalizedRoot.path(percentEncoded: false), isDirectory: &isDirectory), !isDirectory.boolValue {
+            throw XcircuiteWorkspaceStoreError.projectRootIsNotDirectory
+        }
+
+        self.projectRoot = normalizedRoot
+        self.workspaceRoot = normalizedRoot.appending(path: ".xcircuite", directoryHint: .isDirectory)
+        self.transactionFault = transactionFault
     }
 
     public func ensureWorkspace() throws {
@@ -38,6 +59,23 @@ public actor XcircuiteWorkspaceStore {
             }
             throw XcircuiteWorkspaceStoreError.writeFailed(error.localizedDescription)
         }
+    }
+
+    /// Completes any durable workspace transaction interrupted before its commit marker was removed.
+    public func recoverPendingTransactions() throws {
+        try ensureWorkspace()
+        let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+        try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
+        }
+    }
+
+    var transactionCoordinator: XcircuiteWorkspaceTransactionCoordinator {
+        XcircuiteWorkspaceTransactionCoordinator(
+            projectRoot: projectRoot,
+            workspaceRoot: workspaceRoot,
+            fileManager: fileManager
+        )
     }
 
     public func url(for relativePath: String) throws -> URL {
@@ -70,6 +108,7 @@ public actor XcircuiteWorkspaceStore {
             _ = try url(for: relativePath)
             let lockURL = workspaceRoot.appending(path: ".workspace.lock")
             try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+                try transactionCoordinator.recoverPendingTransactions()
                 if immutable, fileManager.fileExists(atPath: destination.path(percentEncoded: false)) {
                     let existing = try Data(contentsOf: destination, options: [.mappedIfSafe])
                     guard existing == data else {
@@ -87,12 +126,19 @@ public actor XcircuiteWorkspaceStore {
     }
 
     public func read(from relativePath: String) throws -> Data {
+        try ensureWorkspace()
         let source = try url(for: relativePath)
-        guard fileManager.fileExists(atPath: source.path(percentEncoded: false)) else {
-            throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
-        }
         do {
-            return try Data(contentsOf: source, options: [.mappedIfSafe])
+            let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+            return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+                try transactionCoordinator.recoverPendingTransactions()
+                guard fileManager.fileExists(atPath: source.path(percentEncoded: false)) else {
+                    throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
+                }
+                return try Data(contentsOf: source, options: [.mappedIfSafe])
+            }
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
         } catch {
             throw XcircuiteWorkspaceStoreError.readFailed(error.localizedDescription)
         }
@@ -113,6 +159,7 @@ public actor XcircuiteWorkspaceStore {
             _ = try url(for: relativePath)
             let lockURL = workspaceRoot.appending(path: ".workspace.lock")
             try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+                try transactionCoordinator.recoverPendingTransactions()
                 let current: Data?
                 if fileManager.fileExists(atPath: destination.path(percentEncoded: false)) {
                     current = try Data(contentsOf: destination, options: [.mappedIfSafe])
@@ -138,20 +185,25 @@ public actor XcircuiteWorkspaceStore {
     @discardableResult
     public func verify(_ reference: ArtifactReference) throws -> ArtifactIntegrity {
         let relativePath = try validatedArtifactPath(for: reference)
-        let integrity = LocalArtifactVerifier().verify(
-            reference,
-            relativeTo: projectRoot
-        )
-        guard !integrity.issues.contains(where: { $0.code == .missingFile }) else {
-            throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
-        }
-        guard integrity.isVerified else {
-            throw XcircuiteWorkspaceStoreError.artifactIntegrityFailed(
-                path: relativePath,
-                issues: integrity.issues
+        try ensureWorkspace()
+        let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+        return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
+            let integrity = LocalArtifactVerifier().verify(
+                reference,
+                relativeTo: projectRoot
             )
+            guard !integrity.issues.contains(where: { $0.code == .missingFile }) else {
+                throw XcircuiteWorkspaceStoreError.missingArtifact(relativePath)
+            }
+            guard integrity.isVerified else {
+                throw XcircuiteWorkspaceStoreError.artifactIntegrityFailed(
+                    path: relativePath,
+                    issues: integrity.issues
+                )
+            }
+            return integrity
         }
-        return integrity
     }
 
     /// Writes an encodable value as sorted-key JSON at a workspace-relative path.

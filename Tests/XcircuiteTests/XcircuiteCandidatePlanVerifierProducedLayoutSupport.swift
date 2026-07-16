@@ -649,3 +649,4 @@ extension XcircuiteCandidatePlanVerifierTests {
         }
     }
 }
+import CircuiteFoundation

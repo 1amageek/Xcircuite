@@ -332,3 +332,4 @@ extension XcircuiteCandidatePlanGenerator {
         )
     }
 }
+import CircuiteFoundation

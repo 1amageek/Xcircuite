@@ -32,7 +32,7 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
             let plan = try await loadPlan(context: context)
             let candidate = try selectCandidate(from: plan)
             try validateProvenance(plan: plan, candidate: candidate)
-            let executor = physicalDesignExecutorWithProjectStore(context: context)
+            let executor = try physicalDesignExecutorWithProjectStore(context: context)
             let result = try await executor.execute(request.physicalDesignRequest)
             try await context.checkCancellation()
             let newDigest = result.payload.physicalDesign?.layoutDigest
@@ -184,13 +184,13 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
 
     private func physicalDesignExecutorWithProjectStore(
         context: FlowExecutionContext
-    ) -> NativePhysicalDesignExecutor {
+    ) throws -> NativePhysicalDesignExecutor {
         if let physicalDesignExecutor {
             return physicalDesignExecutor
         }
         return NativePhysicalDesignExecutor(
             allowedStages: [.timingECO, .drcRepair, .antennaRepair, .redundantViaInsertion, .hotspotRepair],
-            artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot),
+            artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: try context.xcircuiteProjectRoot()),
             implementationID: "native-electrical-signoff-repair-revision",
             implementationVersion: "1.0.0"
         )

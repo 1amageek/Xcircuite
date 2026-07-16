@@ -56,18 +56,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         var diagnostics: [FlowDiagnostic] = []
         var gates: [FlowGateResult] = []
         let persistedRunResult = try await persistRunResult(runResult, context: context)
-        let foundationEvidence = try ElectricalSignoffFoundationEvidence(
-            result: runResult,
-            provenance: try foundationProvenance(for: runResult, request: request)
-        )
-        let persistedFoundationEvidence = try await persistFoundationEvidence(
-            foundationEvidence,
-            context: context
-        )
-        var artifacts: [ArtifactReference] = [
-            persistedRunResult,
-            persistedFoundationEvidence,
-        ]
+        var artifacts = runResult.artifacts + [persistedRunResult]
         for axis in axes {
             guard let envelope = runResult.axisResults[axis] else {
                 let diagnostic = FlowDiagnostic(severity: .error, code: "ELECTRICAL_SIGNOFF_AXIS_MISSING", message: "The electrical signoff result did not contain the requested axis \(axis.rawValue).")
@@ -118,7 +107,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         }
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts,
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         )
         diagnostics.append(contentsOf: integrityGate.diagnostics)
         let stageStatus: FlowStageStatus
@@ -184,18 +173,6 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         )
     }
 
-    private func persistFoundationEvidence(
-        _ evidence: ElectricalSignoffFoundationEvidence,
-        context: FlowExecutionContext
-    ) async throws -> ArtifactReference {
-        try await persist(
-            evidence,
-            artifactID: "electrical-signoff-foundation-evidence",
-            fileName: "foundation-evidence.json",
-            context: context
-        )
-    }
-
     private func persist<Value: Encodable>(
         _ value: Value,
         artifactID: String,
@@ -218,112 +195,6 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
             runID: context.runID,
             mode: .replaceable
         )
-    }
-
-    private func foundationProvenance(
-        for runResult: ElectricalSignoffRunResult,
-        request: ElectricalSignoffRequest
-    ) throws -> ExecutionProvenance {
-        guard let metadata = executionMetadata(from: runResult) else {
-            throw ElectricalSignoffFoundationBoundaryError.invalidArtifact(
-                path: "electrical-signoff-run",
-                reason: "No execution metadata was produced."
-            )
-        }
-        let designRevision: ContentDigest?
-        do {
-            designRevision = try ContentDigest(
-                algorithm: .sha256,
-                hexadecimalValue: request.design.designDigest
-            )
-        } catch {
-            designRevision = nil
-        }
-        return try ExecutionProvenance(
-            producer: metadata.producer,
-            supportingTools: metadata.supportingTools,
-            inputs: try foundationInputReferences(from: request),
-            invocation: metadata.invocation,
-            environment: metadata.environment,
-            configurationDigest: metadata.configurationDigest,
-            designRevision: designRevision,
-            randomSeed: metadata.randomSeed,
-            startedAt: metadata.startedAt,
-            completedAt: metadata.completedAt
-        )
-    }
-
-    private func foundationInputReferences(
-        from request: ElectricalSignoffRequest
-    ) throws -> [ArtifactReference] {
-        var references = request.inputs
-        references.append(try request.materializedArtifact(for: request.design.artifact, role: "design"))
-        references.append(request.physicalDesign.layoutArtifact)
-        references.append(request.pdk.manifest)
-        if let powerIntent = request.powerIntent {
-            references.append(try request.materializedArtifact(for: powerIntent.artifact, role: "power-intent"))
-        }
-        if let parasitics = request.parasitics {
-            references.append(parasitics)
-        }
-        if let topologyArtifact = request.topologyArtifact {
-            references.append(topologyArtifact)
-        }
-        if let topologyProfileArtifact = request.topologyProfileArtifact {
-            references.append(topologyProfileArtifact)
-        }
-        if let processRuleArtifact = request.processRuleArtifact {
-            references.append(processRuleArtifact)
-        }
-
-        var referencesByPath: [String: ArtifactReference] = [:]
-        for reference in references {
-            if let existing = referencesByPath[reference.path] {
-                guard existing == reference else {
-                    throw ElectricalSignoffFoundationBoundaryError.conflictingArtifact(
-                        path: reference.path
-                    )
-                }
-            } else {
-                referencesByPath[reference.path] = reference
-            }
-        }
-        return referencesByPath.values
-            .sorted { $0.path < $1.path }
-    }
-
-    private func executionMetadata(
-        from runResult: ElectricalSignoffRunResult
-    ) -> ExecutionProvenance? {
-        let envelopes = runResult.axisResults
-            .sorted { $0.key.rawValue < $1.key.rawValue }
-            .map(\.value)
-            + runResult.cornerResults
-            .sorted { $0.key < $1.key }
-            .flatMap { _, values in
-                values.sorted { $0.key.rawValue < $1.key.rawValue }.map(\.value)
-            }
-        guard let first = envelopes.first else {
-            return nil
-        }
-        let startedAt = envelopes.map(\.provenance.startedAt).min() ?? first.provenance.startedAt
-        let completedAt = envelopes.map(\.provenance.completedAt).max() ?? first.provenance.completedAt
-        do {
-            return try ExecutionProvenance(
-                producer: first.provenance.producer,
-                supportingTools: first.provenance.supportingTools,
-                inputs: first.provenance.inputs,
-                invocation: first.provenance.invocation,
-                environment: first.provenance.environment,
-                configurationDigest: first.provenance.configurationDigest,
-                designRevision: first.provenance.designRevision,
-                randomSeed: first.provenance.randomSeed,
-                startedAt: startedAt,
-                completedAt: completedAt
-            )
-        } catch {
-            return nil
-        }
     }
 
     private func failureResult(stageID: String, code: String, message: String) -> FlowStageResult {

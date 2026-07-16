@@ -53,8 +53,8 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             try await context.checkCancellation()
             try validate(stage: stage, context: context)
             let layoutURL = try layoutInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let technology = try loadTechnology(context: context)
             var inputArtifacts = [try inputReference(
@@ -89,8 +89,8 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             let connectivityDocument: LayoutDocument?
             if let connectivityInput {
                 let connectivityURL = try connectivityInput.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 connectivityDocument = try MaskDataFormatConverter(tech: technology).importDocument(
                     from: connectivityURL,
@@ -187,8 +187,8 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 throw ElectricalStandardLayoutImportError.unsupportedLayoutFormat(technologyFormat.rawValue)
             }
             let url = try technologyInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             technology = try TechFormatConverter().loadTech(from: url)
         }
@@ -204,8 +204,8 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         }
 
         let mappingURL = try technologyLayerMappingInput.resolveExisting(
-            projectRoot: context.projectRoot,
-            runDirectory: context.runDirectory
+            projectRoot: try context.xcircuiteProjectRoot(),
+            runDirectory: try context.xcircuiteRunDirectory()
         )
         let mapping: ElectricalStandardLayoutLayerMapping
         do {
@@ -231,8 +231,8 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         switch input {
         case .artifact(let suppliedReference):
             _ = try input.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             return ArtifactReference(
                 id: try ArtifactID(rawValue: artifactID),
@@ -248,12 +248,12 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             )
         case .path, .stageArtifact, .stageRawArtifact:
             let url = try input.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             return try StageArtifactReferenceBuilder().reference(
                 for: url,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: artifactID,
                 kind: kind,
                 format: format

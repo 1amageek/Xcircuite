@@ -37,11 +37,11 @@ struct LogicEngineStageExecutionSupport: Sendable {
         stageID: String,
         gateID: String,
         context: FlowExecutionContext
-    ) -> FlowStageResult {
+    ) throws -> FlowStageResult {
         let flowDiagnostics = diagnostics.map(Self.flowDiagnostic)
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts + [resultArtifact],
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         )
         let gateStatus: FlowGateStatus
         let stageStatus: FlowStageStatus
@@ -81,8 +81,8 @@ struct LogicEngineStageExecutionSupport: Sendable {
         additionalDiagnostics: [DesignDiagnostic] = [],
         stageStatusOverride: FlowStageStatus? = nil,
         gateStatusOverride: FlowGateStatus? = nil
-    ) -> FlowStageResult {
-        let diagnostics = result.diagnostics.map { diagnostic in
+    ) throws -> FlowStageResult {
+        let diagnostics = result.rtlDiagnostics.map { diagnostic in
             let severity: FlowDiagnosticSeverity
             switch diagnostic.severity {
             case .info: severity = .info
@@ -94,7 +94,7 @@ struct LogicEngineStageExecutionSupport: Sendable {
         let artifacts = result.artifacts + [resultArtifact] + additionalArtifacts
         let integrityGate = StageArtifactIntegrityGateBuilder().gate(
             for: artifacts,
-            projectRoot: context.projectRoot
+            projectRoot: try context.xcircuiteProjectRoot()
         )
         let gateStatus: FlowGateStatus
         let stageStatus: FlowStageStatus

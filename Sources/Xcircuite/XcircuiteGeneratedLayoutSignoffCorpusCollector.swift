@@ -311,7 +311,12 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
         projectRoot: URL
     ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult {
         let ledger = try await ledgerLoader.loadRunLedger(runID: corpusCase.runID)
-        let bundle = try await reviewBundler.makeReviewBundle(runID: corpusCase.runID, projectRoot: projectRoot)
+        let manifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: manifest.identity.projectID)
+        let bundle = try await reviewBundler.makeReviewBundle(
+            runID: corpusCase.runID,
+            workspaceID: workspaceID
+        )
         let expectedStagesByID = Dictionary(
             corpusCase.expectedStages.map { ($0.stageID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -557,3 +562,4 @@ private extension FlowRunStatus {
         }
     }
 }
+import CircuiteFoundation

@@ -1,7 +1,8 @@
 import Foundation
+import CircuiteFoundation
+import DesignFlowKernel
 import Testing
 @testable import Xcircuite
-import DesignFlowKernel
 
 @Suite("Project path boundary")
 struct ProjectPathBoundaryTests {
@@ -19,9 +20,10 @@ struct ProjectPathBoundaryTests {
             format: .json,
         )
 
-        #expect(reference.path == "artifact.json")
+        #expect(reference.locator.location.value == "artifact.json")
         #expect(reference.byteCount == 2)
-        #expect(reference.sha256 != nil)
+        #expect(reference.digest.algorithm == .sha256)
+        #expect(reference.digest.hexadecimalValue.isEmpty == false)
     }
 
     @Test func artifactReferenceRejectsSymlinkEscapingProjectBeforeHashing() async throws {

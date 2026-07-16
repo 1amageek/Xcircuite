@@ -342,8 +342,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeSpecRoundTripsPEXStageArtifactInputs() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
@@ -357,7 +357,8 @@ extension XcircuiteFlowRuntimeTests {
                         sourceNetlistInput: .path("circuits/top.spice"),
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
-                        technology: .input(.path("tech/pex.json"))
+                        technology: .input(.path("tech/pex.json")),
+                        backendSelection: PEXBackendSelection(backendID: "magic")
                     )
                 ),
             ]
@@ -366,7 +367,7 @@ extension XcircuiteFlowRuntimeTests {
         let data = try JSONEncoder().encode(spec)
         let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
 
-        guard case .mockPEX(let pex) = try #require(decoded.executors.first) else {
+        guard case .pex(let pex) = try #require(decoded.executors.first) else {
             Issue.record("Expected PEX executor")
             return
         }
@@ -504,37 +505,6 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecRejectsQualifiedMockPEXExecutor() async throws {
-        let spec = XcircuiteFlowRuntimeSpec(
-            executors: [
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
-                        stageID: "009-pex",
-                        layoutInput: .path("layout/top.gds"),
-                        layoutFormat: .gds,
-                        sourceNetlistInput: .path("circuits/top.spice"),
-                        topCell: "top",
-                        corners: [PEXCorner(id: "tt")],
-                        technology: .inline(makePEXTechnology()),
-                        tool: qualifiedToolSpec(level: .smokeChecked)
-                    )
-                ),
-            ]
-        )
-
-        do {
-            try spec.validate()
-            Issue.record("Expected qualified mock PEX executor to be rejected")
-        } catch let error as XcircuiteFlowRuntimeSpecError {
-            #expect(error == .mockExecutorCannotDeclareQualifiedTool(
-                stageID: "009-pex",
-                level: ToolQualificationLevel.smokeChecked.rawValue
-            ))
-        } catch {
-            throw error
-        }
-    }
-
     @Test func runtimeSpecRejectsPEXBackendExecutorWithMockBackend() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
@@ -595,14 +565,15 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeSpecRejectsPEXWithoutLayoutInput() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutFormat: .gds,
                         sourceNetlistInput: .path("circuits/top.spice"),
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
-                        technology: .inline(makePEXTechnology())
+                        technology: .inline(makePEXTechnology()),
+                        backendSelection: PEXBackendSelection(backendID: "magic")
                     )
                 ),
             ]
@@ -626,14 +597,15 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeSpecRejectsPEXWithoutTechnologyOrToolchainProfile() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .path("layout/top.gds"),
                         layoutFormat: .gds,
                         sourceNetlistInput: .path("circuits/top.spice"),
                         topCell: "top",
-                        corners: [PEXCorner(id: "tt")]
+                        corners: [PEXCorner(id: "tt")],
+                        backendSelection: PEXBackendSelection(backendID: "magic")
                     )
                 ),
             ]
@@ -695,7 +667,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let layoutRawPath = ".xcircuite/runs/run-1/stages/006-layout/raw"
         try await workspaceStore.ensureWorkspaceDirectory(at: layoutRawPath)
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/drc-layout.json"
@@ -737,9 +709,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -757,7 +728,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let layoutRawPath = ".xcircuite/runs/run-1/stages/006-layout/raw"
         try await workspaceStore.ensureWorkspaceDirectory(at: layoutRawPath)
         let layoutData = Data("{}".utf8)
@@ -799,9 +770,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -853,9 +823,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -928,9 +897,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -950,7 +918,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let layoutRawPath = ".xcircuite/runs/run-1/stages/006-layout/raw"
         try await workspaceStore.ensureWorkspaceDirectory(at: layoutRawPath)
         let layoutData = Data("{}".utf8)
@@ -992,9 +960,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -1314,6 +1281,13 @@ extension XcircuiteFlowRuntimeTests {
 
     private func qualifiedToolSpec(level: ToolQualificationLevel) -> XcircuiteFlowToolSpec {
         QualifiedToolFixtures.toolSpec(level: level)
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private func digestBoundInput(

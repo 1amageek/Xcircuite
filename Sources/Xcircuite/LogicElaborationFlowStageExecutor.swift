@@ -36,13 +36,13 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let sourceURL = try sourceInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let source = try String(contentsOf: sourceURL, encoding: .utf8)
             let sourceReference = try support.artifactBuilder.reference(
                 for: sourceURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 role: .input,
                 kind: ArtifactKind.rtl,
                 format: sourceURL.pathExtension.lowercased() == "v" ? ArtifactFormat.verilog : ArtifactFormat.systemVerilog
@@ -56,9 +56,16 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     source: source
                 )]
             )
-            let engine = injectedEngine ?? LogicElaboratingEngine(
-                sourceProvider: FileSystemSystemVerilogSourceProvider(root: context.projectRoot)
-            )
+            let engine: any LogicElaborating
+            if let injectedEngine {
+                engine = injectedEngine
+            } else {
+                engine = LogicElaboratingEngine(
+                    sourceProvider: FileSystemSystemVerilogSourceProvider(
+                        root: try context.xcircuiteProjectRoot()
+                    )
+                )
+            }
             let envelope = try await engine.execute(request)
             try await context.checkCancellation()
 
@@ -81,7 +88,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     designDigest = try LogicDesignSnapshotCodec.digest(snapshot)
                 }
                 payload.design = LogicDesignReference(
-                    artifact: snapshotReference.locator,
+                    artifact: snapshotReference,
                     topDesignName: snapshot.rtl.topModuleName,
                     designDigest: designDigest,
                     provenance: LogicDesignProvenance(
@@ -96,7 +103,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     schemaVersion: persistedResult.schemaVersion,
                     runID: persistedResult.runID,
                     status: persistedResult.status,
-                    diagnostics: persistedResult.diagnostics,
+                    logicDiagnostics: persistedResult.logicDiagnostics,
                     provenance: persistedResult.provenance,
                     payload: payload
                 )
@@ -108,10 +115,10 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                 context: context,
                 fileName: "logic-result.json"
             )
-            return support.stageResult(
+            return try support.stageResult(
                 resultArtifact: resultArtifact,
                 status: persistedResult.status,
-                diagnostics: persistedResult.diagnostics,
+                diagnostics: persistedResult.logicDiagnostics,
                 stageID: stageID,
                 artifacts: resultArtifacts,
                 context: context

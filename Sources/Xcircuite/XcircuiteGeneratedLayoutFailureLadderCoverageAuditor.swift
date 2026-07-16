@@ -357,3 +357,4 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
         XcircuiteGeneratedLayoutSignoffStageFamily.allCases.firstIndex(of: family) ?? Int.max
     }
 }
+import CircuiteFoundation

@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuitePlanVerificationStepResult: Codable, Sendable, Hashable {

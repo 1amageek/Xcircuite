@@ -62,8 +62,8 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             // The run captures its own input: the netlist is copied in
             // so the stage stays reviewable after the source moves.
             let resolvedNetlistURL = try netlistInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let source = try String(contentsOf: resolvedNetlistURL, encoding: .utf8)
             let netlistReference = try await context.persistArtifact(
@@ -130,7 +130,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             ]
             let preEnvelopeArtifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             if preEnvelopeArtifactIntegrityGate.status != .passed {
                 return FlowStageResult(
@@ -161,7 +161,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             artifacts.append(envelopeArtifact)
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let stageStatus: FlowStageStatus = gateStatus == .passed
                 && artifactIntegrityGate.status == .passed
@@ -332,6 +332,8 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 return "SIMULATION_INPUT_REFERENCE_INVALID"
             case .invalidConfiguration:
                 return "SIMULATION_RUNTIME_CONFIGURATION_INVALID"
+            case .invalidFlowInfrastructure:
+                return "SIMULATION_FLOW_INFRASTRUCTURE_INVALID"
             case .stageMismatch:
                 return "SIMULATION_STAGE_MISMATCH"
             }

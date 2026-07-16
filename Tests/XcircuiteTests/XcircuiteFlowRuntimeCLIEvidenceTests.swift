@@ -64,6 +64,8 @@ extension XcircuiteFlowRuntimeTests {
         #expect(initial.status == .blocked)
 
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let projectManifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: projectManifest.identity.projectID)
         let reviewBundler = DefaultFlowRunReviewBundler(
             loader: workspaceStore,
             persistence: workspaceStore
@@ -74,7 +76,7 @@ extension XcircuiteFlowRuntimeTests {
             ledgerPersistence: workspaceStore
         ).recordApproval(
             FlowGateApprovalRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-1",
                 stageID: "007-drc",
                 verdict: .approved,
@@ -197,7 +199,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(evidence.checkedAt?.timeIntervalSince1970 == 1_784_000_000)
     }
 
-    @Test func runCLIBlocksQualifiedSignoffFixtureWhenPEXIsMock() async throws {
+    @Test func runCLIBlocksQualifiedSignoffFixtureWhenPEXBackendIsUnavailable() async throws {
         let root = try makeTemporaryRoot("runtime-cli-qualified-signoff-fixture")
         defer { removeTemporaryRoot(root) }
         _ = try writeLayout(cleanLayout(), root: root)
@@ -279,7 +281,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(result.status == .blocked)
         let blockedStage = try #require(result.stages.first { $0.stageID == "009-pex" })
         #expect(blockedStage.status == .blocked)
-        #expect(blockedStage.gates.contains(where: { $0.gateID == "tool-trust" && $0.status == .failed }))
+        #expect(blockedStage.gates.contains { $0.gateID == "tool-trust" && $0.status == .failed })
         let toolchain = try await readToolchainManifest(in: root, runID: "signoff-run-1")
         #expect(toolchain.stages.count == 3)
         let drcRecord = try #require(toolchain.stages.first { $0.stageID == "007-drc" })
@@ -294,9 +296,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(drcRecord.selectedDecision?.status == .eligible)
         #expect(lvsRecord.selectedDecision?.status == .eligible)
         #expect(pexRecord.evaluations.contains {
-            $0.descriptor.toolID == "mock-pex"
-                && $0.decision.status == .rejected
-                && $0.decision.diagnostics.contains { $0.code == "INSUFFICIENT_TRUST_LEVEL" }
+            $0.descriptor.toolID == "pex-magic" && $0.decision.status == .rejected
         })
         let drcEvidence = try #require(drcRecord.selectedHealth?.evidence.first)
         let lvsEvidence = try #require(lvsRecord.selectedHealth?.evidence.first)

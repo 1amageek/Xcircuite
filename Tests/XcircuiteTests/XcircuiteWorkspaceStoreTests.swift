@@ -136,6 +136,43 @@ struct XcircuiteWorkspaceStoreTests {
     }
 
     @Test
+    func recoversInterruptedRunArtifactRegistration() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-artifact-recovery", store: store)
+        let interruptedStore = try XcircuiteWorkspaceStore(
+            projectRoot: root,
+            transactionFault: .afterOperation(0)
+        )
+        let path = ".xcircuite/runs/run-artifact-recovery/recovered.json"
+        let content = Data("recovered-run-artifact".utf8)
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .output,
+            kind: .report,
+            format: .json
+        )
+
+        await #expect(throws: XcircuiteWorkspaceTransactionError.injectedFailure(.afterOperation(0))) {
+            _ = try await interruptedStore.persistArtifact(
+                content: content,
+                id: try ArtifactID(rawValue: "recovered-run-artifact"),
+                locator: locator,
+                runID: "run-artifact-recovery",
+                mode: .replaceable
+            )
+        }
+
+        let ledger = try await store.loadRunLedger(runID: "run-artifact-recovery")
+        let reference = try #require(ledger.artifacts.first {
+            $0.id.rawValue == "recovered-run-artifact"
+        })
+        #expect(reference.path == path)
+        #expect(try await store.loadArtifactContent(for: reference) == content)
+    }
+
+    @Test
     func independentStoresSerializeConcurrentWrites() async throws {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
@@ -153,6 +190,99 @@ struct XcircuiteWorkspaceStoreTests {
             retained == Data(repeating: 0x41, count: 65_536)
                 || retained == Data(repeating: 0x42, count: 65_536)
         )
+    }
+
+    @Test
+    func concurrentProjectArtifactRegistrationRetainsEveryManifestEntry() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let first = try XcircuiteWorkspaceStore(projectRoot: root)
+        let second = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await first.createWorkspace()
+        let firstLocator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: "reports/first.json"),
+            role: .output,
+            kind: .report,
+            format: .json
+        )
+        let secondLocator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: "reports/second.json"),
+            role: .output,
+            kind: .report,
+            format: .json
+        )
+
+        async let firstReference = first.persistProjectArtifact(
+            content: Data("first".utf8),
+            id: try ArtifactID(rawValue: "first-report"),
+            locator: firstLocator
+        )
+        async let secondReference = second.persistProjectArtifact(
+            content: Data("second".utf8),
+            id: try ArtifactID(rawValue: "second-report"),
+            locator: secondLocator
+        )
+        _ = try await (firstReference, secondReference)
+
+        let manifest = try await first.loadManifest()
+        #expect(manifest.files.map(\.path) == ["reports/first.json", "reports/second.json"])
+    }
+
+    @Test
+    func recoversInterruptedProjectArtifactRegistration() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.createWorkspace()
+        let interruptedStore = try XcircuiteWorkspaceStore(
+            projectRoot: root,
+            transactionFault: .afterOperation(0)
+        )
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: "reports/recovered.json"),
+            role: .output,
+            kind: .report,
+            format: .json
+        )
+
+        await #expect(throws: XcircuiteWorkspaceTransactionError.injectedFailure(.afterOperation(0))) {
+            _ = try await interruptedStore.persistProjectArtifact(
+                content: Data("recovered".utf8),
+                id: try ArtifactID(rawValue: "recovered-report"),
+                locator: locator
+            )
+        }
+
+        let manifest = try await store.loadManifest()
+        #expect(manifest.files.map(\.path) == ["reports/recovered.json"])
+        #expect(try Data(contentsOf: root.appending(path: "reports/recovered.json")) == Data("recovered".utf8))
+    }
+
+    @Test
+    func rejectsBlankCancellationRequesterAndReason() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-cancel", store: store)
+
+        await #expect(throws: FlowRunCancellationRequestError.emptyRequestedBy) {
+            _ = try await store.persistCancellationRequest(
+                FlowRunCancellationRequest(
+                    runID: "run-cancel",
+                    requestedBy: "  ",
+                    reason: "Stop the run."
+                )
+            )
+        }
+        await #expect(throws: FlowRunCancellationRequestError.emptyReason) {
+            _ = try await store.persistCancellationRequest(
+                FlowRunCancellationRequest(
+                    runID: "run-cancel",
+                    requestedBy: "operator",
+                    reason: "\n"
+                )
+            )
+        }
     }
 
     @Test

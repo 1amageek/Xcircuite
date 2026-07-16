@@ -29,7 +29,7 @@
       }
     },
     {
-      "kind": "mockPEX",
+      "kind": "pex",
       "value": {
         "stageID": "009-pex",
         "layoutPath": "layout.gds",
@@ -67,8 +67,13 @@
             "backendHints": {}
           }
         },
+        "backendSelection": {
+          "backendID": "magic",
+          "executablePath": "/definitely/missing/magic",
+          "environmentOverrides": {}
+        },
         "tool": {
-          "qualificationLevel": "unknown",
+          "qualificationLevel": "corpusChecked",
           "healthStatus": "passed",
           "evidence": []
         }

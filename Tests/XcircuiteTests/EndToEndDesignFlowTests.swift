@@ -22,11 +22,18 @@ struct EndToEndDesignFlowTests {
         let root = try makeRoot(name: "end-to-end-design-flow")
         defer { removeRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
-        try await workspaceStore.ensureWorkspace()
+        try await workspaceStore.createWorkspace()
+        let manifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: manifest.identity.projectID)
         let progressStore = FlowRunProgressStore(persistence: workspaceStore)
         let orchestrator = DefaultFlowOrchestrator(
             infrastructure: workspaceStore,
             ledgerPersistence: workspaceStore,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: progressStore
         )
         let reviewBundler = DefaultFlowRunReviewBundler(
@@ -74,7 +81,7 @@ struct EndToEndDesignFlowTests {
         let loweringRequest = LogicLoweringRequest(
             runID: runID,
             inputs: [snapshotReference],
-            design: LogicFoundationDesignReference(
+            design: LogicDesignArtifact(
                 artifact: snapshotReference,
                 topDesignName: "e2e_top",
                 designRevision: snapshotRevision
@@ -131,7 +138,7 @@ struct EndToEndDesignFlowTests {
         let simulationRequest = LogicSimulationRequest(
             runID: runID,
             inputs: [logicDesignReference, stimulusReference],
-            design: LogicFoundationDesignReference(
+            design: LogicDesignArtifact(
                 artifact: logicDesignReference,
                 topDesignName: "e2e_top",
                 designRevision: logicDesignReference.digest
@@ -163,8 +170,8 @@ struct EndToEndDesignFlowTests {
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [logicDesignReference, constraintsReference, pdkReference],
-            design: LogicDesignReference(
-                artifact: logicDesignReference.locator,
+            design: LogicIR.LogicDesignReference(
+                artifact: logicDesignReference,
                 topDesignName: "e2e_top",
                 designDigest: logicDesignReference.digest.hexadecimalValue
             ),
@@ -237,8 +244,6 @@ struct EndToEndDesignFlowTests {
         let layoutNetlistURL = root.appending(path: "layout.spice")
         try await writeText(matchingNetlist(), name: "schematic.spice", root: root)
         try await writeText(matchingNetlist(), name: "layout.spice", root: root)
-        let pexLayoutURL = root.appending(path: "pex-layout.gds")
-        let pexNetlistURL = root.appending(path: "pex-source.spice")
         try await writeText("layout", name: "pex-layout.gds", root: root)
         try await writeText(".subckt TESTCELL\n.ends TESTCELL\n", name: "pex-source.spice", root: root)
 
@@ -275,11 +280,11 @@ struct EndToEndDesignFlowTests {
                 schematicNetlistURL: schematicNetlistURL,
                 topCell: "TOP"
             ),
-            PEXFlowStageExecutor.mock(
+            PEXFlowStageExecutor.production(
                 stageID: "signoff.pex",
-                layoutURL: pexLayoutURL,
+                layoutInput: .path("pex-layout.gds"),
                 layoutFormat: .gds,
-                sourceNetlistURL: pexNetlistURL,
+                sourceNetlistInput: .path("pex-source.spice"),
                 topCell: "TESTCELL",
                 corners: [
                     PEXCorner(id: PEXCornerID("tt"), name: "tt", temperature: 25),
@@ -307,7 +312,7 @@ struct EndToEndDesignFlowTests {
 
         let initial = try await orchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: runID,
                 intent: "Execute a retained multi-engine design flow and request human review.",
                 stages: stages
@@ -336,7 +341,7 @@ struct EndToEndDesignFlowTests {
 
         let reviewBundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
-            projectRoot: root
+            workspaceID: workspaceID
         )
         #expect(reviewBundle.artifacts.first(where: { $0.stageID == "logic.lower" }) != nil)
         #expect(reviewBundle.artifacts.first(where: { $0.stageID == "logic.simulate" }) != nil)
@@ -365,7 +370,7 @@ struct EndToEndDesignFlowTests {
             ledgerPersistence: workspaceStore
         ).recordApproval(
             FlowGateApprovalRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: runID,
                 stageID: "physical.review",
                 verdict: .approved,
@@ -379,7 +384,7 @@ struct EndToEndDesignFlowTests {
             inspector: ledgerInspector,
             artifactPersistence: workspaceStore
         ).resumeRun(
-            request: FlowRunResumeRequest(projectRoot: root, runID: runID),
+            request: FlowRunResumeRequest(workspaceID: workspaceID, runID: runID),
             toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: executors
@@ -393,7 +398,7 @@ struct EndToEndDesignFlowTests {
 
         let retainedBundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
-            projectRoot: root
+            workspaceID: workspaceID
         )
         #expect(retainedBundle.status == .succeeded)
         #expect(retainedBundle.approvals.count == 1)

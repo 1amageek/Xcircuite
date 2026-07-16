@@ -341,3 +341,4 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusReport: Codable, Sendable, Ha
         }
     }
 }
+import CircuiteFoundation

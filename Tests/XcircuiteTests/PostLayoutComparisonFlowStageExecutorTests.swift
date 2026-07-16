@@ -1,9 +1,9 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
-import DesignFlowKernel
 
 @Suite("Post-layout comparison flow stage executor", .timeLimit(.minutes(1)))
 struct PostLayoutComparisonFlowStageExecutorTests {
@@ -37,7 +37,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-comparison",
                 intent: "Compare post-layout waveform",
                 stages: [
@@ -124,7 +124,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-comparison-fail",
                 intent: "Compare post-layout waveform",
                 stages: [FlowStageDefinition(stageID: "030-compare", displayName: "Post-layout comparison")]
@@ -462,8 +462,20 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         return DefaultFlowOrchestrator(
             infrastructure: store,
             ledgerPersistence: store,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: FlowRunProgressStore(persistence: store)
         )
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private func writeText(_ text: String, name: String, root: URL) throws -> URL {

@@ -153,11 +153,12 @@ enum QualifiedToolFixtures {
 
     private static func smokeFixture(toolID: String) throws -> EvidenceFixture {
         let data = Data("qualified-tool-smoke:\(toolID)".utf8)
+        let issuer = try qualificationIssuer(toolID: toolID)
         let artifact = try qualificationArtifact(
             toolID: toolID,
             kind: .smoke,
             data: data,
-            producer: nil
+            producer: issuer
         )
         return EvidenceFixture(
             evidence: ToolEvidence(
@@ -178,7 +179,11 @@ enum QualifiedToolFixtures {
             toolID: toolID,
             scope: qualificationScope(toolID: toolID),
             issuer: issuer,
-            inputArtifacts: [try supportingArtifact(toolID: toolID, name: "input")],
+            inputArtifacts: [try supportingArtifact(
+                toolID: toolID,
+                name: "input",
+                producer: issuer
+            )],
             outputArtifacts: [try supportingArtifact(toolID: toolID, name: "output", producer: issuer)],
             cases: [ToolQualificationCaseOutcome(
                 caseID: "fixture-case",
@@ -218,7 +223,11 @@ enum QualifiedToolFixtures {
             oracleToolID: "\(toolID)-oracle-tool",
             scope: qualificationScope(toolID: toolID),
             issuer: issuer,
-            inputArtifacts: [try supportingArtifact(toolID: toolID, name: "input")],
+            inputArtifacts: [try supportingArtifact(
+                toolID: toolID,
+                name: "input",
+                producer: issuer
+            )],
             primaryOutputArtifacts: [try supportingArtifact(
                 toolID: toolID,
                 name: "primary-output",
@@ -258,7 +267,11 @@ enum QualifiedToolFixtures {
             toolID: toolID,
             scope: qualificationScope(toolID: toolID),
             issuer: issuer,
-            inputArtifacts: [try supportingArtifact(toolID: toolID, name: "input")],
+            inputArtifacts: [try supportingArtifact(
+                toolID: toolID,
+                name: "input",
+                producer: issuer
+            )],
             outputArtifacts: [try supportingArtifact(
                 toolID: toolID,
                 name: "health-output",
@@ -303,7 +316,7 @@ enum QualifiedToolFixtures {
         toolID: String,
         kind: ToolEvidenceKind,
         data: Data,
-        producer: ProducerIdentity?
+        producer: ProducerIdentity
     ) throws -> ArtifactReference {
         ArtifactReference(
             id: try ArtifactID(rawValue: "\(toolID)-\(kind.rawValue)-evidence"),
@@ -324,7 +337,7 @@ enum QualifiedToolFixtures {
     private static func supportingArtifact(
         toolID: String,
         name: String,
-        producer: ProducerIdentity? = nil
+        producer: ProducerIdentity
     ) throws -> ArtifactReference {
         let data = Data("\(toolID):\(name)".utf8)
         return ArtifactReference(

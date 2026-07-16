@@ -49,35 +49,6 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func mockPEX(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
-        ToolDescriptor(
-            toolID: "mock-pex",
-            displayName: "Mock PEX",
-            kind: .pex,
-            version: "1.0.0",
-            capabilities: [
-                ToolCapability(
-                    operationID: "run-pex",
-                    inputFormats: [.gdsii, .oasis, .spice, .json],
-                    outputFormats: [.spef, .json, .text],
-                    limitations: [
-                        "Generates deterministic synthetic parasitics for runtime contract validation.",
-                    ]
-                ),
-            ],
-            trustProfile: ToolTrustProfile(
-                level: level,
-                knownLimitations: [
-                    "Not a physical signoff extractor.",
-                ]
-            ),
-            environment: ToolEnvironment(
-                executablePath: "in-process",
-                platform: "macOS"
-            )
-        )
-    }
-
     public static func pexBackend(
         backendID: String,
         level: ToolQualificationLevel = .unknown

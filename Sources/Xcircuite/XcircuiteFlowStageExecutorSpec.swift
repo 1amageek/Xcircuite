@@ -21,7 +21,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case nativeDRC(NativeDRC)
     case nativeLVS(NativeLVS)
     case pex(PEX)
-    case mockPEX(MockPEX)
     case coreSpiceSimulation(CoreSpiceSimulation)
     case postLayoutComparison(PostLayoutComparison)
     case rtlVerification(RTLVerification)
@@ -499,111 +498,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         }
     }
 
-    public struct MockPEX: Sendable, Hashable, Codable {
-        public var stageID: String
-        public var layoutPath: String?
-        public var layoutInput: XcircuiteFlowInputReference?
-        public var layoutFormat: LayoutFormat
-        public var sourceNetlistPath: String?
-        public var sourceNetlistInput: XcircuiteFlowInputReference?
-        public var sourceNetlistFormat: NetlistFormat
-        public var topCell: String
-        public var corners: [PEXCorner]
-        public var technology: XcircuitePEXTechnologySpec?
-        public var technologyByCorner: [String: XcircuitePEXTechnologySpec]
-        public var processProfile: PEXProcessProfileReference?
-        public var options: PEXRunOptions?
-        public var tool: XcircuiteFlowToolSpec
-
-        public init(
-            stageID: String,
-            layoutPath: String? = nil,
-            layoutInput: XcircuiteFlowInputReference? = nil,
-            layoutFormat: LayoutFormat,
-            sourceNetlistPath: String? = nil,
-            sourceNetlistInput: XcircuiteFlowInputReference? = nil,
-            sourceNetlistFormat: NetlistFormat = .spice,
-            topCell: String,
-            corners: [PEXCorner],
-            technology: XcircuitePEXTechnologySpec? = nil,
-            technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
-            processProfile: PEXProcessProfileReference? = nil,
-            options: PEXRunOptions? = nil,
-            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
-        ) {
-            self.stageID = stageID
-            self.layoutPath = layoutPath
-            self.layoutInput = layoutInput
-            self.layoutFormat = layoutFormat
-            self.sourceNetlistPath = sourceNetlistPath
-            self.sourceNetlistInput = sourceNetlistInput
-            self.sourceNetlistFormat = sourceNetlistFormat
-            self.topCell = topCell
-            self.corners = corners
-            self.technology = technology
-            self.technologyByCorner = technologyByCorner
-            self.processProfile = processProfile
-            self.options = options
-            self.tool = tool
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case stageID
-            case layoutPath
-            case layoutInput
-            case layoutFormat
-            case sourceNetlistPath
-            case sourceNetlistInput
-            case sourceNetlistFormat
-            case topCell
-            case corners
-            case technology
-            case technologyByCorner
-            case processProfile
-            case options
-            case tool
-        }
-
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            stageID = try container.decode(String.self, forKey: .stageID)
-            layoutPath = try container.decodeIfPresent(String.self, forKey: .layoutPath)
-            layoutInput = try container.decodeIfPresent(XcircuiteFlowInputReference.self, forKey: .layoutInput)
-            layoutFormat = try container.decode(LayoutFormat.self, forKey: .layoutFormat)
-            sourceNetlistPath = try container.decodeIfPresent(String.self, forKey: .sourceNetlistPath)
-            sourceNetlistInput = try container.decodeIfPresent(XcircuiteFlowInputReference.self, forKey: .sourceNetlistInput)
-            sourceNetlistFormat = try container.decode(NetlistFormat.self, forKey: .sourceNetlistFormat)
-            topCell = try container.decode(String.self, forKey: .topCell)
-            corners = try container.decode([PEXCorner].self, forKey: .corners)
-            technology = try container.decodeIfPresent(XcircuitePEXTechnologySpec.self, forKey: .technology)
-            technologyByCorner = try container.decodeIfPresent(
-                [String: XcircuitePEXTechnologySpec].self,
-                forKey: .technologyByCorner
-            ) ?? [:]
-            processProfile = try container.decodeIfPresent(PEXProcessProfileReference.self, forKey: .processProfile)
-            options = try container.decodeIfPresent(PEXRunOptions.self, forKey: .options)
-            tool = try container.decode(XcircuiteFlowToolSpec.self, forKey: .tool)
-        }
-
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(stageID, forKey: .stageID)
-            try container.encodeIfPresent(layoutPath, forKey: .layoutPath)
-            try container.encodeIfPresent(layoutInput, forKey: .layoutInput)
-            try container.encode(layoutFormat, forKey: .layoutFormat)
-            try container.encodeIfPresent(sourceNetlistPath, forKey: .sourceNetlistPath)
-            try container.encodeIfPresent(sourceNetlistInput, forKey: .sourceNetlistInput)
-            try container.encode(sourceNetlistFormat, forKey: .sourceNetlistFormat)
-            try container.encode(topCell, forKey: .topCell)
-            try container.encode(corners, forKey: .corners)
-            try container.encodeIfPresent(technology, forKey: .technology)
-            try container.encode(technologyByCorner, forKey: .technologyByCorner)
-            try container.encodeIfPresent(processProfile, forKey: .processProfile)
-            try container.encodeIfPresent(options, forKey: .options)
-            try container.encode(tool, forKey: .tool)
-        }
-    }
-
     public struct PEX: Sendable, Hashable, Codable {
         public var stageID: String
         public var layoutPath: String?
@@ -787,7 +681,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case nativeDRC
         case nativeLVS
         case pex
-        case mockPEX
         case coreSpiceSimulation
         case postLayoutComparison
         case rtlVerification
@@ -823,8 +716,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .nativeLVS(try container.decode(NativeLVS.self, forKey: .value))
         case .pex:
             self = .pex(try container.decode(PEX.self, forKey: .value))
-        case .mockPEX:
-            self = .mockPEX(try container.decode(MockPEX.self, forKey: .value))
         case .coreSpiceSimulation:
             self = .coreSpiceSimulation(try container.decode(CoreSpiceSimulation.self, forKey: .value))
         case .postLayoutComparison:
@@ -884,9 +775,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             try container.encode(value, forKey: .value)
         case .pex(let value):
             try container.encode(Kind.pex, forKey: .kind)
-            try container.encode(value, forKey: .value)
-        case .mockPEX(let value):
-            try container.encode(Kind.mockPEX, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .coreSpiceSimulation(let value):
             try container.encode(Kind.coreSpiceSimulation, forKey: .kind)
@@ -1003,20 +891,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 backendSelection: spec.backendSelection,
                 options: spec.options ?? .default,
                 engine: DefaultPEXEngine.withDefaults()
-            )
-        case .mockPEX(let spec):
-            return PEXFlowStageExecutor.mock(
-                stageID: spec.stageID,
-                layoutInput: try spec.resolvedLayoutInput(),
-                layoutFormat: spec.layoutFormat,
-                sourceNetlistInput: try spec.resolvedSourceNetlistInput(),
-                sourceNetlistFormat: spec.sourceNetlistFormat,
-                topCell: spec.topCell,
-                corners: spec.corners,
-                technology: try spec.resolvedTechnology(toolchainProfile: toolchainProfile),
-                technologyByCorner: try spec.resolvedTechnologyByCorner(toolchainProfile: toolchainProfile),
-                processProfile: try spec.resolvedProcessProfile(projectRoot: projectRoot),
-                options: spec.options ?? .default
             )
         case .coreSpiceSimulation(let spec):
             return SimulationFlowStageExecutor(
@@ -1307,8 +1181,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 backendID: spec.backendSelection.backendID,
                 level: spec.tool.qualificationLevel
             )
-        case .mockPEX(let spec):
-            SignoffToolDescriptors.mockPEX(level: spec.tool.qualificationLevel)
         case .coreSpiceSimulation(let spec):
             SignoffToolDescriptors.coreSpiceSimulation(level: spec.tool.qualificationLevel)
         case .postLayoutComparison(let spec):
@@ -1400,8 +1272,6 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .nativeLVS(let spec):
             spec.tool
         case .pex(let spec):
-            spec.tool
-        case .mockPEX(let spec):
             spec.tool
         case .coreSpiceSimulation(let spec):
             spec.tool
@@ -1543,58 +1413,6 @@ private extension XcircuiteFlowStageExecutorSpec.NativeLVS {
             return terminalEquivalenceInput
         }
         return terminalEquivalencePath.map { .path($0) }
-    }
-}
-
-private extension XcircuiteFlowStageExecutorSpec.MockPEX {
-    func resolvedLayoutInput() throws -> XcircuiteFlowInputReference {
-        if let layoutInput {
-            return layoutInput
-        }
-        if let layoutPath {
-            return .path(layoutPath)
-        }
-        throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(stageID: stageID, field: "layoutPath or layoutInput")
-    }
-
-    func resolvedSourceNetlistInput() throws -> XcircuiteFlowInputReference {
-        if let sourceNetlistInput {
-            return sourceNetlistInput
-        }
-        if let sourceNetlistPath {
-            return .path(sourceNetlistPath)
-        }
-        throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-            stageID: stageID,
-            field: "sourceNetlistPath or sourceNetlistInput"
-        )
-    }
-
-    func resolvedTechnology(toolchainProfile: XcircuiteFlowToolchainProfile?) throws -> XcircuitePEXTechnologySpec {
-        if let technology {
-            return technology
-        }
-        if let technology = toolchainProfile?.pexTechnology {
-            return technology
-        }
-        throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-            stageID: stageID,
-            field: "technology or toolchainProfile.pexTechnology"
-        )
-    }
-
-    func resolvedTechnologyByCorner(
-        toolchainProfile: XcircuiteFlowToolchainProfile?
-    ) throws -> [String: XcircuitePEXTechnologySpec] {
-        var resolved = toolchainProfile?.pexTechnologyByCorner ?? [:]
-        for (cornerID, technology) in technologyByCorner {
-            resolved[cornerID] = technology
-        }
-        return resolved
-    }
-
-    func resolvedProcessProfile(projectRoot: URL) throws -> PEXProcessProfileReference? {
-        try processProfile.map { try $0.resolved(projectRoot: projectRoot) }
     }
 }
 

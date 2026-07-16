@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import PDKCore
@@ -44,7 +45,7 @@ struct ReleaseFlowStageExecutorTests {
         #expect(result.status == .blocked)
         #expect(result.gates.contains { $0.status == .blocked })
         #expect(result.artifacts.count == 1)
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/release.signoff/raw/result.json").path))
     }
 
@@ -78,7 +79,7 @@ struct ReleaseFlowStageExecutorTests {
         )])
         #expect(result.artifacts.count == 1)
         #expect(result.artifacts.first?.artifactID == "release-authorization-result")
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/release.authorization/raw/result.json").path))
     }
 
@@ -107,7 +108,7 @@ struct ReleaseFlowStageExecutorTests {
         #expect(result.status == .blocked)
         #expect(result.gates.contains { $0.status == .blocked })
         #expect(result.artifacts.count == 1)
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/release.tapeout/raw/result.json").path))
     }
 
@@ -141,19 +142,22 @@ struct ReleaseFlowStageExecutorTests {
     }
 
     private func makeAuthorizationRequest(runID: String) throws -> ReleaseAuthorizationRequest {
+        let producer = try releaseFixtureProducer()
         let bundleArtifact = try makeArtifact(
             artifactID: "signoff-bundle",
             path: "release/signoff-bundle.json",
             kind: .release,
             format: .json,
-            sha256: String(repeating: "b", count: 64)
+            digestHexadecimalValue: String(repeating: "b", count: 64),
+            producer: producer
         )
         let planArtifact = try makeArtifact(
             artifactID: "release-plan",
             path: "release/plan.json",
             kind: .request,
             format: .json,
-            sha256: String(repeating: "a", count: 64)
+            digestHexadecimalValue: String(repeating: "a", count: 64),
+            producer: producer
         )
         let signoffBundle = SignoffBundleReference(
             artifact: bundleArtifact,
@@ -185,16 +189,18 @@ struct ReleaseFlowStageExecutorTests {
     }
 
     private func makeTapeoutRequest(runID: String) throws -> TapeoutRequest {
+        let producer = try releaseFixtureProducer()
         let artifact = try makeArtifact(
             path: "release/signoff.json",
             kind: .release,
             format: .json,
-            sha256: String(repeating: "b", count: 64)
+            digestHexadecimalValue: String(repeating: "b", count: 64),
+            producer: producer
         )
         let physical = PhysicalDesignReference(
             layoutArtifact: artifact,
             topCell: "TOP",
-            layoutDigest: artifact.sha256
+            layoutDigest: artifact.digest.hexadecimalValue
         )
         return TapeoutRequest(
             runID: runID,
@@ -226,11 +232,12 @@ struct ReleaseFlowStageExecutorTests {
 
     private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         return FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
@@ -257,8 +264,9 @@ struct ReleaseFlowStageExecutorTests {
         path: String,
         kind: ArtifactKind,
         format: ArtifactFormat,
-        sha256: String? = nil,
-        byteCount: UInt64 = 1
+        digestHexadecimalValue: String,
+        byteCount: UInt64 = 1,
+        producer: ProducerIdentity
     ) throws -> ArtifactReference {
         ArtifactReference(
             id: try artifactID.map { try ArtifactID(rawValue: $0) },
@@ -270,9 +278,18 @@ struct ReleaseFlowStageExecutorTests {
             ),
             digest: try ContentDigest(
                 algorithm: .sha256,
-                hexadecimalValue: sha256 ?? String(repeating: "0", count: 64)
+                hexadecimalValue: digestHexadecimalValue
             ),
-            byteCount: byteCount
+            byteCount: byteCount,
+            producer: producer
+        )
+    }
+
+    private func releaseFixtureProducer() throws -> ProducerIdentity {
+        try ProducerIdentity(
+            kind: .engine,
+            identifier: "release-flow-stage-tests",
+            version: "1"
         )
     }
 }
@@ -287,9 +304,15 @@ private struct StubReleaseAuthorizer: ReleaseAuthorizing {
             signoffBundle: status == .authorized ? request.signoffBundle : nil,
             diagnostics: [],
             provenance: try ExecutionProvenance(
-                engineID: "release.authorization",
-                implementationID: "stub.release.authorization",
-                implementationVersion: "1.0.0",
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "release.authorization",
+                    version: "1.0.0",
+                    build: "stub.release.authorization"
+                ),
+                invocation: ExecutionInvocation.inProcess(
+                    entryPoint: "stub.release.authorization"
+                ),
                 startedAt: now,
                 completedAt: now
             )

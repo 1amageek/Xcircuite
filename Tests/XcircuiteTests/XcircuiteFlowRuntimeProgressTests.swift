@@ -9,7 +9,6 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func runtimeProgressFollowStreamsLayoutDRCLVSPEXStages() async throws {
@@ -81,8 +80,8 @@ extension XcircuiteFlowRuntimeTests {
                         tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
@@ -97,22 +96,31 @@ extension XcircuiteFlowRuntimeTests {
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
-                        tool: mockPEXContractToolSpec()
+                        backendSelection: PEXBackendSelection(
+                            backendID: "magic",
+                            executablePath: "/definitely/missing/magic"
+                        ),
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "pex-magic")
                     )
                 ),
             ]
         )
         let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        let workspaceID = try FlowWorkspaceID(
+            rawValue: try await workspaceStore.loadManifest().identity.projectID
+        )
         let sink = ProgressEventSink()
         let progressSubscriber = DefaultFlowRunProgressSubscriber(
             progressStore: FlowRunProgressStore(
-                persistence: try XcircuiteWorkspaceStore(projectRoot: root)
+                persistence: workspaceStore
             )
         )
 
         async let followSnapshot = progressSubscriber.followProgress(
             request: FlowRunProgressSubscriptionRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-signoff-follow",
                 timeoutMilliseconds: 20_000,
                 pollIntervalMilliseconds: 10
@@ -123,7 +131,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-signoff-follow",
                 intent: "Follow runtime progress while layout, DRC, LVS, and PEX stages execute",
                 stages: [
@@ -145,14 +153,14 @@ extension XcircuiteFlowRuntimeTests {
                     FlowStageDefinition(
                         stageID: "009-pex",
                         displayName: "PEX",
-                        requiredTool: mockPEXContractRequirement()
+                        requiredTool: pexRequirement()
                     ),
                 ]
             )
         )
         let snapshot = try await followSnapshot
         let events = await sink.events()
-        #expect(result.status == .succeeded)
+        #expect(result.status == .blocked)
         #expect(result.stages.map(\.stageID) == ["006-layout", "007-drc", "008-lvs", "009-pex"])
         #expect(events.map(\.kind) == [
             .runStarted,
@@ -163,7 +171,7 @@ extension XcircuiteFlowRuntimeTests {
             .stageStarted,
             .stageFinished,
             .stageStarted,
-            .stageFinished,
+            .stageBlocked,
             .runFinished,
         ])
         #expect(events.compactMap(\.stageID) == [
@@ -178,12 +186,12 @@ extension XcircuiteFlowRuntimeTests {
         ])
         #expect(events.map(\.sequence) == Array(1...10))
         #expect(snapshot.latestSequence == 10)
-        #expect(snapshot.terminalStatus == .succeeded)
+        #expect(snapshot.terminalStatus == .blocked)
         #expect(snapshot.isTerminal)
 
         let recovered = try await progressSubscriber.snapshot(
             request: FlowRunProgressSubscriptionRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-signoff-follow",
                 afterSequence: 4
             )
@@ -193,13 +201,12 @@ extension XcircuiteFlowRuntimeTests {
             .stageStarted,
             .stageFinished,
             .stageStarted,
-            .stageFinished,
+            .stageBlocked,
             .runFinished,
         ])
         #expect(recovered.events.first?.stageID == "007-drc")
-        #expect(recovered.terminalStatus == .succeeded)
+        #expect(recovered.terminalStatus == .blocked)
 
-        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         let ledger = try await workspaceStore.loadRunLedger(runID: "run-progress-signoff-follow")
         #expect(ledger.progressEvents.map(\.sequence) == Array(1...10))
         let bundle = try await DefaultFlowRunReviewBundler(
@@ -207,7 +214,7 @@ extension XcircuiteFlowRuntimeTests {
             persistence: workspaceStore
         ).makeReviewBundle(
             runID: "run-progress-signoff-follow",
-            projectRoot: root
+            workspaceID: workspaceID
         )
         #expect(bundle.artifacts.first(where: {
             $0.purpose == .runProgress
@@ -232,16 +239,21 @@ extension XcircuiteFlowRuntimeTests {
             descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
             projectRoot: root
         )
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        let workspaceID = try FlowWorkspaceID(
+            rawValue: try await workspaceStore.loadManifest().identity.projectID
+        )
         let sink = ProgressEventSink()
         let progressSubscriber = DefaultFlowRunProgressSubscriber(
             progressStore: FlowRunProgressStore(
-                persistence: try XcircuiteWorkspaceStore(projectRoot: root)
+                persistence: workspaceStore
             )
         )
 
         async let followSnapshot = progressSubscriber.followProgress(
             request: FlowRunProgressSubscriptionRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-drc-stress",
                 timeoutMilliseconds: 20_000,
                 pollIntervalMilliseconds: 10
@@ -252,7 +264,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-drc-stress",
                 intent: "Stress follow runtime progress over repeated native DRC stages",
                 stages: stageIDs.map { stageID in
@@ -291,7 +303,7 @@ extension XcircuiteFlowRuntimeTests {
         let tailCursor = expectedKinds.count - 5
         let recovered = try await progressSubscriber.snapshot(
             request: FlowRunProgressSubscriptionRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-drc-stress",
                 afterSequence: tailCursor
             )
@@ -300,7 +312,6 @@ extension XcircuiteFlowRuntimeTests {
         #expect(recovered.events.last?.kind == .runFinished)
         #expect(recovered.terminalStatus == .succeeded)
 
-        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         let ledger = try await workspaceStore.loadRunLedger(runID: "run-progress-drc-stress")
         #expect(ledger.progressEvents.map(\.sequence) == expectedSequences)
         let manifest = try await workspaceStore.readJSON(
@@ -346,7 +357,6 @@ extension XcircuiteFlowRuntimeTests {
             let layoutStageID = "stress-\(suffix)-layout"
             let drcStageID = "stress-\(suffix)-drc"
             let lvsStageID = "stress-\(suffix)-lvs"
-            let pexStageID = "stress-\(suffix)-pex"
             let simulationStageID = "stress-\(suffix)-sim"
 
             executors.append(.layoutCommand(
@@ -403,25 +413,6 @@ extension XcircuiteFlowRuntimeTests {
                     tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                 )
             ))
-            executors.append(.mockPEX(
-                XcircuiteFlowStageExecutorSpec.MockPEX(
-                    stageID: pexStageID,
-                    layoutInput: .stageArtifact(
-                        XcircuiteFlowInputReference.StageArtifact(
-                            stageID: layoutStageID,
-                            artifactID: "layout-gds",
-                            kind: .layout,
-                            format: .gdsii
-                        )
-                    ),
-                    layoutFormat: .gds,
-                    sourceNetlistPath: "circuits/top.spice",
-                    topCell: "top",
-                    corners: [PEXCorner(id: "tt")],
-                    technology: .inline(makePEXTechnology()),
-                    tool: mockPEXContractToolSpec()
-                )
-            ))
             executors.append(.coreSpiceSimulation(
                 XcircuiteFlowStageExecutorSpec.CoreSpiceSimulation(
                     stageID: simulationStageID,
@@ -449,11 +440,6 @@ extension XcircuiteFlowRuntimeTests {
                 requiredTool: lvsRequirement()
             ))
             stages.append(FlowStageDefinition(
-                stageID: pexStageID,
-                displayName: "PEX \(suffix)",
-                requiredTool: mockPEXContractRequirement()
-            ))
-            stages.append(FlowStageDefinition(
                 stageID: simulationStageID,
                 displayName: "Simulation \(suffix)",
                 requiredTool: simulationRequirement()
@@ -464,15 +450,20 @@ extension XcircuiteFlowRuntimeTests {
             spec: XcircuiteFlowRuntimeSpec(executors: executors),
             projectRoot: root
         )
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        let workspaceID = try FlowWorkspaceID(
+            rawValue: try await workspaceStore.loadManifest().identity.projectID
+        )
         let sink = ProgressEventSink()
         let progressSubscriber = DefaultFlowRunProgressSubscriber(
             progressStore: FlowRunProgressStore(
-                persistence: try XcircuiteWorkspaceStore(projectRoot: root)
+                persistence: workspaceStore
             )
         )
         async let followSnapshot = progressSubscriber.followProgress(
             request: FlowRunProgressSubscriptionRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-multifamily-stress",
                 timeoutMilliseconds: 30_000,
                 pollIntervalMilliseconds: 10
@@ -483,9 +474,9 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-multifamily-stress",
-                intent: "Stress follow runtime progress over layout, DRC, LVS, PEX, and simulation stages",
+                intent: "Stress follow runtime progress over layout, DRC, LVS, and simulation stages",
                 stages: stages
             )
         )
@@ -513,9 +504,6 @@ extension XcircuiteFlowRuntimeTests {
             stage.gates.contains { $0.gateID == "lvs" && $0.status == .passed }
         })
         #expect(result.stages.contains { stage in
-            stage.gates.contains { $0.gateID == "pex" && $0.status == .passed }
-        })
-        #expect(result.stages.contains { stage in
             stage.gates.contains { $0.gateID == "simulation" && $0.status == .passed }
         })
         #expect(events.map(\.kind) == expectedKinds)
@@ -528,7 +516,7 @@ extension XcircuiteFlowRuntimeTests {
         let tailCursor = expectedKinds.count - 7
         let recovered = try await progressSubscriber.snapshot(
             request: FlowRunProgressSubscriptionRequest(
-                projectRoot: root,
+                workspaceID: workspaceID,
                 runID: "run-progress-multifamily-stress",
                 afterSequence: tailCursor
             )
@@ -537,7 +525,6 @@ extension XcircuiteFlowRuntimeTests {
         #expect(recovered.events.last?.kind == .runFinished)
         #expect(recovered.terminalStatus == .succeeded)
 
-        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         let ledger = try await workspaceStore.loadRunLedger(runID: "run-progress-multifamily-stress")
         #expect(ledger.progressEvents.map(\.sequence) == expectedSequences)
         let manifest = try await workspaceStore.readJSON(

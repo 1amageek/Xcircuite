@@ -4,11 +4,10 @@ import PEXEngine
 import Testing
 import ToolQualification
 @testable import Xcircuite
-import DesignFlowKernel
 
 @Suite("PEX flow stage executor")
 struct PEXFlowStageExecutorTests {
-    @Test func mockPEXExecutorRunsThroughDesignFlowKernel() async throws {
+    @Test func fixturePEXBackendRunsThroughDesignFlowKernel() async throws {
         let root = try makeTemporaryRoot("pex-pass")
         defer { removeTemporaryRoot(root) }
 
@@ -19,7 +18,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex",
                 intent: "Run PEX",
                 stages: [
@@ -36,12 +35,17 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [SignoffToolDescriptors.mockPEX(level: .smokeChecked)]),
+            toolRegistry: ToolRegistry(descriptors: [
+                SignoffToolDescriptors.pexBackend(backendID: "test-fixture", level: .smokeChecked),
+            ]),
             healthResults: [
-                "mock-pex": QualifiedToolFixtures.health(toolID: "mock-pex", level: .smokeChecked),
+                "pex-test-fixture": QualifiedToolFixtures.health(
+                    toolID: "pex-test-fixture",
+                    level: .smokeChecked
+                ),
             ],
             executors: [
-                PEXFlowStageExecutor.mock(
+                fixturePEXExecutor(
                     stageID: "009-pex",
                     layoutURL: layoutURL,
                     layoutFormat: .gds,
@@ -180,7 +184,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex-postlayout-review",
                 intent: "Run PEX and compare post-layout waveform",
                 stages: [
@@ -191,7 +195,7 @@ struct PEXFlowStageExecutorTests {
             toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
-                PEXFlowStageExecutor.mock(
+                fixturePEXExecutor(
                     stageID: "009-pex",
                     layoutURL: layoutURL,
                     layoutFormat: .gds,
@@ -247,7 +251,7 @@ struct PEXFlowStageExecutorTests {
             persistence: bundleStore
         ).makeReviewBundle(
             runID: "run-pex-postlayout-review",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(bundle.artifacts.first(where: {
             $0.stageID == "009-pex"
@@ -382,7 +386,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex-retry",
                 intent: "Retry transient PEX executor failure",
                 stages: [
@@ -401,7 +405,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -410,7 +414,7 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default
                     ),
                     engine: FlakyPEXEngine(state: engineState)
@@ -447,7 +451,7 @@ struct PEXFlowStageExecutorTests {
             persistence: bundleStore
         ).makeReviewBundle(
             runID: "run-pex-retry",
-            projectRoot: root
+            workspaceID: try await workspaceID(projectRoot: root)
         )
         #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
@@ -463,7 +467,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex",
                 intent: "Run PEX",
                 stages: [
@@ -475,7 +479,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -484,11 +488,11 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default,
                         workingDirectory: externalDirectory
                     ),
-                    engine: DefaultPEXEngine.withDefaults()
+                    engine: Self.makeFixturePEXEngine()
                 ),
             ]
         )
@@ -511,7 +515,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex-cancel",
                 intent: "Run cancellable PEX",
                 stages: [
@@ -523,7 +527,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -532,7 +536,7 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default
                     ),
                     engine: CancellingPEXEngine(projectRoot: root, runID: "run-pex-cancel")
@@ -547,7 +551,7 @@ struct PEXFlowStageExecutorTests {
         #expect(stage.diagnostics.contains { $0.code == "RUN_CANCELLATION_REQUESTED" })
 
         let ledger = try await XcircuiteWorkspaceStore(projectRoot: root).loadRunLedger(runID: "run-pex-cancel")
-        #expect(ledger.cancellationRequest?.requestedBy == "mock-pex")
+        #expect(ledger.cancellationRequest?.requestedBy == "pex-test-fixture")
         #expect(ledger.progressEvents.contains { $0.kind == .cancellationObserved })
     }
 
@@ -560,7 +564,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex",
                 intent: "Run PEX",
                 stages: [
@@ -572,7 +576,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -581,7 +585,7 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default
                     ),
                     engine: IncompleteArtifactPEXEngine()
@@ -626,7 +630,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex",
                 intent: "Run PEX",
                 stages: [
@@ -638,7 +642,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -647,7 +651,7 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default
                     ),
                     engine: DivergentManifestPEXEngine()
@@ -680,7 +684,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex",
                 intent: "Run PEX",
                 stages: [
@@ -692,7 +696,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -701,7 +705,7 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default
                     ),
                     engine: EscapingArtifactPEXEngine(externalArtifactURL: externalArtifactURL)
@@ -731,7 +735,7 @@ struct PEXFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-pex",
                 intent: "Run PEX",
                 stages: [
@@ -743,7 +747,7 @@ struct PEXFlowStageExecutorTests {
             executors: [
                 PEXFlowStageExecutor(
                     stageID: "009-pex",
-                    toolID: "mock-pex",
+                    toolID: "pex-test-fixture",
                     request: PEXRunRequest(
                         layoutURL: layoutURL,
                         layoutFormat: .gds,
@@ -752,7 +756,7 @@ struct PEXFlowStageExecutorTests {
                         topCell: "TESTCELL",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makeTestTech()),
-                        backendSelection: .mock(),
+                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                         options: .default
                     ),
                     engine: ExternalManifestPEXEngine(externalManifestURL: externalManifestURL)
@@ -792,13 +796,59 @@ struct PEXFlowStageExecutorTests {
         return url
     }
 
+    private func fixturePEXExecutor(
+        stageID: String,
+        layoutURL: URL,
+        layoutFormat: LayoutFormat,
+        sourceNetlistURL: URL,
+        topCell: String,
+        corners: [PEXCorner],
+        technology: XcircuitePEXTechnologySpec,
+        technologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
+        processProfile: PEXProcessProfileReference? = nil
+    ) -> PEXFlowStageExecutor {
+        PEXFlowStageExecutor(
+            stageID: stageID,
+            toolID: SignoffToolDescriptors.pexToolID(backendID: "test-fixture"),
+            layoutInput: .path(layoutURL.path(percentEncoded: false)),
+            layoutFormat: layoutFormat,
+            sourceNetlistInput: .path(sourceNetlistURL.path(percentEncoded: false)),
+            topCell: topCell,
+            corners: corners,
+            technology: technology,
+            technologyByCorner: technologyByCorner,
+            processProfile: processProfile,
+            backendSelection: PEXBackendSelection(backendID: "test-fixture"),
+            engine: Self.makeFixturePEXEngine()
+        )
+    }
+
+    private static func makeFixturePEXEngine() -> DefaultPEXEngine {
+        DefaultPEXEngine(
+            adapterRegistry: PEXAdapterRegistry(adapters: [FixturePEXAdapter()]),
+            parserRegistry: PEXDefaultParsers.makeRegistry()
+        )
+    }
+
     private func makeOrchestrator(root: URL) throws -> DefaultFlowOrchestrator {
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         return DefaultFlowOrchestrator(
             infrastructure: store,
             ledgerPersistence: store,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: FlowRunProgressStore(persistence: store)
         )
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {
@@ -857,7 +907,92 @@ struct PEXFlowStageExecutorTests {
         evaluation.channelResults.first { $0.channelID == channelID }
     }
 
-    private struct IncompleteArtifactPEXEngine: PEXExecuting {
+    private struct FixturePEXAdapter: PEXAdapter {
+        let backendID = "test-fixture"
+        let capabilities = PEXBackendCapabilities(
+            supportsCouplingCaps: true,
+            supportsCornerSweep: true,
+            supportsIncremental: false,
+            supportsRCReduction: false,
+            nativeOutputFormats: [.spef]
+        )
+
+        func prepare(_ context: PEXExecutionContext) async throws {
+            try FileManager.default.createDirectory(
+                at: context.rawOutputDirectory,
+                withIntermediateDirectories: true
+            )
+        }
+
+        func execute(_ context: PEXExecutionContext) async throws -> PEXAdapterExecutionResult {
+            let temperatureScale = 1 + ((context.corner.temperature ?? 25) - 25) * 0.003
+            let capacitance = 0.05 * temperatureScale
+            let resistance = 10 * temperatureScale
+            let spef = """
+            *SPEF "IEEE 1481-1998"
+            *DESIGN "\(context.topCell)"
+            *DATE "2026-01-01"
+            *VENDOR "XcircuiteTests"
+            *PROGRAM "FixturePEXAdapter"
+            *VERSION "1.0"
+            *DESIGN_FLOW "EXTERNAL"
+            *DIVIDER /
+            *DELIMITER :
+            *BUS_DELIMITER [ ]
+            *T_UNIT 1 NS
+            *C_UNIT 1 PF
+            *R_UNIT 1 OHM
+            *L_UNIT 1 HENRY
+
+            *NAME_MAP
+            *1 VDD
+            *2 VSS
+
+            *PORTS
+            VDD I
+            VSS O
+
+            *D_NET VDD \(capacitance)
+            *CONN
+            *I \(context.topCell):VDD I
+            *CAP
+            1 VDD:1 \(capacitance)
+            *RES
+            1 VDD:1 VDD:2 \(resistance)
+            *END
+
+            *D_NET VSS \(capacitance * 2)
+            *CONN
+            *I \(context.topCell):VSS O
+            *CAP
+            1 VSS:1 \(capacitance * 2)
+            *RES
+            1 VSS:1 VSS:2 \(resistance * 2)
+            *END
+            """
+            let outputURL = context.rawOutputDirectory.appending(path: "\(context.corner.id.value).spef")
+            try Data(spef.utf8).write(to: outputURL, options: .atomic)
+            return PEXAdapterExecutionResult(
+                rawOutput: PEXRawOutput(
+                    format: .spef,
+                    fileURLs: [outputURL],
+                    metadata: ["generator": backendID]
+                ),
+                generatedArtifacts: [
+                    PEXGeneratedArtifact(
+                        kind: .rawOutput,
+                        stage: .backendExecution,
+                        cornerID: context.corner.id,
+                        url: outputURL
+                    ),
+                ]
+            )
+        }
+
+        func cleanup(_ context: PEXExecutionContext) async {}
+    }
+
+    private struct IncompleteArtifactPEXEngine: Xcircuite.PEXExecuting {
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
             guard let workingDirectory = request.workingDirectory else {
                 throw PEXError.invalidInput("Expected working directory")
@@ -906,7 +1041,7 @@ struct PEXFlowStageExecutorTests {
             let manifest = PEXArtifactManifest(
                 runID: runID,
                 requestHash: PEXRequestHash("incomplete-artifacts"),
-                backendID: "mock-pex",
+                backendID: "test-fixture",
                 status: .success,
                 startedAt: now,
                 finishedAt: now,
@@ -926,7 +1061,7 @@ struct PEXFlowStageExecutorTests {
             let manifestData = try encoder.encode(manifest)
             try manifestData.write(to: manifestURL, options: .atomic)
 
-            return PEXRunResult(
+            return try PEXRunResult(
                 runID: runID,
                 requestHash: PEXRequestHash("incomplete-artifacts"),
                 status: .success,
@@ -944,7 +1079,7 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ],
                 warnings: [],
-                artifacts: manifest,
+                artifactManifest: manifest,
                 manifestURL: manifestURL,
                 metrics: PEXRunMetrics(
                     totalDurationSeconds: 0,
@@ -956,25 +1091,27 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct CancellingPEXEngine: PEXExecuting {
+    private struct CancellingPEXEngine: Xcircuite.PEXExecuting {
         let projectRoot: URL
         let runID: String
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
             let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            try await store.createWorkspace()
+            let manifest = try await store.loadManifest()
             _ = try await DefaultFlowRunCancellationRecorder(
                 progressStore: FlowRunProgressStore(persistence: store)
             ).requestCancellation(
-                projectRoot: projectRoot,
+                workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
                 runID: runID,
-                requestedBy: "mock-pex",
+                requestedBy: "pex-test-fixture",
                 reason: "cooperative PEX cancellation checkpoint"
             )
             return try await IncompleteArtifactPEXEngine().run(request)
         }
     }
 
-    private struct FlakyPEXEngine: PEXExecuting {
+    private struct FlakyPEXEngine: Xcircuite.PEXExecuting {
         let state: FlakyPEXEngineState
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
@@ -992,11 +1129,11 @@ struct PEXFlowStageExecutorTests {
                     kind: .backendExecutionFailed,
                     stage: .backendExecution,
                     cornerID: PEXCornerID("tt"),
-                    backendID: "mock-pex",
+                    backendID: "test-fixture",
                     message: "transient PEX backend failure"
                 )
             }
-            return try await DefaultPEXEngine.withDefaults().run(request)
+            return try await PEXFlowStageExecutorTests.makeFixturePEXEngine().run(request)
         }
 
         func executionCount() -> Int {
@@ -1004,7 +1141,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct DivergentManifestPEXEngine: PEXExecuting {
+    private struct DivergentManifestPEXEngine: Xcircuite.PEXExecuting {
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
             guard let workingDirectory = request.workingDirectory else {
                 throw PEXError.invalidInput("Expected working directory")
@@ -1088,7 +1225,7 @@ struct PEXFlowStageExecutorTests {
             let returnedManifest = PEXArtifactManifest(
                 runID: runID,
                 requestHash: PEXRequestHash("divergent-manifest"),
-                backendID: "mock-pex",
+                backendID: "test-fixture",
                 status: .success,
                 startedAt: now,
                 finishedAt: now,
@@ -1105,7 +1242,7 @@ struct PEXFlowStageExecutorTests {
             let persistedManifest = PEXArtifactManifest(
                 runID: runID,
                 requestHash: PEXRequestHash("divergent-manifest"),
-                backendID: "mock-pex",
+                backendID: "test-fixture",
                 status: .success,
                 startedAt: now,
                 finishedAt: now,
@@ -1119,7 +1256,7 @@ struct PEXFlowStageExecutorTests {
             let manifestData = try encoder.encode(persistedManifest)
             try manifestData.write(to: manifestURL, options: .atomic)
 
-            return PEXRunResult(
+            return try PEXRunResult(
                 runID: runID,
                 requestHash: PEXRequestHash("divergent-manifest"),
                 status: .success,
@@ -1137,7 +1274,7 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ],
                 warnings: [],
-                artifacts: returnedManifest,
+                artifactManifest: returnedManifest,
                 manifestURL: manifestURL,
                 metrics: PEXRunMetrics(
                     totalDurationSeconds: 0,
@@ -1149,7 +1286,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct EscapingArtifactPEXEngine: PEXExecuting {
+    private struct EscapingArtifactPEXEngine: Xcircuite.PEXExecuting {
         let externalArtifactURL: URL
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
@@ -1210,7 +1347,7 @@ struct PEXFlowStageExecutorTests {
             let manifest = PEXArtifactManifest(
                 runID: runID,
                 requestHash: PEXRequestHash("escaping-artifact"),
-                backendID: "mock-pex",
+                backendID: "test-fixture",
                 status: .success,
                 startedAt: now,
                 finishedAt: now,
@@ -1230,7 +1367,7 @@ struct PEXFlowStageExecutorTests {
             let manifestData = try encoder.encode(manifest)
             try manifestData.write(to: manifestURL, options: .atomic)
 
-            return PEXRunResult(
+            return try PEXRunResult(
                 runID: runID,
                 requestHash: PEXRequestHash("escaping-artifact"),
                 status: .success,
@@ -1248,7 +1385,7 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ],
                 warnings: [],
-                artifacts: manifest,
+                artifactManifest: manifest,
                 manifestURL: manifestURL,
                 metrics: PEXRunMetrics(
                     totalDurationSeconds: 0,
@@ -1260,7 +1397,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct ExternalManifestPEXEngine: PEXExecuting {
+    private struct ExternalManifestPEXEngine: Xcircuite.PEXExecuting {
         let externalManifestURL: URL
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
@@ -1269,7 +1406,7 @@ struct PEXFlowStageExecutorTests {
             let manifest = PEXArtifactManifest(
                 runID: runID,
                 requestHash: PEXRequestHash("external-manifest"),
-                backendID: "mock-pex",
+                backendID: "test-fixture",
                 status: .success,
                 startedAt: now,
                 finishedAt: now,
@@ -1282,7 +1419,7 @@ struct PEXFlowStageExecutorTests {
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(manifest)
             try data.write(to: externalManifestURL, options: .atomic)
-            return PEXRunResult(
+            return try PEXRunResult(
                 runID: runID,
                 requestHash: PEXRequestHash("external-manifest"),
                 status: .success,
@@ -1290,7 +1427,7 @@ struct PEXFlowStageExecutorTests {
                 finishedAt: now,
                 cornerResults: [],
                 warnings: [],
-                artifacts: manifest,
+                artifactManifest: manifest,
                 manifestURL: externalManifestURL,
                 metrics: PEXRunMetrics(
                     totalDurationSeconds: 0,
@@ -1302,3 +1439,4 @@ struct PEXFlowStageExecutorTests {
         }
     }
 }
+import CircuiteFoundation

@@ -962,3 +962,4 @@ private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpPostLayoutComparisonReport
     var artifactReference: ArtifactReference?
 }
+import CircuiteFoundation

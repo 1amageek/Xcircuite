@@ -31,8 +31,8 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let reportURL = try reportInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let report = try JSONDecoder().decode(
                 LogicEvidenceReport.self,
@@ -62,7 +62,7 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
             let allArtifacts = additionalArtifacts + [resultArtifact]
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: allArtifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let accepted = report.state == .oracleCorrelated && report.blockers.isEmpty
             let stageStatus: FlowStageStatus = accepted
@@ -107,7 +107,7 @@ public struct LogicQualificationFlowStageExecutor: FlowStageExecutor {
     ) throws -> ArtifactReference {
         try artifactBuilder.reference(
             for: url,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: artifactID,
             role: .input,
             kind: ArtifactKind.report,

@@ -202,7 +202,7 @@ extension XcircuiteCandidatePlanVerifier {
             ),
         ]
 
-        for artifact in executionResult.artifacts.artifacts where artifact.availability == .available {
+        for artifact in executionResult.artifactManifest.artifacts where artifact.availability == .available {
             let url = pexRunDirectory.appending(path: artifact.locator.location.value)
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue

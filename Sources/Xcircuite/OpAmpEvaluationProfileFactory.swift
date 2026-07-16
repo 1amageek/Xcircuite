@@ -116,3 +116,4 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
         )
     }
 }
+import CircuiteFoundation

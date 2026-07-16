@@ -11,7 +11,6 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsLayoutCommandDRCExportIntoDRCStage() async throws {
@@ -55,7 +54,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Apply layout commands and run DRC",
                 stages: [
@@ -93,27 +92,24 @@ extension XcircuiteFlowRuntimeTests {
         #expect(layout.rules.map(\.id) == ["M1.width"])
     }
 
-    @Test func layoutCommandExecutorRejectsRunDirectoryOutsideProjectBeforeWritingArtifacts() async throws {
+    @Test func layoutCommandExecutorRejectsRunnerOutputOutsideProject() async throws {
         let root = try makeTemporaryRoot("layout-command-outside-run-directory")
         defer { removeTemporaryRoot(root) }
-        let outsideRoot = try makeTemporaryRoot("layout-command-outside-run-target")
-        defer { removeTemporaryRoot(outsideRoot) }
         try await writeLayoutCommandRequest(root: root)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let outsideRunDirectory = outsideRoot.appending(path: "run-1")
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
-            runner: MismatchedLayoutCommandRunner()
+            runner: OutsideProjectLayoutCommandRunner()
         )
 
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "006-layout", displayName: "Layout command"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: outsideRunDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -124,7 +120,6 @@ extension XcircuiteFlowRuntimeTests {
         #expect(result.diagnostics.contains {
             $0.code == "LAYOUT_COMMAND_ARTIFACT_OUTPUT_OUTSIDE_PROJECT"
         })
-        #expect(!FileManager.default.fileExists(atPath: outsideRunDirectory.path(percentEncoded: false)))
     }
 
     @Test func layoutCommandExecutorRejectsRunnerResultPathMismatch() async throws {
@@ -133,19 +128,18 @@ extension XcircuiteFlowRuntimeTests {
         try await writeLayoutCommandRequest(root: root)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
-            runner: MismatchedLayoutCommandRunner()
+            runner: InProjectMismatchedLayoutCommandRunner()
         )
 
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "006-layout", displayName: "Layout command"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -165,7 +159,7 @@ extension XcircuiteFlowRuntimeTests {
         try await writeLayoutCommandRequest(root: root)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -175,9 +169,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "006-layout", displayName: "Layout command"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -196,7 +189,7 @@ extension XcircuiteFlowRuntimeTests {
         try await writeLayoutCommandRequest(root: root)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.ensureWorkspace()
-        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -206,9 +199,8 @@ extension XcircuiteFlowRuntimeTests {
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: "006-layout", displayName: "Layout command"),
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
@@ -291,7 +283,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Apply layout commands with a via and run DRC",
                 stages: [
@@ -357,7 +349,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Reject DRC export without via definitions",
                 stages: [
@@ -479,7 +471,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Export edited layout as GDS and verify it with LVS",
                 stages: [
@@ -503,7 +495,7 @@ extension XcircuiteFlowRuntimeTests {
         let gdsArtifact = try #require(layoutStage.artifacts.first { $0.artifactID == "layout-gds" })
         #expect(gdsArtifact.kind == .layout)
         #expect(gdsArtifact.format == .gdsii)
-        #expect(gdsArtifact.sha256 != nil)
+        #expect(!gdsArtifact.sha256.isEmpty)
         #expect(lvsStage.gates.contains { $0.gateID == "lvs" && $0.status == .passed })
         #expect(lvsStage.artifacts.contains { $0.path.contains("lvs-report") })
     }
@@ -563,7 +555,7 @@ extension XcircuiteFlowRuntimeTests {
 
             let result = try await runtime.run(
                 request: FlowOperationRequest(
-                    projectRoot: root,
+                    workspaceID: try await workspaceID(projectRoot: root),
                     runID: "run-1",
                     intent: "Export edited layout as \(layoutCase.displayName) and verify it with LVS",
                     stages: [
@@ -623,7 +615,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Reject unsupported standard layout export format",
                 stages: [
@@ -645,7 +637,7 @@ extension XcircuiteFlowRuntimeTests {
         })
     }
 
-    @Test func runtimeFeedsLayoutCommandStandardGDSExportIntoPEXStage() async throws {
+    @Test func runtimeBlocksProductionPEXWhenMagicIsUnavailableAfterGDSExport() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-gds-pex")
         defer { removeTemporaryRoot(root) }
         try await writeLayoutCommandRequest(root: root)
@@ -674,8 +666,8 @@ extension XcircuiteFlowRuntimeTests {
                         tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
@@ -686,11 +678,15 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         layoutFormat: .gds,
-                        sourceNetlistPath: "circuits/top.spice",
+                        sourceNetlistInput: .path("circuits/top.spice"),
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
-                        tool: mockPEXContractToolSpec()
+                        backendSelection: PEXBackendSelection(
+                            backendID: "magic",
+                            executablePath: root.appending(path: "missing-magic").path(percentEncoded: false)
+                        ),
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
                     )
                 ),
             ]
@@ -699,7 +695,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Export edited layout as GDS and run PEX",
                 stages: [
@@ -711,34 +707,23 @@ extension XcircuiteFlowRuntimeTests {
                     FlowStageDefinition(
                         stageID: "009-pex",
                         displayName: "PEX",
-                        requiredTool: mockPEXContractRequirement()
+                        requiredTool: pexRequirement()
                     ),
                 ]
             )
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == .blocked)
         let layoutStage = try #require(result.stages.first { $0.stageID == "006-layout" })
         let pexStage = try #require(result.stages.first { $0.stageID == "009-pex" })
         let gdsArtifact = try #require(layoutStage.artifacts.first { $0.artifactID == "layout-gds" })
-        #expect(gdsArtifact.sha256 != nil)
-        #expect(pexStage.gates.contains { $0.gateID == "pex" && $0.status == .passed })
-        #expect(pexStage.gates.contains { $0.gateID == "pex-artifacts" && $0.status == .passed })
-        let summaryArtifact = try #require(pexStage.artifacts.first { $0.artifactID == "pex-summary" })
-        #expect(summaryArtifact.kind == .report)
-        #expect(summaryArtifact.format == .json)
-        let summary = try JSONDecoder().decode(
-            PEXRunSummaryReport.self,
-            from: Data(contentsOf: root.appending(path: summaryArtifact.path))
-        )
-        #expect(summary.summary.corners.first?.cornerID == "tt")
-        #expect(summary.summary.corners.first?.topNets.isEmpty == false)
-        #expect(pexStage.artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .spef }))
-        #expect(pexStage.artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .json }))
-        #expect(pexStage.artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .spice }))
+        #expect(!gdsArtifact.sha256.isEmpty)
+        #expect(pexStage.gates.contains { $0.gateID == "pex" && $0.status == .blocked })
+        #expect(pexStage.diagnostics.contains { $0.code == "PEX_BACKEND_UNAVAILABLE" })
+        #expect(!pexStage.artifacts.contains { $0.artifactID == "pex-summary" })
     }
 
-    @Test func runtimeFeedsLayoutCommandOASISExportIntoPEXStage() async throws {
+    @Test func runtimeBlocksProductionPEXWhenMagicIsUnavailableAfterOASISExport() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-oasis-pex")
         defer { removeTemporaryRoot(root) }
         try await writeLayoutCommandRequest(root: root)
@@ -767,8 +752,8 @@ extension XcircuiteFlowRuntimeTests {
                         tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
@@ -779,11 +764,15 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         layoutFormat: .oas,
-                        sourceNetlistPath: "circuits/top.spice",
+                        sourceNetlistInput: .path("circuits/top.spice"),
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
-                        tool: mockPEXContractToolSpec()
+                        backendSelection: PEXBackendSelection(
+                            backendID: "magic",
+                            executablePath: root.appending(path: "missing-magic").path(percentEncoded: false)
+                        ),
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
                     )
                 ),
             ]
@@ -792,7 +781,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "run-1",
                 intent: "Export edited layout as OASIS and run PEX",
                 stages: [
@@ -804,30 +793,27 @@ extension XcircuiteFlowRuntimeTests {
                     FlowStageDefinition(
                         stageID: "009-pex",
                         displayName: "PEX",
-                        requiredTool: mockPEXContractRequirement(requiredLayoutFormat: .oasis)
+                        requiredTool: pexRequirement(requiredLayoutFormat: .oasis)
                     ),
                 ]
             )
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == .blocked)
         let layoutStage = try #require(result.stages.first { $0.stageID == "006-layout" })
         let pexStage = try #require(result.stages.first { $0.stageID == "009-pex" })
         let oasisArtifact = try #require(layoutStage.artifacts.first { $0.artifactID == "layout-oasis" })
         #expect(oasisArtifact.kind == .layout)
         #expect(oasisArtifact.format == .oasis)
         #expect(oasisArtifact.path.hasSuffix(".oas"))
-        #expect(oasisArtifact.sha256 != nil)
-        #expect(oasisArtifact.byteCount != nil)
-        #expect(pexStage.gates.contains { $0.gateID == "pex" && $0.status == .passed })
-        #expect(pexStage.gates.contains { $0.gateID == "pex-artifacts" && $0.status == .passed })
-        #expect(pexStage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
-        let summaryArtifact = try #require(pexStage.artifacts.first { $0.artifactID == "pex-summary" })
-        #expect(summaryArtifact.kind == .report)
-        #expect(summaryArtifact.format == .json)
+        #expect(!oasisArtifact.sha256.isEmpty)
+        #expect(oasisArtifact.byteCount > 0)
+        #expect(pexStage.gates.contains { $0.gateID == "pex" && $0.status == .blocked })
+        #expect(pexStage.diagnostics.contains { $0.code == "PEX_BACKEND_UNAVAILABLE" })
+        #expect(!pexStage.artifacts.contains { $0.artifactID == "pex-summary" })
     }
 
-    private struct MismatchedLayoutCommandRunner: LayoutCommandRunning {
+    private struct OutsideProjectLayoutCommandRunner: LayoutCommandRunning {
         func run(request: LayoutCommandRequest, baseURL: URL) throws -> LayoutCommandResult {
             LayoutCommandResult(
                 status: "passed",
@@ -836,6 +822,26 @@ extension XcircuiteFlowRuntimeTests {
                 outputArtifact: try XcircuiteFlowRuntimeTests.outputArtifact(
                     at: FileManager.default.temporaryDirectory
                         .appending(path: "external-layout-document.json"),
+                    sha256: String(repeating: "0", count: 64),
+                    byteCount: 0
+                ),
+                cellCount: 0,
+                shapeCount: 0,
+                viaCount: 0,
+                labelCount: 0,
+                netCount: 0
+            )
+        }
+    }
+
+    private struct InProjectMismatchedLayoutCommandRunner: LayoutCommandRunning {
+        func run(request: LayoutCommandRequest, baseURL: URL) throws -> LayoutCommandResult {
+            LayoutCommandResult(
+                status: "passed",
+                commandCount: request.commands.count,
+                appliedCommands: [],
+                outputArtifact: try XcircuiteFlowRuntimeTests.outputArtifact(
+                    at: baseURL.appending(path: "mismatched-layout-document.json"),
                     sha256: String(repeating: "0", count: 64),
                     byteCount: 0
                 ),
@@ -890,6 +896,13 @@ extension XcircuiteFlowRuntimeTests {
                 netCount: result.netCount
             )
         }
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private static func outputArtifact(

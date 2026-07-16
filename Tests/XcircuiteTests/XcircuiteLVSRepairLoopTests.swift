@@ -1237,3 +1237,4 @@ struct XcircuiteLVSRepairLoopTests {
         }
     }
 }
+import CircuiteFoundation

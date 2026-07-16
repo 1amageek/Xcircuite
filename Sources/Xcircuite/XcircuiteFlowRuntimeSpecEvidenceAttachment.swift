@@ -44,8 +44,6 @@ public extension XcircuiteFlowStageExecutorSpec {
             spec.stageID
         case .pex(let spec):
             spec.stageID
-        case .mockPEX(let spec):
-            spec.stageID
         case .coreSpiceSimulation(let spec):
             spec.stageID
         case .postLayoutComparison(let spec):
@@ -105,9 +103,6 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .pex(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .pex(spec)
-        case .mockPEX(var spec):
-            spec.tool = spec.tool.attachingEvidence(evidence)
-            return .mockPEX(spec)
         case .coreSpiceSimulation(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .coreSpiceSimulation(spec)

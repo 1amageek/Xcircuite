@@ -1,4 +1,5 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import ToolQualification
 
@@ -23,13 +24,23 @@ public struct XcircuiteFlowRuntime: Sendable {
         resumer: DefaultFlowRunResumer? = nil,
         planningArtifactStore: XcircuitePlanningArtifactStore? = nil,
         toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore? = nil
-    ) {
+    ) throws {
         let progressStore = FlowRunProgressStore(persistence: workspaceStore)
-        let resolvedOrchestrator = orchestrator ?? DefaultFlowOrchestrator(
-            infrastructure: workspaceStore,
-            ledgerPersistence: workspaceStore,
-            progressStore: progressStore
-        )
+        let resolvedOrchestrator: DefaultFlowOrchestrator
+        if let orchestrator {
+            resolvedOrchestrator = orchestrator
+        } else {
+            resolvedOrchestrator = DefaultFlowOrchestrator(
+                infrastructure: workspaceStore,
+                ledgerPersistence: workspaceStore,
+                producer: try ProducerIdentity(
+                    kind: .library,
+                    identifier: "Xcircuite",
+                    version: "development"
+                ),
+                progressStore: progressStore
+            )
+        }
         let reviewBundler = DefaultFlowRunReviewBundler(
             loader: workspaceStore,
             persistence: workspaceStore
@@ -63,8 +74,8 @@ public struct XcircuiteFlowRuntime: Sendable {
         resumer: DefaultFlowRunResumer? = nil,
         planningArtifactStore: XcircuitePlanningArtifactStore? = nil,
         toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore? = nil
-    ) {
-        self.init(
+    ) throws {
+        try self.init(
             toolRegistry: ToolRegistry(descriptors: descriptors),
             healthResults: healthResults,
             executors: executors,
@@ -87,11 +98,11 @@ public struct XcircuiteFlowRuntime: Sendable {
         )
         try await persistToolchainProfileIfNeeded(
             runID: operationRequest.runID,
-            projectRoot: operationRequest.projectRoot
+            projectRoot: workspaceStore.projectRoot
         )
         _ = try await planningArtifactStore.persistActionDomainSnapshot(
             runID: operationRequest.runID,
-            projectRoot: operationRequest.projectRoot
+            projectRoot: workspaceStore.projectRoot
         )
         return result
     }
@@ -107,16 +118,16 @@ public struct XcircuiteFlowRuntime: Sendable {
         )
         try await persistToolchainProfileIfNeeded(
             runID: request.runID,
-            projectRoot: request.projectRoot
+            projectRoot: workspaceStore.projectRoot
         )
         _ = try await planningArtifactStore.persistActionDomainSnapshot(
             runID: request.runID,
-            projectRoot: request.projectRoot
+            projectRoot: workspaceStore.projectRoot
         )
         let reviewBundler = DefaultFlowRunReviewBundler(loader: workspaceStore, persistence: workspaceStore)
         let summary = try await DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler).inspectRun(
             runID: request.runID,
-            projectRoot: request.projectRoot
+            workspaceID: request.workspaceID
         )
         return FlowRunResumeResult(result: result.result, summary: summary)
     }
@@ -149,4 +160,5 @@ public struct XcircuiteFlowRuntime: Sendable {
             projectRoot: projectRoot
         )
     }
+
 }

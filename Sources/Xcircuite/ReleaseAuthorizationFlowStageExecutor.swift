@@ -34,8 +34,8 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -58,7 +58,7 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
                 )
             }
 
-            let result = try await authorizerFactory(context.projectRoot).execute(request)
+            let result = try await authorizerFactory(try context.xcircuiteProjectRoot()).execute(request)
             try await context.checkCancellation()
             let resultArtifact = try await support.persistResult(
                 result,

@@ -342,3 +342,4 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
         }
     }
 }
+import CircuiteFoundation

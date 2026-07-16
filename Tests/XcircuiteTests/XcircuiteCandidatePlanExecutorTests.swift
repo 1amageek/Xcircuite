@@ -322,7 +322,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         try await store.ensureWorkspace()
         try await prepareTestRun(runID: "run-risk", store: store)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
-        try await artifactStore.persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             makeApprovalRequiredLayoutPlan(),
             runID: "run-risk",
             projectRoot: root

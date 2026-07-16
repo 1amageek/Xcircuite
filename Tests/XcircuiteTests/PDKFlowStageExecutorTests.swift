@@ -16,7 +16,7 @@ struct PDKFlowStageExecutorTests {
         let root = try makeRoot(name: "pdk-discovery-adapter")
         defer { removeRoot(root) }
         _ = try makeFixtureProject(root: root)
-        let context = try makeContext(root: root, runID: "pdk-discovery-adapter")
+        let context = try await makeContext(root: root, runID: "pdk-discovery-adapter")
 
         let result = try await PDKDiscoveryFlowStageExecutor.local(
             searchRoots: [.path("fixtures")],
@@ -28,7 +28,7 @@ struct PDKFlowStageExecutorTests {
 
         #expect(result.status == .succeeded, "Discovery diagnostics: \(result.diagnostics)")
         #expect(result.artifacts.count == 1)
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/pdk.discover/raw/pdk-result.json").path))
     }
 
@@ -41,7 +41,7 @@ struct PDKFlowStageExecutorTests {
         try FileManager.default.removeItem(
             at: fixtureRoot.appending(path: "valid-pdk/models.spice")
         )
-        let context = try makeContext(root: root, runID: "pdk-validation-adapter")
+        let context = try await makeContext(root: root, runID: "pdk-validation-adapter")
 
         let result = try await PDKValidationFlowStageExecutor.local(
             manifestInput: .path(manifestURL.path)
@@ -53,7 +53,7 @@ struct PDKFlowStageExecutorTests {
         #expect(result.status == .blocked, "Validation diagnostics: \(result.diagnostics)")
         #expect(result.gates.contains { $0.status == .blocked })
         #expect(result.artifacts.count == 1)
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/pdk.validate/raw/pdk-result.json").path))
     }
 
@@ -62,7 +62,7 @@ struct PDKFlowStageExecutorTests {
         let root = try makeRoot(name: "pdk-corpus-adapter")
         defer { removeRoot(root) }
         _ = try makeFixtureProject(root: root)
-        let context = try makeContext(root: root, runID: "pdk-corpus-adapter")
+        let context = try await makeContext(root: root, runID: "pdk-corpus-adapter")
 
         let result = try await PDKCorpusValidationFlowStageExecutor.local(
             suiteInput: .path("fixtures/pdk-corpus.json"),
@@ -78,7 +78,7 @@ struct PDKFlowStageExecutorTests {
         #expect(result.status == .succeeded, "Corpus diagnostics: \(result.diagnostics)")
         #expect(result.gates.contains { $0.status == .passed })
         #expect(result.artifacts.count == 1)
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/pdk.validate-corpus/raw/pdk-result.json").path))
     }
 
@@ -88,7 +88,7 @@ struct PDKFlowStageExecutorTests {
         defer { removeRoot(root) }
         let fixtureRoot = try makeFixtureProject(root: root)
 
-        let standardContext = try makeContext(root: root, runID: "pdk-standard-view-adapter")
+        let standardContext = try await makeContext(root: root, runID: "pdk-standard-view-adapter")
         let standardResult = try await PDKStandardViewInspectionFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             assetID: "cells",
@@ -103,7 +103,7 @@ struct PDKFlowStageExecutorTests {
         #expect(standardResult.status == .succeeded, "Standard-view diagnostics: \(standardResult.diagnostics)")
         #expect(standardResult.artifacts.count == 1)
 
-        let ruleDeckContext = try makeContext(root: root, runID: "pdk-rule-deck-adapter")
+        let ruleDeckContext = try await makeContext(root: root, runID: "pdk-rule-deck-adapter")
         let ruleDeckResult = try await PDKRuleDeckInspectionFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             assetID: "rules"
@@ -116,7 +116,7 @@ struct PDKFlowStageExecutorTests {
         )
         #expect(ruleDeckResult.status == .succeeded, "Rule-deck diagnostics: \(ruleDeckResult.diagnostics)")
         #expect(ruleDeckResult.artifacts.count == 1)
-        let ruleDeckURL = ruleDeckContext.runDirectory
+        let ruleDeckURL = try ruleDeckContext.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: PDKKitAPI.ruleDeckInspectionStageID)
             .appending(path: "raw/pdk-result.json")
@@ -130,7 +130,7 @@ struct PDKFlowStageExecutorTests {
         #expect(sourceArtifact.byteCount > 0)
         #expect(sourceArtifact.locator.role == .input)
 
-        let oracleContext = try makeContext(root: root, runID: "pdk-oracle-adapter")
+        let oracleContext = try await makeContext(root: root, runID: "pdk-oracle-adapter")
         let oracleResult = try await PDKOracleFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             oracleInput: .path("fixtures/standard-view-oracle.json")
@@ -184,21 +184,15 @@ struct PDKFlowStageExecutorTests {
         }
     }
 
-    private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
-        let runDirectory = root
-            .appending(path: XcircuiteWorkspaceLayout.directoryName)
-            .appending(path: "runs")
-            .appending(path: runID)
-        do {
-            try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
-        } catch {
-            Issue.record("Failed to create run directory: \(error)")
-        }
+    private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         return FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
-            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

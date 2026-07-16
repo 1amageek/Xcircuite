@@ -19,27 +19,31 @@ struct FlowExecutionCancellationProbeTests {
         }
 
         let runID = "run-cancel-probe"
-        let runDirectory = root
-            .appending(path: XcircuiteWorkspaceLayout.directoryName)
-            .appending(path: "runs")
-            .appending(path: runID)
-        try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: store)
+        _ = try await store.persistCancellationRequest(
+            FlowRunCancellationRequest(
+                runID: runID,
+                requestedBy: "test",
+                reason: "Test corrupted cancellation projection."
+            )
+        )
         try Data("{".utf8).write(
             to: runDirectory.appending(path: FlowRunProgressStore.cancellationRelativePath),
             options: [.atomic]
         )
 
+        let manifest = try await store.loadManifest()
         let context = FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
-            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
+            infrastructure: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
         let probe = FlowExecutionCancellationProbe.make(context: context)
 
-        await #expect(throws: XcircuiteWorkspaceStoreError.self) {
+        await #expect(throws: FlowRunLedgerPersistenceError.self) {
             _ = try await probe()
         }
     }

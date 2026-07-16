@@ -15,6 +15,7 @@ struct LVSSummaryEnvelopeBuilderTests {
         try await workspaceStore.ensureWorkspace()
         let runID = "run-lvs-envelope"
         let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         let rawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "008-lvs")
@@ -88,9 +89,8 @@ struct LVSSummaryEnvelopeBuilderTests {
             stageID: "008-lvs",
             toolID: "native-lvs",
             context: FlowExecutionContext(
-                projectRoot: root,
+                workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
                 runID: runID,
-                runDirectory: runDirectory,
                 infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]

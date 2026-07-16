@@ -125,3 +125,4 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
         try container.encode(nextActions, forKey: .nextActions)
     }
 }
+import CircuiteFoundation

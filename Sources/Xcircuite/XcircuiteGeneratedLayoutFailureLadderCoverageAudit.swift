@@ -195,3 +195,4 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAudit: Codable, Senda
         }
     }
 }
+import CircuiteFoundation

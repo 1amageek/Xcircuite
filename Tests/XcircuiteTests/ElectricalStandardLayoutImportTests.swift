@@ -32,7 +32,7 @@ struct ElectricalStandardLayoutImportTests {
         )
         let runID = "electrical-standard-fixture-run"
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: store)
+        let context = try await makeContext(runID: runID, store: store)
 
         let executor = ElectricalStandardLayoutImportFlowStageExecutor(
             layoutInput: .path("layout.def"),
@@ -47,14 +47,7 @@ struct ElectricalStandardLayoutImportTests {
                 stageID: "electrical-signoff.standard-layout-import",
                 displayName: "Standard layout import"
             ),
-            context: FlowExecutionContext(
-                projectRoot: root,
-                runID: runID,
-                runDirectory: runDirectory,
-                infrastructure: store,
-                toolRegistry: ToolRegistry(),
-                healthResults: [:]
-            )
+            context: context
         )
 
         #expect(result.status == .succeeded, "\(result.diagnostics)")
@@ -100,7 +93,7 @@ struct ElectricalStandardLayoutImportTests {
         )
         let runID = "electrical-standard-lef-blocked-run"
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: store)
+        let context = try await makeContext(runID: runID, store: store)
 
         let executor = ElectricalStandardLayoutImportFlowStageExecutor(
             layoutInput: .path("layout.def"),
@@ -114,14 +107,7 @@ struct ElectricalStandardLayoutImportTests {
                 stageID: "electrical-signoff.standard-layout-import",
                 displayName: "Standard layout import"
             ),
-            context: FlowExecutionContext(
-                projectRoot: root,
-                runID: runID,
-                runDirectory: runDirectory,
-                infrastructure: store,
-                toolRegistry: ToolRegistry(),
-                healthResults: [:]
-            )
+            context: context
         )
 
         #expect(result.status == .blocked)
@@ -136,7 +122,7 @@ struct ElectricalStandardLayoutImportTests {
         try Self.routedDEF.write(to: root.appending(path: "layout.def"), atomically: true, encoding: .utf8)
         let runID = "electrical-standard-layout-run"
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: store)
+        let context = try await makeContext(runID: runID, store: store)
         let executor = ElectricalStandardLayoutImportFlowStageExecutor(
             layoutInput: .path("layout.def"),
             layoutFormat: .def,
@@ -148,14 +134,7 @@ struct ElectricalStandardLayoutImportTests {
                 stageID: "electrical-signoff.standard-layout-import",
                 displayName: "Standard layout import"
             ),
-            context: FlowExecutionContext(
-                projectRoot: root,
-                runID: runID,
-                runDirectory: runDirectory,
-                infrastructure: store,
-                toolRegistry: ToolRegistry(),
-                healthResults: [:]
-            )
+            context: context
         )
 
         #expect(result.status == .succeeded)
@@ -242,7 +221,7 @@ struct ElectricalStandardLayoutImportTests {
             )
             let runID = "electrical-standard-\(extensionName)-run"
             let store = try XcircuiteWorkspaceStore(projectRoot: root)
-            let runDirectory = try await prepareTestRun(runID: runID, store: store)
+            let context = try await makeContext(runID: runID, store: store)
 
             let executor = ElectricalStandardLayoutImportFlowStageExecutor(
                 layoutInput: .path("layout.\(extensionName)"),
@@ -257,14 +236,7 @@ struct ElectricalStandardLayoutImportTests {
                     stageID: "electrical-signoff.standard-layout-import",
                     displayName: "Standard layout import"
                 ),
-                context: FlowExecutionContext(
-                    projectRoot: root,
-                    runID: runID,
-                    runDirectory: runDirectory,
-                    infrastructure: store,
-                    toolRegistry: ToolRegistry(),
-                    healthResults: [:]
-                )
+                context: context
             )
 
             #expect(result.status == .succeeded)
@@ -279,6 +251,22 @@ struct ElectricalStandardLayoutImportTests {
             #expect(manifest.inputArtifacts.count == 2)
             #expect(result.artifacts.contains { $0.artifactID == "electrical-standard-physical-snapshot" })
         }
+    }
+
+    private func makeContext(
+        runID: String,
+        store: XcircuiteWorkspaceStore
+    ) async throws -> FlowExecutionContext {
+        try await store.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: store)
+        let manifest = try await store.loadManifest()
+        return FlowExecutionContext(
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
+            runID: runID,
+            infrastructure: store,
+            toolRegistry: ToolRegistry(),
+            healthResults: [:]
+        )
     }
 
     private static let routedDEF = """

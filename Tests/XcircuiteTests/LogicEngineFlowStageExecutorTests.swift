@@ -129,7 +129,7 @@ struct LogicEngineFlowStageExecutorTests {
         let request = LogicLoweringRequest(
             runID: "logic-lowering-stage",
             inputs: [snapshotReference],
-            design: LogicFoundationDesignReference(
+            design: LogicDesignArtifact(
                 artifact: snapshotReference,
                 topDesignName: "flow_top",
                 designRevision: snapshotRevision
@@ -201,7 +201,7 @@ struct LogicEngineFlowStageExecutorTests {
             )]
         )
         let designReference = try writeJSON(document, name: "signed-design.json", root: root, kind: .netlist)
-        let design = LogicFoundationDesignReference(
+        let design = LogicDesignArtifact(
             artifact: designReference,
             topDesignName: document.topDesignName,
             designRevision: designReference.digest
@@ -363,7 +363,7 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(resumedResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
     }
 
-    private func writeDesign(to root: URL) throws -> LogicFoundationDesignReference {
+    private func writeDesign(to root: URL) throws -> LogicDesignArtifact {
         let document = LogicDesignDocument(
             topDesignName: "flow_top",
             ports: [
@@ -375,7 +375,7 @@ struct LogicEngineFlowStageExecutorTests {
             nodes: [LogicNode(id: "and0", kind: .and, inputs: ["a", "b"], outputs: ["y"])]
         )
         let reference = try writeJSON(document, name: "design.json", root: root, kind: .netlist)
-        return LogicFoundationDesignReference(
+        return LogicDesignArtifact(
             artifact: reference,
             topDesignName: document.topDesignName,
             designRevision: reference.digest
@@ -457,11 +457,12 @@ struct LogicEngineFlowStageExecutorTests {
 
     private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         return FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]

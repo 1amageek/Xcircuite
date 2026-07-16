@@ -79,8 +79,8 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let manifestURL = try manifestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
             let request = PDKManifestViewInspectionRequest(
@@ -89,7 +89,7 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
                 pdk: pdk,
                 assetID: assetID,
                 format: format,
-                projectRootPath: context.projectRoot.path(percentEncoded: false)
+                projectRootPath: try context.xcircuiteProjectRoot().path(percentEncoded: false)
             )
             let result = try await engine.execute(request)
             try await context.checkCancellation()

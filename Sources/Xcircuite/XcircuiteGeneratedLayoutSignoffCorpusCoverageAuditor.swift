@@ -380,3 +380,4 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
         XcircuiteGeneratedLayoutSignoffStageFamily.allCases.firstIndex(of: family) ?? Int.max
     }
 }
+import CircuiteFoundation

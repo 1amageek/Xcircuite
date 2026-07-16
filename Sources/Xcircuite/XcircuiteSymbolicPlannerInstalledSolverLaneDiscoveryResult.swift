@@ -12,3 +12,4 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneDiscoveryResult: Codabl
         self.laneArtifact = laneArtifact
     }
 }
+import CircuiteFoundation

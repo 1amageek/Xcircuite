@@ -73,8 +73,8 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
         var paths: [String] = []
         for input in searchRoots {
             let url = try input.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else {

@@ -43,12 +43,12 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
 
             let corpusURL = try corpusInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let observationsURL = try observationsInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let corpus = try decode(corpusURL, as: DFTOracleCorpus.self)
             let observations = try decode(observationsURL, as: [DFTOracleCaseObservation].self)
@@ -58,7 +58,7 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
             ]
 
             let correlation = try await DFTOracleCorrelationEngine(
-                artifactLoader: FileSystemDFTOracleArtifactLoader(rootURL: context.projectRoot)
+                artifactLoader: FileSystemDFTOracleArtifactLoader(rootURL: try context.xcircuiteProjectRoot())
             ).correlate(corpus: corpus, observations: observations)
             let correlationArtifact = try await persist(
                 correlation,
@@ -110,11 +110,11 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
 
             if let processQualificationEvidenceBuildInput {
                 let buildURL = try processQualificationEvidenceBuildInput.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 let buildRequest = try decode(buildURL, as: ToolProcessQualificationEvidenceBuildRequest.self)
-                let reader = LocalToolQualificationArtifactReader(workspaceRoot: context.projectRoot)
+                let reader = LocalToolQualificationArtifactReader(workspaceRoot: try context.xcircuiteProjectRoot())
                 let processEvidence = try await processQualificationEvidenceBuilder.build(
                     buildRequest,
                     reading: reader,
@@ -190,7 +190,7 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
     ) throws -> ArtifactReference {
         try artifactBuilder.reference(
             for: url,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: artifactID,
             kind: kind,
             format: .json

@@ -155,3 +155,4 @@ public struct XcircuiteVerifiedImprovementCorpusReport: Codable, Sendable, Hasha
         }
     }
 }
+import CircuiteFoundation

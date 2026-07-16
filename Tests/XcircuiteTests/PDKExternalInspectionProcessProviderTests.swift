@@ -158,7 +158,7 @@ struct PDKExternalInspectionProcessProviderTests {
             assetID: "cells",
             format: .lef
         )
-        let context = try makeContext(root: root, runID: runID)
+        let context = try await makeContext(root: root, runID: runID)
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: stageID, displayName: "External PDK standard view"),
             context: context
@@ -166,7 +166,8 @@ struct PDKExternalInspectionProcessProviderTests {
 
         #expect(result.status == .succeeded, "\(result.diagnostics)")
         #expect(result.artifacts.count == 1)
-        let rawURL = context.runDirectory
+        let runDirectory = try context.xcircuiteRunDirectory()
+        let rawURL = runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw/pdk-result.json")
@@ -177,7 +178,7 @@ struct PDKExternalInspectionProcessProviderTests {
         )
         #expect(envelope.status == .completed)
         #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/execution.json") })
-        #expect(FileManager.default.fileExists(atPath: context.runDirectory
+        #expect(FileManager.default.fileExists(atPath: runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw/external-pdk/stdout.txt")
@@ -227,21 +228,15 @@ struct PDKExternalInspectionProcessProviderTests {
         return root
     }
 
-    private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
-        let runDirectory = root
-            .appending(path: ".xcircuite")
-            .appending(path: "runs")
-            .appending(path: runID)
-        do {
-            try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
-        } catch {
-            Issue.record("Failed to create run directory: \(error)")
-        }
+    private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.createWorkspace()
+        _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+        let manifest = try await workspaceStore.loadManifest()
         return FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
-            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

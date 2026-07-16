@@ -136,21 +136,27 @@ struct RTLVerificationFlowStageExecutorTests {
         )
         try nativeData.write(to: nativePath)
         try oracleData.write(to: oraclePath)
-        let nativeArtifact = try fixtureArtifactReference(
+        let nativeArtifact = try artifactReference(
             artifactID: "native-evidence",
             path: "evidence/native.json",
-            kind: .report,
-            format: .json,
-            sha256: try fixtureSHA256(data: nativeData),
-            byteCount: nativeData.count
+            digest: SHA256ContentDigester().digest(data: nativeData),
+            byteCount: UInt64(nativeData.count),
+            producer: ProducerIdentity(
+                kind: .engine,
+                identifier: "native-rtl-verification",
+                version: "1.0.0"
+            )
         )
-        let oracleArtifact = try fixtureArtifactReference(
+        let oracleArtifact = try artifactReference(
             artifactID: "oracle-evidence",
             path: "evidence/oracle.json",
-            kind: .report,
-            format: .json,
-            sha256: try fixtureSHA256(data: oracleData),
-            byteCount: oracleData.count
+            digest: SHA256ContentDigester().digest(data: oracleData),
+            byteCount: UInt64(oracleData.count),
+            producer: ProducerIdentity(
+                kind: .engine,
+                identifier: "independent-rtl-oracle",
+                version: "1.0.0"
+            )
         )
         let requestDigest = String(repeating: "d", count: 64)
         let report = RTLVerificationOracleCorrelationReport(
@@ -360,19 +366,41 @@ private func makeRTLStageFixture(
         in: projectRoot
     )
     let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+    try await workspaceStore.createWorkspace()
     try "module top(input logic a, output logic q); assign q = a; endmodule"
         .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
-    let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
+    _ = try await prepareTestRun(runID: runID, store: workspaceStore)
+    let manifest = try await workspaceStore.loadManifest()
     return (
         projectRoot,
         FlowExecutionContext(
-            projectRoot: projectRoot,
+            workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: workspaceStore,
             toolRegistry: toolRegistry,
             healthResults: healthResults
         )
+    )
+}
+
+private func artifactReference(
+    artifactID: String,
+    path: String,
+    digest: ContentDigest,
+    byteCount: UInt64,
+    producer: ProducerIdentity
+) throws -> ArtifactReference {
+    ArtifactReference(
+        id: try ArtifactID(rawValue: artifactID),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .input,
+            kind: .report,
+            format: .json
+        ),
+        digest: digest,
+        byteCount: byteCount,
+        producer: producer
     )
 }
 

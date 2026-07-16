@@ -15,7 +15,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
     }
 
     public func loadRunLedger(runID: String) async throws -> FlowRunLedger {
-        try loadRunLedgerMetadata(runID: runID)
+        try await loadAttestedRunLedger(runID: runID)
     }
 
     /// Loads a run ledger and verifies every retained artifact against its
@@ -33,6 +33,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             }
             let lockURL = workspaceRoot.appending(path: ".workspace.lock")
             return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+                try transactionCoordinator.recoverPendingTransactions()
                 let ledger = try JSONDecoder().decode(
                     FlowRunLedger.self,
                     from: readWorkspaceContent(
@@ -45,6 +46,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                         stored: ledger.runID
                     )
                 }
+                try validateLedgerProjection(ledger, requestedRunID: runID)
                 for reference in ledger.artifacts {
                     let integrity = LocalArtifactVerifier().verify(reference, relativeTo: projectRoot)
                     guard integrity.isVerified else {
@@ -93,6 +95,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             }
             let lockURL = workspaceRoot.appending(path: ".workspace.lock")
             return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+                try transactionCoordinator.recoverPendingTransactions()
                 let ledger = try JSONDecoder().decode(
                     FlowRunLedger.self,
                     from: readWorkspaceContent(relativePath: ledgerRelativePath(for: runID))
@@ -103,6 +106,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                         stored: ledger.runID
                     )
                 }
+                try validateLedgerProjection(ledger, requestedRunID: runID)
                 return ledger
             }
         } catch let error as FlowRunLedgerPersistenceError {
@@ -111,6 +115,54 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
         } catch {
             throw FlowRunLedgerPersistenceError.storageFailed(error.localizedDescription)
+        }
+    }
+
+    private func validateLedgerProjection(
+        _ ledger: FlowRunLedger,
+        requestedRunID: String
+    ) throws {
+        guard ledger.runID == requestedRunID else {
+            throw FlowRunLedgerPersistenceError.runIdentifierMismatch(
+                requested: requestedRunID,
+                stored: ledger.runID
+            )
+        }
+        guard ledger.runManifest.runID == ledger.runID else {
+            throw FlowRunLedgerPersistenceError.runIdentifierMismatch(
+                requested: ledger.runID,
+                stored: ledger.runManifest.runID
+            )
+        }
+        let ledgerArtifacts = Set(ledger.artifacts)
+        let embeddedManifestArtifacts = Set(ledger.runManifest.artifacts)
+        guard ledgerArtifacts == embeddedManifestArtifacts else {
+            throw FlowRunLedgerPersistenceError.decodingFailed(
+                "Run ledger and embedded manifest contain different artifact sets for \(requestedRunID)."
+            )
+        }
+        let manifestPath = runManifestRelativePath(for: requestedRunID)
+        let manifestURL = try workspaceURL(relativePath: manifestPath)
+        guard fileManager.fileExists(atPath: manifestURL.path(percentEncoded: false)) else {
+            throw FlowRunLedgerPersistenceError.decodingFailed(
+                "Canonical run manifest is missing for \(requestedRunID)."
+            )
+        }
+        let manifest: FlowRunManifest
+        do {
+            manifest = try JSONDecoder().decode(
+                FlowRunManifest.self,
+                from: Data(contentsOf: manifestURL, options: [.mappedIfSafe])
+            )
+        } catch let error as FlowRunLedgerPersistenceError {
+            throw error
+        } catch {
+            throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
+        }
+        guard manifest == ledger.runManifest else {
+            throw FlowRunLedgerPersistenceError.decodingFailed(
+                "Canonical and embedded run manifests differ for \(requestedRunID)."
+            )
         }
     }
 
@@ -127,8 +179,8 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         try createWorkspace()
         try ensureWorkspaceDirectory(at: ".xcircuite/runs/\(ledger.runID)")
         let ledgerURL = try workspaceURL(relativePath: path)
-        let manifestURL = try workspaceURL(relativePath: runManifestRelativePath(for: ledger.runID))
         try XcircuiteWorkspaceFileLock.withExclusiveLock(at: workspaceRoot.appending(path: ".workspace.lock")) {
+            try transactionCoordinator.recoverPendingTransactions()
             let currentData = fileManager.fileExists(atPath: ledgerURL.path(percentEncoded: false))
                 ? try Data(contentsOf: ledgerURL, options: [.mappedIfSafe])
                 : nil
@@ -136,7 +188,13 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             if let currentData {
                 do {
                     current = try JSONDecoder().decode(FlowRunLedger.self, from: currentData)
+                    if let current {
+                        try validateLedgerProjection(current, requestedRunID: ledger.runID)
+                    }
                 } catch {
+                    if let error = error as? FlowRunLedgerPersistenceError {
+                        throw error
+                    }
                     throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
                 }
             } else {
@@ -160,11 +218,12 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             }
 
             var storedLedger = ledger
-            let projectionReferences = try persistDecisionProjections(
+            let projections = try prepareDecisionProjections(
                 for: storedLedger,
                 encoder: encoder
             )
-            for reference in projectionReferences {
+            for projection in projections {
+                let reference = projection.reference
                 storedLedger.artifacts.removeAll {
                     $0.id == reference.id || $0.locator.location == reference.locator.location
                 }
@@ -186,7 +245,9 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             )
 
             let currentArtifacts = Set(current?.artifacts ?? [])
-            for reference in storedLedger.artifacts where !currentArtifacts.contains(reference) {
+            let projectionReferences = Set(projections.map(\.reference))
+            for reference in storedLedger.artifacts where
+                !currentArtifacts.contains(reference) && !projectionReferences.contains(reference) {
                 let integrity = LocalArtifactVerifier().verify(reference, relativeTo: projectRoot)
                 guard integrity.isVerified else {
                     throw FlowRunLedgerPersistenceError.artifactIntegrityFailure(
@@ -195,19 +256,32 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                     )
                 }
             }
-            try encoder.encode(storedLedger.runManifest).write(to: manifestURL, options: .atomic)
-            try encoder.encode(storedLedger).write(to: ledgerURL, options: .atomic)
-            try registerRunReference(for: storedLedger.runID, encoder: encoder)
+            let projectManifestOperation = try projectManifestOperation(
+                registering: storedLedger.runID,
+                encoder: encoder
+            )
+            let operations = projections.map(\.operation) + [
+                XcircuiteWorkspaceTransaction.Operation(
+                    projectRelativePath: runManifestRelativePath(for: storedLedger.runID),
+                    content: try encoder.encode(storedLedger.runManifest)
+                ),
+                XcircuiteWorkspaceTransaction.Operation(
+                    projectRelativePath: path,
+                    content: try encoder.encode(storedLedger)
+                ),
+                projectManifestOperation,
+            ]
+            try transactionCoordinator.commit(operations, fault: transactionFault)
         }
     }
 
     /// Makes every persisted run discoverable from the canonical project
     /// manifest. The update shares the ledger writer lock so concurrent stores
     /// cannot lose run registrations while appending independent runs.
-    private func registerRunReference(
-        for runID: String,
+    private func projectManifestOperation(
+        registering runID: String,
         encoder: JSONEncoder
-    ) throws {
+    ) throws -> XcircuiteWorkspaceTransaction.Operation {
         let projectManifestURL = XcircuiteWorkspaceLayout(projectRoot: projectRoot).manifestURL
         let data = try Data(contentsOf: projectManifestURL, options: [.mappedIfSafe])
         var projectManifest: XcircuiteProjectManifest
@@ -225,19 +299,22 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         projectManifest.runs.append(reference)
         projectManifest.runs.sort { $0.runID < $1.runID }
         try projectManifest.validate()
-        try encoder.encode(projectManifest).write(to: projectManifestURL, options: .atomic)
+        return XcircuiteWorkspaceTransaction.Operation(
+            projectRelativePath: ".xcircuite/\(XcircuiteWorkspaceLayout.manifestFileName)",
+            content: try encoder.encode(projectManifest)
+        )
     }
 
-    private func persistDecisionProjections(
+    private func prepareDecisionProjections(
         for ledger: FlowRunLedger,
         encoder: JSONEncoder
-    ) throws -> [ArtifactReference] {
-        var references: [ArtifactReference] = []
+    ) throws -> [(reference: ArtifactReference, operation: XcircuiteWorkspaceTransaction.Operation)] {
+        var projections: [(reference: ArtifactReference, operation: XcircuiteWorkspaceTransaction.Operation)] = []
         for approval in ledger.approvals {
             try FlowIdentifierValidator().validate(approval.stageID, kind: .stageID)
             let data = try encoder.encode(approval)
             let path = ".xcircuite/runs/\(ledger.runID)/approvals/\(approval.stageID).json"
-            references.append(try writeLedgerProjection(
+            projections.append(try prepareLedgerProjection(
                 data,
                 id: "approval-\(approval.stageID)",
                 path: path,
@@ -250,40 +327,42 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                 data.append(try encoder.encode(action))
                 data.append(0x0A)
             }
-            references.append(try writeLedgerProjection(
+            projections.append(try prepareLedgerProjection(
                 data,
                 id: "action-ledger",
                 path: ".xcircuite/runs/\(ledger.runID)/actions.jsonl",
                 format: .text
             ))
         }
-        return references
+        return projections
     }
 
-    private func writeLedgerProjection(
+    private func prepareLedgerProjection(
         _ data: Data,
         id: String,
         path: String,
         format: ArtifactFormat
-    ) throws -> ArtifactReference {
+    ) throws -> (reference: ArtifactReference, operation: XcircuiteWorkspaceTransaction.Operation) {
         let locator = try locator(
             path: path,
             role: .output,
             kind: .report,
             format: format
         )
-        let destination = try rawProjectArtifactURL(for: locator)
-        try fileManager.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try data.write(to: destination, options: .atomic)
+        _ = try rawProjectArtifactURL(for: locator)
         let digest = try SHA256ContentDigester().digest(data: data, using: .sha256)
-        return ArtifactReference(
+        let reference = ArtifactReference(
             id: try ArtifactID(rawValue: id),
             locator: locator,
             digest: digest,
             byteCount: UInt64(data.count)
+        )
+        return (
+            reference,
+            XcircuiteWorkspaceTransaction.Operation(
+                projectRelativePath: path,
+                content: data
+            )
         )
     }
 
@@ -402,10 +481,10 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         return fileManager.fileExists(atPath: source.path(percentEncoded: false))
     }
 
-    public func prepareRunWorkspace(
+    public func prepareRun(
         runID: String,
         requireNew: Bool
-    ) async throws -> URL {
+    ) async throws {
         try FlowIdentifierValidator().validate(runID, kind: .runID)
         try createWorkspace()
         let url = try workspaceURL(relativePath: ".xcircuite/runs/\(runID)")
@@ -413,7 +492,6 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             throw FlowExecutionError.duplicateRunID(runID)
         }
         try ensureWorkspaceDirectory(at: ".xcircuite/runs/\(runID)")
-        return url
     }
 
     public func runWorkspaceURL(runID: String) async throws -> URL {
@@ -433,72 +511,257 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
     ) async throws -> FlowRunCancellationRequest? {
         try FlowIdentifierValidator().validate(runID, kind: .runID)
         let path = ".xcircuite/runs/\(runID)/cancellation.json"
-        do {
-            let request = try JSONDecoder().decode(
-                FlowRunCancellationRequest.self,
-                from: readWorkspaceContent(relativePath: path)
-            )
+        let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+        return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
+            let ledgerURL = try workspaceURL(relativePath: ledgerRelativePath(for: runID))
+            guard fileManager.fileExists(atPath: ledgerURL.path(percentEncoded: false)) else {
+                throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
+            }
+            let ledger: FlowRunLedger
+            do {
+                ledger = try JSONDecoder().decode(
+                    FlowRunLedger.self,
+                    from: Data(contentsOf: ledgerURL, options: [.mappedIfSafe])
+                )
+            } catch {
+                throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
+            }
+            try validateLedgerProjection(ledger, requestedRunID: runID)
+            guard let reference = ledger.artifacts.first(where: {
+                $0.locator.location.value == path
+            }) else {
+                guard ledger.cancellationRequest == nil else {
+                    throw FlowRunLedgerPersistenceError.decodingFailed(
+                        "Cancellation request exists without a retained projection for \(runID)."
+                    )
+                }
+                return nil
+            }
+            let integrity = LocalArtifactVerifier().verify(reference, relativeTo: projectRoot)
+            guard integrity.isVerified else {
+                throw FlowRunLedgerPersistenceError.artifactIntegrityFailure(
+                    path: path,
+                    reason: integrity.issues.map { $0.code.rawValue }.joined(separator: ",")
+                )
+            }
+            let request: FlowRunCancellationRequest
+            do {
+                request = try JSONDecoder().decode(
+                    FlowRunCancellationRequest.self,
+                    from: readWorkspaceContent(relativePath: path)
+                )
+            } catch {
+                throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
+            }
             guard request.runID == runID else {
                 throw XcircuiteWorkspaceStoreError.decodeFailed(
                     "Cancellation request run ID does not match \(runID)."
                 )
             }
+            guard ledger.cancellationRequest == request else {
+                throw FlowRunLedgerPersistenceError.decodingFailed(
+                    "Cancellation projection and run ledger differ for \(runID)."
+                )
+            }
             return request
-        } catch XcircuiteWorkspaceStoreError.missingArtifact {
-            return nil
-        } catch let error as XcircuiteWorkspaceStoreError {
-            throw error
-        } catch {
-            throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
         }
     }
 
     public func appendProgressEvent(
-        _ event: FlowRunProgressEvent
-    ) async throws -> ArtifactReference {
-        let path = ".xcircuite/runs/\(event.runID)/progress.jsonl"
-        let existing: Data
-        do {
-            existing = try readWorkspaceContent(relativePath: path)
-        } catch XcircuiteWorkspaceStoreError.missingArtifact {
-            existing = Data()
-        }
+        runID: String,
+        kind: FlowRunProgressEventKind,
+        stageID: String?,
+        stageStatus: FlowStageStatus?,
+        runStatus: FlowRunStatus?,
+        message: String,
+        createdAt: Date
+    ) async throws -> FlowRunProgressEvent {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        let path = ".xcircuite/runs/\(runID)/progress.jsonl"
+        try createWorkspace()
+        let ledgerPath = ledgerRelativePath(for: runID)
+        let ledgerURL = try workspaceURL(relativePath: ledgerPath)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        var updated = existing
-        updated.append(try encoder.encode(event))
-        updated.append(0x0A)
-        return try persistRunArtifact(
-            content: updated,
-            id: ArtifactID(rawValue: "run-progress"),
-            locator: try locator(path: path, role: .output, kind: .report, format: .text),
-            runID: event.runID,
-            mode: .replaceable
-        ) { ledger in
-            ledger.progressEvents.removeAll { $0.sequence == event.sequence }
+        let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+        return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
+            guard fileManager.fileExists(atPath: ledgerURL.path(percentEncoded: false)) else {
+                throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
+            }
+            var ledger: FlowRunLedger
+            do {
+                ledger = try JSONDecoder().decode(
+                    FlowRunLedger.self,
+                    from: Data(contentsOf: ledgerURL, options: [.mappedIfSafe])
+                )
+            } catch {
+                throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
+            }
+            try validateLedgerProjection(ledger, requestedRunID: runID)
+            if let retainedProgress = ledger.artifacts.first(where: {
+                $0.locator.location.value == path
+            }) {
+                let integrity = LocalArtifactVerifier().verify(
+                    retainedProgress,
+                    relativeTo: projectRoot
+                )
+                guard integrity.isVerified else {
+                    throw FlowRunLedgerPersistenceError.artifactIntegrityFailure(
+                        path: path,
+                        reason: integrity.issues.map { $0.code.rawValue }.joined(separator: ",")
+                    )
+                }
+            }
+            let sequence = (ledger.progressEvents.map(\.sequence).max() ?? 0) + 1
+            let event = FlowRunProgressEvent(
+                runID: runID,
+                sequence: sequence,
+                kind: kind,
+                stageID: stageID,
+                stageStatus: stageStatus,
+                runStatus: runStatus,
+                message: message,
+                createdAt: createdAt
+            )
+            var updated: Data
+            do {
+                updated = try readWorkspaceContent(relativePath: path)
+            } catch XcircuiteWorkspaceStoreError.missingArtifact {
+                updated = Data()
+            }
+            let persistedEvents = try updated.split(separator: 0x0A).map {
+                try JSONDecoder().decode(FlowRunProgressEvent.self, from: Data($0))
+            }
+            guard persistedEvents == ledger.progressEvents else {
+                throw FlowRunLedgerPersistenceError.decodingFailed(
+                    "Progress projection and run ledger differ for \(runID)."
+                )
+            }
+            updated.append(try encoder.encode(event))
+            updated.append(0x0A)
+            let persistedLocator = try locator(
+                path: path,
+                role: .output,
+                kind: .report,
+                format: .text
+            )
+            let digest = try SHA256ContentDigester().digest(data: updated, using: .sha256)
+            let reference = ArtifactReference(
+                id: try ArtifactID(rawValue: "run-progress"),
+                locator: persistedLocator,
+                digest: digest,
+                byteCount: UInt64(updated.count)
+            )
+            ledger.artifacts.removeAll {
+                $0.id == reference.id || $0.locator.location == reference.locator.location
+            }
+            ledger.artifacts.append(reference)
+            ledger.artifacts.sort { $0.path < $1.path }
             ledger.progressEvents.append(event)
             ledger.progressEvents.sort { $0.sequence < $1.sequence }
+            let currentManifest = ledger.runManifest
+            ledger.runManifest = try FlowRunManifest(
+                runID: currentManifest.runID,
+                status: currentManifest.status,
+                revision: currentManifest.revision + 1,
+                actor: currentManifest.actor,
+                intent: currentManifest.intent,
+                parentRunID: currentManifest.parentRunID,
+                createdAt: currentManifest.createdAt,
+                updatedAt: max(Date(), currentManifest.updatedAt),
+                startedAt: currentManifest.startedAt,
+                finishedAt: currentManifest.finishedAt,
+                artifacts: ledger.artifacts
+            )
+            try transactionCoordinator.commit(
+                [
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: path,
+                        content: updated
+                    ),
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: runManifestRelativePath(for: runID),
+                        content: try encoder.encode(ledger.runManifest)
+                    ),
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: ledgerPath,
+                        content: try encoder.encode(ledger)
+                    ),
+                ],
+                fault: transactionFault
+            )
+            return event
         }
     }
 
     public func loadProgressEvents(
         runID: String
     ) async throws -> [FlowRunProgressEvent] {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
         let path = ".xcircuite/runs/\(runID)/progress.jsonl"
-        let content: Data
-        do {
-            content = try readWorkspaceContent(relativePath: path)
-        } catch XcircuiteWorkspaceStoreError.missingArtifact {
-            return []
-        }
-        return try content.split(separator: 0x0A).map {
-            try JSONDecoder().decode(FlowRunProgressEvent.self, from: Data($0))
+        let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+        return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
+            let ledgerURL = try workspaceURL(relativePath: ledgerRelativePath(for: runID))
+            guard fileManager.fileExists(atPath: ledgerURL.path(percentEncoded: false)) else {
+                throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
+            }
+            let ledger: FlowRunLedger
+            do {
+                ledger = try JSONDecoder().decode(
+                    FlowRunLedger.self,
+                    from: Data(contentsOf: ledgerURL, options: [.mappedIfSafe])
+                )
+            } catch {
+                throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
+            }
+            try validateLedgerProjection(ledger, requestedRunID: runID)
+            guard let reference = ledger.artifacts.first(where: {
+                $0.locator.location.value == path
+            }) else {
+                guard ledger.progressEvents.isEmpty else {
+                    throw FlowRunLedgerPersistenceError.decodingFailed(
+                        "Progress events exist without a retained projection for \(runID)."
+                    )
+                }
+                return []
+            }
+            let integrity = LocalArtifactVerifier().verify(reference, relativeTo: projectRoot)
+            guard integrity.isVerified else {
+                throw FlowRunLedgerPersistenceError.artifactIntegrityFailure(
+                    path: path,
+                    reason: integrity.issues.map { $0.code.rawValue }.joined(separator: ",")
+                )
+            }
+            let content = try readWorkspaceContent(relativePath: path)
+            let events = try content.split(separator: 0x0A).map {
+                try JSONDecoder().decode(FlowRunProgressEvent.self, from: Data($0))
+            }
+            guard events == ledger.progressEvents else {
+                throw FlowRunLedgerPersistenceError.decodingFailed(
+                    "Progress projection and run ledger differ for \(runID)."
+                )
+            }
+            return events
         }
     }
 
     public func persistCancellationRequest(
         _ request: FlowRunCancellationRequest,
     ) async throws -> ArtifactReference {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        guard !request.requestedBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XcircuiteWorkspaceStoreError.invalidCancellationRequest(
+                "requestedBy must not be empty."
+            )
+        }
+        guard !request.reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XcircuiteWorkspaceStoreError.invalidCancellationRequest(
+                "reason must not be empty."
+            )
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try persistRunArtifact(
@@ -601,9 +864,17 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        let digest = try SHA256ContentDigester().digest(data: content, using: .sha256)
+        let reference = ArtifactReference(
+            id: id,
+            locator: persistedLocator,
+            digest: digest,
+            byteCount: UInt64(content.count)
+        )
         try XcircuiteWorkspaceFileLock.withExclusiveLock(
             at: workspaceRoot.appending(path: ".workspace.lock")
         ) {
+            try transactionCoordinator.recoverPendingTransactions()
             let destinationExists = fileManager.fileExists(
                 atPath: destination.path(percentEncoded: false)
             )
@@ -616,27 +887,31 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                     throw XcircuiteWorkspaceStoreError.immutableArtifactConflict(relativePath)
                 }
             case .createOnly, .immutable, .replaceable:
-                try content.write(to: destination, options: .atomic)
+                break
             }
+            var manifest = try loadProjectManifestUnlocked()
+            manifest.files.removeAll {
+                $0.id == reference.id || $0.locator.location == reference.locator.location
+            }
+            manifest.files.append(reference)
+            manifest.files.sort { $0.path < $1.path }
+            try manifest.validate()
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            try transactionCoordinator.commit(
+                [
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: relativePath,
+                        content: content
+                    ),
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: ".xcircuite/\(XcircuiteWorkspaceLayout.manifestFileName)",
+                        content: try encoder.encode(manifest)
+                    ),
+                ],
+                fault: transactionFault
+            )
         }
-        let captured = try LocalArtifactReferencer().reference(
-            persistedLocator,
-            relativeTo: projectRoot
-        )
-        let reference = ArtifactReference(
-            id: id,
-            locator: captured.locator,
-            digest: captured.digest,
-            byteCount: captured.byteCount,
-            producer: captured.producer
-        )
-        var manifest = try loadManifest()
-        manifest.files.removeAll {
-            $0.id == reference.id || $0.locator.location == reference.locator.location
-        }
-        manifest.files.append(reference)
-        manifest.files.sort { $0.path < $1.path }
-        try saveManifest(manifest)
         return reference
     }
 
@@ -717,10 +992,10 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
         let ledgerPath = ledgerRelativePath(for: runID)
         let ledgerURL = try workspaceURL(relativePath: ledgerPath)
-        let manifestURL = try workspaceURL(relativePath: runManifestRelativePath(for: runID))
         let lockURL = workspaceRoot.appending(path: ".workspace.lock")
 
         try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
             guard fileManager.fileExists(atPath: ledgerURL.path(percentEncoded: false)) else {
                 throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
             }
@@ -737,6 +1012,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                     stored: ledger.runID
                 )
             }
+            try validateLedgerProjection(ledger, requestedRunID: runID)
 
             let destinationExists = fileManager.fileExists(
                 atPath: destination.path(percentEncoded: false)
@@ -750,7 +1026,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                     throw XcircuiteWorkspaceStoreError.immutableArtifactConflict(projectRelativePath)
                 }
             case .createOnly, .immutable, .replaceable:
-                try content.write(to: destination, options: .atomic)
+                break
             }
 
             ledger.artifacts.removeAll {
@@ -776,8 +1052,37 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
 
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            try encoder.encode(ledger.runManifest).write(to: manifestURL, options: .atomic)
-            try encoder.encode(ledger).write(to: ledgerURL, options: .atomic)
+            try transactionCoordinator.commit(
+                [
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: projectRelativePath,
+                        content: content
+                    ),
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: runManifestRelativePath(for: runID),
+                        content: try encoder.encode(ledger.runManifest)
+                    ),
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: ledgerPath,
+                        content: try encoder.encode(ledger)
+                    ),
+                ],
+                fault: transactionFault
+            )
+        }
+    }
+
+    private func loadProjectManifestUnlocked() throws -> XcircuiteProjectManifest {
+        let manifestURL = XcircuiteWorkspaceLayout(projectRoot: projectRoot).manifestURL
+        do {
+            return try JSONDecoder().decode(
+                XcircuiteProjectManifest.self,
+                from: Data(contentsOf: manifestURL, options: [.mappedIfSafe])
+            )
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
+        } catch {
+            throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
         }
     }
 

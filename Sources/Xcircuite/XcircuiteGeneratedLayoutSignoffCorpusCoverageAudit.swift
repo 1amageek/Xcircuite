@@ -165,3 +165,4 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit: Codable, Senda
         }
     }
 }
+import CircuiteFoundation

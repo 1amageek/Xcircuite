@@ -37,3 +37,4 @@ public struct XcircuiteSymbolicPlannerPolicyTrace: Codable, Sendable, Hashable {
         self.diagnostics = diagnostics
     }
 }
+import CircuiteFoundation

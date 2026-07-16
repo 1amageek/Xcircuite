@@ -19,6 +19,7 @@ public enum XcircuiteWorkspaceStoreError: Error, Sendable, Equatable, LocalizedE
     case encodeFailed(String)
     case decodeFailed(String)
     case invalidProjectManifest(String)
+    case invalidCancellationRequest(String)
     case runManifestCannotBeProjectFile(String)
     case unsafeProjectPath(String)
 
@@ -59,6 +60,8 @@ public enum XcircuiteWorkspaceStoreError: Error, Sendable, Equatable, LocalizedE
             return "Workspace decoding failed: \(message)"
         case .invalidProjectManifest(let reason):
             return "Invalid project manifest: \(reason)"
+        case .invalidCancellationRequest(let reason):
+            return "Invalid run cancellation request: \(reason)"
         case .runManifestCannotBeProjectFile(let path):
             return "Run manifest cannot be registered as a project file: \(path)"
         case .unsafeProjectPath(let path):

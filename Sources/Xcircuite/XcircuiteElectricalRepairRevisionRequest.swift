@@ -26,3 +26,4 @@ public struct XcircuiteElectricalRepairRevisionRequest: Sendable, Hashable, Coda
         self.physicalDesignRequest = physicalDesignRequest
     }
 }
+import CircuiteFoundation

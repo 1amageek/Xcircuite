@@ -32,18 +32,18 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             try await context.checkCancellation()
             try validate(stage: stage)
             let manifestURL = try manifestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let manifestReference = try foundationReference(
                 for: manifestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "physical-design-run-manifest",
                 kind: .report,
                 format: .json
             )
             let gate = PhysicalDesignReviewGate(
-                artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
+                artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
             )
             let packet = try await gate.prepareReview(
                 manifestReference: manifestReference,
@@ -105,13 +105,13 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 actions: ["rerun_physical_design_review_stage"]
             )]
         }
-        let packetURL = try XcircuiteWorkspaceLayout(projectRoot: context.projectRoot)
+        let packetURL = try XcircuiteWorkspaceLayout(projectRoot: try context.xcircuiteProjectRoot())
             .url(forProjectRelativePath: packetReference.path)
         let packetData = try Data(contentsOf: packetURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let packet = try decoder.decode(PhysicalDesignReviewPacket.self, from: packetData)
-        var diagnostics = verifyPacketArtifacts(packet, projectRoot: context.projectRoot)
+        var diagnostics = verifyPacketArtifacts(packet, projectRoot: try context.xcircuiteProjectRoot())
         guard diagnostics.isEmpty else { return diagnostics }
 
         let decision = PhysicalDesignReviewDecision(
@@ -136,7 +136,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             decision: decision
         )
         let result = PhysicalDesignReviewGate(
-            artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
+            artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
         ).validateResume(resumeRequest, packet: packet)
         diagnostics.append(contentsOf: result.diagnostics.map(flowDiagnostic))
         return diagnostics

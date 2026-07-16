@@ -46,8 +46,8 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let requestURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let requestData = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()
@@ -67,9 +67,16 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
                     message: "Request stage \(request.stage.rawValue) is not allowed for flow stage \(stage.stageID)."
                 )
             }
-            let engine = injectedEngine ?? PhysicalDesignEngine(
-                artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
-            )
+            let engine: any PhysicalDesignStageExecuting
+            if let injectedEngine {
+                engine = injectedEngine
+            } else {
+                engine = PhysicalDesignEngine(
+                    artifactStore: FileSystemPhysicalDesignArtifactStore(
+                        projectRoot: try context.xcircuiteProjectRoot()
+                    )
+                )
+            }
             let result = try await engine.execute(request)
             try await context.checkCancellation()
             let diagnostics = result.diagnostics.map { diagnostic in
@@ -89,7 +96,7 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
             let artifacts = result.artifacts
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
-                projectRoot: context.projectRoot
+                projectRoot: try context.xcircuiteProjectRoot()
             )
             let allDiagnostics = diagnostics + integrityGate.diagnostics
             let stageStatus: FlowStageStatus

@@ -378,8 +378,12 @@ extension XcircuiteFlowCLICommand {
         )
         let runtime = try runtimeSpec
             .makeRuntime(projectRoot: projectRoot)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await workspaceStore.createWorkspace()
+        let projectManifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: projectManifest.identity.projectID)
         let result = try await runtime.resume(
-            request: FlowRunResumeRequest(projectRoot: projectRoot, runID: runID)
+            request: FlowRunResumeRequest(workspaceID: workspaceID, runID: runID)
         )
         return try encode(result, pretty: pretty)
     }
@@ -434,7 +438,11 @@ extension XcircuiteFlowCLICommand {
             requireCompleteToolEvidence: false
         )
         let runtime = try runtimeSpec.makeRuntime(projectRoot: projectRoot)
-        let request = try loadedRunSpec.makeRequest(projectRoot: projectRoot)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await workspaceStore.createWorkspace()
+        let projectManifest = try await workspaceStore.loadManifest()
+        let workspaceID = try FlowWorkspaceID(rawValue: projectManifest.identity.projectID)
+        let request = try loadedRunSpec.makeRequest(workspaceID: workspaceID)
         let result = try await runtime.run(request: request)
         return try encode(result, pretty: pretty)
     }

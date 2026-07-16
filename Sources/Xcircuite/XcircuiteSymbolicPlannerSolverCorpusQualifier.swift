@@ -225,3 +225,4 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         return result
     }
 }
+import CircuiteFoundation

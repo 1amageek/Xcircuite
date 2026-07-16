@@ -49,12 +49,12 @@ public struct PDKOracleFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let manifestURL = try manifestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let oracleURL = try oracleInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
             let oracle = try support.inputReference(
@@ -68,7 +68,7 @@ public struct PDKOracleFlowStageExecutor: FlowStageExecutor {
                 runID: context.runID,
                 pdk: pdk,
                 oracle: oracle,
-                projectRootPath: context.projectRoot.path(percentEncoded: false)
+                projectRootPath: try context.xcircuiteProjectRoot().path(percentEncoded: false)
             )
             let result = try await engine.execute(request)
             try await context.checkCancellation()

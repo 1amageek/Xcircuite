@@ -36,8 +36,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
-                projectRoot: context.projectRoot,
-                runDirectory: context.runDirectory
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
             )
             let request = try JSONDecoder().decode(
                 LogicSynthesisEquivalenceRequest.self,
@@ -72,16 +72,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             let verificationRequest = RTLVerificationRequest(
                 runID: request.runID,
                 inputs: [
-                    try materializedReference(
-                        request.sourceDesign.artifact,
-                        artifactID: "logic-equivalence-source",
-                        context: context
-                    ),
-                    try materializedReference(
-                        request.mappedDesign.artifact,
-                        artifactID: "logic-equivalence-mapped",
-                        context: context
-                    ),
+                    request.sourceDesign.artifact,
+                    request.mappedDesign.artifact,
                     request.synthesisProvenance,
                 ],
                 design: request.sourceDesign,
@@ -95,8 +87,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 verificationEngine = injectedEngine
             } else {
                 let environment = RTLVerificationEnvironment(
-                    reader: FileSystemRTLArtifactReader(projectRoot: context.projectRoot),
-                    writer: FileSystemRTLArtifactStore(projectRoot: context.projectRoot)
+                    reader: FileSystemRTLArtifactReader(projectRoot: try context.xcircuiteProjectRoot()),
+                    writer: FileSystemRTLArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
                 )
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
@@ -145,7 +137,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             )
             let requestArtifact = try artifactBuilder.reference(
                 for: requestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "logic-equivalence-request",
                 role: .input,
                 kind: ArtifactKind.report,
@@ -185,7 +177,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 stageStatus = .blocked
                 gateStatus = .blocked
             }
-            return support.rtlResult(
+            return try support.rtlResult(
                 result,
                 resultArtifact: resultArtifact,
                 stageID: stageID,
@@ -226,15 +218,15 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         requestURL: URL,
         context: FlowExecutionContext
     ) throws -> FlowStageResult? {
-        let rawDirectory = context.runDirectory
+        let rawDirectory = try context.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        let reviewDirectory = context.runDirectory
+        let reviewDirectory = try context.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "review")
-        let auditDirectory = context.runDirectory
+        let auditDirectory = try context.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "audit")
@@ -336,14 +328,14 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
 
         let resultArtifact = try artifactBuilder.reference(
             for: resultURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-result",
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )
         let requestArtifact = try artifactBuilder.reference(
             for: requestURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-request",
             role: .input,
             kind: ArtifactKind.report,
@@ -351,28 +343,28 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         )
         let evidenceArtifact = try artifactBuilder.reference(
             for: evidenceURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-evidence",
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )
         let acceptanceArtifact = try artifactBuilder.reference(
             for: acceptanceURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-synthesis-acceptance",
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )
         let reviewArtifact = try artifactBuilder.reference(
             for: reviewURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-review",
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )
         let auditArtifact = try artifactBuilder.reference(
             for: auditURL,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-audit",
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
@@ -390,7 +382,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             stageStatus = .blocked
             gateStatus = .blocked
         }
-        return support.rtlResult(
+        return try support.rtlResult(
             result,
             resultArtifact: resultArtifact,
             stageID: stageID,
@@ -475,7 +467,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         stageID: String
     ) -> RTLVerificationReviewArtifact {
         let findingActions = result.payload.findings.flatMap(\.suggestedActions)
-        let resultActions = result.diagnostics.flatMap(\.suggestedActions)
+        let resultActions = result.rtlDiagnostics.flatMap(\.suggestedActions)
         let acceptanceActions = acceptance.diagnostics.flatMap { diagnostic in
             diagnostic.suggestedActions.map(\.code)
         }
@@ -492,7 +484,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             analysis: result.payload.analysis,
             status: result.status,
             findings: result.payload.findings,
-            diagnostics: result.diagnostics + rtlDiagnostics(acceptance.diagnostics),
+            diagnostics: result.rtlDiagnostics + rtlDiagnostics(acceptance.diagnostics),
             appliedWaivers: result.payload.appliedWaivers,
             record: result.payload.record,
             approvalRequired: acceptance.state != .accepted || result.status != .completed,
@@ -537,10 +529,10 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         artifactID: String,
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
-        let url = try locator.location.resolvedFileURL(relativeTo: context.projectRoot)
+        let url = try locator.location.resolvedFileURL(relativeTo: try context.xcircuiteProjectRoot())
         return try artifactBuilder.reference(
             for: url,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: artifactID,
             role: .input,
             kind: ArtifactKind.rtl,

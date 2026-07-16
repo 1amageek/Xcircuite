@@ -483,3 +483,4 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         return array
     }
 }
+import CircuiteFoundation

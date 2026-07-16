@@ -253,7 +253,7 @@ extension XcircuiteFlowCLICommand {
         Writes a minimal valid XcircuiteFlowRunSpec + XcircuiteFlowRuntimeSpec pair
         with sequential stage IDs (001-…), placeholder input paths, and tools at
         minimumLevel "unknown" without fabricated qualification evidence. Stage kinds:
-        coreSpiceSimulation, mockPEX, postLayoutComparison (default: all three, in
+        coreSpiceSimulation, pex, postLayoutComparison (default: all three, in
         that order). Both files are decoded back through the real spec types and
         pass coverage validation before anything is written. Edit the placeholder
         paths, attach retained ToolQualification evidence, raise requirements only

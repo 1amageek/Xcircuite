@@ -32,12 +32,12 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                     throw DFTReleaseDownstreamEvidenceBundleError.invalidRole
                 }
                 let url = try source.input.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory()
                 )
                 let artifact = try artifactBuilder.reference(
                     for: url,
-                    projectRoot: context.projectRoot,
+                    projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "dft-downstream-\(source.domain.rawValue)",
                     kind: .report,
                     format: format(for: url)

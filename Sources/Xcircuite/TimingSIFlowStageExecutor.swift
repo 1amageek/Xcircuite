@@ -9,7 +9,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     public let inputs: TimingSIFlowInputs
-    public let engine: (any SignalIntegrityFoundationEngine)?
+    public let engine: (any SignalIntegrityExecuting)?
 
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -17,7 +17,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         inputs: TimingSIFlowInputs,
         stageID: String = "timing.signal-integrity",
         toolID: String = "native-signal-integrity",
-        engine: (any SignalIntegrityFoundationEngine)? = nil
+        engine: (any SignalIntegrityExecuting)? = nil
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -34,10 +34,17 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
-            let executingEngine: any SignalIntegrityFoundationEngine = engine ?? NativeSignalIntegrityEngine(
-                reader: ProjectSITimingArtifactReader(projectRoot: context.projectRoot),
-                artifactStore: nil
-            )
+            let executingEngine: any SignalIntegrityExecuting
+            if let engine {
+                executingEngine = engine
+            } else {
+                executingEngine = NativeSignalIntegrityEngine(
+                    reader: ProjectSITimingArtifactReader(
+                        projectRoot: try context.xcircuiteProjectRoot()
+                    ),
+                    artifactStore: nil
+                )
+            }
             let result = try await executingEngine.execute(request)
             try await context.checkCancellation()
             let resultArtifact = try await persistResult(result, context: context)
@@ -67,12 +74,12 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> SignalIntegrityFoundationRequest {
+    private func makeRequest(context: FlowExecutionContext) throws -> SignalIntegrityRequest {
         let design = try reference(input: inputs.design, context: context, artifactID: "timing-si-design", kind: .netlist, fallback: .json)
         let constraints = try reference(input: inputs.constraints, context: context, artifactID: "timing-si-constraints", kind: .constraint, fallback: .sdc)
         let pdkManifest = try reference(input: inputs.pdkManifest, context: context, artifactID: "timing-si-pdk-manifest", kind: .technology, fallback: .json)
         let parasitics = try reference(input: inputs.parasitics, context: context, artifactID: "timing-si-parasitics", kind: .parasitics, fallback: .spef)
-        return SignalIntegrityFoundationRequest(
+        return SignalIntegrityRequest(
             runID: context.runID,
             design: design,
             topDesignName: inputs.topDesignName,
@@ -95,8 +102,8 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         kind: ArtifactKind,
         fallback: ArtifactFormat
     ) throws -> ArtifactReference {
-        let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
-        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: context.projectRoot)
+        let url = try input.resolveExisting(projectRoot: try context.xcircuiteProjectRoot(), runDirectory: try context.xcircuiteRunDirectory())
+        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: try context.xcircuiteProjectRoot())
         let data = try Data(contentsOf: url)
         return ArtifactReference(
             id: try ArtifactID(rawValue: artifactID),

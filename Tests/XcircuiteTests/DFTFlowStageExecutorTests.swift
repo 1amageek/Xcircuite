@@ -417,7 +417,7 @@ struct DFTFlowStageExecutorTests {
             ),
             payload: DFTPayload(
                 transformedDesign: LogicDesignReference(
-                    artifact: transformedArtifact.locator,
+                    artifact: transformedArtifact,
                     topDesignName: "top",
                     designDigest: request.design.designDigest
                 ),
@@ -692,7 +692,7 @@ struct DFTFlowStageExecutorTests {
             runID: runID,
             inputs: inputs,
             design: LogicDesignReference(
-                artifact: designArtifact.locator,
+                artifact: designArtifact,
                 topDesignName: "top",
                 designDigest: designDigest
             ),
@@ -738,7 +738,7 @@ struct DFTFlowStageExecutorTests {
         approval: FlowApprovalRecord? = nil
     ) async throws -> FlowExecutionContext {
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runDirectory = try await store.prepareRunWorkspace(runID: runID, requireNew: false)
+        try await store.prepareRun(runID: runID, requireNew: false)
         do {
             let existing = try await store.loadRunLedger(runID: runID)
             if let approval, !existing.approvals.contains(approval) {
@@ -766,9 +766,8 @@ struct DFTFlowStageExecutorTests {
             )
         }
         return FlowExecutionContext(
-            projectRoot: root,
+            workspaceID: try FlowWorkspaceID(rawValue: "dft-flow-stage-tests"),
             runID: runID,
-            runDirectory: runDirectory,
             infrastructure: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]

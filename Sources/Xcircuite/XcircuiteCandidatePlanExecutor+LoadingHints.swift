@@ -1,4 +1,5 @@
 import CoreSpiceIO
+import CircuiteFoundation
 import Foundation
 import LayoutCommands
 import LayoutCore

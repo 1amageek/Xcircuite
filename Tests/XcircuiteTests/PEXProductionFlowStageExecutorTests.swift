@@ -1,9 +1,9 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import PEXEngine
 import Testing
 import ToolQualification
-import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Production PEX flow stage executor")
@@ -33,7 +33,7 @@ struct PEXProductionFlowStageExecutorTests {
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: "production-pex-readiness",
                 intent: "Run production PEX only when the selected extractor is available.",
                 stages: [
@@ -80,8 +80,20 @@ struct PEXProductionFlowStageExecutorTests {
         return DefaultFlowOrchestrator(
             infrastructure: store,
             ledgerPersistence: store,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: FlowRunProgressStore(persistence: store)
         )
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 
     private func makeRoot() throws -> URL {

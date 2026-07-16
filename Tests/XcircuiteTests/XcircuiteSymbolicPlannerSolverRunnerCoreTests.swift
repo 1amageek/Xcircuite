@@ -642,10 +642,12 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
     }
 
     let observedChildPID = try #require(try await waitForCoreChildPID(at: childPIDURL))
+    let projectManifest = try await store.loadManifest()
+    let workspaceID = try FlowWorkspaceID(rawValue: projectManifest.identity.projectID)
     _ = try await DefaultFlowRunCancellationRecorder(
         progressStore: FlowRunProgressStore(persistence: store)
     ).requestCancellation(
-        projectRoot: root,
+        workspaceID: workspaceID,
         runID: "run-pddl",
         requestedBy: "solver-cancellation-test",
         reason: "Stop external solver process."

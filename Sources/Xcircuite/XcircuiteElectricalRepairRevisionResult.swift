@@ -59,3 +59,4 @@ public struct XcircuiteElectricalRepairRevisionResult: Sendable, Hashable, Codab
         return !newDigest.isEmpty && newDigest != digestLineage.parentLayoutDigest
     }
 }
+import CircuiteFoundation

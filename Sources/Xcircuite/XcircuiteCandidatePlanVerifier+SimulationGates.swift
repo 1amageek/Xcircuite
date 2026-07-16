@@ -354,3 +354,4 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 }
+import CircuiteFoundation

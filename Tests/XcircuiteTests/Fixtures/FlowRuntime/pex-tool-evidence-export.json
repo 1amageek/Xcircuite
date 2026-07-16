@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "status": "passed",
   "reportPath": "qualification/pex-spef-corpus-report.json",
-  "reportSHA256": "c994862ca3a1a0bee78be11e21d400ffac0dc0f06095489f61a92123bb615c21",
+  "reportSHA256": "30a454d6a5d029a227cd7129dbfc1c881b0ac40748150bdcc0827aba5dbbafa4",
   "toolEvidence": {
     "evidenceID": "pex-spef-corpus-2026-06-19",
     "kind": "corpus",
@@ -19,12 +19,12 @@
       },
       "digest": {
         "algorithm": "sha256",
-        "hexadecimalValue": "c994862ca3a1a0bee78be11e21d400ffac0dc0f06095489f61a92123bb615c21"
+        "hexadecimalValue": "30a454d6a5d029a227cd7129dbfc1c881b0ac40748150bdcc0827aba5dbbafa4"
       },
-      "byteCount": 1783,
+      "byteCount": 1786,
       "producer": {
         "kind": "engine",
-        "identifier": "mock-pex-qualification-fixture",
+        "identifier": "pex-corpus-qualification-fixture",
         "version": "1"
       }
     },

@@ -65,7 +65,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
             do {
                 try await processQualificationEvidenceValidator.validate(
                     processEvidence,
-                    reading: LocalToolQualificationArtifactReader(workspaceRoot: context.projectRoot),
+                    reading: LocalToolQualificationArtifactReader(workspaceRoot: try context.xcircuiteProjectRoot()),
                     at: Date()
                 )
                 try validateEvidenceBindings(processEvidence, request: request, result: result)
@@ -171,7 +171,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         from input: XcircuiteFlowInputReference,
         context: FlowExecutionContext
     ) throws -> Value {
-        let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
+        let url = try input.resolveExisting(projectRoot: try context.xcircuiteProjectRoot(), runDirectory: try context.xcircuiteRunDirectory())
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(type, from: Data(contentsOf: url))
@@ -183,10 +183,10 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
         kind: ArtifactKind,
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
-        let url = try input.resolveExisting(projectRoot: context.projectRoot, runDirectory: context.runDirectory)
+        let url = try input.resolveExisting(projectRoot: try context.xcircuiteProjectRoot(), runDirectory: try context.xcircuiteRunDirectory())
         return try artifactBuilder.reference(
             for: url,
-            projectRoot: context.projectRoot,
+            projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: artifactID,
             kind: kind,
             format: .json
@@ -240,7 +240,7 @@ public struct DFTReleaseFlowStageExecutor: FlowStageExecutor {
 
     private func verify(_ artifacts: [ArtifactReference], context: FlowExecutionContext) throws {
         for artifact in artifacts {
-            let integrity = verifier.verify(artifact, relativeTo: context.projectRoot)
+            let integrity = verifier.verify(artifact, relativeTo: try context.xcircuiteProjectRoot())
             guard integrity.isVerified else {
                 throw XcircuiteRuntimeError.invalidConfiguration(
                     "Artifact integrity failed for \(artifact.id.rawValue): \(integrity.issues)"

@@ -52,12 +52,12 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let rawDirectory = context.runDirectory
+            let rawDirectory = try context.xcircuiteRunDirectory()
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
             let expectedPaths = LayoutCommandArtifactPaths(rawDirectory: rawDirectory)
-            try validateOutputDirectories(expectedPaths, projectRoot: context.projectRoot)
+            try validateOutputDirectories(expectedPaths, projectRoot: try context.xcircuiteProjectRoot())
             try FileManager.default.createDirectory(
                 at: rawDirectory,
                 withIntermediateDirectories: true
@@ -73,7 +73,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 request: effectiveRequest,
                 baseURL: requestURL.deletingLastPathComponent()
             )
-            try validateResult(result, expectedPaths: expectedPaths, projectRoot: context.projectRoot)
+            try validateResult(result, expectedPaths: expectedPaths, projectRoot: try context.xcircuiteProjectRoot())
             try await context.checkCancellation()
             let document = try loadOutputDocument(at: expectedPaths.outputDocumentURL)
             let drcLayoutURL = try drcExport.map {
@@ -192,6 +192,10 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
             throw LayoutCommandFlowStageExecutorError.runnerReportedUnpassedStatus(result.status)
         }
         try validateOutputDirectories(expectedPaths, projectRoot: projectRoot)
+        _ = try outputPathGuard.validateOutputDirectory(
+            for: URL(filePath: result.outputArtifact.path),
+            projectRoot: projectRoot
+        )
         try requirePath(
             result.outputArtifact.path,
             equals: expectedPaths.outputDocumentURL,
@@ -295,8 +299,8 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
             path: "\(spec.artifactID).\(try standardLayoutFileExtension(for: spec.format))"
         )
         let technologyURL = try spec.technologyInput.resolveExisting(
-            projectRoot: context.projectRoot,
-            runDirectory: context.runDirectory
+            projectRoot: try context.xcircuiteProjectRoot(),
+            runDirectory: try context.xcircuiteRunDirectory()
         )
         let converter = MaskDataFormatConverter(tech: try loadTechnology(from: technologyURL))
         try converter.exportDocument(document, to: exportURL, format: spec.format)
@@ -474,28 +478,28 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         var artifacts = [
             try artifactBuilder.reference(
                 for: expectedPaths.outputDocumentURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "layout-document",
                 kind: ArtifactKind.layout,
                 format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.artifactManifestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "layout-command-manifest",
                 kind: ArtifactKind.report,
                 format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.resultURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "layout-command-result",
                 kind: ArtifactKind.report,
                 format: ArtifactFormat.json
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.effectiveRequestURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "layout-command-effective-request",
                 kind: ArtifactKind.other,
                 format: ArtifactFormat.json
@@ -504,7 +508,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         if let drcLayoutURL {
             artifacts.append(try artifactBuilder.reference(
                 for: drcLayoutURL,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "drc-layout",
                 kind: ArtifactKind.layout,
                 format: ArtifactFormat.json
@@ -513,7 +517,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         for artifact in standardLayoutArtifacts {
             artifacts.append(try artifactBuilder.reference(
                 for: artifact.url,
-                projectRoot: context.projectRoot,
+                projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: artifact.artifactID,
                 kind: ArtifactKind.layout,
                 format: artifact.format

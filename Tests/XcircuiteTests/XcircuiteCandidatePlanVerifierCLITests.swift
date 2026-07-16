@@ -225,7 +225,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         defer { removeTemporaryRoot(root) }
         try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        try await XcircuitePlanningArtifactStore(workspaceStore: store).appendRejectedPlan(
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).appendRejectedPlan(
             XcircuiteRejectedPlanRecord(
                 rejectionID: "rejection-1",
                 runID: "run-1",

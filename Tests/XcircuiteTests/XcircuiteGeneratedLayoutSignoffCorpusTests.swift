@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import DRCEngine
 import Foundation
@@ -166,8 +167,8 @@ extension XcircuiteFlowRuntimeTests {
                             tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                         )
                     ),
-                    .mockPEX(
-                        XcircuiteFlowStageExecutorSpec.MockPEX(
+                    .pex(
+                        XcircuiteFlowStageExecutorSpec.PEX(
                             stageID: "009-pex",
                             layoutInput: .stageArtifact(
                                 XcircuiteFlowInputReference.StageArtifact(
@@ -182,7 +183,13 @@ extension XcircuiteFlowRuntimeTests {
                             topCell: "top",
                             corners: [PEXCorner(id: "tt")],
                             technology: .inline(makePEXTechnology()),
-                            tool: mockPEXContractToolSpec()
+                            backendSelection: PEXBackendSelection(
+                                backendID: "magic",
+                                executablePath: root
+                                    .appending(path: "missing-magic")
+                                    .path(percentEncoded: false)
+                            ),
+                            tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "pex-magic")
                         )
                     ),
                 ]
@@ -190,7 +197,7 @@ extension XcircuiteFlowRuntimeTests {
             let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
             let result = try await runtime.run(
                 request: FlowOperationRequest(
-                    projectRoot: root,
+                    workspaceID: try await workspaceID(projectRoot: root),
                     runID: runID,
                     intent: "Collect generated layout signoff corpus case",
                     stages: [
@@ -212,12 +219,16 @@ extension XcircuiteFlowRuntimeTests {
                         FlowStageDefinition(
                             stageID: "009-pex",
                             displayName: "PEX",
-                            requiredTool: mockPEXContractRequirement(requiredLayoutFormat: canonicalArtifactFormat)
+                            requiredTool: pexRequirement(requiredLayoutFormat: canonicalArtifactFormat)
                         ),
                     ]
                 )
             )
-            #expect(result.status == FlowRunStatus.succeeded)
+            #expect(result.status == FlowRunStatus.blocked)
+            let pexStage = try #require(result.stages.first { $0.stageID == "009-pex" })
+            #expect(pexStage.status == .blocked)
+            #expect(pexStage.diagnostics.contains { $0.code == "PEX_BACKEND_UNAVAILABLE" })
+            #expect(!pexStage.artifacts.contains { $0.artifactID == "pex-summary" })
         }
 
         try await runGeneratedLayoutSignoffCase(
@@ -253,7 +264,8 @@ extension XcircuiteFlowRuntimeTests {
                 ),
                 XcircuiteGeneratedLayoutSignoffCorpusRequest.ExpectedStage(
                     stageID: "009-pex",
-                    family: .pex
+                    family: .pex,
+                    expectedStatus: .blocked
                 ),
             ]
         }
@@ -293,6 +305,7 @@ extension XcircuiteFlowRuntimeTests {
                 XcircuiteGeneratedLayoutSignoffCorpusRequest.CaseRequest(
                     caseID: "standard-gds-drc-lvs-pex-pass",
                     runID: gdsRunID,
+                    expectedRunStatus: .blocked,
                     expectedStages: expectedSignoffStages(),
                     coverageTags: [
                         "generated-layout.standard-gds.drc-lvs-pex",
@@ -304,6 +317,7 @@ extension XcircuiteFlowRuntimeTests {
                 XcircuiteGeneratedLayoutSignoffCorpusRequest.CaseRequest(
                     caseID: "standard-oasis-drc-lvs-pex-pass",
                     runID: oasisRunID,
+                    expectedRunStatus: .blocked,
                     expectedStages: expectedSignoffStages(),
                     coverageTags: [
                         "generated-layout.standard-oasis.drc-lvs-pex",
@@ -569,7 +583,16 @@ extension XcircuiteFlowRuntimeTests {
             caseResult.signoffArtifactRefs.contains { $0.artifactID == "lvs-summary" }
         })
         #expect(report.caseResults.allSatisfy { caseResult in
-            caseResult.signoffArtifactRefs.contains { $0.artifactID == "pex-summary" }
+            caseResult.stageResults.contains {
+                $0.stageID == "009-pex"
+                    && $0.family == .pex
+                    && $0.status == .blocked
+                    && $0.statusMatches
+                    && $0.diagnostics.contains { $0.code == "PEX_BACKEND_UNAVAILABLE" }
+            }
+        })
+        #expect(report.caseResults.allSatisfy { caseResult in
+            !caseResult.signoffArtifactRefs.contains { $0.artifactID == "pex-summary" }
         })
         let gdsDRCLayoutArtifact = try #require(gdsCaseResult.sourceArtifactRefs.first {
             $0.artifactID == "drc-layout"
@@ -999,7 +1022,6 @@ extension XcircuiteFlowRuntimeTests {
             requiredSignoffArtifactIDs: [
                 "drc-summary",
                 "lvs-summary",
-                "pex-summary",
             ],
             requiredStageFamilies: [
                 .layout,
@@ -1252,7 +1274,7 @@ extension XcircuiteFlowRuntimeTests {
         let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
         let result = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: root,
+                workspaceID: try await workspaceID(projectRoot: root),
                 runID: runID,
                 intent: "Capture generated layout DRC failure ladder",
                 stages: [
@@ -1414,7 +1436,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let retryResult = try await runtime.run(
             request: FlowOperationRequest(
-                projectRoot: retryRoot,
+                workspaceID: try await workspaceID(projectRoot: retryRoot),
                 runID: retryRunID,
                 intent: "Capture generated layout retry exhaustion ladder",
                 stages: [
@@ -1494,7 +1516,7 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: staleRoot
         ).run(
             request: FlowOperationRequest(
-                projectRoot: staleRoot,
+                workspaceID: try await workspaceID(projectRoot: staleRoot),
                 runID: staleRunID,
                 intent: "Capture generated layout stale artifact ladder",
                 stages: [
@@ -1519,30 +1541,28 @@ extension XcircuiteFlowRuntimeTests {
         try Data(#"{"tampered":true}"#.utf8).write(to: staleSummaryURL, options: [.atomic])
 
         let staleCollector = try makeGeneratedLayoutFailureLadderCollector(projectRoot: staleRoot)
-        let staleReport = try await staleCollector.collectAndPersist(
-            request: XcircuiteGeneratedLayoutFailureLadderRequest(
-                ladderID: "generated-layout-stale-artifact",
-                runID: staleRunID,
-                expectedStageFamilies: [
-                    "006-layout": .layout,
-                    "007-drc": .drc,
-                ]
-            ),
-            projectRoot: staleRoot
-        )
-        #expect(staleReport.summary.artifactIssueCount > 0)
-        let staleNode = try #require(staleReport.stageNodes.first { $0.stageID == "007-drc" })
-        let staleStatuses = Set(["byteCountMismatch", "sha256Mismatch"])
-        #expect(staleNode.artifactIssues.contains {
-            $0.artifactID == "drc-summary" && staleStatuses.contains($0.status)
-        })
-        #expect(staleNode.artifactRefs.contains {
-            $0.artifactID == "drc-summary"
-                && $0.integrityStatus.map { staleStatuses.contains($0) } == true
-        })
-        #expect(staleReport.suggestedActions.contains {
-            $0.stageID == "007-drc" && $0.actionKind == "inspect-artifact-integrity"
-        })
+        do {
+            _ = try await staleCollector.collectAndPersist(
+                request: XcircuiteGeneratedLayoutFailureLadderRequest(
+                    ladderID: "generated-layout-stale-artifact",
+                    runID: staleRunID,
+                    expectedStageFamilies: [
+                        "006-layout": .layout,
+                        "007-drc": .drc,
+                    ]
+                ),
+                projectRoot: staleRoot
+            )
+            Issue.record("Tampered retained artifacts must stop failure-ladder collection.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .artifactIntegrityFailure(let path, let reason) = error else {
+                Issue.record("Expected artifactIntegrityFailure, got \(error).")
+                return
+            }
+            #expect(path == ".xcircuite/runs/\(staleRunID)/stages/007-drc/raw/drc-summary.json")
+            #expect(reason.contains("byteCountMismatch"))
+            #expect(reason.contains("digestMismatch"))
+        }
     }
 
     @Test func generatedLayoutFailureLadderClassifiesLVSPEXAndPostLayoutFailures() async throws {
@@ -1606,7 +1626,7 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: drcRoot
         ).run(
             request: FlowOperationRequest(
-                projectRoot: drcRoot,
+                workspaceID: try await workspaceID(projectRoot: drcRoot),
                 runID: drcRunID,
                 intent: "Capture generated layout DRC failure ladder coverage case",
                 stages: [
@@ -1689,7 +1709,7 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: lvsRoot
         ).run(
             request: FlowOperationRequest(
-                projectRoot: lvsRoot,
+                workspaceID: try await workspaceID(projectRoot: lvsRoot),
                 runID: lvsRunID,
                 intent: "Capture generated layout LVS failure ladder",
                 stages: [
@@ -1746,8 +1766,8 @@ extension XcircuiteFlowRuntimeTests {
                         tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
-                .mockPEX(
-                    XcircuiteFlowStageExecutorSpec.MockPEX(
+                .pex(
+                    XcircuiteFlowStageExecutorSpec.PEX(
                         stageID: "009-pex",
                         layoutInput: .stageArtifact(
                             XcircuiteFlowInputReference.StageArtifact(
@@ -1762,7 +1782,8 @@ extension XcircuiteFlowRuntimeTests {
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
-                        tool: mockPEXContractToolSpec()
+                        backendSelection: PEXBackendSelection(backendID: "magic"),
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "pex-magic")
                     )
                 ),
             ]
@@ -1773,7 +1794,7 @@ extension XcircuiteFlowRuntimeTests {
             projectRoot: pexRoot
         ).run(
             request: FlowOperationRequest(
-                projectRoot: pexRoot,
+                workspaceID: try await workspaceID(projectRoot: pexRoot),
                 runID: pexRunID,
                 intent: "Capture generated layout PEX failure ladder",
                 stages: [
@@ -1785,7 +1806,7 @@ extension XcircuiteFlowRuntimeTests {
                     FlowStageDefinition(
                         stageID: "009-pex",
                         displayName: "PEX",
-                        requiredTool: mockPEXContractRequirement()
+                        requiredTool: pexRequirement()
                     ),
                 ]
             )
@@ -1835,11 +1856,16 @@ extension XcircuiteFlowRuntimeTests {
         let postLayoutOrchestrator = DefaultFlowOrchestrator(
             infrastructure: postLayoutStore,
             ledgerPersistence: postLayoutStore,
+            producer: try ProducerIdentity(
+                kind: .library,
+                identifier: "XcircuiteTests",
+                version: "1.0.0"
+            ),
             progressStore: FlowRunProgressStore(persistence: postLayoutStore)
         )
         let postLayoutResult = try await postLayoutOrchestrator.run(
             request: FlowOperationRequest(
-                projectRoot: postLayoutRoot,
+                workspaceID: try await workspaceID(projectRoot: postLayoutRoot),
                 runID: postLayoutRunID,
                 intent: "Capture generated layout post-layout comparison failure",
                 stages: [
@@ -2090,5 +2116,12 @@ extension XcircuiteFlowRuntimeTests {
             reviewBundler: reviewBundler,
             workspaceStore: workspaceStore
         )
+    }
+
+    private func workspaceID(projectRoot: URL) async throws -> FlowWorkspaceID {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await store.createWorkspace()
+        let manifest = try await store.loadManifest()
+        return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
     }
 }
