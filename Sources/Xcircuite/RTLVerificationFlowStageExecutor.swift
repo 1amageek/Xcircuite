@@ -266,7 +266,10 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             } else {
                 let environment = RTLVerificationEnvironment(
                     reader: FileSystemRTLArtifactReader(projectRoot: try context.xcircuiteProjectRoot()),
-                    writer: FileSystemRTLArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
+                    writer: try FileSystemRTLArtifactStore(
+                        artifactRoot: context.xcircuiteProjectRoot(),
+                        namespace: RTLArtifactNamespace(validating: ".xcircuite/runs")
+                    )
                 )
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
@@ -286,8 +289,9 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                         builder = oracleEvidenceBuilder
                     } else {
                         builder = RTLVerificationOracleEvidenceBuilder(
-                            writer: FileSystemRTLArtifactStore(
-                                projectRoot: try context.xcircuiteProjectRoot()
+                            writer: try FileSystemRTLArtifactStore(
+                                artifactRoot: context.xcircuiteProjectRoot(),
+                                namespace: RTLArtifactNamespace(validating: ".xcircuite/runs")
                             )
                         )
                     }

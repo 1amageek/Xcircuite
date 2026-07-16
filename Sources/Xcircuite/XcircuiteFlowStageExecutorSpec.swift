@@ -1091,7 +1091,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 engine: ElectricalSignoffEngine(
                     support: ElectricalSignoffExecutionSupport(
                         projectRoot: projectRoot,
-                        artifactStore: LocalElectricalArtifactStore(projectRoot: projectRoot)
+                        artifactStore: try LocalElectricalArtifactStore(
+                            artifactRoot: projectRoot,
+                            namespace: ElectricalArtifactNamespace(validating: ".xcircuite/runs")
+                        )
                     )
                 )
             )
@@ -1113,7 +1116,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                     engine: ElectricalSignoffEngine(
                         support: ElectricalSignoffExecutionSupport(
                             projectRoot: projectRoot,
-                            artifactStore: LocalElectricalArtifactStore(projectRoot: projectRoot)
+                            artifactStore: try LocalElectricalArtifactStore(
+                                artifactRoot: projectRoot,
+                                namespace: ElectricalArtifactNamespace(validating: ".xcircuite/runs")
+                            )
                         )
                     ),
                     oracle: oracle

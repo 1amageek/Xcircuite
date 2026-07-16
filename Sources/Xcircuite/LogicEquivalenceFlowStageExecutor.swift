@@ -88,7 +88,10 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             } else {
                 let environment = RTLVerificationEnvironment(
                     reader: FileSystemRTLArtifactReader(projectRoot: try context.xcircuiteProjectRoot()),
-                    writer: FileSystemRTLArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
+                    writer: try FileSystemRTLArtifactStore(
+                        artifactRoot: context.xcircuiteProjectRoot(),
+                        namespace: RTLArtifactNamespace(validating: ".xcircuite/runs")
+                    )
                 )
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
