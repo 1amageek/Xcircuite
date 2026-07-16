@@ -280,8 +280,9 @@ struct EndToEndDesignFlowTests {
                 schematicNetlistURL: schematicNetlistURL,
                 topCell: "TOP"
             ),
-            PEXFlowStageExecutor.production(
+            PEXFlowStageExecutor(
                 stageID: "signoff.pex",
+                toolID: SignoffToolDescriptors.pexToolID(backendID: "test-fixture"),
                 layoutInput: .path("pex-layout.gds"),
                 layoutFormat: .gds,
                 sourceNetlistInput: .path("pex-source.spice"),
@@ -291,7 +292,9 @@ struct EndToEndDesignFlowTests {
                     PEXCorner(id: PEXCornerID("ss"), name: "ss", temperature: 125),
                 ],
                 technology: .inline(makeTestTechnology()),
-                technologyByCorner: ["ss": .inline(makeTestTechnology())]
+                technologyByCorner: ["ss": .inline(makeTestTechnology())],
+                backendSelection: PEXBackendSelection(backendID: "test-fixture"),
+                engine: makeFixturePEXEngine()
             ),
             PhysicalDesignReviewFlowStageExecutor(manifestInput: .path(reviewManifestPath)),
         ]
@@ -321,14 +324,6 @@ struct EndToEndDesignFlowTests {
             healthResults: [:],
             executors: executors
         )
-
-        if initial.status != .blocked {
-            for stage in initial.stages {
-                Issue.record(
-                    "Unexpected end-to-end stage result \(stage.stageID): status=\(stage.status.rawValue), diagnostics=\(stage.diagnostics.map(\.code).joined(separator: ","))"
-                )
-            }
-        }
 
         #expect(initial.status == .blocked, "Initial multi-engine stages: \(initial.stages)")
         #expect(initial.stages.count == stages.count)
