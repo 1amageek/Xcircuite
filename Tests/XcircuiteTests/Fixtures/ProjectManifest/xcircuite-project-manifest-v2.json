@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "identity": {
+    "projectID": "contract-fixture-project",
+    "displayName": "Contract Fixture",
+    "topDesignName": "TOP"
+  },
+  "files": [
+    {
+      "id": "source-netlist",
+      "locator": {
+        "location": {
+          "storage": "workspaceRelative",
+          "value": "netlists/top.spice"
+        },
+        "role": "input",
+        "kind": "netlist",
+        "format": "spice"
+      },
+      "digest": {
+        "algorithm": "sha256",
+        "hexadecimalValue": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "byteCount": 128
+    }
+  ],
+  "runs": [
+    {
+      "runID": "contract-run-1",
+      "manifestPath": ".xcircuite/runs/contract-run-1/manifest.json"
+    }
+  ]
+}
