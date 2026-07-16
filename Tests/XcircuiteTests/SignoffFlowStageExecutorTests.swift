@@ -29,6 +29,11 @@ struct SignoffFlowStageExecutorTests {
             ),
             root: root
         )
+        let qualification = try await QualifiedToolFixtures.qualificationRecord(
+            for: SignoffToolDescriptors.nativeDRC(),
+            level: .smokeChecked,
+            projectRoot: root
+        )
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
@@ -49,13 +54,8 @@ struct SignoffFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .smokeChecked
-            )]),
-            healthResults: [
-                "native-drc": QualifiedToolFixtures.health(toolID: "native-drc", level: .smokeChecked),
-            ],
+            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            healthResults: ["native-drc": qualification.health],
             executors: [
                 DRCFlowStageExecutor.native(
                     stageID: "007-drc",
@@ -594,6 +594,11 @@ struct SignoffFlowStageExecutorTests {
 
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
         let layoutURL = try writeNetlist(matchingNetlist(), name: "layout.spice", root: root)
+        let qualification = try await QualifiedToolFixtures.qualificationRecord(
+            for: SignoffToolDescriptors.nativeLVS(),
+            level: .smokeChecked,
+            projectRoot: root
+        )
 
         let result = try await services.orchestrator.run(
             request: FlowOperationRequest(
@@ -614,13 +619,8 @@ struct SignoffFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeLVS(),
-                qualifiedAt: .smokeChecked
-            )]),
-            healthResults: [
-                "native-lvs": QualifiedToolFixtures.health(toolID: "native-lvs", level: .smokeChecked),
-            ],
+            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            healthResults: ["native-lvs": qualification.health],
             executors: [
                 LVSFlowStageExecutor.native(
                     stageID: "008-lvs",

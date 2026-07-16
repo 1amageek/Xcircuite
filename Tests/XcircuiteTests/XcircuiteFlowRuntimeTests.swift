@@ -18,7 +18,7 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("runtime-run")
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
@@ -27,10 +27,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )]
+            descriptors: [SignoffToolDescriptors.nativeDRC()]
         )
 
         let result = try await runtime.run(
@@ -57,7 +54,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsSimulationWaveformArtifactsIntoPostLayoutComparisonStage() async throws {
         let root = try makeTemporaryRoot("runtime-post-layout-artifact-input")
         defer { removeTemporaryRoot(root) }
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 WaveformArtifactExecutor(
@@ -108,10 +105,8 @@ extension XcircuiteFlowRuntimeTests {
                     )
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.postLayoutComparison(),
-                qualifiedAt: .smokeChecked
-            )]
+            descriptors: [SignoffToolDescriptors.postLayoutComparison()],
+            qualificationLevels: ["post-layout-comparison": .smokeChecked]
         )
 
         let result = try await runtime.run(
@@ -156,7 +151,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
         let engineState = FlakyDRCEngineState()
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 DRCFlowStageExecutor(
@@ -170,10 +165,7 @@ extension XcircuiteFlowRuntimeTests {
                     engine: FlakyDRCEngine(state: engineState)
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )]
+            descriptors: [SignoffToolDescriptors.nativeDRC()]
         )
 
         let result = try await runtime.run(
@@ -242,7 +234,7 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("runtime-action-domain")
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
@@ -251,10 +243,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )]
+            descriptors: [SignoffToolDescriptors.nativeDRC()]
         )
 
         _ = try await runtime.run(
@@ -400,7 +389,7 @@ extension XcircuiteFlowRuntimeTests {
             ]
         )
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
@@ -409,10 +398,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )],
+            descriptors: [SignoffToolDescriptors.nativeDRC()],
             toolchainProfile: toolchainProfile
         )
 
@@ -477,7 +463,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
@@ -486,10 +472,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )]
+            descriptors: [SignoffToolDescriptors.nativeDRC()]
         )
         let initial = try await runtime.run(
             request: FlowOperationRequest(
@@ -549,7 +532,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let runtime = try makeQualifiedRuntime(
+        let runtime = try await makeQualifiedRuntime(
             projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
@@ -558,10 +541,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )]
+            descriptors: [SignoffToolDescriptors.nativeDRC()]
         )
         _ = try await runtime.run(
             request: FlowOperationRequest(
@@ -635,7 +615,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -673,7 +653,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -720,12 +700,14 @@ extension XcircuiteFlowRuntimeTests {
         projectRoot: URL,
         executors: [any FlowStageExecutor],
         descriptors: [ToolDescriptor],
+        qualificationLevels: [String: ToolQualificationLevel] = [:],
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil
-    ) throws -> XcircuiteFlowRuntime {
-        try QualifiedToolFixtures.runtime(
+    ) async throws -> XcircuiteFlowRuntime {
+        try await QualifiedToolFixtures.runtime(
             executors: executors,
             descriptors: descriptors,
             projectRoot: projectRoot,
+            qualificationLevels: qualificationLevels,
             toolchainProfile: toolchainProfile
         )
     }

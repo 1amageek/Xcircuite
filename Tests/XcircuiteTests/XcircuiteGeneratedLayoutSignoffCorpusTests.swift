@@ -194,7 +194,7 @@ extension XcircuiteFlowRuntimeTests {
                     ),
                 ]
             )
-            let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+            let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
             let result = try await runtime.run(
                 request: FlowOperationRequest(
                     workspaceID: try await workspaceID(projectRoot: root),
@@ -1271,7 +1271,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
         let result = try await runtime.run(
             request: FlowOperationRequest(
                 workspaceID: try await workspaceID(projectRoot: root),
@@ -1417,7 +1417,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(retryRoot) }
         let retryRunID = "generated-layout-retry-exhausted-run"
         let layoutURL = try writeLayout(cleanLayout(), root: retryRoot)
-        let runtime = try QualifiedToolFixtures.runtime(
+        let runtime = try await QualifiedToolFixtures.runtime(
             executors: [
                 DRCFlowStageExecutor(
                     stageID: "007-drc",
@@ -1430,10 +1430,7 @@ extension XcircuiteFlowRuntimeTests {
                     engine: AlwaysFailingDRCEngine()
                 ),
             ],
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )],
+            descriptors: [SignoffToolDescriptors.nativeDRC()],
             projectRoot: retryRoot
         )
 

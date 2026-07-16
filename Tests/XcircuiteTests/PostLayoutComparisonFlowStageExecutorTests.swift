@@ -34,6 +34,11 @@ struct PostLayoutComparisonFlowStageExecutorTests {
             name: "post.csv",
             root: root
         )
+        let qualification = try await QualifiedToolFixtures.qualificationRecord(
+            for: SignoffToolDescriptors.postLayoutComparison(),
+            level: .smokeChecked,
+            projectRoot: root
+        )
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
@@ -48,18 +53,8 @@ struct PostLayoutComparisonFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [
-                QualifiedToolFixtures.descriptor(
-                    SignoffToolDescriptors.postLayoutComparison(),
-                    qualifiedAt: .smokeChecked
-                ),
-            ]),
-            healthResults: [
-                "post-layout-comparison": QualifiedToolFixtures.health(
-                    toolID: "post-layout-comparison",
-                    level: .smokeChecked
-                ),
-            ],
+            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            healthResults: ["post-layout-comparison": qualification.health],
             executors: [
                 PostLayoutComparisonFlowStageExecutor(
                     stageID: "030-compare",

@@ -43,7 +43,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(decoded.executors[0].makeDescriptor().toolID == "native-rtl-verification")
     }
 
-    @Test func runtimeSpecRegistersAnIndependentRTLVerificationOracle() async throws {
+    @Test func runtimeSpecRegistersAnUnqualifiedIndependentRTLVerificationOracle() async throws {
         let oracleToolID = "fixture-rtl-oracle"
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
@@ -56,10 +56,7 @@ extension XcircuiteFlowRuntimeTests {
                             toolID: oracleToolID,
                             executablePath: "tools/rtl-oracle",
                             version: "1.0.0",
-                            tool: QualifiedToolFixtures.toolSpec(
-                                level: .oracleChecked,
-                                toolID: oracleToolID
-                            )
+                            tool: XcircuiteFlowToolSpec()
                         )
                     )
                 ),
@@ -80,7 +77,8 @@ extension XcircuiteFlowRuntimeTests {
         }
         #expect(rtl.oracleTool?.toolID == oracleToolID)
         #expect(runtime.toolRegistry.descriptor(toolID: oracleToolID)?.version == "1.0.0")
-        #expect(runtime.healthResults[oracleToolID]?.status == .passed)
+        #expect(runtime.toolRegistry.descriptor(toolID: oracleToolID)?.trustProfile.level == .unknown)
+        #expect(runtime.healthResults[oracleToolID]?.status == .notChecked)
     }
 
     @Test func runtimeSpecRoundTripsElectricalRepairRevisionStage() async throws {
@@ -429,7 +427,7 @@ extension XcircuiteFlowRuntimeTests {
         let data = try JSONEncoder().encode(spec)
         let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
         try decoded.validate()
-        let runtime = try QualifiedToolFixtures.runtime(spec: decoded, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: decoded, projectRoot: root)
         let descriptor = try #require(runtime.toolRegistry.descriptor(toolID: "pex-magic"))
 
         #expect(descriptor.kind == .pex)
@@ -1135,7 +1133,7 @@ extension XcircuiteFlowRuntimeTests {
             ]
         )
 
-        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
         let descriptor = try #require(runtime.toolRegistry.descriptor(toolID: "post-layout-comparison"))
 
         #expect(descriptor.toolID == "post-layout-comparison")

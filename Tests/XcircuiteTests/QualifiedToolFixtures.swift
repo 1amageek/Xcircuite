@@ -12,23 +12,20 @@ enum QualifiedToolFixtures {
 
     private static let checkedAt = Date(timeIntervalSince1970: 1_784_000_000)
 
-    static func descriptor(
-        _ descriptor: ToolDescriptor,
-        qualifiedAt level: ToolQualificationLevel
-    ) -> ToolDescriptor {
-        var qualifiedDescriptor = descriptor
-        qualifiedDescriptor.trustProfile.level = level
-        return qualifiedDescriptor
-    }
-
     static func runtime(
         spec: XcircuiteFlowRuntimeSpec,
+        qualificationLevels: [String: ToolQualificationLevel],
         projectRoot: URL
-    ) throws -> XcircuiteFlowRuntime {
+    ) async throws -> XcircuiteFlowRuntime {
         let bindings = try spec.makeUnqualifiedToolBindings()
-        return try XcircuiteFlowRuntime(
+        let qualifiedBindings = try await externallyQualifiedBindings(
             descriptors: bindings.descriptors,
-            healthResults: bindings.healthResults,
+            qualificationLevels: qualificationLevels,
+            projectRoot: projectRoot
+        )
+        return try XcircuiteFlowRuntime(
+            descriptors: qualifiedBindings.descriptors,
+            healthResults: qualifiedBindings.healthResults,
             executors: try spec.executors.map {
                 try $0.makeExecutor(projectRoot: projectRoot, toolchainProfile: spec.toolchainProfile)
             },
@@ -38,35 +35,124 @@ enum QualifiedToolFixtures {
     }
 
     static func runtime(
+        spec: XcircuiteFlowRuntimeSpec,
+        projectRoot: URL
+    ) async throws -> XcircuiteFlowRuntime {
+        let descriptors = try spec.makeUnqualifiedToolBindings().descriptors
+        let levels = Dictionary(uniqueKeysWithValues: descriptors.map { descriptor in
+            (descriptor.toolID, defaultQualificationLevel(for: descriptor.toolID))
+        })
+        return try await runtime(
+            spec: spec,
+            qualificationLevels: levels,
+            projectRoot: projectRoot
+        )
+    }
+
+    static func runtime(
         executors: [any FlowStageExecutor],
         descriptors: [ToolDescriptor],
         projectRoot: URL,
+        qualificationLevels: [String: ToolQualificationLevel] = [:],
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil
-    ) throws -> XcircuiteFlowRuntime {
-        let qualifiedDescriptors = descriptors.map { descriptor in
-            var qualifiedDescriptor = descriptor
-            qualifiedDescriptor.trustProfile.evidence = evidenceSupporting(
-                level: descriptor.trustProfile.level,
-                toolID: descriptor.toolID
+    ) async throws -> XcircuiteFlowRuntime {
+        let levels = Dictionary(uniqueKeysWithValues: descriptors.map { descriptor in
+            (
+                descriptor.toolID,
+                qualificationLevels[descriptor.toolID]
+                    ?? defaultQualificationLevel(for: descriptor.toolID)
             )
-            return qualifiedDescriptor
-        }
-        try materializeEvidence(for: qualifiedDescriptors, in: projectRoot)
-        let healthResults = Dictionary(
-            uniqueKeysWithValues: qualifiedDescriptors.map { descriptor in
-                (
-                    descriptor.toolID,
-                    health(toolID: descriptor.toolID, level: descriptor.trustProfile.level)
-                )
-            }
+        })
+        let bindings = try await externallyQualifiedBindings(
+            descriptors: descriptors,
+            qualificationLevels: levels,
+            projectRoot: projectRoot
         )
         return try XcircuiteFlowRuntime(
-            descriptors: qualifiedDescriptors,
-            healthResults: healthResults,
+            descriptors: bindings.descriptors,
+            healthResults: bindings.healthResults,
             executors: executors,
             workspaceStore: XcircuiteWorkspaceStore(projectRoot: projectRoot),
             toolchainProfile: toolchainProfile
         )
+    }
+
+    static func qualificationRecord(
+        for descriptor: ToolDescriptor,
+        level: ToolQualificationLevel,
+        projectRoot: URL
+    ) async throws -> ToolQualificationRecord {
+        var qualifiedDescriptor = descriptor
+        qualifiedDescriptor.trustProfile.level = level
+        qualifiedDescriptor.trustProfile.evidence = evidenceSupporting(
+            level: level,
+            toolID: descriptor.toolID
+        )
+        try materializeEvidence(for: [qualifiedDescriptor], in: projectRoot)
+
+        let healthResult = health(toolID: descriptor.toolID, level: level)
+        let record = try await DefaultToolQualificationRecordIssuer().issue(
+            recordID: "\(descriptor.toolID)-test-qualification-record",
+            descriptor: qualifiedDescriptor,
+            health: healthResult,
+            issuer: try ProducerIdentity(
+                kind: .engine,
+                identifier: "tool-qualification-test-fixture",
+                version: "1"
+            ),
+            reading: XcircuiteWorkspaceStore(projectRoot: projectRoot),
+            issuedAt: checkedAt
+        )
+        let recordURL = projectRoot.appending(
+            path: "qualification/test-fixtures/\(descriptor.toolID)-record.json"
+        )
+        try FileManager.default.createDirectory(
+            at: recordURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try record.canonicalData().write(to: recordURL, options: .atomic)
+        return record
+    }
+
+    private static func externallyQualifiedBindings(
+        descriptors: [ToolDescriptor],
+        qualificationLevels: [String: ToolQualificationLevel],
+        projectRoot: URL
+    ) async throws -> XcircuiteFlowRuntimeToolBindings {
+        var qualifiedDescriptors: [ToolDescriptor] = []
+        var healthResults: [String: ToolHealthCheckResult] = [:]
+        for descriptor in descriptors {
+            guard let level = qualificationLevels[descriptor.toolID] else {
+                qualifiedDescriptors.append(descriptor)
+                healthResults[descriptor.toolID] = ToolHealthCheckResult(
+                    toolID: descriptor.toolID,
+                    status: .notChecked
+                )
+                continue
+            }
+            let record = try await qualificationRecord(
+                for: descriptor,
+                level: level,
+                projectRoot: projectRoot
+            )
+            qualifiedDescriptors.append(record.descriptor)
+            healthResults[descriptor.toolID] = record.health
+        }
+        return XcircuiteFlowRuntimeToolBindings(
+            descriptors: qualifiedDescriptors,
+            healthResults: healthResults
+        )
+    }
+
+    private static func defaultQualificationLevel(
+        for toolID: String
+    ) -> ToolQualificationLevel {
+        switch toolID {
+        case "native-drc", "native-lvs", "post-layout-comparison":
+            .corpusChecked
+        default:
+            .smokeChecked
+        }
     }
 
     static func toolSpec(
@@ -166,22 +252,30 @@ enum QualifiedToolFixtures {
     }
 
     private static func smokeFixture(toolID: String) throws -> EvidenceFixture {
-        let data = Data("qualified-tool-smoke:\(toolID)".utf8)
         let issuer = try qualificationIssuer(toolID: toolID)
-        let artifact = try qualificationArtifact(
+        let result = ToolSmokeQualificationResult(
+            resultID: "\(toolID)-smoke",
+            qualificationID: "\(toolID)-qualification",
+            toolID: toolID,
+            issuer: issuer,
+            inputArtifacts: [try supportingArtifact(
+                toolID: toolID,
+                name: "input",
+                producer: issuer
+            )],
+            outputArtifacts: [try supportingArtifact(
+                toolID: toolID,
+                name: "output",
+                producer: issuer
+            )],
+            checkedAt: checkedAt
+        )
+        return try evidenceFixture(
+            evidenceID: result.resultID,
             toolID: toolID,
             kind: .smoke,
-            data: data,
-            producer: issuer
-        )
-        return EvidenceFixture(
-            evidence: ToolEvidence(
-                evidenceID: "\(toolID)-smoke",
-                kind: .smoke,
-                artifact: artifact,
-                checkedAt: checkedAt
-            ),
-            data: data
+            data: result.canonicalData(),
+            issuer: issuer
         )
     }
 

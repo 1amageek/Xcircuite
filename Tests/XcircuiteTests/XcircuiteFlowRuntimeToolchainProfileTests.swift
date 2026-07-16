@@ -125,7 +125,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(

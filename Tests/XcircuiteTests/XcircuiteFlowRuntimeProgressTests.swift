@@ -105,7 +105,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
+        let runtime = try await QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         try await workspaceStore.createWorkspace()
         let workspaceID = try FlowWorkspaceID(
@@ -234,12 +234,9 @@ extension XcircuiteFlowRuntimeTests {
                 topCell: "TOP"
             )
         }
-        let runtime = try QualifiedToolFixtures.runtime(
+        let runtime = try await QualifiedToolFixtures.runtime(
             executors: executors,
-            descriptors: [QualifiedToolFixtures.descriptor(
-                SignoffToolDescriptors.nativeDRC(),
-                qualifiedAt: .corpusChecked
-            )],
+            descriptors: [SignoffToolDescriptors.nativeDRC()],
             projectRoot: root
         )
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -449,7 +446,7 @@ extension XcircuiteFlowRuntimeTests {
             ))
         }
 
-        let runtime = try QualifiedToolFixtures.runtime(
+        let runtime = try await QualifiedToolFixtures.runtime(
             spec: XcircuiteFlowRuntimeSpec(executors: executors),
             projectRoot: root
         )

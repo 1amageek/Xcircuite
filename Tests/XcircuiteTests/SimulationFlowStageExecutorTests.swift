@@ -29,6 +29,11 @@ struct SimulationFlowStageExecutorTests {
         let root = try makeTemporaryRoot("sim-pass")
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
+        let qualification = try await QualifiedToolFixtures.qualificationRecord(
+            for: SignoffToolDescriptors.coreSpiceSimulation(),
+            level: .smokeChecked,
+            projectRoot: root
+        )
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
@@ -49,14 +54,9 @@ struct SimulationFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [
-                QualifiedToolFixtures.descriptor(
-                    SignoffToolDescriptors.coreSpiceSimulation(),
-                    qualifiedAt: .smokeChecked
-                ),
-            ]),
+            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: [
-                "corespice": QualifiedToolFixtures.health(toolID: "corespice", level: .smokeChecked),
+                "corespice": qualification.health,
             ],
             executors: [
                 SimulationFlowStageExecutor(

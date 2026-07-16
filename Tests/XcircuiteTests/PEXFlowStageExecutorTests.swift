@@ -15,6 +15,11 @@ struct PEXFlowStageExecutorTests {
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
         _ = try writeText("tt-deck", name: "deck-tt.rc", root: root)
         _ = try writeText("ss-deck", name: "deck-ss.rc", root: root)
+        let qualification = try await QualifiedToolFixtures.qualificationRecord(
+            for: SignoffToolDescriptors.pexBackend(backendID: "test-fixture"),
+            level: .smokeChecked,
+            projectRoot: root
+        )
 
         let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
@@ -35,17 +40,9 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [
-                QualifiedToolFixtures.descriptor(
-                    SignoffToolDescriptors.pexBackend(backendID: "test-fixture"),
-                    qualifiedAt: .smokeChecked
-                ),
-            ]),
+            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: [
-                "pex-test-fixture": QualifiedToolFixtures.health(
-                    toolID: "pex-test-fixture",
-                    level: .smokeChecked
-                ),
+                "pex-test-fixture": qualification.health,
             ],
             executors: [
                 fixturePEXExecutor(
@@ -147,9 +144,18 @@ struct PEXFlowStageExecutorTests {
                 && $0.severity == .warning
         })
         #expect(artifacts.contains { $0.format == .spef })
-        #expect(artifacts.contains { $0.kind == .technology && $0.path.contains("process-profile-decks") })
-        #expect(artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .json }))
-        #expect(artifacts.contains(where: { (artifact: ArtifactReference) in artifact.kind == .parasitics && artifact.format == .spice }))
+        #expect(artifacts.contains {
+            $0.kind.rawValue == PEXArtifactKind.processProfileDeckInput.foundationRawValue
+                && $0.path.contains("process-profile-decks")
+        })
+        #expect(artifacts.contains {
+            $0.kind.rawValue == PEXArtifactKind.parasiticIR.foundationRawValue
+                && $0.format == .json
+        })
+        #expect(artifacts.contains {
+            $0.kind.rawValue == PEXArtifactKind.spiceBackannotation.foundationRawValue
+                && $0.format == .spice
+        })
         #expect(artifacts.allSatisfy { !$0.path.hasPrefix("/") })
         #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
             $0.path.contains(".xcircuite/runs/run-pex/stages/009-pex/raw")

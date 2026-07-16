@@ -561,10 +561,15 @@ extension XcircuiteFlowRuntimeTests {
         )
     }
 
-    func fixtureURL(_ name: String) -> URL {
-        URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .appending(path: "Fixtures/FlowRuntime/\(name)")
+    func fixtureURL(_ name: String) throws -> URL {
+        guard let url = Bundle.module.url(
+            forResource: name,
+            withExtension: nil,
+            subdirectory: "Fixtures/FlowRuntime"
+        ) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return url
     }
 
     func installQualificationEvidenceFixtures(in root: URL) throws {
