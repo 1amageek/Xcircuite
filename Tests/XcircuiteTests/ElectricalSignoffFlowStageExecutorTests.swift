@@ -466,7 +466,12 @@ private struct StubElectricalSignoffEngine: ElectricalSignoffExecuting {
         _ request: ElectricalSignoffRequest,
         axes: [ElectricalSignoffAnalysisAxis]
     ) async throws -> ElectricalSignoffRunResult {
-        let metadata = try makeElectricalProvenance(identifier: "stub-electrical-signoff", startedAt: 1, completedAt: 1)
+        let metadata = try makeElectricalProvenance(
+            identifier: "stub-electrical-signoff",
+            inputs: request.executionInputArtifacts,
+            startedAt: 1,
+            completedAt: 1
+        )
         let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: axes.map { axis in
             let payload = ElectricalSignoffPayload(violationCount: 0, axis: axis)
             let result = ElectricalSignoffResult(
@@ -492,7 +497,12 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
         _ request: ElectricalSignoffRequest,
         axes: [ElectricalSignoffAnalysisAxis]
     ) async throws -> ElectricalSignoffRunResult {
-        let metadata = try makeElectricalProvenance(identifier: "repair-stub", startedAt: 1, completedAt: 1)
+        let metadata = try makeElectricalProvenance(
+            identifier: "repair-stub",
+            inputs: request.executionInputArtifacts,
+            startedAt: 1,
+            completedAt: 1
+        )
         let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: axes.map { axis in
             let payload = ElectricalSignoffPayload(
                 violationCount: 1,
@@ -548,6 +558,7 @@ private func makeFoundationArtifactReference(
 
 private func makeElectricalProvenance(
     identifier: String,
+    inputs: [ArtifactReference] = [],
     startedAt: TimeInterval,
     completedAt: TimeInterval
 ) throws -> ExecutionProvenance {
@@ -557,6 +568,7 @@ private func makeElectricalProvenance(
             identifier: identifier,
             version: "1"
         ),
+        inputs: inputs,
         startedAt: Date(timeIntervalSince1970: startedAt),
         completedAt: Date(timeIntervalSince1970: completedAt)
     )

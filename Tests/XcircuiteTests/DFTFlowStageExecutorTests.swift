@@ -64,7 +64,11 @@ struct DFTFlowStageExecutorTests {
 
         #expect(result.status == .succeeded)
         #expect(result.gates.contains { $0.gateID == "dft" && $0.status == .passed })
-        #expect(result.artifacts.count == 4)
+        #expect(Set(result.artifacts.map(\.artifactID)) == [
+            "dft-transformed-design",
+            "dft-design-diff",
+            "dft-result",
+        ])
         #expect(FileManager.default.fileExists(atPath: root
             .appending(path: "dft/runs/\(runID)/transformed-design.json")
             .path))
