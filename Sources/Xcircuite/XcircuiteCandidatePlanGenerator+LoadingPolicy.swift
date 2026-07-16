@@ -1,17 +1,35 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanGenerator {
-    func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    func projectURL(for relativePath: String, projectRoot: URL) throws -> URL {
+        guard !relativePath.isEmpty, !relativePath.hasPrefix("/") else {
+            throw XcircuiteCandidatePlanGenerationError.invalidArtifactReference(
+                path: relativePath,
+                reason: "project artifact path must be relative"
+            )
+        }
+        let url = projectRoot.appending(path: relativePath).standardizedFileURL
+        guard ProjectPathBoundary().contains(url, projectRoot: projectRoot) else {
+            throw XcircuiteRuntimeError.artifactOutsideProject(
+                path: url.path(percentEncoded: false),
+                projectRoot: projectRoot.path(percentEncoded: false)
+            )
+        }
+        return url
+    }
+
+    func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     func loadOrPersistActionDomainSnapshot(
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ActionDomainSnapshotContext {
-        let resolved = try XcircuiteActionDomainSnapshotResolver(
+    ) async throws -> ActionDomainSnapshotContext {
+        let resolved = try await XcircuiteActionDomainSnapshotResolver(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         ).loadDefaultOrPersist(
@@ -24,7 +42,7 @@ extension XcircuiteCandidatePlanGenerator {
 
     func loadRejectedPlanFeedback(
         request: XcircuiteCandidatePlanGenerationRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) throws -> XcircuiteRejectedPlanFeedbackSummary {
         let path = try optionalPath(
@@ -53,7 +71,7 @@ extension XcircuiteCandidatePlanGenerator {
 
     func loadCalibrationContext(
         request: XcircuiteCandidatePlanGenerationRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) throws -> SymbolicCalibrationContext? {
         let useDefaultArtifacts = calibrationLearningEnabled(request.strategy)
@@ -105,7 +123,7 @@ extension XcircuiteCandidatePlanGenerator {
 
     func selectPolicy(
         request: XcircuiteCandidatePlanGenerationRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) throws -> SymbolicPolicySelection {
         let calibrationPolicy = try normalizedCalibrationPolicy(request.calibrationPolicy)
@@ -241,18 +259,18 @@ extension XcircuiteCandidatePlanGenerator {
         explicitPath: String?,
         artifactID: String?,
         defaultArtifactID: String,
-        format: XcircuiteFileFormat,
-        manifest: XcircuiteRunManifest,
+        format: ArtifactFormat,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         if let explicitPath {
-            return try workspaceStore.fileReference(
-                forProjectRelativePath: explicitPath,
+            return try StageArtifactReferenceBuilder().reference(
+                for: projectURL(for: explicitPath, projectRoot: projectRoot),
+                projectRoot: projectRoot,
                 artifactID: artifactID ?? defaultArtifactID,
                 kind: .other,
-                format: format,
-                inProjectAt: projectRoot
+                format: format
             )
         }
         let resolvedArtifactID = artifactID ?? defaultArtifactID
@@ -285,12 +303,12 @@ extension XcircuiteCandidatePlanGenerator {
     func optionalPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
     ) throws -> String? {
         if let explicitPath {
-            _ = try workspaceStore.url(forProjectRelativePath: explicitPath, inProjectAt: projectRoot)
+            _ = try projectURL(for: explicitPath, projectRoot: projectRoot)
             return explicitPath
         }
         guard let artifactID else {
@@ -310,7 +328,7 @@ extension XcircuiteCandidatePlanGenerator {
         path: String,
         projectRoot: URL
     ) throws -> [XcircuiteRejectedPlanRecord] {
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try projectURL(for: path, projectRoot: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var records: [XcircuiteRejectedPlanRecord] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -332,9 +350,9 @@ extension XcircuiteCandidatePlanGenerator {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteMetricThresholdProfile {
-        let profile = try workspaceStore.readJSON(
+        let profile = try JSONDecoder().decode(
             XcircuiteMetricThresholdProfile.self,
-            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: Data(contentsOf: projectURL(for: path, projectRoot: projectRoot))
         )
         guard profile.runID == runID else {
             throw XcircuiteCandidatePlanGenerationError.runMismatch(
@@ -350,9 +368,9 @@ extension XcircuiteCandidatePlanGenerator {
         runID: String,
         projectRoot: URL
     ) throws -> XcircuiteCostCalibrationReport {
-        let report = try workspaceStore.readJSON(
+        let report = try JSONDecoder().decode(
             XcircuiteCostCalibrationReport.self,
-            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: Data(contentsOf: projectURL(for: path, projectRoot: projectRoot))
         )
         guard report.runID == runID else {
             throw XcircuiteCandidatePlanGenerationError.runMismatch(
@@ -368,7 +386,7 @@ extension XcircuiteCandidatePlanGenerator {
         runID: String,
         projectRoot: URL
     ) throws -> [XcircuiteParetoCandidateSet.Candidate] {
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try projectURL(for: path, projectRoot: projectRoot)
         let text = try String(contentsOf: url, encoding: .utf8)
         var candidates: [XcircuiteParetoCandidateSet.Candidate] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
@@ -400,12 +418,12 @@ extension XcircuiteCandidatePlanGenerator {
     func requiredPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
     ) throws -> String {
         if let explicitPath {
-            _ = try workspaceStore.url(forProjectRelativePath: explicitPath, inProjectAt: projectRoot)
+            _ = try projectURL(for: explicitPath, projectRoot: projectRoot)
             return explicitPath
         }
         guard let artifactID else {
@@ -426,12 +444,12 @@ extension XcircuiteCandidatePlanGenerator {
 
     func verifiedManifestArtifactReference(
         artifactID: String,
-        expectedKind: XcircuiteFileKind?,
-        expectedFormat: XcircuiteFileFormat?,
-        manifest: XcircuiteRunManifest,
+        expectedKind: ArtifactKind?,
+        expectedFormat: ArtifactFormat?,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         guard let reference = manifest.artifacts.first(where: { $0.artifactID == artifactID }) else {
             return nil
         }
@@ -447,19 +465,13 @@ extension XcircuiteCandidatePlanGenerator {
                 reason: "artifact format \(reference.format.rawValue) does not match expected \(expectedFormat.rawValue)."
             )
         }
-        if let producedByRunID = reference.producedByRunID, producedByRunID != runID {
-            throw XcircuiteCandidatePlanGenerationError.artifactProducerRunMismatch(
-                expected: runID,
-                actual: producedByRunID
-            )
-        }
-        let verifier = XcircuiteFileReferenceVerifier()
-        let integrity = verifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let verifier = LocalArtifactVerifier()
+        let integrity = verifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteCandidatePlanGenerationError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
         return reference
@@ -479,7 +491,7 @@ extension XcircuiteCandidatePlanGenerator {
             .joined(separator: "-")
         let trimmed = String(collapsed.prefix(120)).trimmingCharacters(in: CharacterSet(charactersIn: ".-_"))
         let value = trimmed.isEmpty ? "candidate-plan" : trimmed
-        try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+        try FlowIdentifierValidator().validate(value, kind: .artifactID)
         return value
     }
 }

@@ -8,13 +8,13 @@ public struct XcircuiteElectricalRepairRevisionRequest: Sendable, Hashable, Coda
 
     public var schemaVersion: Int
     public var runID: String
-    public var repairPlanArtifact: XcircuiteFileReference
+    public var repairPlanArtifact: ArtifactReference
     public var selectedCandidateID: String
     public var physicalDesignRequest: PhysicalDesignRequest
 
     public init(
         runID: String,
-        repairPlanArtifact: XcircuiteFileReference,
+        repairPlanArtifact: ArtifactReference,
         selectedCandidateID: String,
         physicalDesignRequest: PhysicalDesignRequest,
         schemaVersion: Int = Self.currentSchemaVersion

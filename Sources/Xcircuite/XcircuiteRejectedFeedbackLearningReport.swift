@@ -534,7 +534,7 @@ public struct XcircuiteRejectedFeedbackLearningReport: Codable, Sendable, Hashab
 
     fileprivate static func validateRunID(_ value: String) throws {
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .runID)
+            try FlowIdentifierValidator().validate(value, kind: .runID)
         } catch {
             throw XcircuiteRejectedFeedbackLearningReportValidationError.invalidIdentifier(
                 field: "runID",
@@ -545,7 +545,7 @@ public struct XcircuiteRejectedFeedbackLearningReport: Codable, Sendable, Hashab
 
     fileprivate static func validateIdentifier(_ value: String, field: String) throws {
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+            try FlowIdentifierValidator().validate(value, kind: .artifactID)
         } catch {
             throw XcircuiteRejectedFeedbackLearningReportValidationError.invalidIdentifier(
                 field: field,

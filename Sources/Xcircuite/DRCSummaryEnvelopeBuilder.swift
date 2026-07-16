@@ -13,7 +13,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
@@ -44,41 +44,30 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
             confidence: confidence
         ) + bucketChannelResults(summary: summary, confidence: confidence)
 
-        let envelope = XcircuiteArtifactEnvelope(
+        let envelope = FlowArtifactEnvelope(
             artifactID: artifactID,
             role: "drc-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: XcircuiteArtifactProducer(
+            producer: FlowArtifactProducer(
                 producerID: toolID,
                 toolID: toolID
             ),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
-            evaluationSpec: XcircuiteEvaluationSpec(
+            evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",
                 objective: "Evaluate DRC violation evidence for stage readiness and repair planning.",
                 criteria: criteria,
                 requiredArtifactRoles: ["drc-summary"],
-                confidence: XcircuiteEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false),
-                metadata: [
-                    "backendID": .string(summary.summary.backendID),
-                    "topCell": .string(summary.summary.topCell),
-                    "activeViolationCount": .number(Double(summary.summary.activeViolationCount)),
-                    "violationBucketCount": .number(Double(summary.summary.violationBuckets.count)),
-                ]
+                confidence: FlowEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false)
             ),
-            observationSet: XcircuiteObservationSet(
+            observationSet: FlowObservationSet(
                 observationSetID: "\(artifactID)-observations",
                 specID: "\(artifactID)-evaluation-spec",
                 channels: channels,
-                confidence: confidence,
-                metadata: [
-                    "backendID": .string(summary.summary.backendID),
-                    "toolName": .string(summary.summary.toolName),
-                    "topCell": .string(summary.summary.topCell),
-                ]
+                confidence: confidence
             ),
-            evaluationResult: XcircuiteEvaluationResult(
+            evaluationResult: FlowEvaluationResult(
                 evaluationID: "\(artifactID)-evaluation",
                 specID: "\(artifactID)-evaluation-spec",
                 status: evaluationStatus(summary: summary, gateStatus: gateStatus),
@@ -92,82 +81,67 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
                     gateStatus: gateStatus,
                     confidence: confidence
                 ),
-                summary: "DRC summary evaluation ended with gate status \(gateStatus.rawValue).",
-                metadata: [
-                    "activeViolationCount": .number(Double(summary.summary.activeViolationCount)),
-                    "waivedViolationCount": .number(Double(summary.summary.waivedViolationCount)),
-                    "unusedWaiverCount": .number(Double(summary.summary.unusedWaiverIDs.count)),
-                ]
-            ),
-            metadata: [
-                "gateID": .string("drc"),
-                "gateStatus": .string(gateStatus.rawValue),
-                "stageID": .string(stageID),
-                "toolID": .string(toolID),
-            ]
+                summary: "DRC summary evaluation ended with gate status \(gateStatus.rawValue)."
+            )
         )
 
-        return try context.storage.writeArtifactEnvelope(
-            envelope,
-            runID: context.runID,
-            inProjectAt: context.projectRoot
-        )
+        return try await context.persistArtifactEnvelope(envelope)
     }
 
-    private func baseCriteria(artifactID: String) -> [XcircuiteEvaluationCriterion] {
+    private func baseCriteria(artifactID: String) -> [FlowEvaluationCriterion] {
         [
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "drc-gate-status",
                 channelID: "drc-gate-status",
                 comparator: .equal,
-                target: .string(FlowGateStatus.passed.rawValue)
+                target: .text(FlowGateStatus.passed.rawValue)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "drc-active-violation-count",
                 channelID: "drc-active-violation-count",
                 comparator: .equal,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "drc-unused-waiver-count",
                 channelID: "drc-unused-waiver-count",
                 comparator: .equal,
-                target: .number(0),
+                target: .scalar(0),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "drc-tool-evidence",
                 channelID: "drc-tool-evidence-count",
                 comparator: .greaterThanOrEqual,
-                target: .number(1),
+                target: .scalar(1),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "drc-calibration",
                 channelID: "drc-qualified-calibration",
                 comparator: .equal,
-                target: .bool(true),
+                target: .boolean(true),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "drc-summary-artifact",
                 channelID: "drc-summary-artifact-present",
                 comparator: .equal,
-                target: .bool(true),
-                metadata: ["artifactID": .string(artifactID)]
+                target: .boolean(true),
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
         ]
     }
 
-    private func bucketCriteria(summary: DRCRunSummaryReport) -> [XcircuiteEvaluationCriterion] {
+    private func bucketCriteria(summary: DRCRunSummaryReport) -> [FlowEvaluationCriterion] {
         summary.summary.violationBuckets.enumerated().map { index, bucket in
             let baseID = bucketChannelBase(index: index, bucket: bucket)
-            return XcircuiteEvaluationCriterion(
+            return FlowEvaluationCriterion(
                 criterionID: "\(baseID)-active-count",
                 channelID: "\(baseID)-active-count",
                 comparator: .equal,
-                target: .number(0),
-                metadata: bucketMetadata(index: index, bucket: bucket)
+                target: .scalar(0),
+                context: bucketContext(index: index, bucket: bucket)
             )
         }
     }
@@ -179,110 +153,110 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         toolEvidenceCount: Int,
         hasQualifiedEvidence: Bool,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-summary-artifact-present",
                 status: .observed,
-                value: .bool(true),
+                value: .boolean(true),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-gate-status",
                 status: .observed,
-                value: .string(gateStatus.rawValue),
+                value: .text(gateStatus.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence,
-                metadata: ["gateID": .string("drc")]
+                context: FlowEvaluationContext(gateID: "drc")
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-diagnostic-count",
                 status: .observed,
-                value: .number(Double(diagnostics.count)),
+                value: .scalar(Double(diagnostics.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-tool-evidence-count",
                 status: toolEvidenceCount > 0 ? .observed : .missing,
-                value: .number(Double(toolEvidenceCount)),
+                value: .scalar(Double(toolEvidenceCount)),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-qualified-calibration",
                 status: hasQualifiedEvidence ? .observed : .uncalibrated,
-                value: .bool(hasQualifiedEvidence),
+                value: .boolean(hasQualifiedEvidence),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-completed",
                 status: .observed,
-                value: .bool(summary.summary.completed),
+                value: .boolean(summary.summary.completed),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-passed",
                 status: .observed,
-                value: .bool(summary.summary.passed),
+                value: .boolean(summary.summary.passed),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-active-violation-count",
                 status: .observed,
-                value: .number(Double(summary.summary.activeViolationCount)),
+                value: .scalar(Double(summary.summary.activeViolationCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-waived-violation-count",
                 status: .observed,
-                value: .number(Double(summary.summary.waivedViolationCount)),
+                value: .scalar(Double(summary.summary.waivedViolationCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-violation-bucket-count",
                 status: .observed,
-                value: .number(Double(summary.summary.violationBuckets.count)),
+                value: .scalar(Double(summary.summary.violationBuckets.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-unused-waiver-count",
                 status: .observed,
-                value: .number(Double(summary.summary.unusedWaiverIDs.count)),
+                value: .scalar(Double(summary.summary.unusedWaiverIDs.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-info-diagnostic-count",
                 status: .observed,
-                value: .number(Double(summary.summary.diagnosticSummary.infoCount)),
+                value: .scalar(Double(summary.summary.diagnosticSummary.infoCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-warning-diagnostic-count",
                 status: .observed,
-                value: .number(Double(summary.summary.diagnosticSummary.warningCount)),
+                value: .scalar(Double(summary.summary.diagnosticSummary.warningCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-error-diagnostic-count",
                 status: .observed,
-                value: .number(Double(summary.summary.diagnosticSummary.errorCount)),
+                value: .scalar(Double(summary.summary.diagnosticSummary.errorCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "drc-waived-error-count",
                 status: .observed,
-                value: .number(Double(summary.summary.diagnosticSummary.waivedErrorCount)),
+                value: .scalar(Double(summary.summary.diagnosticSummary.waivedErrorCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -292,79 +266,71 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
     private func bucketObservationChannels(
         summary: DRCRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         summary.summary.violationBuckets.enumerated().flatMap { index, bucket in
             let baseID = bucketChannelBase(index: index, bucket: bucket)
-            let metadata = bucketMetadata(index: index, bucket: bucket)
+            let context = bucketContext(index: index, bucket: bucket)
             return [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-active-count",
                     label: bucketLabel(bucket),
                     status: .observed,
-                    value: .number(Double(bucket.activeCount)),
+                    value: .scalar(Double(bucket.activeCount)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-waived-count",
                     label: "\(bucketLabel(bucket)) waived",
                     status: .observed,
-                    value: .number(Double(bucket.waivedCount)),
+                    value: .scalar(Double(bucket.waivedCount)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-max-measured",
                     label: "\(bucketLabel(bucket)) max measured",
                     status: bucket.maxMeasured == nil ? .missing : .observed,
-                    value: bucket.maxMeasured.map { .number($0) },
+                    value: bucket.maxMeasured.map { .scalar($0) },
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-required",
                     label: "\(bucketLabel(bucket)) required",
                     status: bucket.required == nil ? .missing : .observed,
-                    value: bucket.required.map { .number($0) },
+                    value: bucket.required.map { .scalar($0) },
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-related-shape-count",
                     status: .observed,
-                    value: .number(Double(bucket.relatedShapeIDs.count)),
+                    value: .scalar(Double(bucket.relatedShapeIDs.count)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-related-net-count",
                     status: .observed,
-                    value: .number(Double(bucket.relatedNetIDs.count)),
+                    value: .scalar(Double(bucket.relatedNetIDs.count)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-suggested-fix-count",
                     status: .observed,
-                    value: .number(Double(bucket.suggestedFixes.count)),
+                    value: .scalar(Double(bucket.suggestedFixes.count)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
-                ),
-                XcircuiteObservationChannel(
-                    channelID: "\(baseID)-suggested-fixes",
-                    status: bucket.suggestedFixes.isEmpty ? .missing : .observed,
-                    value: .array(bucket.suggestedFixes.map { .string($0) }),
-                    sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
             ]
         }
@@ -375,43 +341,43 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         gateStatus: FlowGateStatus,
         diagnostics: [FlowDiagnostic],
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         [
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "drc-gate-status",
                 channelID: "drc-gate-status",
                 status: evaluationStatus(from: gateStatus),
-                observedValue: .string(gateStatus.rawValue),
+                observedValue: .text(gateStatus.rawValue),
                 residual: gateStatus == .passed ? 0 : 1,
                 likelihood: likelihood(from: gateStatus),
                 confidence: confidence,
                 diagnostics: diagnostics.map(runActionDiagnostic)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "drc-summary-artifact",
                 channelID: "drc-summary-artifact-present",
                 status: .accepted,
-                observedValue: .bool(true),
+                observedValue: .boolean(true),
                 residual: 0,
                 likelihood: 1,
                 confidence: confidence,
-                metadata: ["artifactID": .string(artifactID)]
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "drc-active-violation-count",
                 channelID: "drc-active-violation-count",
                 status: countStatus(summary.summary.activeViolationCount),
-                observedValue: .number(Double(summary.summary.activeViolationCount)),
+                observedValue: .scalar(Double(summary.summary.activeViolationCount)),
                 residual: Double(summary.summary.activeViolationCount),
                 likelihood: countLikelihood(summary.summary.activeViolationCount),
                 confidence: confidence
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "drc-unused-waiver-count",
                 channelID: "drc-unused-waiver-count",
                 status: summary.summary.unusedWaiverIDs.isEmpty ? .accepted : .needsHumanReview,
-                observedValue: .number(Double(summary.summary.unusedWaiverIDs.count)),
+                observedValue: .scalar(Double(summary.summary.unusedWaiverIDs.count)),
                 residual: Double(summary.summary.unusedWaiverIDs.count),
                 likelihood: countLikelihood(summary.summary.unusedWaiverIDs.count),
                 confidence: confidence
@@ -421,19 +387,19 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
 
     private func bucketChannelResults(
         summary: DRCRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         summary.summary.violationBuckets.enumerated().map { index, bucket in
             let baseID = bucketChannelBase(index: index, bucket: bucket)
-            return XcircuiteEvaluationChannelResult(
+            return FlowEvaluationChannelResult(
                 criterionID: "\(baseID)-active-count",
                 channelID: "\(baseID)-active-count",
                 status: countStatus(bucket.activeCount),
-                observedValue: .number(Double(bucket.activeCount)),
+                observedValue: .scalar(Double(bucket.activeCount)),
                 residual: Double(bucket.activeCount),
                 likelihood: countLikelihood(bucket.activeCount),
                 confidence: confidence,
-                metadata: bucketMetadata(index: index, bucket: bucket)
+                context: bucketContext(index: index, bucket: bucket)
             )
         }
     }
@@ -442,14 +408,14 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         summary: DRCRunSummaryReport,
         gateStatus: FlowGateStatus,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
-        var signals: [XcircuiteFeedbackSignal] = []
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
+        var signals: [FlowFeedbackSignal] = []
         let activeBuckets = summary.summary.violationBuckets.filter { $0.activeCount > 0 }
 
         if gateStatus == .passed && activeBuckets.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-continue",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "drc-gate-status",
@@ -466,7 +432,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         signals.append(contentsOf: activeBuckets.enumerated().map { activeIndex, bucket in
             let originalIndex = summary.summary.violationBuckets.firstIndex(of: bucket) ?? activeIndex
             let baseID = bucketChannelBase(index: originalIndex, bucket: bucket)
-            return XcircuiteFeedbackSignal(
+            return FlowFeedbackSignal(
                 signalID: "\(baseID)-repair-feedback",
                 sourceEvaluationID: "\(artifactID)-evaluation",
                 channelID: "\(baseID)-active-count",
@@ -476,14 +442,13 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
                 residual: Double(bucket.activeCount),
                 affectedArtifactIDs: [artifactID],
                 suggestedActions: suggestedActions(for: bucket),
-                confidence: confidence,
-                metadata: bucketMetadata(index: originalIndex, bucket: bucket)
+                confidence: confidence
             )
         })
 
         if !summary.summary.unusedWaiverIDs.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-unused-waivers",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "drc-unused-waiver-count",
@@ -493,17 +458,14 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
                     residual: Double(summary.summary.unusedWaiverIDs.count),
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-drc-waivers", "remove-stale-waivers"],
-                    confidence: confidence,
-                    metadata: [
-                        "unusedWaiverIDs": .array(summary.summary.unusedWaiverIDs.map { .string($0) }),
-                    ]
+                    confidence: confidence
                 )
             )
         }
 
         if gateStatus != .passed && activeBuckets.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-incomplete-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "drc-gate-status",
@@ -520,7 +482,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
 
         if signals.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-review-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "drc-gate-status",
@@ -540,35 +502,38 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
     private func dependencies(
         from artifacts: [ArtifactReference],
         excluding summaryArtifact: ArtifactReference
-    ) -> [XcircuiteArtifactDependency] {
+    ) -> [FlowArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }
             .map { artifact in
-                XcircuiteArtifactDependency(
+                FlowArtifactDependency(
                     artifactID: artifact.artifactID,
                     path: artifact.path,
-                    role: artifact.artifactID ?? artifact.kind.rawValue,
+                    role: artifact.artifactID,
                     required: true
                 )
             }
     }
 
     private func hasQualifiedEvidence(context: FlowExecutionContext, toolID: String) -> Bool {
-        context.healthResults[toolID]?.evidence.contains { evidence in
-            evidence.qualification?.qualified == true
-        } == true
+        guard let descriptor = context.toolRegistry.descriptor(toolID: toolID),
+              descriptor.trustProfile.level >= .corpusChecked,
+              context.healthResults[toolID]?.status == .passed else {
+            return false
+        }
+        return descriptor.trustProfile.evidence.contains { $0.hasVerifiableArtifactBinding }
     }
 
-    private func confidence(hasQualifiedEvidence: Bool) -> XcircuiteEvidenceConfidence {
+    private func confidence(hasQualifiedEvidence: Bool) -> FlowEvidenceConfidence {
         if hasQualifiedEvidence {
-            return XcircuiteEvidenceConfidence(
+            return FlowEvidenceConfidence(
                 value: 0.8,
                 posteriorVariance: 0.2,
                 calibrationCoefficient: 0.7,
                 calibrated: true
             )
         }
-        return XcircuiteEvidenceConfidence(
+        return FlowEvidenceConfidence(
             value: 0.35,
             posteriorVariance: 0.65,
             calibrationCoefficient: 0,
@@ -579,7 +544,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
     private func evaluationStatus(
         summary: DRCRunSummaryReport,
         gateStatus: FlowGateStatus
-    ) -> XcircuiteEvaluationStatus {
+    ) -> FlowEvaluationStatus {
         if gateStatus == .blocked {
             return .blocked
         }
@@ -592,7 +557,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         return .accepted
     }
 
-    private func evaluationStatus(from status: FlowGateStatus) -> XcircuiteEvaluationStatus {
+    private func evaluationStatus(from status: FlowGateStatus) -> FlowEvaluationStatus {
         switch status {
         case .passed, .waived:
             .accepted
@@ -605,7 +570,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func countStatus(_ count: Int) -> XcircuiteEvaluationStatus {
+    private func countStatus(_ count: Int) -> FlowEvaluationStatus {
         count == 0 ? .accepted : .rejected
     }
 
@@ -657,8 +622,8 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> XcircuiteRunActionDiagnostic {
-        XcircuiteRunActionDiagnostic(
+    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> FlowRunDiagnostic {
+        FlowRunDiagnostic(
             severity: runActionSeverity(diagnostic.severity),
             code: diagnostic.code,
             message: diagnostic.message
@@ -667,7 +632,7 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
 
     private func runActionSeverity(
         _ severity: FlowDiagnosticSeverity
-    ) -> XcircuiteRunActionDiagnosticSeverity {
+    ) -> FlowRunDiagnosticSeverity {
         switch severity {
         case .info:
             .info
@@ -703,42 +668,26 @@ struct DRCSummaryEnvelopeBuilder: Sendable {
         return "bucket"
     }
 
-    private func bucketMetadata(
+    private func bucketContext(
         index: Int,
         bucket: DRCViolationBucketSummary
-    ) -> [String: XcircuiteJSONValue] {
-        var metadata: [String: XcircuiteJSONValue] = [
-            "bucketIndex": .number(Double(index)),
-            "activeCount": .number(Double(bucket.activeCount)),
-            "waivedCount": .number(Double(bucket.waivedCount)),
-            "relatedShapeIDs": .array(bucket.relatedShapeIDs.map { .string($0) }),
-            "relatedNetIDs": .array(bucket.relatedNetIDs.map { .string($0) }),
-            "suggestedFixes": .array(bucket.suggestedFixes.map { .string($0) }),
-        ]
-        if let ruleID = bucket.ruleID {
-            metadata["ruleID"] = .string(ruleID)
-        }
-        if let kind = bucket.kind {
-            metadata["kind"] = .string(kind)
-        }
-        if let layer = bucket.layer {
-            metadata["layer"] = .string(layer)
-        }
-        if let maxMeasured = bucket.maxMeasured {
-            metadata["maxMeasured"] = .number(maxMeasured)
-        }
-        if let required = bucket.required {
-            metadata["required"] = .number(required)
-        }
-        if let region = bucket.representativeRegion {
-            metadata["representativeRegion"] = .object([
-                "x": .number(region.x),
-                "y": .number(region.y),
-                "width": .number(region.width),
-                "height": .number(region.height),
-            ])
-        }
-        return metadata
+    ) -> FlowEvaluationContext {
+        FlowEvaluationContext(
+            kind: bucket.kind,
+            layer: bucket.layer,
+            ruleID: bucket.ruleID,
+            requiredValue: bucket.required,
+            bucketIndex: index,
+            activeCount: bucket.activeCount,
+            waivedCount: bucket.waivedCount,
+            relatedShapeIDs: bucket.relatedShapeIDs,
+            relatedNetIDs: bucket.relatedNetIDs,
+            suggestedActions: bucket.suggestedFixes,
+            maximumMeasuredValue: bucket.maxMeasured,
+            region: bucket.representativeRegion.map {
+                FlowEvaluationContext.Region(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
+            }
+        )
     }
 
     private func slug(_ value: String) -> String {

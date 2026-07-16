@@ -13,7 +13,7 @@ public extension XcircuiteFlowRunSpec {
             throw XcircuiteFlowRuntimeSpecError.emptyRunStageList
         }
 
-        let validator = XcircuiteIdentifierValidator()
+        let validator = FlowIdentifierValidator()
         try validator.validate(runID, kind: .runID)
         var stageIDs: Set<String> = []
         for stage in stages {
@@ -43,21 +43,6 @@ public extension XcircuiteFlowRuntimeSpec {
         let executorStageIDs = Set(executors.map(\.stageID))
         for stage in runSpec.stages where !executorStageIDs.contains(stage.stageID) {
             throw XcircuiteFlowRuntimeSpecError.missingRuntimeExecutorForRunStage(stage.stageID)
-        }
-        let processQualificationStageIDs = Set(
-            executors.compactMap { executor -> String? in
-                if case .electricalSignoffProcessQualification = executor {
-                    return executor.stageID
-                }
-                return nil
-            }
-        )
-        for stage in runSpec.stages where processQualificationStageIDs.contains(stage.stageID) {
-            guard stage.requiresApproval else {
-                throw XcircuiteFlowRuntimeSpecError.electricalProcessQualificationRequiresApproval(
-                    stage.stageID
-                )
-            }
         }
     }
 }

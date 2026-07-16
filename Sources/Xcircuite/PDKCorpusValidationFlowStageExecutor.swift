@@ -45,7 +45,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let suiteURL = try suiteInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -80,7 +80,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
                 inputs: [suiteReference]
             )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let artifact = try support.persistResult(result, stageID: stageID, context: context)
             return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {

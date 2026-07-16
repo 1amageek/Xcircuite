@@ -8,15 +8,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
             workspaceStore: workspaceStore,
-            fileReferenceVerifier: fileReferenceVerifier
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
         )
     }
 
@@ -24,9 +24,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest,
         projectRoot: URL
     ) async throws -> XcircuiteSymbolicPlannerSolverFamilyPromotionResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
-        let comparisonInput = try loadComparison(request: request, projectRoot: projectRoot)
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
+        let comparisonInput = try await loadComparison(request: request, projectRoot: projectRoot)
         let comparison = comparisonInput.comparison
         guard comparison.runID == request.runID else {
             throw XcircuiteSymbolicPlannerSolverError.qualificationRunMismatch(
@@ -51,7 +51,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         guard let qualificationArtifact = selectedCandidate.qualificationArtifact else {
             throw XcircuiteSymbolicPlannerSolverError.missingSelectedSolverFamilyQualificationArtifact
         }
-        let qualification = try loadQualification(
+        let qualification = try await loadQualification(
             artifact: qualificationArtifact,
             runID: request.runID,
             projectRoot: projectRoot
@@ -75,20 +75,20 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         }
 
         var diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic] = []
-        let promotedSolverPlanArtifact = try promoteSolverPlanIfAvailable(
+        let promotedSolverPlanArtifact = try await promoteSolverPlanIfAvailable(
             qualification: qualification,
             runID: request.runID,
             projectRoot: projectRoot,
             diagnostics: &diagnostics
         )
-        let promotedCandidatePlanArtifact = try artifactStore.persistCandidatePlan(
+        let promotedCandidatePlanArtifact = try await artifactStore.persistCandidatePlan(
             importResult.candidatePlan,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let promotedPlanReplayValidationArtifact: XcircuiteFileReference?
+        let promotedPlanReplayValidationArtifact: ArtifactReference?
         if let planReplayValidation = qualification.planReplayValidation {
-            promotedPlanReplayValidationArtifact = try artifactStore.persistSymbolicPlannerPlanReplayValidation(
+            promotedPlanReplayValidationArtifact = try await artifactStore.persistSymbolicPlannerPlanReplayValidation(
                 planReplayValidation,
                 runID: request.runID,
                 projectRoot: projectRoot
@@ -106,7 +106,10 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
 
         let verificationResult: XcircuiteCandidatePlanVerificationResult?
         if request.verifyPromotedPlan {
-            verificationResult = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+            verificationResult = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
                 request: XcircuiteCandidatePlanVerificationRequest(runID: request.runID),
                 projectRoot: projectRoot
             )
@@ -129,54 +132,35 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             comparisonID: comparison.comparisonID,
             selectedCandidateIndex: selectedIndex,
             selectedToolID: qualification.toolID,
-            sourceComparisonArtifact: try requireFoundationArtifactReference(
-                comparisonInput.reference,
-                field: "promotion.sourceComparisonArtifact"
-            ),
+            sourceComparisonArtifact: comparisonInput.reference,
             sourceQualificationArtifact: qualificationArtifact,
-            promotedCandidatePlanArtifact: try requireFoundationArtifactReference(
-                promotedCandidatePlanArtifact,
-                field: "promotion.promotedCandidatePlanArtifact"
-            ),
-            promotedSolverPlanArtifact: try promotedSolverPlanArtifact.map {
-                try requireFoundationArtifactReference(
-                    $0,
-                    field: "promotion.promotedSolverPlanArtifact"
-                )
-            },
-            promotedPlanReplayValidationArtifact: try promotedPlanReplayValidationArtifact.map {
-                try requireFoundationArtifactReference(
-                    $0,
-                    field: "promotion.promotedPlanReplayValidationArtifact"
-                )
-            },
+            promotedCandidatePlanArtifact: promotedCandidatePlanArtifact,
+            promotedSolverPlanArtifact: promotedSolverPlanArtifact,
+            promotedPlanReplayValidationArtifact: promotedPlanReplayValidationArtifact,
             promotedPlanVerificationArtifact: verificationResult?.planVerificationArtifact,
             verificationStatus: verificationResult?.status,
             verificationAccepted: verificationResult?.accepted,
             diagnostics: diagnostics
         )
-        let promotionArtifact = try artifactStore.persistSymbolicPlannerSolverFamilyPromotion(
+        let promotionArtifact = try await artifactStore.persistSymbolicPlannerSolverFamilyPromotion(
             promotion,
             runID: request.runID,
             projectRoot: projectRoot
         )
         return XcircuiteSymbolicPlannerSolverFamilyPromotionResult(
             promotion: promotion,
-            promotionArtifact: try requireFoundationArtifactReference(
-                promotionArtifact,
-                field: "promotion.promotionArtifact"
-            )
+            promotionArtifact: promotionArtifact
         )
     }
 
     private func loadComparison(
         request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest,
         projectRoot: URL
-    ) throws -> ComparisonInput {
-        let manifest = try runManifest(runID: request.runID, projectRoot: projectRoot)
-        let reference: XcircuiteFileReference
+    ) async throws -> ComparisonInput {
+        let manifest = try await runManifest(runID: request.runID)
+        let reference: ArtifactReference
         if let comparisonArtifactID = request.comparisonArtifactID {
-            reference = try uniqueVerifiedManifestArtifact(
+            reference = try await uniqueVerifiedManifestArtifact(
                 artifactID: comparisonArtifactID,
                 field: "comparisonArtifactID",
                 expectedFormat: .json,
@@ -185,7 +169,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
                 projectRoot: projectRoot
             )
         } else if let comparisonPath = request.comparisonPath {
-            reference = try verifiedProjectFileReference(
+            reference = try await verifiedProjectFileReference(
                 path: comparisonPath,
                 field: "comparisonPath",
                 expectedFormat: .json,
@@ -193,7 +177,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
                 projectRoot: projectRoot
             )
         } else {
-            reference = try uniqueVerifiedManifestArtifact(
+            reference = try await uniqueVerifiedManifestArtifact(
                 artifactID: comparisonArtifactID(for: request.comparisonID),
                 field: "comparisonArtifactID",
                 expectedFormat: .json,
@@ -202,9 +186,9 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
                 projectRoot: projectRoot
             )
         }
-        let comparison = try workspaceStore.readJSON(
+        let comparison = try await workspaceStore.readJSON(
             XcircuiteSymbolicPlannerSolverFamilyComparison.self,
-            from: url(for: reference.path, projectRoot: projectRoot)
+            from: reference.path
         )
         return ComparisonInput(reference: reference, comparison: comparison)
     }
@@ -213,15 +197,15 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         artifact: ArtifactReference,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
+    ) async throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
         let integrity = LocalArtifactVerifier().verify(artifact, relativeTo: projectRoot)
         guard !integrity.isVerified else {
-            return try workspaceStore.readJSON(
+            return try await workspaceStore.readJSON(
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
-                from: url(for: artifact.path, projectRoot: projectRoot)
+                from: artifact.path
             )
         }
-        let status: XcircuiteFileReferenceIntegrityStatus = switch integrity.issues.first?.code {
+        let status: FlowArtifactVerificationStatus = switch integrity.issues.first?.code {
         case .missingFile: .missingArtifact
         case .notRegularFile, .unreadableFile: .unreadableArtifact
         case .byteCountMismatch: .byteCountMismatch
@@ -247,13 +231,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         runID: String,
         projectRoot: URL,
         diagnostics: inout [XcircuiteSymbolicPlannerSolverDiagnostic]
-    ) throws -> XcircuiteFileReference? {
-        let solverPlanArtifact: ArtifactReference
-        if let artifact = qualification.solverResult.solverPlanArtifact {
-            solverPlanArtifact = artifact
-        } else if let legacyArtifact = qualification.solverResult.importResult?.solverPlanArtifact {
-            solverPlanArtifact = legacyArtifact
-        } else {
+    ) async throws -> ArtifactReference? {
+        guard let solverPlanArtifact = qualification.solverResult.solverPlanArtifact else {
             diagnostics.append(
                 XcircuiteSymbolicPlannerSolverDiagnostic(
                     severity: "warning",
@@ -263,7 +242,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             )
             return nil
         }
-        let solverPlanURL = try url(for: solverPlanArtifact.path, projectRoot: projectRoot)
+        let solverPlanURL = try await workspaceStore.url(for: solverPlanArtifact.path)
         let solverPlanText: String
         do {
             solverPlanText = try String(contentsOf: solverPlanURL, encoding: .utf8)
@@ -277,7 +256,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
             )
             return nil
         }
-        return try artifactStore.persistSymbolicPlannerSolverPlan(
+        return try await artifactStore.persistSymbolicPlannerSolverPlan(
             solverPlanText,
             runID: qualification.runID,
             projectRoot: projectRoot
@@ -301,21 +280,20 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     }
 
     private func runManifest(
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteRunManifest {
-        try artifactReferenceResolver.runManifest(runID: runID, projectRoot: projectRoot)
+        runID: String
+    ) async throws -> FlowRunManifest {
+        try await artifactReferenceResolver.runManifest(runID: runID)
     }
 
     private func uniqueVerifiedManifestArtifact(
         artifactID: String,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
-        manifest: XcircuiteRunManifest,
+        expectedFormat: ArtifactFormat,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try artifactReferenceResolver.uniqueManifestArtifact(
+    ) async throws -> ArtifactReference {
+        try await artifactReferenceResolver.uniqueManifestArtifact(
             artifactID: artifactID,
             field: field,
             expectedFormat: expectedFormat,
@@ -328,28 +306,12 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
     private func verifiedProjectFileReference(
         path: String,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try artifactReferenceResolver.projectFileReference(
+    ) async throws -> ArtifactReference {
+        try await artifactReferenceResolver.projectFileReference(
             path: path,
-            field: field,
-            expectedFormat: expectedFormat,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-    }
-
-    private func verifiedArtifactReference(
-        _ reference: XcircuiteFileReference,
-        field: String,
-        expectedFormat: XcircuiteFileFormat,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try artifactReferenceResolver.verifiedArtifactReference(
-            reference,
             field: field,
             expectedFormat: expectedFormat,
             runID: runID,
@@ -361,12 +323,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyPromoter: Sendable {
         "\(XcircuitePlanningArtifactStore.symbolicPlannerSolverFamilyComparisonArtifactID)-\(String(comparisonID.prefix(80)))"
     }
 
-    private func url(for path: String, projectRoot: URL) throws -> URL {
-        return try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-    }
-
     private struct ComparisonInput {
-        var reference: XcircuiteFileReference
+        var reference: ArtifactReference
         var comparison: XcircuiteSymbolicPlannerSolverFamilyComparison
     }
 }

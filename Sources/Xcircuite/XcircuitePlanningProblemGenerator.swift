@@ -9,41 +9,41 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let builder: XcircuiteDiagnosticPlanningProblemBuilder
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
         builder: XcircuiteDiagnosticPlanningProblemBuilder = XcircuiteDiagnosticPlanningProblemBuilder(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.builder = builder
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func generateRepairProblem(
         request: XcircuitePlanningProblemGenerationRequest,
         projectRoot: URL
-    ) throws -> XcircuitePlanningProblemGenerationResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let summaryPath = try requiredPath(
+    ) async throws -> XcircuitePlanningProblemGenerationResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let summaryPath = try await requiredPath(
             explicitPath: request.summaryPath,
             artifactID: request.summaryArtifactID ?? request.source.rawValue,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let layoutPath = try optionalPath(
+        let layoutPath = try await optionalPath(
             explicitPath: request.layoutPath,
             artifactID: request.layoutArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let actionDomainPath = try optionalPath(
+        let actionDomainPath = try await optionalPath(
             explicitPath: request.actionDomainPath,
             artifactID: request.actionDomainArtifactID ?? XcircuitePlanningArtifactStore.actionDomainArtifactID,
             manifest: manifest,
@@ -51,14 +51,14 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
             projectRoot: projectRoot,
             missingDefaultIsAllowed: true
         )
-        let technologyPath = try optionalPath(
+        let technologyPath = try await optionalPath(
             explicitPath: request.technologyPath,
             artifactID: request.technologyArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let repairHintPath = try optionalPath(
+        let repairHintPath = try await optionalPath(
             explicitPath: request.repairHintPath,
             artifactID: request.repairHintArtifactID,
             manifest: manifest,
@@ -68,13 +68,12 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         let problem: XcircuiteCircuitPlanningProblem
         switch request.source {
         case .drcSummary:
-            let summary = try workspaceStore.readJSON(
+            let summary = try await loadProjectJSON(
                 DRCRunSummaryReport.self,
-                from: workspaceStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
+                from: summaryPath
             )
-            let repairHints = try loadDRCRepairHintsIfPresent(
-                path: repairHintPath,
-                projectRoot: projectRoot
+            let repairHints = try await loadDRCRepairHintsIfPresent(
+                path: repairHintPath
             )
             problem = try builder.makeDRCRepairProblem(
                 runID: request.runID,
@@ -88,13 +87,12 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
                 actionDomainArtifactPath: actionDomainPath
             )
         case .lvsSummary:
-            let summary = try workspaceStore.readJSON(
+            let summary = try await loadProjectJSON(
                 LVSRunSummaryReport.self,
-                from: workspaceStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
+                from: summaryPath
             )
-            let repairHints = try loadLVSRepairHintsIfPresent(
-                path: repairHintPath,
-                projectRoot: projectRoot
+            let repairHints = try await loadLVSRepairHintsIfPresent(
+                path: repairHintPath
             )
             problem = try builder.makeLVSRepairProblem(
                 runID: request.runID,
@@ -108,13 +106,12 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
                 actionDomainArtifactPath: actionDomainPath
             )
         case .pexSummary:
-            let summary = try workspaceStore.readJSON(
+            let summary = try await loadProjectJSON(
                 PEXRunSummaryReport.self,
-                from: workspaceStore.url(forProjectRelativePath: summaryPath, inProjectAt: projectRoot)
+                from: summaryPath
             )
-            let metricReport = try loadPostLayoutMetricReportIfPresent(
-                path: request.metricReportPath,
-                projectRoot: projectRoot
+            let metricReport = try await loadPostLayoutMetricReportIfPresent(
+                path: request.metricReportPath
             )
             problem = try builder.makePEXRecoveryProblem(
                 runID: request.runID,
@@ -129,7 +126,7 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
             )
         }
 
-        let problemArtifact = try artifactStore.persistPlanningProblem(
+        let problemArtifact = try await artifactStore.persistPlanningProblem(
             problem,
             runID: request.runID,
             projectRoot: projectRoot
@@ -148,60 +145,71 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
             metricReportPath: request.metricReportPath,
             repairHintPath: repairHintPath,
             actionDomainPath: actionDomainPath,
-            problemArtifact: try requireFoundationArtifactReference(
-                problemArtifact,
-                field: "planning-problem"
-            )
+            problemArtifact: problemArtifact
         )
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func loadPostLayoutMetricReportIfPresent(
-        path: String?,
-        projectRoot: URL
-    ) throws -> PostLayoutComparisonReport? {
+        path: String?
+    ) async throws -> PostLayoutComparisonReport? {
         guard let path else {
             return nil
         }
-        let validatedPath = try validateExplicitPathExists(path, projectRoot: projectRoot)
-        let url = try workspaceStore.url(forProjectRelativePath: validatedPath, inProjectAt: projectRoot)
-        return try workspaceStore.readJSON(PostLayoutComparisonReport.self, from: url)
+        let validatedPath = try await validateExplicitPathExists(path)
+        return try await loadProjectJSON(PostLayoutComparisonReport.self, from: validatedPath)
     }
 
     private func loadDRCRepairHintsIfPresent(
-        path: String?,
-        projectRoot: URL
-    ) throws -> DRCRepairHintReport? {
+        path: String?
+    ) async throws -> DRCRepairHintReport? {
         guard let path else {
             return nil
         }
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        return try workspaceStore.readJSON(DRCRepairHintReport.self, from: url)
+        return try await loadProjectJSON(DRCRepairHintReport.self, from: path)
     }
 
     private func loadLVSRepairHintsIfPresent(
-        path: String?,
-        projectRoot: URL
-    ) throws -> LVSRepairHintReport? {
+        path: String?
+    ) async throws -> LVSRepairHintReport? {
         guard let path else {
             return nil
         }
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        return try workspaceStore.readJSON(LVSRepairHintReport.self, from: url)
+        return try await loadProjectJSON(LVSRepairHintReport.self, from: path)
+    }
+
+    private func loadProjectJSON<Value: Decodable & Sendable>(
+        _ type: Value.Type,
+        from path: String
+    ) async throws -> Value {
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .input,
+            kind: .other,
+            format: .json
+        )
+        guard let content = try await workspaceStore.loadProjectArtifactContent(at: locator) else {
+            throw XcircuiteWorkspaceStoreError.missingArtifact(path)
+        }
+        do {
+            return try JSONDecoder().decode(type, from: content)
+        } catch {
+            throw XcircuiteWorkspaceStoreError.decodeFailed(error.localizedDescription)
+        }
     }
 
     private func requiredPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> String {
+    ) async throws -> String {
         if let explicitPath {
-            return try validateExplicitPathExists(explicitPath, projectRoot: projectRoot)
+            return try await validateExplicitPathExists(explicitPath)
         }
         guard let artifactID else {
             throw XcircuitePlanningProblemGenerationError.missingSummaryReference
@@ -218,13 +226,13 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
     private func optionalPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL,
         missingDefaultIsAllowed: Bool = false
-    ) throws -> String? {
+    ) async throws -> String? {
         if let explicitPath {
-            return try validateExplicitPathExists(explicitPath, projectRoot: projectRoot)
+            return try await validateExplicitPathExists(explicitPath)
         }
         guard let artifactID else {
             return nil
@@ -248,12 +256,14 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         return reference.path
     }
 
-    private func validateExplicitPathExists(
-        _ path: String,
-        projectRoot: URL
-    ) throws -> String {
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+    private func validateExplicitPathExists(_ path: String) async throws -> String {
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .input,
+            kind: .other,
+            format: .json
+        )
+        guard try await workspaceStore.projectArtifactExists(at: locator) else {
             throw XcircuitePlanningProblemGenerationError.explicitPathNotFound(path: path)
         }
         return path
@@ -261,10 +271,10 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
 
     private func uniqueVerifiedArtifactReference(
         artifactID: String,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         let matches = manifest.artifacts.filter { $0.artifactID == artifactID }
         guard !matches.isEmpty else {
             throw XcircuitePlanningProblemGenerationError.artifactNotFound(runID: runID, artifactID: artifactID)
@@ -282,16 +292,16 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
     }
 
     private func validateArtifactIntegrity(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         projectRoot: URL
     ) throws {
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuitePlanningProblemGenerationError.artifactIntegrityFailed(
                 artifactID: reference.artifactID,
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }

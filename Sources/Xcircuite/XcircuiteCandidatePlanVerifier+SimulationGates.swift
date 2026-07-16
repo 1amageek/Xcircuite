@@ -12,7 +12,7 @@ extension XcircuiteCandidatePlanVerifier {
         sourceStepIDs: [String],
         spec: SimulationMetricExecutionSpec,
         netlistRef: XcircuitePlanningReference,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         verificationDirectory: URL,
         runID: String,
         projectRoot: URL
@@ -20,36 +20,33 @@ extension XcircuiteCandidatePlanVerifier {
         let netlistURL = try url(for: netlistRef, manifest: manifest, projectRoot: projectRoot)
         let source = try String(contentsOf: netlistURL, encoding: .utf8)
         let netlistCopyURL = verificationDirectory.appending(path: "input-\(netlistURL.lastPathComponent)")
-        try workspaceStore.writeText(source, to: netlistCopyURL)
+        try await writeWorkspaceText(source, to: netlistCopyURL, projectRoot: projectRoot)
         let outcome = try await CoreSpiceSimulationEngine().run(
             netlistSource: source,
             fileName: netlistURL.lastPathComponent
         )
         let waveformURL = verificationDirectory.appending(path: "waveform.csv")
-        try workspaceStore.writeText(outcome.waveformCSV, to: waveformURL)
+        try await writeWorkspaceText(outcome.waveformCSV, to: waveformURL, projectRoot: projectRoot)
         let measurementsURL = verificationDirectory.appending(path: "measurements.json")
-        try workspaceStore.writeJSON(
+        try await writeWorkspaceJSON(
             outcome.measurements,
             to: measurementsURL,
-            forProjectAt: projectRoot
+            projectRoot: projectRoot
         )
         let summary = simulationMetricReport(
             outcome: outcome,
             expectations: spec.expectations
         )
         let summaryURL = verificationDirectory.appending(path: "simulation-summary.json")
-        try workspaceStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
-        let artifacts = try simulationMetricArtifactRefs(
+        try await writeWorkspaceJSON(summary, to: summaryURL, projectRoot: projectRoot)
+        let artifacts = try await retainRunArtifacts(simulationMetricArtifactRefs(
             netlistURL: netlistCopyURL,
             waveformURL: waveformURL,
             measurementsURL: measurementsURL,
             summaryURL: summaryURL,
             runID: runID,
             projectRoot: projectRoot
-        )
-        for artifact in artifacts {
-            try workspaceStore.upsertRunArtifact(artifact, runID: runID, inProjectAt: projectRoot)
-        }
+        ), runID: runID, projectRoot: projectRoot)
         let diagnostics = simulationMetricDiagnostics(from: summary)
         return GateExecutionEvaluation(
             gateResult: XcircuitePlanVerificationGateResult(
@@ -59,7 +56,7 @@ extension XcircuiteCandidatePlanVerifier {
                 sourceStepIDs: sourceStepIDs,
                 diagnostics: diagnostics
             ),
-            artifactReferences: try foundationArtifactReferences(artifacts, field: "simulation-metric")
+            artifactReferences: artifacts
         )
     }
 
@@ -67,32 +64,31 @@ extension XcircuiteCandidatePlanVerifier {
         required: Bool,
         sourceStepIDs: [String],
         metricReportRef: XcircuitePlanningReference,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         verificationDirectory: URL,
         runID: String,
         projectRoot: URL
-    ) throws -> GateExecutionEvaluation {
+    ) async throws -> GateExecutionEvaluation {
         let reportURL = try url(for: metricReportRef, manifest: manifest, projectRoot: projectRoot)
-        let postLayoutReport = try workspaceStore.readJSON(PostLayoutComparisonReport.self, from: reportURL)
+        let postLayoutReport = try JSONDecoder().decode(
+            PostLayoutComparisonReport.self,
+            from: Data(contentsOf: reportURL)
+        )
         let summary = simulationMetricReport(
             postLayoutReport: postLayoutReport,
             sourceReportPath: metricReportRef.path
         )
         let summaryURL = verificationDirectory.appending(path: "simulation-summary.json")
-        try workspaceStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
-        let artifacts = [
+        try await writeWorkspaceJSON(summary, to: summaryURL, projectRoot: projectRoot)
+        let artifacts = try await retainRunArtifacts([
             try artifactBuilder.reference(
                 for: summaryURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-simulation-summary",
                 kind: .report,
-                format: .json,
-                producedByRunID: runID
+                format: .json
             ),
-        ]
-        for artifact in artifacts {
-            try workspaceStore.upsertRunArtifact(artifact, runID: runID, inProjectAt: projectRoot)
-        }
+        ], runID: runID, projectRoot: projectRoot)
         let diagnostics = simulationMetricDiagnostics(from: summary)
         return GateExecutionEvaluation(
             gateResult: XcircuitePlanVerificationGateResult(
@@ -102,7 +98,7 @@ extension XcircuiteCandidatePlanVerifier {
                 sourceStepIDs: sourceStepIDs,
                 diagnostics: diagnostics
             ),
-            artifactReferences: try foundationArtifactReferences(artifacts, field: "simulation-metric")
+            artifactReferences: artifacts
         )
     }
 
@@ -113,39 +109,35 @@ extension XcircuiteCandidatePlanVerifier {
         summaryURL: URL,
         runID: String,
         projectRoot: URL
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         [
             try artifactBuilder.reference(
                 for: netlistURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-simulation-netlist",
                 kind: .netlist,
-                format: netlistFileFormat(from: netlistURL),
-                producedByRunID: runID
+                format: netlistFileFormat(from: netlistURL)
             ),
             try artifactBuilder.reference(
                 for: waveformURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-simulation-waveform",
                 kind: .waveform,
-                format: .csv,
-                producedByRunID: runID
+                format: .csv
             ),
             try artifactBuilder.reference(
                 for: measurementsURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-simulation-measurements",
                 kind: .measurement,
-                format: .json,
-                producedByRunID: runID
+                format: .json
             ),
             try artifactBuilder.reference(
                 for: summaryURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-simulation-summary",
                 kind: .report,
-                format: .json,
-                producedByRunID: runID
+                format: .json
             ),
         ]
     }
@@ -329,13 +321,12 @@ extension XcircuiteCandidatePlanVerifier {
         var hint = CandidatePlanSimulationInputHint()
         for step in plan.steps.sorted(by: { $0.order < $1.order })
             where step.verificationGates.contains("simulation-metric-gate") {
-            if let decoded: CandidatePlanSimulationInputHint = try decodedHint("simulationInputs", from: step) {
-                hint.merge(decoded)
+            if case .simulationInputs(let inputs)? = step.parameterHints["simulationInputs"] {
+                hint.merge(CandidatePlanSimulationInputHint(
+                    netlistRefID: inputs.netlistReferenceID,
+                    measurementExpectations: inputs.measurementExpectations
+                ))
             }
-            let measurementExpectations: [SimulationMeasurementExpectation]? =
-                try decodedHint("measurementExpectations", from: step)
-                    ?? decodedHint("simulationExpectations", from: step)
-                    ?? decodedHint("expectations", from: step)
             hint.merge(CandidatePlanSimulationInputHint(
                 netlistRef: stringHint("netlistRef", step: step)
                     ?? stringHint("sourceNetlistRef", step: step)
@@ -348,7 +339,7 @@ extension XcircuiteCandidatePlanVerifier {
                 metricReportRefID: stringHint("metricReportRefID", step: step)
                     ?? stringHint("postLayoutMetricReportRefID", step: step),
                 expectations: nil,
-                measurementExpectations: measurementExpectations
+                measurementExpectations: nil
             ))
         }
         return hint

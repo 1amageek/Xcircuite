@@ -9,7 +9,7 @@ public enum XcircuiteSignoffRepairFormulationError: Error, LocalizedError, Equat
     case repairHintArtifactIntegrityFailed(
         sourceKind: String,
         path: String,
-        status: XcircuiteFileReferenceIntegrityStatus,
+        status: FlowArtifactVerificationStatus,
         message: String
     )
     case reportReadFailed(path: String, message: String)

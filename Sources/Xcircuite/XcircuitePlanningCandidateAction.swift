@@ -10,7 +10,7 @@ public struct XcircuitePlanningCandidateAction: Codable, Sendable, Hashable {
     public var sourceObjectiveIDs: [String]
     public var requiredInputRefs: [String]
     public var verificationGates: [String]
-    public var parameterHints: [String: XcircuiteJSONValue]
+    public var parameterHints: [String: PlanningParameterValue]
 
     public init(
         actionID: String,
@@ -21,7 +21,7 @@ public struct XcircuitePlanningCandidateAction: Codable, Sendable, Hashable {
         sourceObjectiveIDs: [String],
         requiredInputRefs: [String],
         verificationGates: [String],
-        parameterHints: [String: XcircuiteJSONValue] = [:]
+        parameterHints: [String: PlanningParameterValue] = [:]
     ) {
         self.actionID = actionID
         self.domainID = domainID

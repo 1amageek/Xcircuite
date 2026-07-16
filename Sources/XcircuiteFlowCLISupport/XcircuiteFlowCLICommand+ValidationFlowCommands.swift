@@ -4,7 +4,7 @@ import Xcircuite
 import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
-    static func validatePlanningProblem(arguments: [String]) throws -> String {
+    static func validatePlanningProblem(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -44,7 +44,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuitePlanningProblemValidator().validatePlanningProblem(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuitePlanningProblemValidator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).validatePlanningProblem(
             request: XcircuitePlanningProblemValidationRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -57,7 +61,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func auditProblemTranslation(arguments: [String]) throws -> String {
+    static func auditProblemTranslation(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -91,7 +95,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteProblemTranslationAuditor().auditProblemTranslation(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteProblemTranslationAuditor(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).auditProblemTranslation(
             request: XcircuiteProblemTranslationAuditRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,

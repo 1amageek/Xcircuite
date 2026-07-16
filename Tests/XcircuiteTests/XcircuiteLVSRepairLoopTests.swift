@@ -1,54 +1,54 @@
+import DesignFlowKernel
 import Foundation
 import LVSEngine
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 @Suite("Xcircuite LVS repair loop")
 struct XcircuiteLVSRepairLoopTests {
     @Test func repairHintArtifactDrivesCLIPlanningAndVerifiedPortRepair() async throws {
         let root = try makeTemporaryRoot("repair-hint-artifact-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let runID = "run-lvs-hint-port"
         let layoutPath = "layout/port-layout.json"
         let layoutNetlistPath = "circuits/layout.spice"
         let schematicNetlistPath = "circuits/schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-repair-hints.json"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        try await store.createWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         try writeSimpleLayoutDocument(path: layoutPath, root: root)
         try writeMatchingLVSNetlists(
             layoutPath: layoutNetlistPath,
             schematicPath: schematicNetlistPath,
             root: root
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makePortSummary(),
             artifactID: "lvs-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makePortRepairHints(),
             artifactID: "lvs-repair-hints",
             path: repairHintPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
-        try registerExistingArtifact(
+        try await registerExistingArtifact(
             artifactID: "layout-document",
             path: layoutPath,
             kind: .layout,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
 
@@ -80,9 +80,9 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(generation.summaryPath == summaryPath)
         #expect(generation.repairHintPath == repairHintPath)
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: generation.problemArtifact.path)
+            from: generation.problemArtifact.path
         )
         #expect(problem.sourceRefs.contains {
             $0.refID == "lvs-repair-hints" && $0.path == repairHintPath
@@ -90,14 +90,16 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(problem.initialStateRefs.contains {
             $0.refID == "layout-netlist-ref" && $0.path == layoutNetlistPath
         })
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("lvs.export-repair-hints"))
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("lvs.export-repair-hints"))
         #expect(problem.candidateActions.map(\.operationID) == ["layout.add-label"])
-        #expect(problem.candidateActions.first?.parameterHints["sourceRepairHintID"] == .string("lvs-repair-0-LVS_PORT_MISMATCH"))
-        #expect(problem.candidateActions.first?.parameterHints["lvsInputs"] == .object([
-            "layoutNetlistRef": .string("layout-netlist-ref"),
-            "schematicNetlistRef": .string("schematic-netlist-ref"),
-            "topCell": .string("top"),
-        ]))
+        #expect(problem.candidateActions.first?.parameterHints["sourceRepairHintID"] == .text("lvs-repair-0-LVS_PORT_MISMATCH"))
+        #expect(problem.candidateActions.first?.parameterHints["lvsInputs"] == .lvsInputs(
+            PlanningLVSInputs(
+                layoutNetlistReferenceID: "layout-netlist-ref",
+                schematicNetlistReferenceID: "schematic-netlist-ref",
+                topCell: "top"
+            )
+        ))
 
         let candidateJSON = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -151,9 +153,9 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(verification.status == "accepted")
         #expect(verification.accepted)
 
-        let verificationDocument = try store.readJSON(
+        let verificationDocument = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verification.planVerificationArtifact.path)
+            from: verification.planVerificationArtifact.path
         )
         #expect(verificationDocument.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "passed" })
         #expect(verificationDocument.goalCoverageStatus == "covered")
@@ -166,35 +168,35 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func approvedPolicyRepairArtifactDrivesNativeLVSVerification() async throws {
         let root = try makeTemporaryRoot("approved-policy-repair-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let runID = "run-lvs-policy-repair"
         let layoutNetlistPath = "circuits/model-layout.spice"
         let schematicNetlistPath = "circuits/model-schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-repair-hints.json"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        try await store.createWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         try writeModelMismatchLVSNetlists(
             layoutPath: layoutNetlistPath,
             schematicPath: schematicNetlistPath,
             root: root
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeModelPolicySummary(),
             artifactID: "lvs-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeModelPolicyRepairHints(),
             artifactID: "lvs-repair-hints",
             path: repairHintPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
 
@@ -281,16 +283,16 @@ struct XcircuiteLVSRepairLoopTests {
         })
 
         let designDiffArtifact = try #require(execution.designDiffArtifact)
-        let designDiff = try store.readJSON(
-            XcircuiteDesignDiff.self,
-            from: root.appending(path: designDiffArtifact.path)
+        let designDiff = try await store.readJSON(
+            DesignDiff.self,
+            from: designDiffArtifact.path
         )
         #expect(designDiff.changes.first?.domain == .verification)
         #expect(designDiff.changes.first?.operation == .add)
 
-        let policy = try store.readJSON(
+        let policy = try await store.readJSON(
             LVSModelEquivalencePolicy.self,
-            from: root.appending(path: policyArtifact.path)
+            from: policyArtifact.path
         )
         #expect(policy.groups == [
             LVSModelEquivalenceGroup(
@@ -317,9 +319,9 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(verification.status == "accepted")
         #expect(verification.accepted)
 
-        let verificationDocument = try store.readJSON(
+        let verificationDocument = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verification.planVerificationArtifact.path)
+            from: verification.planVerificationArtifact.path
         )
         #expect(verificationDocument.gateResults.contains { $0.gateID == "approval-gate" && $0.status == "passed" })
         #expect(verificationDocument.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "passed" })
@@ -339,51 +341,51 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func approvedTerminalPolicyRepairArtifactDrivesNativeLVSVerification() async throws {
         let root = try makeTemporaryRoot("approved-terminal-policy-repair-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let runID = "run-lvs-terminal-policy-repair"
         let layoutNetlistPath = "circuits/terminal-layout.spice"
         let schematicNetlistPath = "circuits/terminal-schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-lvs/lvs-repair-hints.json"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        try await store.createWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         try writeTerminalMismatchLVSNetlists(
             layoutPath: layoutNetlistPath,
             schematicPath: schematicNetlistPath,
             root: root
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeTerminalPolicySummary(),
             artifactID: "lvs-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeTerminalPolicyRepairHints(),
             artifactID: "lvs-repair-hints",
             path: repairHintPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: runID
         )
-        try registerExistingArtifact(
+        try await registerExistingArtifact(
             artifactID: "layout-netlist",
             path: layoutNetlistPath,
             kind: .netlist,
             format: .spice,
-            root: root,
+            store: store,
             runID: runID
         )
-        try registerExistingArtifact(
+        try await registerExistingArtifact(
             artifactID: "schematic-netlist",
             path: schematicNetlistPath,
             kind: .netlist,
             format: .spice,
-            root: root,
+            store: store,
             runID: runID
         )
 
@@ -469,9 +471,9 @@ struct XcircuiteLVSRepairLoopTests {
             $0.artifactID == "candidate-step-1-lvs-policy-repair-report"
         })
 
-        let policy = try store.readJSON(
+        let policy = try await store.readJSON(
             LVSTerminalEquivalencePolicy.self,
-            from: root.appending(path: policyArtifact.path)
+            from: policyArtifact.path
         )
         #expect(policy.rules == [
             LVSTerminalEquivalenceRule(
@@ -480,9 +482,9 @@ struct XcircuiteLVSRepairLoopTests {
                 equivalentPinGroups: [[0, 1]]
             ),
         ])
-        let report = try store.readJSON(
+        let report = try await store.readJSON(
             XcircuiteLVSPolicyRepairReport.self,
-            from: root.appending(path: reportArtifact.path)
+            from: reportArtifact.path
         )
         #expect(report.policyKind == "terminal-equivalence")
         #expect(report.terminalKind == "diode")
@@ -506,9 +508,9 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(verification.status == "accepted")
         #expect(verification.accepted)
 
-        let verificationDocument = try store.readJSON(
+        let verificationDocument = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verification.planVerificationArtifact.path)
+            from: verification.planVerificationArtifact.path
         )
         #expect(verificationDocument.gateResults.contains { $0.gateID == "approval-gate" && $0.status == "passed" })
         #expect(verificationDocument.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "passed" })
@@ -522,24 +524,37 @@ struct XcircuiteLVSRepairLoopTests {
     @Test func closedLVSRepairLoopUsesEditedLayoutNetlistAndAcceptsRepairedCandidate() async throws {
         let root = try makeTemporaryRoot("closed-lvs-repair-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareRun(root: root, runID: "run-1")
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(
+            root: root,
+            runID: "run-1",
+            store: store,
+            artifactStore: artifactStore
+        )
 
-        try persistCandidatePlan(
+        try await persistCandidatePlan(
             makeLVSPlan(
                 runID: "run-1",
                 planID: "run-1-lvs-width-failing-plan",
                 width: 1.0,
                 sourceCandidateID: "lvs-layout-m1-width-1"
             ),
-            root: root
+            root: root,
+            artifactStore: artifactStore
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-1"),
             projectRoot: root
         )
 
-        let rejected = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let rejected = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-1",
                 verificationMode: "post-execution"
@@ -550,17 +565,18 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(rejected.status == "rejected")
         #expect(rejected.accepted == false)
         #expect(rejected.nextActions.contains("repair-verification-gate:native-lvs"))
-        let rejectedVerification = try store.readJSON(
+        let rejectedVerification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: rejected.planVerificationArtifact.path)
+            from: rejected.planVerificationArtifact.path
         )
         #expect(rejectedVerification.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "failed" })
         #expect(rejectedVerification.diagnostics.contains { $0.code == "LVS_PARAMETER_MISMATCH" })
 
         let rejectedPlansArtifact = try #require(rejected.rejectedPlansArtifact)
-        let rejectedRecordsAfterFailure = try readJSONLines(
+        let rejectedRecordsAfterFailure = try await readJSONLines(
             XcircuiteRejectedPlanRecord.self,
-            from: root.appending(path: rejectedPlansArtifact.path)
+            from: rejectedPlansArtifact.path,
+            store: store
         )
         let rejectedRecord = try #require(rejectedRecordsAfterFailure.last)
         #expect(rejectedRecord.status == "rejected")
@@ -570,16 +586,20 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(rejectedRecord.artifactRefs.contains { $0.artifactID == "candidate-step-1-edited-netlist" })
         #expect(rejectedRecord.artifactRefs.contains { $0.artifactID == "candidate-step-1-netlist-parameter-edit-report" })
 
-        try persistCandidatePlan(
+        try await persistCandidatePlan(
             makeLVSPlan(
                 runID: "run-1",
                 planID: "run-1-lvs-width-repaired-plan",
                 width: 2.0,
                 sourceCandidateID: "lvs-layout-m1-width-2"
             ),
-            root: root
+            root: root,
+            artifactStore: artifactStore
         )
-        let repairExecution = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let repairExecution = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-1"),
             projectRoot: root
         )
@@ -587,7 +607,10 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(repairExecution.producedArtifacts.contains { $0.artifactID == "candidate-step-1-edited-netlist" })
         #expect(repairExecution.producedArtifacts.contains { $0.artifactID == "candidate-step-1-netlist-parameter-edit-report" })
 
-        let accepted = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let accepted = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-1",
                 verificationMode: "post-execution"
@@ -598,35 +621,37 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(accepted.status == "accepted")
         #expect(accepted.accepted)
         #expect(accepted.nextActions.isEmpty)
-        let acceptedVerification = try store.readJSON(
+        let acceptedVerification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: accepted.planVerificationArtifact.path)
+            from: accepted.planVerificationArtifact.path
         )
         #expect(acceptedVerification.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "passed" })
         #expect(acceptedVerification.artifactRefs.contains { $0.artifactID == "planning-native-lvs-summary" })
 
-        let rejectedRecordsAfterRepair = try readJSONLines(
+        let rejectedRecordsAfterRepair = try await readJSONLines(
             XcircuiteRejectedPlanRecord.self,
-            from: root.appending(path: rejectedPlansArtifact.path)
+            from: rejectedPlansArtifact.path,
+            store: store
         )
         #expect(rejectedRecordsAfterRepair.count == 1)
         #expect(rejectedRecordsAfterRepair.first?.planID == "run-1-lvs-width-failing-plan")
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
-        #expect(manifest.artifacts.contains { $0.artifactID == "candidate-step-1-edited-netlist" })
-        #expect(manifest.artifacts.contains { $0.artifactID == "candidate-step-1-netlist-parameter-edit-report" })
-        #expect(manifest.artifacts.contains { $0.artifactID == "planning-native-lvs-summary" })
-        let action = try #require(store.loadRunActions(runID: "run-1", inProjectAt: root).last)
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "candidate-step-1-edited-netlist" })
+        #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "candidate-step-1-netlist-parameter-edit-report" })
+        #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "planning-native-lvs-summary" })
+        let action = try #require((try await store.loadRunActions(runID: "run-1")).last)
         #expect(action.status == .succeeded)
     }
 
-    private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+    private func prepareRun(
+        root: URL,
+        runID: String,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.createWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         try writeText(
             """
             .subckt inv in out vdd vss
@@ -647,7 +672,7 @@ struct XcircuiteLVSRepairLoopTests {
             path: "circuits/schematic.spice",
             root: root
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await artifactStore.persistPlanningProblem(
             makeLVSProblem(runID: runID),
             runID: runID,
             projectRoot: root
@@ -679,8 +704,8 @@ struct XcircuiteLVSRepairLoopTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "layout-and-schematic-equivalent",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair the layout netlist device width so native LVS passes."
                 ),
             ],
@@ -705,7 +730,7 @@ struct XcircuiteLVSRepairLoopTests {
                     requiredInputRefs: ["layout-netlist-ref", "schematic-netlist-ref"],
                     verificationGates: ["artifact-integrity", "native-lvs"],
                     parameterHints: [
-                        "lvsEditedNetlistRole": .string("layout"),
+                        "lvsEditedNetlistRole": .text("layout"),
                     ]
                 ),
             ],
@@ -758,20 +783,19 @@ struct XcircuiteLVSRepairLoopTests {
                     verificationGates: ["artifact-integrity", "native-lvs"],
                     reason: "Edit layout netlist M1 width and verify the resulting LVS equivalence.",
                     parameterHints: [
-                        "netlistPath": .string("circuits/layout.spice"),
-                        "sourceParameterCandidateID": .string(sourceCandidateID),
-                        "lvsEditedNetlistRole": .string("layout"),
-                        "assignments": .array([
-                            .object([
-                                "name": .string("M1.w"),
-                                "value": .number(width),
-                            ]),
+                        "netlistPath": .text("circuits/layout.spice"),
+                        "sourceParameterCandidateID": .text(sourceCandidateID),
+                        "lvsEditedNetlistRole": .text("layout"),
+                        "assignments": .parameterAssignments([
+                            XcircuiteParameterAssignment(name: "M1.w", value: width),
                         ]),
-                        "lvsInputs": .object([
-                            "layoutNetlistRef": .string("layout-netlist-ref"),
-                            "schematicNetlistRef": .string("schematic-netlist-ref"),
-                            "topCell": .string("inv"),
-                        ]),
+                        "lvsInputs": .lvsInputs(
+                            PlanningLVSInputs(
+                                layoutNetlistReferenceID: "layout-netlist-ref",
+                                schematicNetlistReferenceID: "schematic-netlist-ref",
+                                topCell: "inv"
+                            )
+                        ),
                     ],
                     blockers: []
                 ),
@@ -1043,14 +1067,18 @@ struct XcircuiteLVSRepairLoopTests {
           "id" : "10000000-0000-0000-0000-000000020000",
           "name" : "lvs-port-layout",
           "topCellID" : "10000000-0000-0000-0000-000000020001",
-          "units" : { "dbuPerMicron" : 1000 }
+          "units" : { "scale" : 1000 }
         }
         """
         try writeText(text, path: path, root: root)
     }
 
-    private func persistCandidatePlan(_ plan: XcircuiteCandidatePlan, root: URL) throws {
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+    private func persistCandidatePlan(
+        _ plan: XcircuiteCandidatePlan,
+        root: URL,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        _ = try await artifactStore.persistCandidatePlan(
             plan,
             runID: plan.runID,
             projectRoot: root
@@ -1131,28 +1159,22 @@ struct XcircuiteLVSRepairLoopTests {
         )
     }
 
-    private func registerJSONArtifact<T: Encodable>(
+    private func registerJSONArtifact<T: Encodable & Sendable>(
         _ value: T,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        root: URL,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        store: XcircuiteWorkspaceStore,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let url = root.appending(path: path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try store.writeJSON(value, to: url, forProjectAt: root)
-        try registerExistingArtifact(
+    ) async throws {
+        try await store.writeJSON(value, to: path)
+        try await registerExistingArtifact(
             artifactID: artifactID,
             path: path,
             kind: kind,
             format: format,
-            root: root,
+            store: store,
             runID: runID
         )
     }
@@ -1160,21 +1182,23 @@ struct XcircuiteLVSRepairLoopTests {
     private func registerExistingArtifact(
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        root: URL,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        store: XcircuiteWorkspaceStore,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let reference = try store.fileReference(
+    ) async throws {
+        let reference = try await store.makeArtifactReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: kind,
             format: format,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(
+            reference,
+            runID: runID,
+            store: store,
+            projectRoot: await store.projectRoot
+        )
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {
@@ -1184,8 +1208,15 @@ struct XcircuiteLVSRepairLoopTests {
         return root
     }
 
-    private func readJSONLines<T: Decodable>(_ type: T.Type, from url: URL) throws -> [T] {
-        let text = try String(contentsOf: url, encoding: .utf8)
+    private func readJSONLines<T: Decodable & Sendable>(
+        _ type: T.Type,
+        from relativePath: String,
+        store: XcircuiteWorkspaceStore
+    ) async throws -> [T] {
+        let data = try await store.read(from: relativePath)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw XcircuiteWorkspaceStoreError.decodeFailed("JSON Lines artifact is not valid UTF-8.")
+        }
         let decoder = JSONDecoder()
         return try text
             .split(separator: "\n")

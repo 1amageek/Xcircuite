@@ -30,7 +30,7 @@ struct SimulationFlowStageExecutorTests {
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim",
@@ -93,9 +93,9 @@ struct SimulationFlowStageExecutorTests {
         #expect(evaluation.status == .accepted)
         #expect(observations.channels.first {
             $0.channelID == "simulation-tool-evidence-count"
-        }?.value == .number(1))
+        }?.value == .scalar(1))
         #expect(observations.missingChannelIDs.isEmpty)
-        #expect(observations.uncalibratedChannelIDs.isEmpty)
+        #expect(observations.uncalibratedChannelIDs == ["simulation-qualified-calibration"])
         let valueChannel = try #require(observations.channels.first {
             $0.channelID == "simulation-measurement-0-vfinal-value"
         })
@@ -106,7 +106,7 @@ struct SimulationFlowStageExecutorTests {
             $0.channelID == "simulation-measurement-0-vfinal-within-tolerance"
         })
         let waveformVariablesChannel = try #require(observations.channels.first {
-            $0.channelID == "simulation-waveform-variables"
+            $0.channelID == "simulation-waveform-variable-count"
         })
         #expect(valueChannel.status == .observed)
         #expect(abs((jsonNumber(valueChannel.value) ?? 0) - 1) < 0.000001)
@@ -114,8 +114,9 @@ struct SimulationFlowStageExecutorTests {
         #expect(residualChannel.status == .observed)
         #expect((jsonNumber(residualChannel.value) ?? 1) < 0.000001)
         #expect(withinToleranceChannel.status == .observed)
-        #expect(withinToleranceChannel.value == .bool(true))
+        #expect(withinToleranceChannel.value == .boolean(true))
         #expect(waveformVariablesChannel.status == .observed)
+        #expect(waveformVariablesChannel.value == .scalar(Double(summary.waveformVariables.count)))
         #expect(evaluation.channelResults.contains {
             $0.channelID == "simulation-measurement-0-vfinal-within-tolerance"
                 && $0.status == .accepted
@@ -141,7 +142,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-missing-analysis",
@@ -173,7 +174,7 @@ struct SimulationFlowStageExecutorTests {
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-empty-expectations",
@@ -204,7 +205,7 @@ struct SimulationFlowStageExecutorTests {
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
         let engineState = FlakySimulationEngineState()
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-retry",
@@ -251,13 +252,17 @@ struct SimulationFlowStageExecutorTests {
         #expect(attempts.map(\.attemptIndex) == [1, 2])
         #expect(attempts[0].retryDecision.matchedDiagnosticCodes == ["SIMULATION_EXECUTION_ERROR"])
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(runID: "run-sim-retry", projectRoot: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let ledger = try await store.loadRunLedger(runID: "run-sim-retry")
         #expect(ledger.progressEvents.map(\.kind).contains(.stageRetryScheduled))
         let summary = DefaultFlowRunLedgerSummarizer().summarize(ledger)
         #expect(summary.stages.first?.attemptCount == 2)
         #expect(summary.stages.first?.retryCount == 1)
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundle = try await DefaultFlowRunReviewBundler(
+            loader: store,
+            persistence: store
+        ).makeReviewBundle(
             runID: "run-sim-retry",
             projectRoot: root
         )
@@ -280,7 +285,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-waveform-names",
@@ -314,7 +319,7 @@ struct SimulationFlowStageExecutorTests {
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "waveform.csv", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-netlist-output-name-collision",
@@ -350,14 +355,14 @@ struct SimulationFlowStageExecutorTests {
     @Test func stageArtifactInputDigestMismatchReturnsStructuredDiagnostic() async throws {
         let root = try makeTemporaryRoot("sim-stage-artifact-digest")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        let runDirectory = try workspaceStore.createRunDirectory(for: "run-sim-input-digest", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        let runDirectory = try await prepareTestRun(runID: "run-sim-input-digest", store: workspaceStore)
         let producerRawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "005-netlist")
             .appending(path: "raw")
-        try workspaceStore.ensureDirectory(at: producerRawDirectory)
+        try FileManager.default.createDirectory(at: producerRawDirectory, withIntermediateDirectories: true)
         let netlistURL = producerRawDirectory.appending(path: "input.cir")
         let netlistData = Data(rcNetlist.utf8)
         try netlistData.write(to: netlistURL, options: [.atomic])
@@ -365,24 +370,22 @@ struct SimulationFlowStageExecutorTests {
         let producerStageDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "005-netlist")
-        try workspaceStore.writeJSON(
+        try await workspaceStore.writeJSON(
             FlowStageResult(
                 stageID: "005-netlist",
                 status: .succeeded,
                 artifacts: [
-                    try foundationReference(XcircuiteFileReference(
+                    try foundationReference(try fixtureArtifactReference(
                         artifactID: "source-netlist",
                         path: netlistPath,
                         kind: .netlist,
                         format: .spice,
                         sha256: String(repeating: "0", count: 64),
                         byteCount: Int64(netlistData.count),
-                        producedByRunID: "run-sim-input-digest"
                     )),
                 ]
             ),
-            to: producerStageDirectory.appending(path: "result.json"),
-            forProjectAt: root
+            to: ".xcircuite/runs/run-sim-input-digest/stages/005-netlist/result.json"
         )
 
         let result = try await SimulationFlowStageExecutor(
@@ -401,7 +404,7 @@ struct SimulationFlowStageExecutorTests {
                 projectRoot: root,
                 runID: "run-sim-input-digest",
                 runDirectory: runDirectory,
-                storage: workspaceStore,
+                infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -423,7 +426,7 @@ struct SimulationFlowStageExecutorTests {
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-fail",
@@ -463,7 +466,7 @@ struct SimulationFlowStageExecutorTests {
         let channelResult = try #require(evaluation.channelResults.first {
             $0.channelID == "simulation-measurement-0-vfinal-within-tolerance"
         })
-        #expect(withinToleranceChannel.value == .bool(false))
+        #expect(withinToleranceChannel.value == .boolean(false))
         #expect(evaluation.status == .rejected)
         #expect(channelResult.status == .rejected)
         #expect((channelResult.residual ?? 0) > 1)
@@ -475,7 +478,7 @@ struct SimulationFlowStageExecutorTests {
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-missing",
@@ -520,7 +523,7 @@ struct SimulationFlowStageExecutorTests {
         defer { removeTemporaryRoot(root) }
         let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-cancel",
@@ -544,7 +547,7 @@ struct SimulationFlowStageExecutorTests {
         #expect(stage.gates.contains { $0.gateID == "cancellation" && $0.status == .failed })
         #expect(stage.diagnostics.contains { $0.code == "RUN_CANCELLATION_REQUESTED" })
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(runID: "run-sim-cancel", projectRoot: root)
+        let ledger = try await XcircuiteWorkspaceStore(projectRoot: root).loadRunLedger(runID: "run-sim-cancel")
         #expect(ledger.cancellationRequest?.requestedBy == "corespice")
         #expect(ledger.progressEvents.contains { $0.kind == .cancellationObserved })
     }
@@ -565,7 +568,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-ac",
@@ -616,7 +619,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-dc",
@@ -735,7 +738,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-tf",
@@ -784,7 +787,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-sens",
@@ -830,7 +833,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-noise",
@@ -877,7 +880,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-pz",
@@ -929,7 +932,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-four",
@@ -978,7 +981,7 @@ struct SimulationFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-sim-mc",
@@ -1037,21 +1040,30 @@ struct SimulationFlowStageExecutorTests {
     private func decodeArtifactEnvelope(
         _ reference: ArtifactReference,
         root: URL
-    ) throws -> XcircuiteArtifactEnvelope {
+    ) throws -> FlowArtifactEnvelope {
         try JSONDecoder().decode(
-            XcircuiteArtifactEnvelope.self,
+            FlowArtifactEnvelope.self,
             from: Data(contentsOf: root.appending(path: reference.path))
         )
     }
 
-    private func jsonNumber(_ value: XcircuiteJSONValue?) -> Double? {
+    private func jsonNumber(_ value: FlowMetricValue?) -> Double? {
         guard let value else {
             return nil
         }
-        if case .number(let number) = value {
+        if case .scalar(let number) = value {
             return number
         }
         return nil
+    }
+
+    private func makeOrchestrator(root: URL) throws -> DefaultFlowOrchestrator {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return DefaultFlowOrchestrator(
+            infrastructure: store,
+            ledgerPersistence: store,
+            progressStore: FlowRunProgressStore(persistence: store)
+        )
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {
@@ -1074,7 +1086,10 @@ struct SimulationFlowStageExecutorTests {
         let runID: String
 
         func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome {
-            _ = try DefaultFlowRunCancellationRecorder().requestCancellation(
+            let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            _ = try await DefaultFlowRunCancellationRecorder(
+                progressStore: FlowRunProgressStore(persistence: store)
+            ).requestCancellation(
                 projectRoot: projectRoot,
                 runID: runID,
                 requestedBy: "corespice",

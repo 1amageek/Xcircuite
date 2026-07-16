@@ -87,7 +87,14 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy: Codable,
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported generated-layout signoff corpus qualification policy schema version: \(schemaVersion)."
+            )
+        }
         self.policyID = try container.decodeIfPresent(
             String.self,
             forKey: .policyID

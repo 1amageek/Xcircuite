@@ -37,83 +37,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> FlowGateResult {
-        foundationManifestGate(
-            gateID: "lvs-artifacts",
-            manifestURL: manifestURL,
-            artifacts: artifacts,
-            projectRoot: projectRoot
-        ) { data in
-            let manifest = try JSONDecoder().decode(LVSArtifactManifest.self, from: data)
-            return manifest.outputs.map { record in
-                ManifestOutputRecord(
-                    id: record.id,
-                    kind: record.kind.rawValue,
-                    path: record.path,
-                    byteCount: record.byteCount.map(Int64.init),
-                    sha256: record.sha256
-                )
-            }
-        }
-    }
-
-    func pexGate(
-        manifestURL: URL,
-        artifacts: [ArtifactReference],
-        projectRoot: URL
-    ) -> FlowGateResult {
-        foundationManifestGate(
-            gateID: "pex-flow-artifacts",
-            manifestURL: manifestURL,
-            artifacts: artifacts,
-            projectRoot: projectRoot
-        ) { data in
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let manifest = try decoder.decode(PEXArtifactManifest.self, from: data)
-            return manifest.artifacts
-                .filter { $0.status == .available }
-                .map { record in
-                    ManifestOutputRecord(
-                        id: record.id,
-                        kind: record.kind.rawValue,
-                        path: record.relativePath.value,
-                        byteCount: record.byteCount.map(Int64.init),
-                        sha256: record.sha256
-                    )
-                }
-        }
-    }
-
-    func drcGate(
-        manifestURL: URL?,
-        artifacts: [XcircuiteFileReference],
-        projectRoot: URL
-    ) -> FlowGateResult {
-        manifestGate(
-            gateID: "drc-artifacts",
-            manifestURL: manifestURL,
-            artifacts: artifacts,
-            projectRoot: projectRoot
-        ) { data in
-            let manifest = try JSONDecoder().decode(DRCArtifactManifest.self, from: data)
-            return manifest.outputs.map { record in
-                ManifestOutputRecord(
-                    id: record.id,
-                    kind: record.kind.rawValue,
-                    path: record.path,
-                    byteCount: record.byteCount.map(Int64.init),
-                    sha256: record.sha256
-                )
-            }
-        }
-    }
-
-    func lvsGate(
-        manifestURL: URL?,
-        artifacts: [XcircuiteFileReference],
-        projectRoot: URL
-    ) -> FlowGateResult {
-        let coverageGate = manifestGate(
+        let coverageGate = foundationManifestGate(
             gateID: "lvs-artifacts",
             manifestURL: manifestURL,
             artifacts: artifacts,
@@ -145,7 +69,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             return coverageGate
         }
 
-        let diagnostics = coverageGate.diagnostics + lvsV2Diagnostics(
+        let diagnostics = coverageGate.diagnostics + currentLVSSchemaDiagnostics(
             manifest: manifest,
             manifestURL: manifestURL,
             artifacts: artifacts,
@@ -160,10 +84,10 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
 
     func pexGate(
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> FlowGateResult {
-        manifestGate(
+        foundationManifestGate(
             gateID: "pex-flow-artifacts",
             manifestURL: manifestURL,
             artifacts: artifacts,
@@ -275,85 +199,6 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         )
     }
 
-    private func manifestGate(
-        gateID: String,
-        manifestURL: URL?,
-        artifacts: [XcircuiteFileReference],
-        projectRoot: URL,
-        decodeOutputs: (Data) throws -> [ManifestOutputRecord]
-    ) -> FlowGateResult {
-        guard let manifestURL else {
-            return failedGate(
-                gateID: gateID,
-                code: "ARTIFACT_MANIFEST_MISSING",
-                message: "Stage did not provide an artifact manifest URL."
-            )
-        }
-        guard pathBoundary.contains(manifestURL, projectRoot: projectRoot) else {
-            return failedGate(
-                gateID: gateID,
-                code: "ARTIFACT_MANIFEST_INVALID_PATH",
-                message: "Stage artifact manifest path escapes the project root."
-            )
-        }
-
-        let outputs: [ManifestOutputRecord]
-        do {
-            outputs = try decodeOutputs(Data(contentsOf: manifestURL))
-        } catch {
-            return failedGate(
-                gateID: gateID,
-                code: "ARTIFACT_MANIFEST_UNREADABLE",
-                message: "Stage artifact manifest could not be decoded: \(error.localizedDescription)"
-            )
-        }
-
-        let artifactsByPath = Dictionary(grouping: artifacts, by: \.path)
-        let duplicateArtifactDiagnostics = duplicateArtifactPathDiagnostics(artifactsByPath: artifactsByPath)
-        let outputDiagnostics = outputs.compactMap { output -> FlowDiagnostic? in
-            guard let expectedPath = projectRelativePath(
-                for: output,
-                manifestURL: manifestURL,
-                projectRoot: projectRoot
-            ) else {
-                return FlowDiagnostic(
-                    severity: .error,
-                    code: "ARTIFACT_MANIFEST_INVALID_PATH",
-                    message: "Artifact manifest output path escapes the project. id=\(output.id) path=\(output.path)"
-                )
-            }
-            guard let artifact = artifactsByPath[expectedPath]?.first else {
-                return FlowDiagnostic(
-                    severity: .error,
-                    code: "ARTIFACT_MANIFEST_OUTPUT_NOT_INDEXED",
-                    message: "Artifact manifest output is not indexed in FlowStageResult.artifacts. id=\(output.id) kind=\(output.kind) path=\(expectedPath)"
-                )
-            }
-            if let byteCount = output.byteCount, artifact.byteCount != byteCount {
-                return FlowDiagnostic(
-                    severity: .error,
-                    code: "ARTIFACT_MANIFEST_BYTE_COUNT_MISMATCH",
-                    message: "Artifact byte count differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestByteCount=\(byteCount) flowByteCount=\(artifact.byteCount.map(String.init) ?? "missing")"
-                )
-            }
-            if let sha256 = output.sha256, artifact.sha256 != sha256 {
-                return FlowDiagnostic(
-                    severity: .error,
-                    code: "ARTIFACT_MANIFEST_SHA256_MISMATCH",
-                    message: "Artifact SHA-256 differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestSHA256=\(sha256) flowSHA256=\(artifact.sha256 ?? "missing")"
-                )
-            }
-            return nil
-        }
-        let diagnostics = duplicateArtifactDiagnostics + outputDiagnostics
-
-        return FlowGateResult(
-            gateID: gateID,
-            status: diagnostics.isEmpty ? .passed : .failed,
-            diagnostics: diagnostics
-        )
-    }
-
     private func failedGate(
         gateID: String,
         code: String,
@@ -366,25 +211,6 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
                 FlowDiagnostic(severity: .error, code: code, message: message),
             ]
         )
-    }
-
-    private func duplicateArtifactPathDiagnostics(
-        artifactsByPath: [String: [XcircuiteFileReference]]
-    ) -> [FlowDiagnostic] {
-        artifactsByPath.keys.sorted().compactMap { path in
-            guard let artifacts = artifactsByPath[path], artifacts.count > 1 else {
-                return nil
-            }
-            let artifactIDs = artifacts
-                .map { $0.artifactID ?? $0.kind.rawValue }
-                .sorted()
-                .joined(separator: ",")
-            return FlowDiagnostic(
-                severity: .error,
-                code: "ARTIFACT_MANIFEST_DUPLICATE_FLOW_ARTIFACT_PATH",
-                message: "FlowStageResult.artifacts contains duplicate artifact paths. path=\(path) artifactIDs=\(artifactIDs)"
-            )
-        }
     }
 
     private func projectRelativePath(
@@ -402,10 +228,10 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         return pathBoundary.relativePathIfContained(for: outputURL, projectRoot: projectRoot)
     }
 
-    private func lvsV2Diagnostics(
+    private func currentLVSSchemaDiagnostics(
         manifest: LVSArtifactManifest,
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> [FlowDiagnostic] {
         var diagnostics: [FlowDiagnostic] = []
@@ -441,7 +267,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private func lvsRequiredOutputDiagnostics(
         manifest: LVSArtifactManifest,
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> [FlowDiagnostic] {
         let requirements: [(id: String, kind: LVSArtifactRecord.Kind, flowArtifactID: String?)] = [
@@ -457,7 +283,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             guard matches.count == 1, let output = matches.first else {
                 diagnostics.append(lvsDiagnostic(
                     code: "LVS_ARTIFACT_MANIFEST_REQUIRED_OUTPUT_INVALID",
-                    message: "LVS manifest v2 requires exactly one output id=\(requirement.id) kind=\(requirement.kind.rawValue); found \(matches.count)."
+                    message: "LVS manifest schema \(LVSArtifactManifest.currentSchemaVersion) requires exactly one output id=\(requirement.id) kind=\(requirement.kind.rawValue); found \(matches.count)."
                 ))
                 continue
             }
@@ -473,20 +299,20 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
                artifact.artifactID != flowArtifactID {
                 diagnostics.append(lvsDiagnostic(
                     code: "LVS_ARTIFACT_STABLE_ID_MISMATCH",
-                    message: "LVS output \(requirement.id) must be indexed with stable artifactID \(flowArtifactID); found \(artifact.artifactID ?? "missing")."
+                    message: "LVS output \(requirement.id) must be indexed with stable artifactID \(flowArtifactID); found \(artifact.artifactID)."
                 ))
             }
             if requirement.kind != .manifest {
                 if (output.byteCount ?? 0) <= 0 {
                     diagnostics.append(lvsDiagnostic(
                         code: "LVS_ARTIFACT_MANIFEST_BYTE_COUNT_MISSING",
-                        message: "LVS manifest v2 output \(requirement.id) must retain a positive byte count."
+                        message: "LVS manifest output \(requirement.id) must retain a positive byte count."
                     ))
                 }
                 if (output.sha256 ?? "").isEmpty {
                     diagnostics.append(lvsDiagnostic(
                         code: "LVS_ARTIFACT_MANIFEST_SHA256_MISSING",
-                        message: "LVS manifest v2 output \(requirement.id) must retain a SHA-256 digest."
+                        message: "LVS manifest output \(requirement.id) must retain a SHA-256 digest."
                     ))
                 }
             }
@@ -522,14 +348,14 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private func lvsSummaryLineageDiagnostics(
         manifest: LVSArtifactManifest,
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> [FlowDiagnostic] {
         let summaryArtifacts = artifacts.filter { $0.artifactID == "lvs-summary" }
         guard summaryArtifacts.count == 1, let summaryArtifact = summaryArtifacts.first else {
             return [lvsDiagnostic(
                 code: "LVS_SUMMARY_ARTIFACT_REQUIRED",
-                message: "LVS manifest v2 requires exactly one indexed lvs-summary artifact; found \(summaryArtifacts.count)."
+                message: "The current LVS manifest requires exactly one indexed lvs-summary artifact; found \(summaryArtifacts.count)."
             )]
         }
         guard let summaryURL = containedArtifactURL(
@@ -596,11 +422,11 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             artifacts: artifacts,
             projectRoot: projectRoot
         ) + [summaryArtifact]
-        let runIDs = Set(lineageArtifacts.compactMap(\.producedByRunID))
-        if lineageArtifacts.contains(where: { $0.producedByRunID == nil }) || runIDs.count != 1 {
+        let runScopes = Set(lineageArtifacts.compactMap { runScope(for: $0) })
+        if lineageArtifacts.contains(where: { runScope(for: $0) == nil }) || runScopes.count != 1 {
             diagnostics.append(lvsDiagnostic(
                 code: "LVS_ARTIFACT_RUN_LINEAGE_INVALID",
-                message: "LVS summary, report, manifest, and correspondence must retain one common producedByRunID."
+                message: "LVS summary, report, manifest, and correspondence must belong to one canonical run scope."
             ))
         }
         return diagnostics
@@ -609,7 +435,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private func lvsOptionalArtifactLineageDiagnostics(
         manifest: LVSArtifactManifest,
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
     ) -> [FlowDiagnostic] {
         let manifestOutputs = manifest.outputs.filter { output in
@@ -617,7 +443,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         }
         let flowArtifacts = artifacts.filter { artifact in
             artifact.kind == .netlist
-                || artifact.artifactID.map { isOptionalLVSArtifactIdentifier($0) } == true
+                || isOptionalLVSArtifactIdentifier(artifact.artifactID)
         }
         let requiredArtifacts = requiredLVSLineageArtifacts(
             manifest: manifest,
@@ -626,8 +452,8 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             projectRoot: projectRoot
         )
         let summaryArtifacts = artifacts.filter { $0.artifactID == "lvs-summary" }
-        let expectedRunIDs = Set((requiredArtifacts + summaryArtifacts).compactMap(\.producedByRunID))
-        let expectedRunID = expectedRunIDs.count == 1 ? expectedRunIDs.first : nil
+        let expectedRunScopes = Set((requiredArtifacts + summaryArtifacts).compactMap { runScope(for: $0) })
+        let expectedRunScope = expectedRunScopes.count == 1 ? expectedRunScopes.first : nil
         var diagnostics: [FlowDiagnostic] = []
         for output in manifestOutputs {
             if (output.byteCount ?? 0) <= 0 {
@@ -650,7 +476,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             ) {
                 diagnostics.append(contentsOf: optionalRunLineageDiagnostics(
                     artifact: artifact,
-                    expectedRunID: expectedRunID
+                    expectedRunScope: expectedRunScope
                 ))
             }
         }
@@ -665,7 +491,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             }) else {
                 diagnostics.append(lvsDiagnostic(
                     code: "LVS_OPTIONAL_ARTIFACT_MANIFEST_LINEAGE_MISSING",
-                    message: "Indexed LVS artifact \(artifact.artifactID ?? artifact.path) is not retained by the engine manifest."
+                    message: "Indexed LVS artifact \(artifact.artifactID) is not retained by the engine manifest."
                 ))
                 continue
             }
@@ -674,22 +500,32 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     }
 
     private func optionalRunLineageDiagnostics(
-        artifact: XcircuiteFileReference,
-        expectedRunID: String?
+        artifact: ArtifactReference,
+        expectedRunScope: String?
     ) -> [FlowDiagnostic] {
-        guard let runID = artifact.producedByRunID else {
+        guard let artifactRunScope = runScope(for: artifact) else {
             return [lvsDiagnostic(
                 code: "LVS_OPTIONAL_ARTIFACT_RUN_LINEAGE_MISSING",
-                message: "Indexed LVS artifact \(artifact.artifactID ?? artifact.path) is missing producedByRunID."
+                message: "Indexed LVS artifact \(artifact.artifactID) is outside a canonical run scope."
             )]
         }
-        guard runID == expectedRunID else {
+        guard artifactRunScope == expectedRunScope else {
             return [lvsDiagnostic(
                 code: "LVS_OPTIONAL_ARTIFACT_RUN_LINEAGE_MISMATCH",
-                message: "Indexed LVS artifact \(artifact.artifactID ?? artifact.path) does not share the summary/report/manifest/correspondence producedByRunID."
+                message: "Indexed LVS artifact \(artifact.artifactID) does not share the summary run scope."
             )]
         }
         return []
+    }
+
+    private func runScope(for artifact: ArtifactReference) -> String? {
+        let components = artifact.locator.location.value.split(separator: "/")
+        guard components.count >= 3,
+              String(components[0]) == XcircuiteWorkspaceLayout.directoryName,
+              components[1] == "runs" else {
+            return nil
+        }
+        return components.prefix(3).joined(separator: "/")
     }
 
     private func isOptionalLVSArtifactIdentifier(_ identifier: String) -> Bool {
@@ -703,9 +539,9 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private func requiredLVSLineageArtifacts(
         manifest: LVSArtifactManifest,
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
-    ) -> [XcircuiteFileReference] {
+    ) -> [ArtifactReference] {
         ["report", "manifest", "lvs-correspondence"].compactMap { id in
             guard let output = manifest.outputs.first(where: { $0.id == id }) else {
                 return nil
@@ -722,9 +558,9 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     private func indexedArtifact(
         for output: LVSArtifactRecord,
         manifestURL: URL,
-        artifacts: [XcircuiteFileReference],
+        artifacts: [ArtifactReference],
         projectRoot: URL
-    ) -> XcircuiteFileReference? {
+    ) -> ArtifactReference? {
         let record = ManifestOutputRecord(
             id: output.id,
             kind: output.kind.rawValue,
@@ -743,7 +579,7 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     }
 
     private func containedArtifactURL(
-        for artifact: XcircuiteFileReference,
+        for artifact: ArtifactReference,
         projectRoot: URL
     ) -> URL? {
         let url = artifact.path.hasPrefix("/")

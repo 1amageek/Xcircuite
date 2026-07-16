@@ -12,8 +12,8 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
     let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
@@ -22,14 +22,14 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
     public func generateCandidatePlan(
         request: XcircuiteCandidatePlanGenerationRequest,
         projectRoot: URL
-    ) throws -> XcircuiteCandidatePlanGenerationResult {
-        let build = try makeCandidatePlanBuild(request: request, projectRoot: projectRoot)
-        let reference = try artifactStore.persistCandidatePlan(
+    ) async throws -> XcircuiteCandidatePlanGenerationResult {
+        let build = try await makeCandidatePlanBuild(request: request, projectRoot: projectRoot)
+        let reference = try await artifactStore.persistCandidatePlan(
             build.draft.plan,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let traceReference = try artifactStore.persistSymbolicPlannerTrace(
+        let traceReference = try await artifactStore.persistSymbolicPlannerTrace(
             build.draft.trace,
             runID: request.runID,
             projectRoot: projectRoot
@@ -41,32 +41,20 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             planID: build.draft.plan.planID,
             executionReadiness: build.draft.plan.executionReadiness,
             problemPath: build.problemPath,
-            candidatePlanArtifact: try requireFoundationArtifactReference(
-                reference,
-                field: "candidate-plan"
-            ),
-            problemTranslationAuditArtifact: try requireFoundationArtifactReference(
-                build.problemTranslationAuditArtifact,
-                field: "problem-translation-audit"
-            ),
-            actionDomainSnapshotArtifact: try requireFoundationArtifactReference(
-                build.actionDomainSnapshotArtifact,
-                field: "action-domain-snapshot"
-            ),
+            candidatePlanArtifact: reference,
+            problemTranslationAuditArtifact: build.problemTranslationAuditArtifact,
+            actionDomainSnapshotArtifact: build.actionDomainSnapshotArtifact,
             symbolicPlannerTrace: build.draft.trace,
-            symbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
-                traceReference,
-                field: "symbolic-planner-trace"
-            )
+            symbolicPlannerTraceArtifact: traceReference
         )
     }
 
     public func runSymbolicPlannerFamily(
         request: XcircuiteSymbolicPlannerFamilyRunRequest,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerFamilyRunResult {
+    ) async throws -> XcircuiteSymbolicPlannerFamilyRunResult {
         try validateFamilyRequest(request)
-        try rejectExistingFamilyRunOutputs(request: request, projectRoot: projectRoot)
+        try await rejectExistingFamilyRunOutputs(request: request, projectRoot: projectRoot)
         let normalizedCalibrationPolicy = try normalizedCalibrationPolicy(request.calibrationPolicy)
         var candidates: [FamilyCandidateBuild] = []
         for (index, strategy) in request.strategies.enumerated() {
@@ -85,8 +73,8 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
                 strategy: strategy,
                 calibrationPolicy: request.calibrationPolicy
             )
-            let build = try makeCandidatePlanBuild(request: generationRequest, projectRoot: projectRoot)
-            let artifacts = try persistFamilyCandidateArtifacts(
+            let build = try await makeCandidatePlanBuild(request: generationRequest, projectRoot: projectRoot)
+            let artifacts = try await persistFamilyCandidateArtifacts(
                 build: build,
                 requestedStrategy: strategy,
                 candidateIndex: index,
@@ -115,12 +103,12 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             candidates,
             selectionPolicy: request.selectionPolicy
         )
-        let promotedPlanArtifact = try artifactStore.persistCandidatePlan(
+        let promotedPlanArtifact = try await artifactStore.persistCandidatePlan(
             selected.build.draft.plan,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let promotedTraceArtifact = try artifactStore.persistSymbolicPlannerTrace(
+        let promotedTraceArtifact = try await artifactStore.persistSymbolicPlannerTrace(
             selected.build.draft.trace,
             runID: request.runID,
             projectRoot: projectRoot
@@ -140,26 +128,14 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             selectedCandidateIndex: selected.candidateIndex,
             selectedStrategy: selected.build.draft.trace.strategy,
             selectedPlanID: selected.build.draft.plan.planID,
-            selectedCandidatePlanArtifact: try requireFoundationArtifactReference(
-                selected.candidatePlanArtifact,
-                field: "familyRun.selectedCandidatePlanArtifact"
-            ),
-            selectedSymbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
-                selected.symbolicPlannerTraceArtifact,
-                field: "familyRun.selectedSymbolicPlannerTraceArtifact"
-            ),
-            promotedCandidatePlanArtifact: try requireFoundationArtifactReference(
-                promotedPlanArtifact,
-                field: "familyRun.promotedCandidatePlanArtifact"
-            ),
-            promotedSymbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
-                promotedTraceArtifact,
-                field: "familyRun.promotedSymbolicPlannerTraceArtifact"
-            ),
+            selectedCandidatePlanArtifact: selected.candidatePlanArtifact,
+            selectedSymbolicPlannerTraceArtifact: selected.symbolicPlannerTraceArtifact,
+            promotedCandidatePlanArtifact: promotedPlanArtifact,
+            promotedSymbolicPlannerTraceArtifact: promotedTraceArtifact,
             candidates: candidateResults,
             diagnostics: familyDiagnostics(from: candidateResults)
         )
-        let familyRunArtifact = try artifactStore.persistSymbolicPlannerFamilyRun(
+        let familyRunArtifact = try await artifactStore.persistSymbolicPlannerFamilyRun(
             familyRun,
             runID: request.runID,
             projectRoot: projectRoot
@@ -167,10 +143,7 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
         return XcircuiteSymbolicPlannerFamilyRunResult(
             status: "generated",
             familyRun: familyRun,
-            familyRunArtifact: try requireFoundationArtifactReference(
-                familyRunArtifact,
-                field: "familyRun.familyRunArtifact"
-            )
+            familyRunArtifact: familyRunArtifact
         )
     }
 
@@ -198,13 +171,13 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
         var problem: XcircuiteCircuitPlanningProblem
         var problemPath: String
         var draft: CandidatePlanDraft
-        var problemTranslationAuditArtifact: XcircuiteFileReference
-        var actionDomainSnapshotArtifact: XcircuiteFileReference
+        var problemTranslationAuditArtifact: ArtifactReference
+        var actionDomainSnapshotArtifact: ArtifactReference
     }
 
     struct FamilyCandidateArtifacts {
-        var plan: XcircuiteFileReference
-        var trace: XcircuiteFileReference
+        var plan: ArtifactReference
+        var trace: ArtifactReference
     }
 
     struct FamilyCandidateBuild {
@@ -213,8 +186,8 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
         var candidateIndex: Int
         var selectionScore: Int
         var scoreComponents: [XcircuiteSymbolicPlannerFamilySelectionScoreComponent]
-        var candidatePlanArtifact: XcircuiteFileReference
-        var symbolicPlannerTraceArtifact: XcircuiteFileReference
+        var candidatePlanArtifact: ArtifactReference
+        var symbolicPlannerTraceArtifact: ArtifactReference
     }
 
     struct CandidatePlanSequence {
@@ -271,7 +244,7 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
 
     struct ActionDomainSnapshotContext {
         var snapshot: XcircuitePlanningActionDomainSnapshot
-        var reference: XcircuiteFileReference
+        var reference: ArtifactReference
     }
 
     struct SymbolicCalibrationContext {

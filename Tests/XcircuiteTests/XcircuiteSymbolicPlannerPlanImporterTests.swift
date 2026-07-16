@@ -10,13 +10,26 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
     @Test func importerWritesCandidatePlanFromPDDLSolverPlanAndVerifierCoversGoals() async throws {
         let root = try makeTemporaryRoot("symbolic-plan-importer")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-pddl")
-        _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(
+            root: root,
+            runID: "run-pddl",
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).exportSymbolicPlannerProblem(
             request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
             projectRoot: root
         )
 
-        let result = try XcircuiteSymbolicPlannerPlanImporter().importSolverPlan(
+        let result = try await XcircuiteSymbolicPlannerPlanImporter(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).importSolverPlan(
             request: XcircuiteSymbolicPlannerPlanImportRequest(
                 runID: "run-pddl",
                 solverPlanText: """
@@ -53,23 +66,23 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         #expect(step.missingInputRefs == [])
         #expect(step.reason.contains("Imported from external symbolic planner action a-fix-m1-width."))
 
-        let verifierResult = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let verifierResult = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(runID: "run-pddl"),
             projectRoot: root
         )
-        let verification = try XcircuiteWorkspaceStore().readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verifierResult.planVerificationArtifact.path)
+            from: verifierResult.planVerificationArtifact.path
         )
         #expect(verification.stepResults.map(\.status) == ["preflight-passed"])
         #expect(verification.goalCoverageStatus == "covered")
         #expect(verification.missingGoalAtoms == [])
         #expect(verification.finalSymbolicState.contains("drc-width-fixed"))
 
-        let manifest = try XcircuiteWorkspaceStore().readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-pddl").runManifest
         #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID })
         #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID })
     }
@@ -77,14 +90,23 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
     @Test func importSymbolicPlannerPlanCLIWritesCandidatePlan() async throws {
         let root = try makeTemporaryRoot("symbolic-plan-importer-cli")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-pddl")
-        _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(
+            root: root,
+            runID: "run-pddl",
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).exportSymbolicPlannerProblem(
             request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
             projectRoot: root
         )
         let solverPlanPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/external-plan.txt"
-        let solverPlanURL = root.appending(path: solverPlanPath)
-        try XcircuiteWorkspaceStore().writeText("(a-fix-m1-width)\n", to: solverPlanURL)
+        try await store.writeWorkspaceText("(a-fix-m1-width)\n", to: solverPlanPath)
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -111,19 +133,26 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
     @Test func importerRejectsTamperedPDDLExportArtifact() async throws {
         let root = try makeTemporaryRoot("symbolic-plan-importer-tampered-pddl")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-pddl")
-        _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(
+            root: root,
+            runID: "run-pddl",
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).exportSymbolicPlannerProblem(
             request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
             projectRoot: root
         )
-        let manifest = try XcircuiteWorkspaceStore().readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-pddl").runManifest
         let pddlExport = try #require(manifest.artifacts.first {
             $0.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID
         })
-        let pddlExportURL = root.appending(path: pddlExport.path)
+        let pddlExportURL = try pddlExport.locator.location.resolvedFileURL(relativeTo: root)
         let handle = try FileHandle(forWritingTo: pddlExportURL)
         defer {
             do {
@@ -135,14 +164,17 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         try handle.seekToEnd()
         try handle.write(contentsOf: Data("\n".utf8))
 
-        #expect(throws: XcircuiteSymbolicPlannerPlanImportError.artifactIntegrityFailed(
+        await #expect(throws: XcircuiteSymbolicPlannerPlanImportError.artifactIntegrityFailed(
             field: "pddl-export",
             artifactID: XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
             path: pddlExport.path,
             status: .byteCountMismatch,
             message: "Artifact byte count does not match the file reference."
         )) {
-            _ = try XcircuiteSymbolicPlannerPlanImporter().importSolverPlan(
+            _ = try await XcircuiteSymbolicPlannerPlanImporter(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).importSolverPlan(
                 request: XcircuiteSymbolicPlannerPlanImportRequest(
                     runID: "run-pddl",
                     solverPlanText: "(a-fix-m1-width)\n"
@@ -152,11 +184,21 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         }
     }
 
-    @Test func importerRejectsExplicitPDDLExportPathOutsideRunManifestReference() throws {
+    @Test func importerRejectsExplicitPDDLExportPathOutsideRunManifestReference() async throws {
         let root = try makeTemporaryRoot("symbolic-plan-importer-untracked-pddl")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-pddl")
-        _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(
+            root: root,
+            runID: "run-pddl",
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).exportSymbolicPlannerProblem(
             request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
             projectRoot: root
         )
@@ -167,14 +209,17 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
             to: root.appending(path: explicitPath)
         )
 
-        #expect(throws: XcircuiteSymbolicPlannerPlanImportError.manifestReferenceMismatch(
+        await #expect(throws: XcircuiteSymbolicPlannerPlanImportError.manifestReferenceMismatch(
             field: "pddl-export",
             artifactID: XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
             path: explicitPath,
             manifestPath: manifestPath,
             reason: "Explicit path does not match the run manifest artifact path."
         )) {
-            _ = try XcircuiteSymbolicPlannerPlanImporter().importSolverPlan(
+            _ = try await XcircuiteSymbolicPlannerPlanImporter(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).importSolverPlan(
                 request: XcircuiteSymbolicPlannerPlanImportRequest(
                     runID: "run-pddl",
                     pddlExportPath: explicitPath,
@@ -185,11 +230,21 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         }
     }
 
-    @Test func importerRejectsExplicitProblemPathOutsideRunManifestReference() throws {
+    @Test func importerRejectsExplicitProblemPathOutsideRunManifestReference() async throws {
         let root = try makeTemporaryRoot("symbolic-plan-importer-untracked-problem")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-pddl")
-        _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(
+            root: root,
+            runID: "run-pddl",
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).exportSymbolicPlannerProblem(
             request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
             projectRoot: root
         )
@@ -200,14 +255,17 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
             to: root.appending(path: explicitPath)
         )
 
-        #expect(throws: XcircuiteSymbolicPlannerPlanImportError.manifestReferenceMismatch(
+        await #expect(throws: XcircuiteSymbolicPlannerPlanImportError.manifestReferenceMismatch(
             field: "planning-problem",
             artifactID: XcircuitePlanningArtifactStore.problemArtifactID,
             path: explicitPath,
             manifestPath: manifestPath,
             reason: "Explicit path does not match the run manifest artifact path."
         )) {
-            _ = try XcircuiteSymbolicPlannerPlanImporter().importSolverPlan(
+            _ = try await XcircuiteSymbolicPlannerPlanImporter(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).importSolverPlan(
                 request: XcircuiteSymbolicPlannerPlanImportRequest(
                     runID: "run-pddl",
                     problemPath: explicitPath,
@@ -218,26 +276,34 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
         }
     }
 
-    private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+    private func prepareRun(
+        root: URL,
+        runID: String,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await prepareTestRun(runID: runID, store: store)
+        _ = try await artifactStore.persistPlanningProblem(
             makePlanningProblem(runID: runID),
             runID: runID,
             projectRoot: root
         )
-        let snapshotURL = root.appending(path: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json")
-        try store.writeJSON(makeActionDomainSnapshot(runID: runID), to: snapshotURL, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json",
-            artifactID: XcircuitePlanningArtifactStore.actionDomainArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        _ = try await store.persistArtifact(
+            content: encoder.encode(makeActionDomainSnapshot(runID: runID)),
+            id: ArtifactID(rawValue: XcircuitePlanningArtifactStore.actionDomainArtifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json"
+                ),
+                role: .output,
+                kind: .other,
+                format: .json
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 
     private func makePlanningProblem(runID: String) -> XcircuiteCircuitPlanningProblem {
@@ -250,7 +316,7 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
                     kind: "layout",
                     artifactID: "layout-json",
                     metadata: [
-                        "symbolicStateAtoms": .array([.string("drc-width-violation")]),
+                        "symbolicStateAtoms": .textList(["drc-width-violation"]),
                     ]
                 ),
             ],
@@ -285,11 +351,11 @@ struct XcircuiteSymbolicPlannerPlanImporterTests {
                     priority: "error",
                     sourceRefIDs: ["layout-drc-input"],
                     target: "no-width-violation",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair width violation.",
                     evidence: [
-                        "symbolicGoalAtoms": .array([.string("drc-width-fixed")]),
+                        "symbolicGoalAtoms": .textList(["drc-width-fixed"]),
                     ]
                 ),
             ],

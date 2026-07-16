@@ -29,7 +29,7 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -48,8 +48,8 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
             }
             request.projectRoot = context.projectRoot.path
             let result = try await engine.execute(request)
-            try context.checkCancellation()
-            let artifact = try support.persistResult(
+            try await context.checkCancellation()
+            let artifact = try await support.persistResult(
                 result,
                 stageID: stageID,
                 artifactID: "release-signoff-result",
@@ -59,7 +59,7 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
                 result: result,
                 stageID: stageID,
                 artifacts: [artifact],
-                approved: result.payload.approved
+                approved: result.payload.passed
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

@@ -76,23 +76,17 @@ public extension XcircuiteFlowStageExecutorSpec {
             spec.stageID
         case .pdkQualification(let spec):
             spec.stageID
-        case .releaseQualification(let spec):
+        case .releaseAuthorization(let spec):
             spec.stageID
         case .releaseSignoff(let spec):
             spec.stageID
         case .releaseTapeout(let spec):
             spec.stageID
-        case .releaseProfile(let spec):
-            spec.stageID
         case .electricalStandardLayoutImport(let spec):
             spec.stageID
         case .electricalSignoff(let spec):
             spec.stageID
-        case .electricalSignoffQualification(let spec):
-            spec.stageID
-        case .electricalSignoffProcessQualification(let spec):
-            spec.stageID
-        case .electricalSignoffReleaseGate(let spec):
+        case .electricalSignoffCorpus(let spec):
             spec.stageID
         case .electricalRepairRevision(let spec):
             spec.stageID
@@ -161,33 +155,24 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .pdkQualification(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .pdkQualification(spec)
-        case .releaseQualification(var spec):
+        case .releaseAuthorization(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
-            return .releaseQualification(spec)
+            return .releaseAuthorization(spec)
         case .releaseSignoff(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .releaseSignoff(spec)
         case .releaseTapeout(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .releaseTapeout(spec)
-        case .releaseProfile(var spec):
-            spec.tool = spec.tool.attachingEvidence(evidence)
-            return .releaseProfile(spec)
         case .electricalStandardLayoutImport(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .electricalStandardLayoutImport(spec)
         case .electricalSignoff(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .electricalSignoff(spec)
-        case .electricalSignoffQualification(var spec):
+        case .electricalSignoffCorpus(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
-            return .electricalSignoffQualification(spec)
-        case .electricalSignoffProcessQualification(var spec):
-            spec.tool = spec.tool.attachingEvidence(evidence)
-            return .electricalSignoffProcessQualification(spec)
-        case .electricalSignoffReleaseGate(var spec):
-            spec.tool = spec.tool.attachingEvidence(evidence)
-            return .electricalSignoffReleaseGate(spec)
+            return .electricalSignoffCorpus(spec)
         case .electricalRepairRevision(var spec):
             spec.tool = spec.tool.attachingEvidence(evidence)
             return .electricalRepairRevision(spec)

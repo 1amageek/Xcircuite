@@ -13,7 +13,7 @@ public struct XcircuiteActionDomainSnapshotBuilder: Sendable {
         runID: String,
         generatedAt: String
     ) throws -> XcircuitePlanningActionDomainSnapshot {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
         let simulationDomain = try XcircuiteSimulationActionDomainSupplement().applying(
             to: canonicalDomain(CoreSpiceActionDomainExporter().snapshot())
         )

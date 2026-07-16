@@ -6,22 +6,18 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
 
     public func makeProfile(
         profileID: String = "opamp-evaluation-profile"
-    ) -> XcircuiteEvaluationProfile {
-        XcircuiteEvaluationProfile(
+    ) -> FlowEvaluationProfile {
+        FlowEvaluationProfile(
             profileID: profileID,
             domain: "analog-opamp",
             metricChannels: metricChannels(),
             requiredAnalyses: requiredAnalyses(),
             artifactRoles: artifactRoles(),
-            comparisonPolicy: .previousIteration,
-            metadata: [
-                "intent": .string("Provide evaluation material for external Agent-driven op-amp design iterations."),
-                "loopOwner": .string("external-agent"),
-            ]
+            comparisonPolicy: .previousIteration
         )
     }
 
-    private func metricChannels() -> [XcircuiteEvaluationProfile.MetricChannel] {
+    private func metricChannels() -> [FlowEvaluationProfile.MetricChannel] {
         [
             metric("dc.operatingPoint", label: "DC operating point", direction: .categorical),
             metric("dc.biasRegion", label: "Device operating regions", direction: .categorical),
@@ -50,7 +46,7 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
         ]
     }
 
-    private func requiredAnalyses() -> [XcircuiteEvaluationProfile.RequiredAnalysis] {
+    private func requiredAnalyses() -> [FlowEvaluationProfile.RequiredAnalysis] {
         [
             analysis("dc-operating-point", domain: "simulation", artifactRole: "simulation-summary"),
             analysis("ac-small-signal", domain: "simulation", artifactRole: "simulation-summary"),
@@ -63,7 +59,7 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
         ]
     }
 
-    private func artifactRoles() -> [XcircuiteEvaluationProfile.ArtifactRole] {
+    private func artifactRoles() -> [FlowEvaluationProfile.ArtifactRole] {
         [
             role("netlist", description: "Canonical SPICE netlist used by the run."),
             role("simulation-summary", description: "Structured simulation result with evaluated metric channels."),
@@ -82,10 +78,10 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
         _ channelID: String,
         label: String,
         unit: String? = nil,
-        direction: XcircuiteEvaluationProfile.MetricChannel.Direction,
+        direction: FlowEvaluationProfile.MetricChannel.Direction,
         required: Bool = true
-    ) -> XcircuiteEvaluationProfile.MetricChannel {
-        XcircuiteEvaluationProfile.MetricChannel(
+    ) -> FlowEvaluationProfile.MetricChannel {
+        FlowEvaluationProfile.MetricChannel(
             channelID: channelID,
             label: label,
             unit: unit,
@@ -99,8 +95,8 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
         domain: String,
         artifactRole: String,
         required: Bool = true
-    ) -> XcircuiteEvaluationProfile.RequiredAnalysis {
-        XcircuiteEvaluationProfile.RequiredAnalysis(
+    ) -> FlowEvaluationProfile.RequiredAnalysis {
+        FlowEvaluationProfile.RequiredAnalysis(
             analysisID: analysisID,
             domain: domain,
             artifactRole: artifactRole,
@@ -112,8 +108,8 @@ public struct OpAmpEvaluationProfileFactory: Sendable {
         _ role: String,
         description: String,
         required: Bool = true
-    ) -> XcircuiteEvaluationProfile.ArtifactRole {
-        XcircuiteEvaluationProfile.ArtifactRole(
+    ) -> FlowEvaluationProfile.ArtifactRole {
+        FlowEvaluationProfile.ArtifactRole(
             role: role,
             required: required,
             description: description

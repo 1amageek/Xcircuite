@@ -13,8 +13,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "info",
             sourceRefIDs: [summaryRefID],
             target: "no-active-drc-violations",
-            currentValue: .number(0),
-            requiredValue: .number(0),
+            currentValue: .scalar(0),
+            requiredValue: .scalar(0),
             description: "No active DRC violations were present in the source summary."
         )
     }
@@ -28,14 +28,14 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             .compactMap { $0 }
             .joined(separator: "-")
         let objectiveID = try identifier("drc-\(label.isEmpty ? "violation" : label)-\(index + 1)")
-        var evidence: [String: XcircuiteJSONValue] = [
-            "activeCount": .number(Double(bucket.activeCount)),
-            "waivedCount": .number(Double(bucket.waivedCount)),
-            "problemSourceOperation": .string("xcircuite.generate-planning-problem"),
-            "sourceEngineOperation": .string("drc.run-native"),
-            "symbolicGoalAtoms": .array(drcGoalAtoms(for: bucket).map { .string($0) }),
-            "relatedShapeIDs": .array(bucket.relatedShapeIDs.map { .string($0) }),
-            "relatedNetIDs": .array(bucket.relatedNetIDs.map { .string($0) }),
+        var evidence: [String: PlanningParameterValue] = [
+            "activeCount": .scalar(Double(bucket.activeCount)),
+            "waivedCount": .scalar(Double(bucket.waivedCount)),
+            "problemSourceOperation": .text("xcircuite.generate-planning-problem"),
+            "sourceEngineOperation": .text("drc.run-native"),
+            "symbolicGoalAtoms": .textList(drcGoalAtoms(for: bucket)),
+            "relatedShapeIDs": .textList(bucket.relatedShapeIDs),
+            "relatedNetIDs": .textList(bucket.relatedNetIDs),
         ]
         insertOptional(bucket.ruleID, key: "ruleID", into: &evidence)
         insertOptional(bucket.kind, key: "kind", into: &evidence)
@@ -50,8 +50,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: [summaryRefID],
             target: "no-active-violations-for-bucket",
-            currentValue: .number(Double(bucket.activeCount)),
-            requiredValue: .number(0),
+            currentValue: .scalar(Double(bucket.activeCount)),
+            requiredValue: .scalar(0),
             unit: nil,
             description: "Repair DRC bucket \(label.isEmpty ? "unknown" : label) with \(bucket.activeCount) active violation(s).",
             evidence: evidence,
@@ -73,18 +73,18 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         if let repairHintRefID {
             sourceRefIDs.append(repairHintRefID)
         }
-        var evidence: [String: XcircuiteJSONValue] = [
-            "activeCount": .number(1),
-            "problemSourceOperation": .string("xcircuite.generate-planning-problem"),
-            "sourceEngineOperation": .string("drc.export-repair-hints"),
-            "sourceRepairHintID": .string(hint.hintID),
-            "sourceDiagnosticIndex": .number(Double(hint.sourceDiagnosticIndex)),
-            "repairHintConfidence": .string(hint.confidence),
-            "repairHintOperationID": .string(hint.operationID),
-            "symbolicGoalAtoms": .array(drcGoalAtoms(forOperationID: hint.operationID).map { .string($0) }),
-            "relatedShapeIDs": .array(hint.targetShapeIDs.map { .string($0) }),
-            "relatedViaIDs": .array(hint.relatedViaIDs.map { .string($0) }),
-            "relatedNetIDs": .array(hint.relatedNetIDs.map { .string($0) }),
+        var evidence: [String: PlanningParameterValue] = [
+            "activeCount": .scalar(1),
+            "problemSourceOperation": .text("xcircuite.generate-planning-problem"),
+            "sourceEngineOperation": .text("drc.export-repair-hints"),
+            "sourceRepairHintID": .text(hint.hintID),
+            "sourceDiagnosticIndex": .scalar(Double(hint.sourceDiagnosticIndex)),
+            "repairHintConfidence": .text(hint.confidence),
+            "repairHintOperationID": .text(hint.operationID),
+            "symbolicGoalAtoms": .textList(drcGoalAtoms(forOperationID: hint.operationID)),
+            "relatedShapeIDs": .textList(hint.targetShapeIDs),
+            "relatedViaIDs": .textList(hint.relatedViaIDs),
+            "relatedNetIDs": .textList(hint.relatedNetIDs),
         ]
         insertOptional(hint.ruleID, key: "ruleID", into: &evidence)
         insertOptional(hint.kind, key: "kind", into: &evidence)
@@ -99,8 +99,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: sourceRefIDs,
             target: "no-active-violation-for-repair-hint",
-            currentValue: .number(1),
-            requiredValue: .number(0),
+            currentValue: .scalar(1),
+            requiredValue: .scalar(0),
             unit: nil,
             description: "Repair DRC diagnostic \(hint.sourceDiagnosticIndex) using engine-owned repair hint \(hint.hintID).",
             evidence: evidence,
@@ -169,11 +169,11 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
 
     func addingSymbolicEffects(
         _ atoms: [String],
-        to hints: [String: XcircuiteJSONValue]
-    ) -> [String: XcircuiteJSONValue] {
+        to hints: [String: PlanningParameterValue]
+    ) -> [String: PlanningParameterValue] {
         var result = hints
         if !atoms.isEmpty {
-            result["symbolicEffects"] = .array(atoms.map { .string($0) })
+            result["symbolicEffects"] = .textList(atoms)
         }
         return result
     }

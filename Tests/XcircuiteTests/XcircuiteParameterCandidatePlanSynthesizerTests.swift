@@ -9,11 +9,11 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesizeParameterCandidatePlanCLIAndExecuteNetlistEdit() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-synthesis")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-1", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-1", store: store)
+        try writeTextFixture(
             """
             RC Candidate Test
             R1 in out 1k
@@ -23,12 +23,12 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             """,
             to: root.appending(path: "circuits/rc.spice")
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-1", withBounds: true),
             runID: "run-1",
             projectRoot: root
         )
-        _ = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        _ = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-1", maxCandidates: 3),
             projectRoot: root
         )
@@ -52,25 +52,28 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(synthesis.executionReadiness == "ready")
         #expect(synthesis.selectedCandidateRank == 2)
         let selectionTraceRef = try #require(synthesis.selectionTraceArtifact)
-        let persistedSelectionTrace = try store.readJSON(
+        let persistedSelectionTrace = try await store.readJSON(
             XcircuiteParameterCandidateSelectionTrace.self,
-            from: root.appending(path: selectionTraceRef.path)
+            from: selectionTraceRef.path
         )
         #expect(persistedSelectionTrace.selectedCandidateID == synthesis.selectedCandidateID)
         #expect(persistedSelectionTrace.parameterCandidatesPath == synthesis.parameterCandidatesPath)
 
-        let plan = try store.readJSON(
+        let plan = try await store.readJSON(
             XcircuiteCandidatePlan.self,
-            from: root.appending(path: synthesis.candidatePlanArtifact.path)
+            from: synthesis.candidatePlanArtifact.path
         )
         #expect(plan.assumptions.map(\.assumptionID) == ["simulation-metric-current"])
         #expect(plan.riskClassifications.map(\.riskID) == ["metric-recovery-regression-risk"])
         let step = try #require(plan.steps.first)
         #expect(step.operationID == "simulation.set-netlist-parameters")
-        #expect(step.parameterHints["netlistPath"] == .string("circuits/rc.spice"))
-        #expect(step.parameterHints["sourceParameterCandidateID"] == .string(synthesis.selectedCandidateID))
+        #expect(step.parameterHints["netlistPath"] == .text("circuits/rc.spice"))
+        #expect(step.parameterHints["sourceParameterCandidateID"] == .text(synthesis.selectedCandidateID))
 
-        let execution = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let execution = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-1"),
             projectRoot: root
         )
@@ -85,9 +88,9 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         let reportRef = try #require(execution.producedArtifacts.first {
             $0.artifactID == "candidate-step-1-netlist-parameter-edit-report"
         })
-        let report = try store.readJSON(
+        let report = try await store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: root.appending(path: reportRef.path)
+            from: reportRef.path
         )
         #expect(report.sourceParameterCandidateID == synthesis.selectedCandidateID)
         #expect(report.outputNetlistPath == netlistRef.path)
@@ -97,36 +100,34 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(report.edits.first?.parameterName == "r")
         #expect(report.edits.first?.value == 1500)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
-        #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID })
-        #expect(manifest.artifacts.contains {
-            $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSelectionTraceArtifactID
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        #expect(ledger.artifacts.contains { $0.id.rawValue == XcircuitePlanningArtifactStore.candidatePlanArtifactID })
+        #expect(ledger.artifacts.contains {
+            $0.id.rawValue == XcircuitePlanningArtifactStore.parameterCandidateSelectionTraceArtifactID
         })
-        #expect(manifest.artifacts.contains { $0.artifactID == "candidate-step-1-edited-netlist" })
-        #expect(manifest.artifacts.contains { $0.artifactID == "candidate-step-1-netlist-parameter-edit-report" })
+        #expect(ledger.artifacts.contains { $0.id.rawValue == "candidate-step-1-edited-netlist" })
+        #expect(ledger.artifacts.contains { $0.id.rawValue == "candidate-step-1-netlist-parameter-edit-report" })
     }
 
-    @Test func missingCandidateRankFailsWithoutReplacingCandidatePlan() throws {
+    @Test func missingCandidateRankFailsWithoutReplacingCandidatePlan() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-missing-rank")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-2", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-2", store: store)
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-2", withBounds: true),
             runID: "run-2",
             projectRoot: root
         )
-        _ = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        _ = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-2", maxCandidates: 2),
             projectRoot: root
         )
 
         do {
-            _ = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+            _ = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
                 request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-2", rank: 9),
                 projectRoot: root
             )
@@ -135,23 +136,20 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             #expect(error == .candidateNotFound(candidateID: nil, rank: 9))
         }
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-2/manifest.json")
-        )
-        #expect(!manifest.artifacts.contains {
-            $0.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID
+        let ledger = try await store.loadRunLedger(runID: "run-2")
+        #expect(!ledger.artifacts.contains {
+            $0.id.rawValue == XcircuitePlanningArtifactStore.candidatePlanArtifactID
         })
     }
 
-    @Test func synthesisRejectsStaleParameterCandidatesArtifact() throws {
+    @Test func synthesisRejectsStaleParameterCandidatesArtifact() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-stale-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-stale", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-stale", store: store)
+        try writeTextFixture(
             """
             RC Stale Candidate Test
             R1 in out 1k
@@ -161,12 +159,12 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             """,
             to: root.appending(path: "circuits/rc.spice")
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-stale", withBounds: true),
             runID: "run-stale",
             projectRoot: root
         )
-        let generation = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let generation = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-stale", maxCandidates: 2),
             projectRoot: root
         )
@@ -177,7 +175,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         try "\(original)\n\(firstLine)\n".write(to: candidatesURL, atomically: true, encoding: .utf8)
 
         do {
-            _ = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+            _ = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
                 request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-stale", rank: 1),
                 projectRoot: root
             )
@@ -195,11 +193,11 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
     @Test func synthesisSkipsRejectedCandidateFeedbackUnlessExplicitlyIncluded() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-3", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-3", store: store)
+        try writeTextFixture(
             """
             RC Candidate Feedback Test
             R1 in out 1k
@@ -209,12 +207,12 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             """,
             to: root.appending(path: "circuits/rc.spice")
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-3", withBounds: true),
             runID: "run-3",
             projectRoot: root
         )
-        let candidatesResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let candidatesResult = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-3", maxCandidates: 3),
             projectRoot: root
         )
@@ -224,7 +222,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             from: root.appending(path: candidatesArtifact.path)
         )
         let rejectedCandidate = try #require(candidates.first { $0.rank == 1 })
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-3",
                 problemID: rejectedCandidate.problemID,
@@ -236,7 +234,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             projectRoot: root
         )
 
-        let synthesis = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+        let synthesis = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
             request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-3"),
             projectRoot: root
         )
@@ -257,7 +255,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(rejectedScore.feedbackPenalty > 0)
 
         do {
-            _ = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+            _ = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
                 request: XcircuiteParameterCandidatePlanSynthesisRequest(
                     runID: "run-3",
                     candidateID: rejectedCandidate.candidateID
@@ -294,14 +292,14 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(retry.rejectedPlanFeedback?.excludedCandidateIDs == [rejectedCandidate.candidateID])
     }
 
-    @Test func synthesisDoesNotExcludeBlockedCandidateFeedback() throws {
+    @Test func synthesisDoesNotExcludeBlockedCandidateFeedback() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-blocked-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-4", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-4", store: store)
+        try writeTextFixture(
             """
             RC Candidate Blocked Feedback Test
             R1 in out 1k
@@ -311,12 +309,12 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             """,
             to: root.appending(path: "circuits/rc.spice")
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-4", withBounds: true),
             runID: "run-4",
             projectRoot: root
         )
-        let candidatesResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let candidatesResult = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-4", maxCandidates: 3),
             projectRoot: root
         )
@@ -326,7 +324,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             from: root.appending(path: candidatesArtifact.path)
         )
         let blockedCandidate = try #require(candidates.first { $0.rank == 1 })
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-4",
                 problemID: blockedCandidate.problemID,
@@ -338,7 +336,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             projectRoot: root
         )
 
-        let synthesis = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+        let synthesis = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
             request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-4"),
             projectRoot: root
         )
@@ -348,9 +346,9 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(synthesis.rejectedPlanFeedback?.excludedCandidateIDs == [])
         let trace = try #require(synthesis.selectionTrace)
         let traceRef = try #require(synthesis.selectionTraceArtifact)
-        let persistedTrace = try store.readJSON(
+        let persistedTrace = try await store.readJSON(
             XcircuiteParameterCandidateSelectionTrace.self,
-            from: root.appending(path: traceRef.path)
+            from: traceRef.path
         )
         #expect(persistedTrace.selectedCandidateID == trace.selectedCandidateID)
         let blockedScore = try #require(trace.rankedCandidates.first {
@@ -361,14 +359,14 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(blockedScore.totalScore > blockedScore.baseCost)
     }
 
-    @Test func synthesisRanksEligibleCandidatesWithFeedbackPenalty() throws {
+    @Test func synthesisRanksEligibleCandidatesWithFeedbackPenalty() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-feedback-ranking")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-5", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-5", store: store)
+        try writeTextFixture(
             """
             RC Candidate Feedback Ranking Test
             R1 in out 1k
@@ -378,12 +376,12 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             """,
             to: root.appending(path: "circuits/rc.spice")
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-5", withBounds: true),
             runID: "run-5",
             projectRoot: root
         )
-        let candidatesResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let candidatesResult = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-5", maxCandidates: 3),
             projectRoot: root
         )
@@ -395,7 +393,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         let rejectedCandidate = try #require(candidates.first { $0.rank == 1 })
         let blockedCandidate = try #require(candidates.first { $0.rank == 2 })
         let cleanCandidate = try #require(candidates.first { $0.rank == 3 })
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-5",
                 problemID: rejectedCandidate.problemID,
@@ -406,7 +404,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             runID: "run-5",
             projectRoot: root
         )
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-5",
                 problemID: blockedCandidate.problemID,
@@ -418,7 +416,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             projectRoot: root
         )
 
-        let synthesis = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+        let synthesis = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
             request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-5"),
             projectRoot: root
         )
@@ -443,14 +441,14 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(selectedScore.totalScore < blockedScore.totalScore)
     }
 
-    @Test func synthesisUsesCostModelFeedbackWeightingPolicy() throws {
+    @Test func synthesisUsesCostModelFeedbackWeightingPolicy() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-feedback-weighting")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-6", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-6", store: store)
+        try writeTextFixture(
             """
             RC Candidate Feedback Weighting Test
             R1 in out 1k
@@ -466,7 +464,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             feedbackCostTerm("feedback.diagnostic", 0),
             feedbackCostTerm("feedback.next-action", 0),
         ]
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(
                 runID: "run-6",
                 withBounds: true,
@@ -475,7 +473,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             runID: "run-6",
             projectRoot: root
         )
-        let candidatesResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let candidatesResult = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-6", maxCandidates: 3),
             projectRoot: root
         )
@@ -486,7 +484,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         )
         let rejectedCandidate = try #require(candidates.first { $0.rank == 1 })
         let blockedCandidate = try #require(candidates.first { $0.rank == 2 })
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-6",
                 problemID: rejectedCandidate.problemID,
@@ -497,7 +495,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             runID: "run-6",
             projectRoot: root
         )
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-6",
                 problemID: blockedCandidate.problemID,
@@ -509,7 +507,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             projectRoot: root
         )
 
-        let synthesis = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+        let synthesis = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
             request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-6"),
             projectRoot: root
         )
@@ -530,14 +528,14 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(blockedComponent.appliedPenalty == 0)
     }
 
-    @Test func synthesisAppliesGlobalRejectedPlanFeedbackToMatchingVerificationGate() throws {
+    @Test func synthesisAppliesGlobalRejectedPlanFeedbackToMatchingVerificationGate() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-global-feedback")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-8", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-8", store: store)
+        try writeTextFixture(
             """
             RC Global Feedback Test
             R1 in out 1k
@@ -548,12 +546,12 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             to: root.appending(path: "circuits/rc.spice")
         )
         let problem = makeMultiGateParameterPlanningProblem(runID: "run-8")
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             problem,
             runID: "run-8",
             projectRoot: root
         )
-        let candidatesResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let candidatesResult = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-8", maxCandidates: 4),
             projectRoot: root
         )
@@ -570,7 +568,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         })
         #expect(drcCandidate.rank < simulationCandidate.rank)
 
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await artifactStore.appendRejectedPlan(
             rejectedPlanRecord(
                 runID: "run-8",
                 problemID: problem.problemID,
@@ -582,7 +580,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             projectRoot: root
         )
 
-        let synthesis = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+        let synthesis = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
             request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-8"),
             projectRoot: root
         )
@@ -610,14 +608,14 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         #expect(simulationScore.feedbackPenalty == 0)
     }
 
-    @Test func synthesisRejectsInvalidFeedbackWeightingPolicy() throws {
+    @Test func synthesisRejectsInvalidFeedbackWeightingPolicy() async throws {
         let root = try makeTemporaryRoot("parameter-candidate-plan-invalid-feedback-weighting")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-7", inProjectAt: root)
-        try store.ensureDirectory(at: root.appending(path: "circuits"))
-        try store.writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-7", store: store)
+        try writeTextFixture(
             """
             RC Invalid Feedback Weighting Test
             R1 in out 1k
@@ -627,7 +625,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             """,
             to: root.appending(path: "circuits/rc.spice")
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(
                 runID: "run-7",
                 withBounds: true,
@@ -638,13 +636,13 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             runID: "run-7",
             projectRoot: root
         )
-        _ = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        _ = try await XcircuiteParameterCandidateGenerator(workspaceStore: store, artifactStore: artifactStore).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-7", maxCandidates: 2),
             projectRoot: root
         )
 
         do {
-            _ = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+            _ = try await XcircuiteParameterCandidatePlanSynthesizer(workspaceStore: store, artifactStore: artifactStore).synthesizeCandidatePlan(
                 request: XcircuiteParameterCandidatePlanSynthesisRequest(runID: "run-7"),
                 projectRoot: root
             )
@@ -659,19 +657,19 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         withBounds: Bool,
         feedbackCostTerms: [XcircuitePlanningCostTerm] = []
     ) -> XcircuiteCircuitPlanningProblem {
-        var parameterHints: [String: XcircuiteJSONValue] = [
-            "metric": .string("vfinal"),
+        var parameterHints: [String: PlanningParameterValue] = [
+            "metric": .text("vfinal"),
         ]
         if withBounds {
-            parameterHints["parameterBounds"] = .array([
-                .object([
-                    "name": .string("R1"),
-                    "lowerBound": .number(500),
-                    "upperBound": .number(1500),
-                    "nominalValue": .number(1000),
-                    "step": .number(250),
-                    "unit": .string("ohm"),
-                ]),
+            parameterHints["parameterBounds"] = .parameterBounds([
+                XcircuiteParameterBound(
+                    name: "R1",
+                    lowerBound: 500,
+                    upperBound: 1500,
+                    nominalValue: 1000,
+                    step: 250,
+                    unit: "ohm"
+                ),
             ])
         }
         return XcircuiteCircuitPlanningProblem(
@@ -722,8 +720,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
                     priority: "error",
                     sourceRefIDs: ["simulation-summary"],
                     target: "measurement-within-tolerance",
-                    currentValue: .number(0.5),
-                    requiredValue: .number(1.0),
+                    currentValue: .scalar(0.5),
+                    requiredValue: .scalar(1.0),
                     description: "Recover simulation metric by bounded parameter search."
                 ),
             ],
@@ -799,8 +797,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "drc-clean",
-                    currentValue: .string("failing"),
-                    requiredValue: .string("passing"),
+                    currentValue: .text("failing"),
+                    requiredValue: .text("passing"),
                     description: "Repair native DRC feedback."
                 ),
                 XcircuitePlanningObjective(
@@ -810,8 +808,8 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "measurement-within-tolerance",
-                    currentValue: .number(0.5),
-                    requiredValue: .number(1.0),
+                    currentValue: .scalar(0.5),
+                    requiredValue: .scalar(1.0),
                     description: "Recover simulation metric."
                 ),
             ],
@@ -828,15 +826,15 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
                     requiredInputRefs: ["source-netlist-ref"],
                     verificationGates: ["native-drc"],
                     parameterHints: [
-                        "parameterBounds": .array([
-                            .object([
-                                "name": .string("W1"),
-                                "lowerBound": .number(1),
-                                "upperBound": .number(3),
-                                "nominalValue": .number(2),
-                                "step": .number(1),
-                                "unit": .string("um"),
-                            ]),
+                        "parameterBounds": .parameterBounds([
+                            XcircuiteParameterBound(
+                                name: "W1",
+                                lowerBound: 1,
+                                upperBound: 3,
+                                nominalValue: 2,
+                                step: 1,
+                                unit: "um"
+                            ),
                         ]),
                     ]
                 ),
@@ -850,15 +848,15 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
                     requiredInputRefs: ["source-netlist-ref"],
                     verificationGates: ["simulation-metric-gate"],
                     parameterHints: [
-                        "parameterBounds": .array([
-                            .object([
-                                "name": .string("R1"),
-                                "lowerBound": .number(500),
-                                "upperBound": .number(1500),
-                                "nominalValue": .number(1000),
-                                "step": .number(250),
-                                "unit": .string("ohm"),
-                            ]),
+                        "parameterBounds": .parameterBounds([
+                            XcircuiteParameterBound(
+                                name: "R1",
+                                lowerBound: 500,
+                                upperBound: 1500,
+                                nominalValue: 1000,
+                                step: 250,
+                                unit: "ohm"
+                            ),
                         ]),
                     ]
                 ),
@@ -911,7 +909,7 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
         status: String,
         candidateID: String? = nil,
         failedGateIDs: [String] = ["simulation-metric-gate"]
-    ) -> XcircuiteRejectedPlanRecord {
+    ) throws -> XcircuiteRejectedPlanRecord {
         XcircuiteRejectedPlanRecord(
             rejectionID: "\(planID)-\(status)",
             runID: runID,
@@ -922,13 +920,13 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
             sourceParameterCandidateIDs: candidateID.map { [$0] } ?? [],
             failedStepIDs: [],
             failedGateIDs: failedGateIDs,
-            candidatePlanRef: XcircuiteFileReference(
+            candidatePlanRef: try fixtureArtifactReference(
                 artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                 path: ".xcircuite/runs/\(runID)/planning/candidate-plan.json",
                 kind: .other,
                 format: .json
             ),
-            planVerificationRef: XcircuiteFileReference(
+            planVerificationRef: try fixtureArtifactReference(
                 artifactID: XcircuitePlanningArtifactStore.planVerificationArtifactID,
                 path: ".xcircuite/runs/\(runID)/planning/plan-verification.json",
                 kind: .other,
@@ -956,6 +954,14 @@ struct XcircuiteParameterCandidatePlanSynthesizerTests {
                 let data = Data(line.utf8)
                 return try decoder.decode(type, from: data)
             }
+    }
+
+    private func writeTextFixture(_ text: String, to url: URL) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

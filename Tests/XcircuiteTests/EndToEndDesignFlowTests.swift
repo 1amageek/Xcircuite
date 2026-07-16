@@ -21,7 +21,19 @@ struct EndToEndDesignFlowTests {
     func retainedMultiEngineRunResumesAfterReview() async throws {
         let root = try makeRoot(name: "end-to-end-design-flow")
         defer { removeRoot(root) }
-        try XcircuiteWorkspaceStore().ensureWorkspaceDirectory(forProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        let progressStore = FlowRunProgressStore(persistence: workspaceStore)
+        let orchestrator = DefaultFlowOrchestrator(
+            infrastructure: workspaceStore,
+            ledgerPersistence: workspaceStore,
+            progressStore: progressStore
+        )
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        let ledgerInspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
 
         let runID = "end-to-end-design-flow"
         let snapshot = try LogicDesignSnapshotCodec.finalized(LogicDesignSnapshot(
@@ -134,19 +146,18 @@ struct EndToEndDesignFlowTests {
             kind: .other
         ).locator.location.value
 
-        try writeSTAInputs(to: root)
+        try await writeSTAInputs(to: root)
         let pdkReference = try writeJSON(
             ["processID": "fixture-process", "version": "1"],
             name: "pdk.json",
             root: root,
             kind: .technology
         )
-        let constraintsLegacyReference = try XcircuiteWorkspaceStore().fileReference(
+        let constraintsLegacyReference = try await XcircuiteWorkspaceStore(projectRoot: root).makeArtifactReference(
             forProjectRelativePath: "constraints.sdc",
             artifactID: "e2e-constraints",
             kind: .constraint,
             format: .sdc,
-            inProjectAt: root
         )
         let constraintsReference = try foundationReference(constraintsLegacyReference)
         let physicalRequest = PhysicalDesignRequest(
@@ -224,12 +235,12 @@ struct EndToEndDesignFlowTests {
         )
         let schematicNetlistURL = root.appending(path: "schematic.spice")
         let layoutNetlistURL = root.appending(path: "layout.spice")
-        try writeText(matchingNetlist(), name: "schematic.spice", root: root)
-        try writeText(matchingNetlist(), name: "layout.spice", root: root)
+        try await writeText(matchingNetlist(), name: "schematic.spice", root: root)
+        try await writeText(matchingNetlist(), name: "layout.spice", root: root)
         let pexLayoutURL = root.appending(path: "pex-layout.gds")
         let pexNetlistURL = root.appending(path: "pex-source.spice")
-        try writeText("layout", name: "pex-layout.gds", root: root)
-        try writeText(".subckt TESTCELL\n.ends TESTCELL\n", name: "pex-source.spice", root: root)
+        try await writeText("layout", name: "pex-layout.gds", root: root)
+        try await writeText(".subckt TESTCELL\n.ends TESTCELL\n", name: "pex-source.spice", root: root)
 
         let staInputs = TimingSTAFlowInputs(
             design: .path("sta-design.json"),
@@ -294,7 +305,7 @@ struct EndToEndDesignFlowTests {
             ),
         ]
 
-        let initial = try await DefaultFlowOrchestrator().run(
+        let initial = try await orchestrator.run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: runID,
@@ -323,7 +334,7 @@ struct EndToEndDesignFlowTests {
             $0.gateID == "approval" && $0.status == .incomplete
         } == true)
 
-        let reviewBundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let reviewBundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
             projectRoot: root
         )
@@ -342,7 +353,11 @@ struct EndToEndDesignFlowTests {
             $0.domain == "approval" && $0.stageID == "physical.review"
         } == false)
 
-        _ = try DefaultFlowGateApprovalRecorder().recordApproval(
+        _ = try await DefaultFlowGateApprovalRecorder(
+            loader: workspaceStore,
+            inspector: ledgerInspector,
+            ledgerPersistence: workspaceStore
+        ).recordApproval(
             FlowGateApprovalRequest(
                 projectRoot: root,
                 runID: runID,
@@ -352,7 +367,12 @@ struct EndToEndDesignFlowTests {
                 note: "Reviewed the multi-engine artifact bundle and physical revision."
             )
         )
-        let resumed = try await DefaultFlowRunResumer().resumeRun(
+        let resumed = try await DefaultFlowRunResumer(
+            loader: workspaceStore,
+            orchestrator: orchestrator,
+            inspector: ledgerInspector,
+            artifactPersistence: workspaceStore
+        ).resumeRun(
             request: FlowRunResumeRequest(projectRoot: root, runID: runID),
             toolRegistry: ToolRegistry(),
             healthResults: [:],
@@ -365,7 +385,7 @@ struct EndToEndDesignFlowTests {
         #expect(Set(resumed.summary.stages.map(\.stageID)) == Set(stages.map(\.stageID)))
         #expect(resumed.summary.stages.allSatisfy { $0.artifactCount > 0 })
 
-        let retainedBundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let retainedBundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
             projectRoot: root
         )
@@ -383,15 +403,15 @@ struct EndToEndDesignFlowTests {
         })
     }
 
-    private func writeSTAInputs(to root: URL) throws {
-        try writeText(
+    private func writeSTAInputs(to root: URL) async throws {
+        try await writeText(
             """
             {"schemaVersion":1,"topDesignName":"top","ports":[{"name":"in","direction":"input"},{"name":"out","direction":"output"}],"instances":[{"name":"U1","cell":"INV","connections":{"A":"in","Y":"out"}}],"nets":[]}
             """,
             name: "sta-design.json",
             root: root
         )
-        try writeText(
+        try await writeText(
             """
             library (fixture) {
               time_unit : "1ns";
@@ -413,7 +433,7 @@ struct EndToEndDesignFlowTests {
             name: "library.lib",
             root: root
         )
-        try writeText(
+        try await writeText(
             """
             create_clock -name clk -period 10ns [get_ports in]
             set_input_delay 1ns -clock clk [get_ports in]
@@ -479,7 +499,7 @@ struct EndToEndDesignFlowTests {
         )
     }
 
-    private func writeText(_ text: String, name: String, root: URL) throws {
+    private func writeText(_ text: String, name: String, root: URL) async throws {
         try Data(text.utf8).write(to: root.appending(path: name), options: .atomic)
     }
 

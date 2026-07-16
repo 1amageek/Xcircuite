@@ -23,7 +23,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
     private let artifactBuilder: StageArtifactReferenceBuilder
     private let outputPathGuard: StageArtifactOutputPathGuard
     private let layoutDocumentSerializer: LayoutDocumentSerializer
-    private let hasher: XcircuiteHasher
+    private let fileFingerprinter: any FileFingerprinting
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
@@ -44,7 +44,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         self.artifactBuilder = StageArtifactReferenceBuilder()
         self.outputPathGuard = StageArtifactOutputPathGuard()
         self.layoutDocumentSerializer = LayoutDocumentSerializer()
-        self.hasher = XcircuiteHasher()
+        self.fileFingerprinter = LocalFileFingerprinter()
         self.decoder = JSONDecoder()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -56,7 +56,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let rawDirectory = context.runDirectory
                 .appending(path: "stages")
@@ -64,20 +64,23 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 .appending(path: "raw")
             let expectedPaths = LayoutCommandArtifactPaths(rawDirectory: rawDirectory)
             try validateOutputDirectories(expectedPaths, projectRoot: context.projectRoot)
-            try context.storage.ensureDirectory(at: rawDirectory)
-            try context.checkCancellation()
+            try FileManager.default.createDirectory(
+                at: rawDirectory,
+                withIntermediateDirectories: true
+            )
+            try await context.checkCancellation()
 
             let request = try loadRequest()
             let effectiveRequest = preparedRequest(request, expectedPaths: expectedPaths)
             try encoder.encode(effectiveRequest).write(to: expectedPaths.effectiveRequestURL, options: [.atomic])
-            try context.checkCancellation()
+            try await context.checkCancellation()
 
             let result = try runner.run(
                 request: effectiveRequest,
                 baseURL: requestURL.deletingLastPathComponent()
             )
             try validateResult(result, expectedPaths: expectedPaths, projectRoot: context.projectRoot)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let document = try loadOutputDocument(at: expectedPaths.outputDocumentURL)
             let drcLayoutURL = try drcExport.map {
                 try exportDRCLayout(from: document, spec: $0, rawDirectory: rawDirectory)
@@ -160,8 +163,8 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stage.stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stage.stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private func validateOutputDirectories(
@@ -225,7 +228,8 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         _ result: LayoutCommandResult,
         expectedOutputURL: URL
     ) throws {
-        let actualByteCount = try hasher.byteCount(fileAt: expectedOutputURL)
+        let fingerprint = try fileFingerprinter.fingerprint(fileAt: expectedOutputURL)
+        let actualByteCount = Int64(fingerprint.byteCount)
         guard actualByteCount == Int64(result.outputDocumentByteCount) else {
             throw LayoutCommandFlowStageExecutorError.outputDocumentByteCountMismatch(
                 path: canonicalPath(expectedOutputURL),
@@ -234,7 +238,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
             )
         }
 
-        let actualDigest = try hasher.sha256(fileAt: expectedOutputURL)
+        let actualDigest = fingerprint.digest.hexadecimalValue
         guard actualDigest == result.outputDocumentSHA256 else {
             throw LayoutCommandFlowStageExecutorError.outputDocumentDigestMismatch(
                 path: canonicalPath(expectedOutputURL),
@@ -281,7 +285,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         rawDirectory: URL,
         context: FlowExecutionContext
     ) throws -> StandardLayoutArtifact {
-        try XcircuiteIdentifierValidator().validate(spec.artifactID, kind: .artifactID)
+        try FlowIdentifierValidator().validate(spec.artifactID, kind: .artifactID)
         let exportURL = rawDirectory.appending(
             path: "\(spec.artifactID).\(try standardLayoutFileExtension(for: spec.format))"
         )
@@ -294,7 +298,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         return StandardLayoutArtifact(
             url: exportURL,
             artifactID: spec.artifactID,
-            format: try xcircuiteFileFormat(for: spec.format)
+            format: try artifactFormat(for: spec.format)
         )
     }
 
@@ -325,7 +329,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func xcircuiteFileFormat(for format: LayoutFileFormat) throws -> ArtifactFormat {
+    private func artifactFormat(for format: LayoutFileFormat) throws -> ArtifactFormat {
         switch format {
         case .gds:
             return .gdsii

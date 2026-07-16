@@ -29,7 +29,7 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -59,8 +59,8 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
                 )
             )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
-            let resultArtifact = try support.persistResult(
+            try await context.checkCancellation()
+            let resultArtifact = try await support.persistResult(
                 result,
                 fileName: "logic-lowering-result.json",
                 artifactID: "logic-lowering-result",

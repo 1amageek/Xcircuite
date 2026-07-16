@@ -9,8 +9,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit: Codable, Senda
     public var summary: Summary
     public var missingRequirements: [MissingRequirement]
     public var suggestedActions: [SuggestedAction]
-    public var policyArtifact: XcircuiteFileReference?
-    public var auditArtifact: XcircuiteFileReference?
+    public var policyArtifact: ArtifactReference?
+    public var auditArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -20,8 +20,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit: Codable, Senda
         summary: Summary,
         missingRequirements: [MissingRequirement],
         suggestedActions: [SuggestedAction],
-        policyArtifact: XcircuiteFileReference? = nil,
-        auditArtifact: XcircuiteFileReference? = nil
+        policyArtifact: ArtifactReference? = nil,
+        auditArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suiteID = suiteID

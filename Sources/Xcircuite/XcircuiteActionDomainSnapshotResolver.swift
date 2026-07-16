@@ -1,14 +1,15 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 struct XcircuiteResolvedActionDomainSnapshot: Sendable, Hashable {
     var snapshot: XcircuitePlanningActionDomainSnapshot
-    var reference: XcircuiteFileReference
+    var reference: ArtifactReference
 }
 
 enum XcircuiteActionDomainSnapshotResolutionError: Error, LocalizedError, Equatable {
     case artifactNotFound(runID: String, artifactID: String)
-    case artifactIntegrityFailed(path: String, status: XcircuiteFileReferenceIntegrityStatus, message: String)
+    case artifactIntegrityFailed(path: String, status: FlowArtifactVerificationStatus, message: String)
     case invalidArtifactReference(path: String, reason: String)
     case runMismatch(expected: String, actual: String)
     case producedByRunMismatch(expected: String, actual: String)
@@ -32,12 +33,12 @@ enum XcircuiteActionDomainSnapshotResolutionError: Error, LocalizedError, Equata
 struct XcircuiteActionDomainSnapshotResolver: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let verifier: XcircuiteFileReferenceVerifier
+    private let verifier: LocalArtifactVerifier
 
     init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        verifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        verifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
@@ -45,14 +46,14 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
     }
 
     func loadDefaultOrPersist(
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteResolvedActionDomainSnapshot {
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot {
         if let existing = manifest.artifacts.first(where: {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
         }) {
-            let reusable = try reusableDefaultSnapshot(
+            let reusable = try await reusableDefaultSnapshot(
                 existing,
                 runID: runID,
                 projectRoot: projectRoot
@@ -61,28 +62,27 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
                 return reusable
             }
         }
-        return try persistAndLoad(runID: runID, projectRoot: projectRoot)
+        return try await persistAndLoad(runID: runID, projectRoot: projectRoot)
     }
 
     func loadExplicitOrDefault(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteResolvedActionDomainSnapshot {
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot {
         if let explicitPath {
-            return try loadExplicitPath(
+            return try await loadExplicitPath(
                 explicitPath,
                 artifactID: artifactID ?? XcircuitePlanningArtifactStore.actionDomainArtifactID,
-                runID: runID,
-                projectRoot: projectRoot
+                runID: runID
             )
         }
 
         let resolvedArtifactID = artifactID ?? XcircuitePlanningArtifactStore.actionDomainArtifactID
         if let existing = manifest.artifacts.first(where: { $0.artifactID == resolvedArtifactID }) {
-            return try verifiedManifestSnapshot(
+            return try await verifiedManifestSnapshot(
                 existing,
                 expectedArtifactID: resolvedArtifactID,
                 runID: runID,
@@ -90,7 +90,7 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
             )
         }
         if artifactID == nil {
-            return try persistAndLoad(runID: runID, projectRoot: projectRoot)
+            return try await persistAndLoad(runID: runID, projectRoot: projectRoot)
         }
         throw XcircuiteActionDomainSnapshotResolutionError.artifactNotFound(
             runID: runID,
@@ -101,49 +101,44 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
     private func loadExplicitPath(
         _ path: String,
         artifactID: String,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteResolvedActionDomainSnapshot {
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        let snapshot = try workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
+        runID: String
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot {
+        let snapshot = try await workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: path)
         guard snapshot.runID == runID else {
             throw XcircuiteActionDomainSnapshotResolutionError.runMismatch(
                 expected: runID,
                 actual: snapshot.runID
             )
         }
-        let reference = try workspaceStore.fileReference(
+        let reference = try await workspaceStore.makeArtifactReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
+            format: .json
         )
         return XcircuiteResolvedActionDomainSnapshot(snapshot: snapshot, reference: reference)
     }
 
     private func reusableDefaultSnapshot(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteResolvedActionDomainSnapshot? {
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot? {
         guard reference.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID,
               reference.kind == .other,
               reference.format == .json else {
             return nil
         }
-        if let producedByRunID = reference.producedByRunID, producedByRunID != runID {
+        let integrity = verifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             return nil
         }
-        let integrity = verifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        do {
+            _ = try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+        } catch {
             return nil
         }
-        guard let url = verifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
-            return nil
-        }
-        let snapshot = try workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
+        let snapshot = try await workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: reference.path)
         guard snapshot.runID == runID else {
             return nil
         }
@@ -151,11 +146,11 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
     }
 
     private func verifiedManifestSnapshot(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         expectedArtifactID: String,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteResolvedActionDomainSnapshot {
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot {
         guard reference.artifactID == expectedArtifactID else {
             throw XcircuiteActionDomainSnapshotResolutionError.invalidArtifactReference(
                 path: reference.path,
@@ -168,28 +163,23 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
                 reason: "action-domain snapshots must be JSON artifacts."
             )
         }
-        if let producedByRunID = reference.producedByRunID, producedByRunID != runID {
-            throw XcircuiteActionDomainSnapshotResolutionError.producedByRunMismatch(
-                expected: runID,
-                actual: producedByRunID
-            )
-        }
-
-        let integrity = verifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = verifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteActionDomainSnapshotResolutionError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
-        guard let url = verifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
+        do {
+            _ = try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+        } catch {
             throw XcircuiteActionDomainSnapshotResolutionError.invalidArtifactReference(
                 path: reference.path,
-                reason: "artifact path cannot be resolved inside the project root."
+                reason: error.localizedDescription
             )
         }
-        let snapshot = try workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: url)
+        let snapshot = try await workspaceStore.readJSON(XcircuitePlanningActionDomainSnapshot.self, from: reference.path)
         guard snapshot.runID == runID else {
             throw XcircuiteActionDomainSnapshotResolutionError.runMismatch(
                 expected: runID,
@@ -202,14 +192,14 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
     private func persistAndLoad(
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteResolvedActionDomainSnapshot {
-        let reference = try artifactStore.persistActionDomainSnapshot(
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot {
+        let reference = try await artifactStore.persistActionDomainSnapshot(
             runID: runID,
             projectRoot: projectRoot
         )
-        let snapshot = try workspaceStore.readJSON(
+        let snapshot = try await workspaceStore.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
-            from: workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            from: reference.path
         )
         guard snapshot.runID == runID else {
             throw XcircuiteActionDomainSnapshotResolutionError.runMismatch(

@@ -10,20 +10,12 @@ import Testing
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
-func requireFoundationArtifactReference(
-    _ reference: XcircuiteFileReference,
-    field: String
-) throws -> ArtifactReference {
-    try #require(foundationArtifactReferences([reference], field: field).first)
-}
-
-
 struct ProducedLayoutCorpusCase: Sendable, Hashable {
     var id: String
     var artifactID: String
     var fileName: String
     var layoutFileFormat: LayoutFileFormat
-    var xcircuiteFileFormat: XcircuiteFileFormat
+    var xcircuiteFileFormat: ArtifactFormat
     var pexLayoutFormat: String
 }
 
@@ -70,30 +62,37 @@ extension XcircuiteCandidatePlanVerifierTests {
         case missingBoundingBox
     }
 
+    func makeVerifier(root: URL = FileManager.default.temporaryDirectory) throws -> XcircuiteCandidatePlanVerifier {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+        )
+    }
+
     func prepareRun(
         root: URL,
         runID: String,
         problem: XcircuiteCircuitPlanningProblem
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+    ) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             problem,
             runID: runID,
             projectRoot: root
         )
     }
 
-    func candidatePlanRef(runID: String) -> XcircuiteFileReference {
-        XcircuiteFileReference(
+    func candidatePlanRef(runID: String) throws -> ArtifactReference {
+        try fixtureArtifactReference(
             artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
             path: ".xcircuite/runs/\(runID)/planning/candidate-plan.json",
             kind: .other,
             format: .json,
-            sha256: "abc",
+            sha256: String(repeating: "a", count: 64),
             byteCount: 12,
-            producedByRunID: runID
         )
     }
 
@@ -173,8 +172,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: ["drc-summary"],
                     target: "no-active-violations-for-bucket",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair M1 width violation."
                 ),
             ],
@@ -198,7 +197,7 @@ extension XcircuiteCandidatePlanVerifierTests {
                     sourceObjectiveIDs: ["drc-m1-width-1"],
                     requiredInputRefs: ["layout-ref"],
                     verificationGates: ["artifact-integrity", "native-drc", "native-lvs"],
-                    parameterHints: ["ruleID": .string("M1.width")]
+                    parameterHints: ["ruleID": .text("M1.width")]
                 ),
             ],
             costModel: XcircuitePlanningCostModel(strategy: "minimize-risk-then-churn", terms: []),
@@ -249,21 +248,21 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verificationGates: ["artifact-integrity", "native-drc"],
                     reason: "Create a DRC-verifiable layout candidate.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000301"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000303"),
-                        "cellName": .string("top"),
-                        "layer": .string("M1"),
-                        "originX": .number(0),
-                        "originY": .number(0),
-                        "width": .number(width),
-                        "height": .number(1),
-                        "drcRules": .array([
-                            .object([
-                                "id": .string("M1.width"),
-                                "kind": .string("minimumWidth"),
-                                "layer": .string("M1"),
-                                "value": .number(requiredWidth),
-                            ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000301"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000303"),
+                        "cellName": .text("top"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(0),
+                        "originY": .scalar(0),
+                        "width": .scalar(width),
+                        "height": .scalar(1),
+                        "drcRules": .drcRules([
+                            PlanningDRCRule(
+                                ruleID: "M1.width",
+                                kind: "minimumWidth",
+                                layer: "M1",
+                                requiredValue: requiredWidth
+                            ),
                         ]),
                     ],
                     blockers: []
@@ -286,19 +285,20 @@ extension XcircuiteCandidatePlanVerifierTests {
         root: URL,
         runID: String,
         layoutNetlist: String,
-        schematicNetlist: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeText(layoutNetlist, path: "circuits/layout.spice", root: root)
-        try writeText(schematicNetlist, path: "circuits/schematic.spice", root: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        schematicNetlist: String,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText(layoutNetlist, path: "circuits/layout.spice", root: root)
+        try await writeText(schematicNetlist, path: "circuits/schematic.spice", root: root)
+        _ = try await artifactStore.persistPlanningProblem(
             makeExecutableLVSProblem(runID: runID),
             runID: runID,
             projectRoot: root
         )
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             makeExecutableLVSPlan(runID: runID),
             runID: runID,
             projectRoot: root
@@ -309,23 +309,23 @@ extension XcircuiteCandidatePlanVerifierTests {
         root: URL,
         runID: String,
         layoutCase: ProducedLayoutCorpusCase,
-        circuitCase: ProducedCircuitCorpusCase
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeText(
+        circuitCase: ProducedCircuitCorpusCase,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText(
             circuitCase.schematicNetlist,
             path: "circuits/standard-layout-schematic.spice",
             root: root
         )
-        try writeJSON(LayoutTechDatabase.sampleProcess(), path: "tech/layout-tech.json", root: root)
+        try await writeJSON(LayoutTechDatabase.sampleProcess(), path: "tech/layout-tech.json", root: root)
         let problem = makeProducedStandardLayoutLVSProblem(runID: runID)
         let plan = makeProducedStandardLayoutLVSPlan(runID: runID, layoutCase: layoutCase)
-        try artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
-        let candidatePlanRef = try artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
-        let layoutRef = try writeProducedLayoutArtifact(
+        _ = try await artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
+        let candidatePlanRef = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
+        let layoutRef = try await writeProducedLayoutArtifact(
             root: root,
             runID: runID,
             planID: plan.planID,
@@ -333,8 +333,8 @@ extension XcircuiteCandidatePlanVerifierTests {
             layoutCase: layoutCase,
             circuitCase: circuitCase
         )
-        try store.upsertRunArtifact(layoutRef, runID: runID, inProjectAt: root)
-        try artifactStore.persistPlanExecution(
+        _ = try await retainTestArtifact(layoutRef, runID: runID, store: store, projectRoot: root)
+        _ = try await artifactStore.persistPlanExecution(
             XcircuiteCandidatePlanExecution(
                 runID: runID,
                 problemID: problem.problemID,
@@ -349,10 +349,10 @@ extension XcircuiteCandidatePlanVerifierTests {
                         domainID: "layout-edit",
                         operationID: "layout.create-cell",
                         status: "executed",
-                        artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-step")]
+                        artifactReferences: [layoutRef]
                     ),
                 ],
-                artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-execution")],
+                artifactReferences: [layoutRef],
                 diagnostics: [],
                 nextActions: []
             ),
@@ -364,13 +364,13 @@ extension XcircuiteCandidatePlanVerifierTests {
     func prepareProducedStandardLayoutPEXRun(
         root: URL,
         runID: String,
-        layoutCase: ProducedLayoutCorpusCase
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeText(
+        layoutCase: ProducedLayoutCorpusCase,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText(
             """
             .subckt top in out vdd vss
             M1 out in vdd vdd pmos W=1u L=0.15u
@@ -380,12 +380,12 @@ extension XcircuiteCandidatePlanVerifierTests {
             path: "circuits/source.spice",
             root: root
         )
-        try writeJSON(makeTestPEXTechnology(), path: "tech/pex-technology.json", root: root)
+        try await writeJSON(makeTestPEXTechnology(), path: "tech/pex-technology.json", root: root)
         let problem = makeProducedStandardLayoutPEXProblem(runID: runID)
         let plan = makeProducedStandardLayoutPEXPlan(runID: runID, layoutCase: layoutCase)
-        try artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
-        let candidatePlanRef = try artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
-        let layoutRef = try writeProducedLayoutArtifact(
+        _ = try await artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
+        let candidatePlanRef = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
+        let layoutRef = try await writeProducedLayoutArtifact(
             root: root,
             runID: runID,
             planID: plan.planID,
@@ -393,8 +393,8 @@ extension XcircuiteCandidatePlanVerifierTests {
             layoutCase: layoutCase,
             circuitCase: producedSingleNMOSCircuitCase()
         )
-        try store.upsertRunArtifact(layoutRef, runID: runID, inProjectAt: root)
-        try artifactStore.persistPlanExecution(
+        _ = try await retainTestArtifact(layoutRef, runID: runID, store: store, projectRoot: root)
+        _ = try await artifactStore.persistPlanExecution(
             XcircuiteCandidatePlanExecution(
                 runID: runID,
                 problemID: problem.problemID,
@@ -409,10 +409,10 @@ extension XcircuiteCandidatePlanVerifierTests {
                         domainID: "layout-edit",
                         operationID: "layout.create-cell",
                         status: "executed",
-                        artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-step")]
+                        artifactReferences: [layoutRef]
                     ),
                 ],
-                artifactReferences: [try requireFoundationArtifactReference(layoutRef, field: "layout-execution")],
+                artifactReferences: [layoutRef],
                 diagnostics: [],
                 nextActions: []
             ),
@@ -446,8 +446,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "layout-and-schematic-equivalent",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Verify the candidate against LVS."
                 ),
             ],
@@ -498,13 +498,15 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verificationGates: ["artifact-integrity", "native-lvs"],
                     reason: "Run a concrete post-execution LVS gate.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000601"),
-                        "cellName": .string("lvs_gate_marker"),
-                        "lvsInputs": .object([
-                            "layoutNetlistRef": .string("layout-netlist-ref"),
-                            "schematicNetlistRef": .string("schematic-netlist-ref"),
-                            "topCell": .string("inv"),
-                        ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000601"),
+                        "cellName": .text("lvs_gate_marker"),
+                        "lvsInputs": .lvsInputs(
+                            PlanningLVSInputs(
+                                layoutNetlistReferenceID: "layout-netlist-ref",
+                                schematicNetlistReferenceID: "schematic-netlist-ref",
+                                topCell: "inv"
+                            )
+                        ),
                     ],
                     blockers: []
                 ),
@@ -547,8 +549,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "post-edit-layout-and-schematic-equivalent",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Verify the produced standard layout artifact against LVS."
                 ),
             ],
@@ -602,15 +604,17 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verificationGates: ["artifact-integrity", "native-lvs"],
                     reason: "Run native LVS from a produced standard layout artifact.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000611"),
-                        "cellName": .string("produced_lvs_gate_marker"),
-                        "lvsInputs": .object([
-                            "layoutGDSRefID": .string(layoutCase.artifactID),
-                            "schematicNetlistRef": .string("schematic-netlist-ref"),
-                            "technologyRef": .string("layout-technology-ref"),
-                            "topCell": .string("TOP"),
-                            "backendID": .string("native-gds"),
-                        ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000611"),
+                        "cellName": .text("produced_lvs_gate_marker"),
+                        "lvsInputs": .lvsInputs(
+                            PlanningLVSInputs(
+                                layoutGDSReferenceID: layoutCase.artifactID,
+                                schematicNetlistReferenceID: "schematic-netlist-ref",
+                                technologyReferenceID: "layout-technology-ref",
+                                topCell: "TOP",
+                                backendID: "native-gds"
+                            )
+                        ),
                     ],
                     blockers: []
                 ),
@@ -631,12 +635,13 @@ extension XcircuiteCandidatePlanVerifierTests {
     func prepareExecutableSimulationRun(
         root: URL,
         runID: String,
-        target: Double
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeText(
+        target: Double,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText(
             """
             * rc lowpass step
             V1 1 0 1
@@ -649,12 +654,12 @@ extension XcircuiteCandidatePlanVerifierTests {
             path: "circuits/rc.cir",
             root: root
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await artifactStore.persistPlanningProblem(
             makeExecutableSimulationProblem(runID: runID),
             runID: runID,
             projectRoot: root
         )
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             makeExecutableSimulationPlan(runID: runID, target: target),
             runID: runID,
             projectRoot: root
@@ -681,8 +686,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "measurement-within-tolerance",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Verify the candidate against a simulation measurement."
                 ),
             ],
@@ -733,18 +738,20 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verificationGates: ["artifact-integrity", "simulation-metric-gate"],
                     reason: "Run a concrete post-execution simulation metric gate.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000801"),
-                        "cellName": .string("simulation_gate_marker"),
-                        "simulationInputs": .object([
-                            "netlistRef": .string("source-netlist-ref"),
-                            "expectations": .array([
-                                .object([
-                                    "name": .string("vfinal"),
-                                    "target": .number(target),
-                                    "tolerance": .number(0.01),
-                                ]),
-                            ]),
-                        ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000801"),
+                        "cellName": .text("simulation_gate_marker"),
+                        "simulationInputs": .simulationInputs(
+                            PlanningSimulationInputs(
+                                netlistReferenceID: "source-netlist-ref",
+                                measurementExpectations: [
+                                    SimulationMeasurementExpectation(
+                                        name: "vfinal",
+                                        target: target,
+                                        tolerance: 0.01
+                                    ),
+                                ]
+                            )
+                        ),
                     ],
                     blockers: []
                 ),
@@ -764,13 +771,14 @@ extension XcircuiteCandidatePlanVerifierTests {
 
     func prepareExecutablePEXRun(
         root: URL,
-        runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeText("GDS placeholder for deterministic mock PEX input", path: "layout/top.gds", root: root)
-        try writeText(
+        runID: String,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText("GDS placeholder for deterministic mock PEX input", path: "layout/top.gds", root: root)
+        try await writeText(
             """
             .subckt top in out vdd vss
             M1 out in vdd vdd pmos W=1u L=0.15u
@@ -780,13 +788,13 @@ extension XcircuiteCandidatePlanVerifierTests {
             path: "circuits/source.spice",
             root: root
         )
-        try writeJSON(makeTestPEXTechnology(), path: "tech/pex-technology.json", root: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        try await writeJSON(makeTestPEXTechnology(), path: "tech/pex-technology.json", root: root)
+        _ = try await artifactStore.persistPlanningProblem(
             makeExecutablePEXProblem(runID: runID),
             runID: runID,
             projectRoot: root
         )
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             makeExecutablePEXPlan(runID: runID),
             runID: runID,
             projectRoot: root
@@ -823,8 +831,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "complete-pex-summary",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Verify the candidate against PEX summary completeness."
                 ),
             ],
@@ -875,20 +883,23 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verificationGates: ["artifact-integrity", "pex-summary-gate"],
                     reason: "Run a concrete post-execution PEX summary gate.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000701"),
-                        "cellName": .string("pex_gate_marker"),
-                        "pexInputs": .object([
-                            "layoutRef": .string("layout-ref"),
-                            "sourceNetlistRef": .string("source-netlist-ref"),
-                            "technologyRef": .string("pex-technology-ref"),
-                            "topCell": .string("top"),
-                            "backendID": .string("mock"),
-                            "allowMockBackend": .bool(true),
-                            "layoutFormat": .string("gds"),
-                            "sourceNetlistFormat": .string("spice"),
-                            "corners": .array([.string("tt")]),
-                            "topNets": .number(5),
-                        ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000701"),
+                        "cellName": .text("pex_gate_marker"),
+                        "pexInputs": .pexInputs(
+                            PlanningPEXInputs(
+                                layoutReferenceID: "layout-ref",
+                                sourceNetlistReferenceID: "source-netlist-ref",
+                                technologyReferenceID: "pex-technology-ref",
+                                topCell: "top",
+                                layoutFormat: "gds",
+                                sourceNetlistFormat: "spice",
+                                backendID: "mock",
+                                allowMockBackend: true,
+                                cornerIDs: ["tt"],
+                                options: .default,
+                                topNetCount: 5
+                            )
+                        ),
                     ],
                     blockers: []
                 ),
@@ -908,15 +919,15 @@ extension XcircuiteCandidatePlanVerifierTests {
 
     func updatePEXInputs(
         in plan: inout XcircuiteCandidatePlan,
-        update: (inout [String: XcircuiteJSONValue]) -> Void
+        update: (inout PlanningPEXInputs) -> Void
     ) throws {
         let pexInputsValue = try #require(plan.steps.first?.parameterHints["pexInputs"])
-        guard case .object(var pexInputs) = pexInputsValue else {
-            Issue.record("Expected pexInputs to be an object.")
+        guard case .pexInputs(var pexInputs) = pexInputsValue else {
+            Issue.record("Expected typed PEX inputs.")
             return
         }
         update(&pexInputs)
-        plan.steps[0].parameterHints["pexInputs"] = .object(pexInputs)
+        plan.steps[0].parameterHints["pexInputs"] = .pexInputs(pexInputs)
     }
 
     func makeProducedStandardLayoutPEXProblem(runID: String) -> XcircuiteCircuitPlanningProblem {
@@ -944,8 +955,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "complete-post-edit-pex-summary",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Verify the produced standard layout artifact through PEX."
                 ),
             ],
@@ -999,20 +1010,23 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verificationGates: ["artifact-integrity", "pex-summary-gate"],
                     reason: "Run PEX from a produced standard layout artifact.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000711"),
-                        "cellName": .string("produced_pex_gate_marker"),
-                        "pexInputs": .object([
-                            "layoutRefID": .string(layoutCase.artifactID),
-                            "sourceNetlistRef": .string("source-netlist-ref"),
-                            "technologyRef": .string("pex-technology-ref"),
-                            "topCell": .string("top"),
-                            "backendID": .string("mock"),
-                            "allowMockBackend": .bool(true),
-                            "layoutFormat": .string(layoutCase.pexLayoutFormat),
-                            "sourceNetlistFormat": .string("spice"),
-                            "corners": .array([.string("tt")]),
-                            "topNets": .number(5),
-                        ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000711"),
+                        "cellName": .text("produced_pex_gate_marker"),
+                        "pexInputs": .pexInputs(
+                            PlanningPEXInputs(
+                                layoutReferenceID: layoutCase.artifactID,
+                                sourceNetlistReferenceID: "source-netlist-ref",
+                                technologyReferenceID: "pex-technology-ref",
+                                topCell: "top",
+                                layoutFormat: layoutCase.pexLayoutFormat,
+                                sourceNetlistFormat: "spice",
+                                backendID: "mock",
+                                allowMockBackend: true,
+                                cornerIDs: ["tt"],
+                                options: .default,
+                                topNetCount: 5
+                            )
+                        ),
                     ],
                     blockers: []
                 ),
@@ -1076,8 +1090,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                     priority: "error",
                     sourceRefIDs: ["lvs-summary"],
                     target: "layout-and-schematic-equivalent-for-bucket",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair model policy mismatch."
                 ),
             ],

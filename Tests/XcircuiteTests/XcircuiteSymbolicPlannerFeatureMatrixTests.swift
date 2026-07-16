@@ -63,7 +63,7 @@ struct XcircuiteSymbolicPlannerFeatureMatrixTests {
         #expect(Set(tags).count == tags.count)
     }
 
-    @Test func coverageTagValidatorRejectsUnknownTags() throws {
+    @Test func coverageTagValidatorRejectsUnknownTags() async throws {
         let validator = XcircuiteSymbolicPlannerCoverageTagValidator()
 
         do {
@@ -84,7 +84,7 @@ struct XcircuiteSymbolicPlannerFeatureMatrixTests {
         }
     }
 
-    @Test func coverageTagValidatorAcceptsNativeCertificateCoverageAsImplemented() throws {
+    @Test func coverageTagValidatorAcceptsNativeCertificateCoverageAsImplemented() async throws {
         let validator = XcircuiteSymbolicPlannerCoverageTagValidator()
 
         try validator.validateImplementedCoverageTags([

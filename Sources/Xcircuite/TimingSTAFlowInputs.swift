@@ -14,7 +14,7 @@ public struct TimingSTAFlowInputs: Sendable, Hashable, Codable {
     public var modeIDs: [String]
     public var cornerIDs: [String]
     public var analysisKinds: [STAAnalysisKind]
-    public var requiresSignoff: Bool
+    public var requiresPostLayoutInputs: Bool
 
     public init(
         design: XcircuiteFlowInputReference,
@@ -29,7 +29,7 @@ public struct TimingSTAFlowInputs: Sendable, Hashable, Codable {
         modeIDs: [String] = ["default"],
         cornerIDs: [String] = ["default"],
         analysisKinds: [STAAnalysisKind] = [.setup, .hold],
-        requiresSignoff: Bool = false
+        requiresPostLayoutInputs: Bool = false
     ) {
         self.design = design
         self.libraries = libraries
@@ -43,6 +43,6 @@ public struct TimingSTAFlowInputs: Sendable, Hashable, Codable {
         self.modeIDs = modeIDs
         self.cornerIDs = cornerIDs
         self.analysisKinds = analysisKinds
-        self.requiresSignoff = requiresSignoff
+        self.requiresPostLayoutInputs = requiresPostLayoutInputs
     }
 }

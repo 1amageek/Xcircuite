@@ -15,8 +15,8 @@ struct LogicDesignFlowStageSupport: Sendable {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     func writeResult<Value: Encodable>(
@@ -24,20 +24,14 @@ struct LogicDesignFlowStageSupport: Sendable {
         stageID: String,
         context: FlowExecutionContext,
         fileName: String
-    ) throws -> ArtifactReference {
-        let directory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: directory)
-        let url = directory.appending(path: fileName)
-        try context.storage.writeJSON(result, to: url, forProjectAt: context.projectRoot)
-        return try artifactBuilder.reference(
-            for: url,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await context.persistJSONArtifact(
+            result,
             artifactID: "\(stageID)-result",
+            stageID: stageID,
+            fileName: fileName,
             kind: .report,
-            format: .json
+            mode: .replaceable
         )
     }
 

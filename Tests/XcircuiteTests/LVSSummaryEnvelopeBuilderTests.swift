@@ -1,25 +1,25 @@
 import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import LVSEngine
 import Testing
 import ToolQualification
 @testable import Xcircuite
-import DesignFlowKernel
 
 @Suite("LVS summary envelope builder")
 struct LVSSummaryEnvelopeBuilderTests {
-    @Test func duplicateMismatchBucketsProduceUniqueFeedbackChannels() throws {
+    @Test func duplicateMismatchBucketsProduceUniqueFeedbackChannels() async throws {
         let root = try makeTemporaryRoot("duplicate-lvs-buckets")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
         let runID = "run-lvs-envelope"
-        let runDirectory = try workspaceStore.createRunDirectory(for: runID, inProjectAt: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
         let rawDirectory = runDirectory
             .appending(path: "stages")
             .appending(path: "008-lvs")
             .appending(path: "raw")
-        try workspaceStore.ensureDirectory(at: rawDirectory)
+        try FileManager.default.createDirectory(at: rawDirectory, withIntermediateDirectories: true)
 
         let bucket = LVSMismatchBucketSummary(
             ruleID: "LVS_MODEL_MISMATCH",
@@ -60,16 +60,26 @@ struct LVSSummaryEnvelopeBuilderTests {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(summary).write(to: summaryURL, options: .atomic)
-        let summaryReference = try foundationReference(workspaceStore.fileReference(
-            forProjectRelativePath: ".xcircuite/runs/\(runID)/stages/008-lvs/raw/lvs-summary.json",
-            artifactID: "lvs-summary",
-            kind: .report,
-            format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
-        ))
+        let capturedSummary = try LocalArtifactReferencer().reference(
+            ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(runID)/stages/008-lvs/raw/lvs-summary.json"
+                ),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            relativeTo: root
+        )
+        let summaryReference = ArtifactReference(
+            id: try ArtifactID(rawValue: "lvs-summary"),
+            locator: capturedSummary.locator,
+            digest: capturedSummary.digest,
+            byteCount: capturedSummary.byteCount,
+            producer: capturedSummary.producer
+        )
 
-        let envelopeReference = try LVSSummaryEnvelopeBuilder().envelopeReference(
+        let envelopeReference = try await LVSSummaryEnvelopeBuilder().envelopeReference(
             summary: summary,
             summaryArtifactID: "lvs-summary",
             stageArtifacts: [summaryReference],
@@ -81,14 +91,14 @@ struct LVSSummaryEnvelopeBuilderTests {
                 projectRoot: root,
                 runID: runID,
                 runDirectory: runDirectory,
-                storage: workspaceStore,
+                infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
         )
 
         let envelope = try JSONDecoder().decode(
-            XcircuiteArtifactEnvelope.self,
+            FlowArtifactEnvelope.self,
             from: Data(contentsOf: root.appending(path: envelopeReference.path))
         )
         let feedbackSignals = try #require(envelope.evaluationResult?.feedbackSignals)

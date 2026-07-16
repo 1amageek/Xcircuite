@@ -13,8 +13,8 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
@@ -23,18 +23,18 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     public func generateImprovementPlanningArtifacts(
         request: XcircuiteImprovementPlanningArtifactGenerationRequest,
         projectRoot: URL
-    ) throws -> XcircuiteImprovementPlanningArtifactGenerationResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
+    ) async throws -> XcircuiteImprovementPlanningArtifactGenerationResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
         let loopPath = try requiredPath(
             explicitPath: request.numericRepairLoopPath,
             artifactID: request.numericRepairLoopArtifactID ?? XcircuitePlanningArtifactStore.numericRepairLoopArtifactID,
             manifest: manifest,
             missingError: .missingNumericRepairLoopReference
         )
-        let loop = try workspaceStore.readJSON(
+        let loop = try await workspaceStore.readJSON(
             XcircuiteNumericRepairLoopResult.self,
-            from: workspaceStore.url(forProjectRelativePath: loopPath, inProjectAt: projectRoot)
+            from: loopPath
         )
         guard loop.runID == request.runID else {
             throw XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(
@@ -49,17 +49,24 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
             manifest: manifest
         )
-        let problem = try problemPath.map {
-            try loadProblem(path: $0, runID: request.runID, loopProblemID: loop.problemID, projectRoot: projectRoot)
+        let problem: XcircuiteCircuitPlanningProblem?
+        if let problemPath {
+            problem = try await loadProblem(
+                path: problemPath,
+                runID: request.runID,
+                loopProblemID: loop.problemID
+            )
+        } else {
+            problem = nil
         }
         let generatedAt = request.generatedAt ?? ISO8601DateFormatter().string(from: Date())
-        let evidence = try loop.iterations.map {
-            try iterationEvidence(
-                $0,
+        var evidence: [IterationEvidence] = []
+        for iteration in loop.iterations {
+            evidence.append(try await iterationEvidence(
+                iteration,
                 runID: request.runID,
-                problemID: loop.problemID,
-                projectRoot: projectRoot
-            )
+                problemID: loop.problemID
+            ))
         }
 
         let profile = makeThresholdProfile(
@@ -69,7 +76,7 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             loopPath: loopPath,
             generatedAt: generatedAt
         )
-        let profileRef = try artifactStore.persistMetricThresholdProfile(
+        let profileRef = try await artifactStore.persistMetricThresholdProfile(
             profile,
             runID: request.runID,
             projectRoot: projectRoot
@@ -81,10 +88,10 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             loop: loop,
             loopPath: loopPath,
             evidence: evidence,
-            thresholdArtifactID: profileRef.artifactID ?? XcircuitePlanningArtifactStore.metricThresholdProfileArtifactID,
+            thresholdArtifactID: profileRef.artifactID,
             generatedAt: generatedAt
         )
-        let calibrationRef = try artifactStore.persistCostCalibrationReport(
+        let calibrationRef = try await artifactStore.persistCostCalibrationReport(
             calibration,
             runID: request.runID,
             projectRoot: projectRoot
@@ -95,11 +102,11 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             problemID: problem?.problemID ?? loop.problemID,
             loop: loop,
             evidence: evidence,
-            thresholdArtifactID: profileRef.artifactID ?? XcircuitePlanningArtifactStore.metricThresholdProfileArtifactID,
-            calibrationArtifactID: calibrationRef.artifactID ?? XcircuitePlanningArtifactStore.costCalibrationArtifactID,
+            thresholdArtifactID: profileRef.artifactID,
+            calibrationArtifactID: calibrationRef.artifactID,
             generatedAt: generatedAt
         )
-        let paretoRef = try artifactStore.persistParetoCandidates(
+        let paretoRef = try await artifactStore.persistParetoCandidates(
             paretoSet,
             runID: request.runID,
             projectRoot: projectRoot
@@ -110,24 +117,23 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             problemID: problem?.problemID ?? loop.problemID,
             loop: loop,
             evidence: evidence,
-            thresholdArtifactID: profileRef.artifactID ?? XcircuitePlanningArtifactStore.metricThresholdProfileArtifactID,
-            calibrationArtifactID: calibrationRef.artifactID ?? XcircuitePlanningArtifactStore.costCalibrationArtifactID,
-            paretoArtifactID: paretoRef.artifactID ?? XcircuitePlanningArtifactStore.paretoCandidatesArtifactID
+            thresholdArtifactID: profileRef.artifactID,
+            calibrationArtifactID: calibrationRef.artifactID,
+            paretoArtifactID: paretoRef.artifactID
         )
-        let loopRef = try artifactStore.persistImprovementLoop(
+        let loopRef = try await artifactStore.persistImprovementLoop(
             improvementLoop,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let learningReport = try makeRejectedFeedbackLearningReport(
+        let learningReport = try await makeRejectedFeedbackLearningReport(
             runID: request.runID,
             problemID: problem?.problemID ?? loop.problemID,
             loopPath: loopPath,
             evidence: evidence,
-            generatedAt: generatedAt,
-            projectRoot: projectRoot
+            generatedAt: generatedAt
         )
-        let learningRef = try artifactStore.persistRejectedFeedbackLearningReport(
+        let learningRef = try await artifactStore.persistRejectedFeedbackLearningReport(
             learningReport,
             runID: request.runID,
             projectRoot: projectRoot
@@ -141,26 +147,11 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             accepted: loop.accepted,
             iterationCount: loop.iterationCount,
             selectedCandidateID: paretoSet.selectedCandidateID,
-            thresholdProfileArtifact: try requireFoundationArtifactReference(
-                profileRef,
-                field: "metric-threshold-profile"
-            ),
-            costCalibrationArtifact: try requireFoundationArtifactReference(
-                calibrationRef,
-                field: "cost-calibration"
-            ),
-            paretoCandidatesArtifact: try requireFoundationArtifactReference(
-                paretoRef,
-                field: "pareto-candidates"
-            ),
-            improvementLoopArtifact: try requireFoundationArtifactReference(
-                loopRef,
-                field: "improvement-loop"
-            ),
-            rejectedFeedbackLearningReportArtifact: try requireFoundationArtifactReference(
-                learningRef,
-                field: "rejected-feedback-learning-report"
-            ),
+            thresholdProfileArtifact: profileRef,
+            costCalibrationArtifact: calibrationRef,
+            paretoCandidatesArtifact: paretoRef,
+            improvementLoopArtifact: loopRef,
+            rejectedFeedbackLearningReportArtifact: learningRef,
             diagnostics: diagnostics(problem: problem, loop: loop, evidence: evidence)
         )
     }
@@ -410,16 +401,15 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         problemID: String?,
         loopPath: String,
         evidence: [IterationEvidence],
-        generatedAt: String,
-        projectRoot: URL
-    ) throws -> XcircuiteRejectedFeedbackLearningReport {
+        generatedAt: String
+    ) async throws -> XcircuiteRejectedFeedbackLearningReport {
         let rejectedPlanPaths = unique(evidence.flatMap { item in
             [
                 item.selectionTrace?.rejectedPlansPath,
                 item.iteration.rejectedPlansArtifact?.path,
             ].compactMap { $0 }
         })
-        let rejectedRecords = try loadRejectedPlanRecords(paths: rejectedPlanPaths, projectRoot: projectRoot)
+        let rejectedRecords = try await loadRejectedPlanRecords(paths: rejectedPlanPaths)
         let retainedFailedGateIDs = unique(rejectedRecords.flatMap(\.failedGateIDs))
         let retainedDiagnosticCodes = unique(rejectedRecords.flatMap { record in
             record.diagnostics.map(\.code)
@@ -485,13 +475,12 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     }
 
     private func loadRejectedPlanRecords(
-        paths: [String],
-        projectRoot: URL
-    ) throws -> [XcircuiteRejectedPlanRecord] {
+        paths: [String]
+    ) async throws -> [XcircuiteRejectedPlanRecord] {
         var records: [XcircuiteRejectedPlanRecord] = []
         let decoder = JSONDecoder()
         for path in paths {
-            let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            let url = try await workspaceStore.url(for: path)
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
             }
@@ -563,16 +552,14 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     private func iterationEvidence(
         _ iteration: XcircuiteNumericRepairLoopIteration,
         runID: String,
-        problemID: String?,
-        projectRoot: URL
-    ) throws -> IterationEvidence {
-        let selectionTrace = try optionalJSON(
+        problemID: String?
+    ) async throws -> IterationEvidence {
+        let selectionTrace = try await optionalJSON(
             XcircuiteParameterCandidateSelectionTrace.self,
                 from: archivedReference(
                     role: "selection-trace",
                     iteration: iteration
-                ) ?? iteration.selectionTraceArtifact,
-            projectRoot: projectRoot
+                ) ?? iteration.selectionTraceArtifact
         )
         if let selectionTrace {
             try validateSelectionTrace(
@@ -582,13 +569,12 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
                 problemID: problemID
             )
         }
-        let verification = try optionalJSON(
+        let verification = try await optionalJSON(
             XcircuitePlanVerification.self,
                 from: archivedReference(
                     role: "plan-verification",
                     iteration: iteration
-                ) ?? iteration.planVerificationArtifact,
-            projectRoot: projectRoot
+                ) ?? iteration.planVerificationArtifact
         )
         if let verification {
             try validateVerification(
@@ -614,33 +600,31 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         }
     }
 
-    private func optionalJSON<T: Decodable>(
+    private func optionalJSON<T: Decodable & Sendable>(
         _ type: T.Type,
-        from reference: ArtifactReference?,
-        projectRoot: URL
-    ) throws -> T? {
+        from reference: ArtifactReference?
+    ) async throws -> T? {
         guard let reference else {
             return nil
         }
-        return try workspaceStore.readJSON(
+        return try JSONDecoder().decode(
             T.self,
-            from: try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+            from: try await workspaceStore.loadArtifactContent(for: reference)
         )
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func loadProblem(
         path: String,
         runID: String,
-        loopProblemID: String?,
-        projectRoot: URL
-    ) throws -> XcircuiteCircuitPlanningProblem {
-        let problem = try workspaceStore.readJSON(
+        loopProblemID: String?
+    ) async throws -> XcircuiteCircuitPlanningProblem {
+        let problem = try await workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            from: path
         )
         guard problem.runID == runID else {
             throw XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(
@@ -660,7 +644,7 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     private func requiredPath(
         explicitPath: String?,
         artifactID: String,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         missingError: XcircuiteImprovementPlanningArtifactGenerationError
     ) throws -> String {
         if let explicitPath {
@@ -682,7 +666,7 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
     private func optionalPath(
         explicitPath: String?,
         artifactID: String,
-        manifest: XcircuiteRunManifest
+        manifest: FlowRunManifest
     ) throws -> String? {
         if let explicitPath {
             return explicitPath
@@ -828,8 +812,8 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
             iteration.planVerificationArtifact?.artifactID,
             iteration.rejectedPlansArtifact?.artifactID,
         ].compactMap { $0 }
-        let producedArtifactIDs = iteration.producedArtifacts.compactMap(\.artifactID)
-        let archivedArtifactIDs = iteration.archivedArtifactRefs.compactMap(\.artifactID)
+        let producedArtifactIDs = iteration.producedArtifacts.map(\.artifactID)
+        let archivedArtifactIDs = iteration.archivedArtifactRefs.map(\.artifactID)
         return unique(directArtifactIDs + producedArtifactIDs + archivedArtifactIDs)
     }
 
@@ -849,21 +833,21 @@ public struct XcircuiteImprovementPlanningArtifactGenerator: Sendable {
         return "within-tolerance"
     }
 
-    private func numberValue(_ value: XcircuiteJSONValue?) -> Double? {
+    private func numberValue(_ value: PlanningParameterValue?) -> Double? {
         guard let value else {
             return nil
         }
-        if case .number(let number) = value {
+        if case .scalar(let number) = value {
             return number
         }
         return nil
     }
 
-    private func stringValue(_ value: XcircuiteJSONValue?) -> String? {
+    private func stringValue(_ value: PlanningParameterValue?) -> String? {
         guard let value else {
             return nil
         }
-        if case .string(let string) = value {
+        if case .text(let string) = value {
             return string
         }
         return nil

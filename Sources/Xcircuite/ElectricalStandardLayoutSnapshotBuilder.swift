@@ -30,7 +30,7 @@ public struct ElectricalStandardLayoutSnapshotBuilder: Sendable {
             )
         }
 
-        let dbuPerMicron = document.units.dbuPerMicron
+        let dbuPerMicron = document.units.scale.databaseUnitsPerMicrometer
         guard dbuPerMicron.isFinite, dbuPerMicron > 0 else {
             throw ElectricalStandardLayoutImportError.malformedGeometry("DBU per micron must be positive")
         }

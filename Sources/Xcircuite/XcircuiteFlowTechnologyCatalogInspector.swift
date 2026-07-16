@@ -492,7 +492,7 @@ public struct XcircuiteFlowTechnologyCatalogInspector: XcircuiteFlowTechnologyCa
         into issues: inout [XcircuiteFlowTechnologyCatalogInventoryIssue]
     ) {
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+            try FlowIdentifierValidator().validate(value, kind: .artifactID)
         } catch {
             issues.append(
                 issue(

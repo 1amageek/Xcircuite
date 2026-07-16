@@ -3,7 +3,6 @@ import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
-import DesignFlowKernel
 
 @Suite("Timing headless flow")
 struct TimingHeadlessFlowTests {
@@ -11,7 +10,7 @@ struct TimingHeadlessFlowTests {
     func staStagePersistsResult() async throws {
         let projectRoot = try makeProjectRoot(name: "timing-sta-headless")
         try writeSTAInputs(to: projectRoot)
-        let context = try makeContext(projectRoot: projectRoot, runID: "sta-headless")
+        let context = try await makeContext(projectRoot: projectRoot, runID: "sta-headless")
         let inputs = TimingSTAFlowInputs(
             design: .path("design.json"),
             libraries: [.path("library.lib")],
@@ -55,7 +54,14 @@ struct TimingHeadlessFlowTests {
         )
         let executor = TimingSTAFlowStageExecutor(inputs: inputs)
 
-        let blocked = try await DefaultFlowOrchestrator().run(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let runtime = XcircuiteFlowRuntime(
+            toolRegistry: ToolRegistry(),
+            healthResults: [:],
+            executors: [executor],
+            workspaceStore: workspaceStore
+        )
+        let blocked = try await runtime.run(
             request: FlowOperationRequest(
                 projectRoot: projectRoot,
                 runID: runID,
@@ -67,14 +73,15 @@ struct TimingHeadlessFlowTests {
                         requiresApproval: true
                     ),
                 ]
-            ),
-            toolRegistry: ToolRegistry(),
-            healthResults: [:],
-            executors: [executor]
+            )
         )
         #expect(blocked.status == .blocked)
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        let bundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
             projectRoot: projectRoot
         )
@@ -86,7 +93,12 @@ struct TimingHeadlessFlowTests {
         #expect(timingArtifact.sha256 != nil)
         #expect((timingArtifact.byteCount ?? 0) > 0)
 
-        let approval = try DefaultFlowGateApprovalRecorder().recordApproval(
+        let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
+        let approval = try await DefaultFlowGateApprovalRecorder(
+            loader: workspaceStore,
+            inspector: inspector,
+            ledgerPersistence: workspaceStore
+        ).recordApproval(
             FlowGateApprovalRequest(
                 projectRoot: projectRoot,
                 runID: runID,
@@ -97,11 +109,8 @@ struct TimingHeadlessFlowTests {
         )
         #expect(approval.approval.stageID == "timing.sta")
 
-        let resumed = try await DefaultFlowRunResumer().resumeRun(
-            request: FlowRunResumeRequest(projectRoot: projectRoot, runID: runID),
-            toolRegistry: ToolRegistry(),
-            healthResults: [:],
-            executors: [executor]
+        let resumed = try await runtime.resume(
+            request: FlowRunResumeRequest(projectRoot: projectRoot, runID: runID)
         )
         #expect(resumed.result.status == .succeeded)
         #expect(resumed.summary.approvalCount == 1)
@@ -110,7 +119,7 @@ struct TimingHeadlessFlowTests {
                 && stage.artifactCount > 0
         })
 
-        let resumedBundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let resumedBundle = try await reviewBundler.makeReviewBundle(
             runID: runID,
             projectRoot: projectRoot
         )
@@ -139,7 +148,7 @@ struct TimingHeadlessFlowTests {
         1 victim aggressor 100
         *END
         """.write(to: projectRoot.appending(path: "positive.spef"), atomically: true, encoding: .utf8)
-        let context = try makeContext(projectRoot: projectRoot, runID: "si-headless")
+        let context = try await makeContext(projectRoot: projectRoot, runID: "si-headless")
         let inputs = TimingSIFlowInputs(
             design: .path("design.json"),
             constraints: .path("constraints.sdc"),
@@ -167,16 +176,15 @@ struct TimingHeadlessFlowTests {
         return root
     }
 
-    private func makeContext(projectRoot: URL, runID: String) throws -> FlowExecutionContext {
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
-        let runDirectory = projectRoot.appending(path: ".xcircuite/runs/\(runID)")
-        try workspaceStore.ensureDirectory(at: runDirectory)
+    private func makeContext(projectRoot: URL, runID: String) async throws -> FlowExecutionContext {
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        try await workspaceStore.ensureWorkspace()
+        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
         return FlowExecutionContext(
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            storage: workspaceStore,
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

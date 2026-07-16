@@ -53,14 +53,11 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                     priority: "info",
                     sourceRefIDs: [summaryRefID],
                     target: "pex-summary-available",
-                    currentValue: .number(0),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(0),
+                    requiredValue: .scalar(0),
                     description: "PEX summary contains no hotspots or diagnostics requiring a recovery plan.",
                     evidence: [
-                        "symbolicGoalAtoms": .array([
-                            .string("pex-summary-available"),
-                            .string("artifact:pex-summary"),
-                        ]),
+                        "symbolicGoalAtoms": .textList(["pex-summary-available", "artifact:pex-summary"]),
                     ]
                 )
             )
@@ -117,23 +114,20 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: [metricReportRefID],
             target: "post-layout-metric-gate-passed",
-            currentValue: .string(report.gateStatus),
-            requiredValue: .string("passed"),
+            currentValue: .text(report.gateStatus),
+            requiredValue: .text("passed"),
             description: "Recover post-layout simulation metrics until the comparison gate passes.",
             evidence: [
-                "metricReportRefID": .string(metricReportRefID),
-                "status": .string(report.status),
-                "gateStatus": .string(report.gateStatus),
-                "gateViolations": .array(report.gateViolations.map { .string($0) }),
-                "maxAbsoluteDelta": .number(report.maxAbsoluteDelta),
-                "maxRelativeDelta": .number(report.maxRelativeDelta),
-                "comparedVariableCount": .number(Double(report.comparedVariables.count)),
-                "missingPostLayoutVariables": .array(report.missingInPostLayout.map { .string($0) }),
-                "addedPostLayoutVariables": .array(report.addedInPostLayout.map { .string($0) }),
-                "symbolicGoalAtoms": .array([
-                    .string("post-layout-metric-gate-passed"),
-                    .string("artifact:simulation-metric-report"),
-                ]),
+                "metricReportRefID": .text(metricReportRefID),
+                "status": .text(report.status),
+                "gateStatus": .text(report.gateStatus),
+                "gateViolations": .textList(report.gateViolations),
+                "maxAbsoluteDelta": .scalar(report.maxAbsoluteDelta),
+                "maxRelativeDelta": .scalar(report.maxRelativeDelta),
+                "comparedVariableCount": .scalar(Double(report.comparedVariables.count)),
+                "missingPostLayoutVariables": .textList(report.missingInPostLayout),
+                "addedPostLayoutVariables": .textList(report.addedInPostLayout),
+                "symbolicGoalAtoms": .textList(["post-layout-metric-gate-passed", "artifact:simulation-metric-report"]),
             ],
             suggestedActions: [
                 "inspect_post_layout_metric_violations",
@@ -155,20 +149,17 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "warning",
             sourceRefIDs: [metricReportRefID],
             target: "reduce-post-layout-waveform-delta",
-            currentValue: .number(variable.maxRelativeDelta),
+            currentValue: .scalar(variable.maxRelativeDelta),
             requiredValue: nil,
             unit: "ratio",
             description: "Reduce post-layout waveform delta for variable \(variable.variableName).",
             evidence: [
-                "metricReportRefID": .string(metricReportRefID),
-                "variableName": .string(variable.variableName),
-                "pointCount": .number(Double(variable.pointCount)),
-                "maxAbsoluteDelta": .number(variable.maxAbsoluteDelta),
-                "maxRelativeDelta": .number(variable.maxRelativeDelta),
-                "symbolicGoalAtoms": .array([
-                    .string("post-layout-variable-delta-reduced"),
-                    .string("artifact:simulation-metric-report"),
-                ]),
+                "metricReportRefID": .text(metricReportRefID),
+                "variableName": .text(variable.variableName),
+                "pointCount": .scalar(Double(variable.pointCount)),
+                "maxAbsoluteDelta": .scalar(variable.maxAbsoluteDelta),
+                "maxRelativeDelta": .scalar(variable.maxRelativeDelta),
+                "symbolicGoalAtoms": .textList(["post-layout-variable-delta-reduced", "artifact:simulation-metric-report"]),
             ],
             suggestedActions: [
                 "identify_post_layout_waveform_delta_source",
@@ -190,17 +181,14 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: [metricReportRefID],
             target: "restore-required-post-layout-variable",
-            currentValue: .string("missing"),
-            requiredValue: .string("present"),
+            currentValue: .text("missing"),
+            requiredValue: .text("present"),
             description: "Restore required post-layout variable \(variable.variableName).",
             evidence: [
-                "metricReportRefID": .string(metricReportRefID),
-                "variableName": .string(variable.variableName),
-                "present": .bool(variable.present),
-                "symbolicGoalAtoms": .array([
-                    .string("post-layout-variable-present"),
-                    .string("artifact:simulation-metric-report"),
-                ]),
+                "metricReportRefID": .text(metricReportRefID),
+                "variableName": .text(variable.variableName),
+                "present": .boolean(variable.present),
+                "symbolicGoalAtoms": .textList(["post-layout-variable-present", "artifact:simulation-metric-report"]),
             ],
             suggestedActions: [
                 "inspect_post_layout_output_variables",
@@ -215,21 +203,18 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         index: Int,
         metricReportRefID: String
     ) throws -> XcircuitePlanningObjective {
-        var evidence: [String: XcircuiteJSONValue] = [
-            "metricReportRefID": .string(metricReportRefID),
-            "variableName": .string(metric.variableName),
-            "violations": .array(metric.violations.map { .string($0) }),
-            "symbolicGoalAtoms": .array([
-                .string("post-layout-oscillation-metric-recovered"),
-                .string("artifact:simulation-metric-report"),
-            ]),
+        var evidence: [String: PlanningParameterValue] = [
+            "metricReportRefID": .text(metricReportRefID),
+            "variableName": .text(metric.variableName),
+            "violations": .textList(metric.violations),
+            "symbolicGoalAtoms": .textList(["post-layout-oscillation-metric-recovered", "artifact:simulation-metric-report"]),
         ]
         insertOptional(metric.frequencyRelativeDelta, key: "frequencyRelativeDelta", into: &evidence)
         if let postLayout = metric.postLayout {
-            evidence["postLayoutAmplitude"] = .number(postLayout.amplitude)
+            evidence["postLayoutAmplitude"] = .scalar(postLayout.amplitude)
             insertOptional(postLayout.frequency, key: "postLayoutFrequency", into: &evidence)
             insertOptional(postLayout.averagePeriod, key: "postLayoutAveragePeriod", into: &evidence)
-            evidence["postLayoutTransitionCount"] = .number(Double(postLayout.transitionCount))
+            evidence["postLayoutTransitionCount"] = .scalar(Double(postLayout.transitionCount))
             insertOptional(postLayout.dutyCycle, key: "postLayoutDutyCycle", into: &evidence)
         }
         return XcircuitePlanningObjective(
@@ -239,8 +224,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: [metricReportRefID],
             target: "recover-post-layout-oscillation-metric",
-            currentValue: .string("violating"),
-            requiredValue: .string("passed"),
+            currentValue: .text("violating"),
+            requiredValue: .text("passed"),
             description: "Recover post-layout oscillation metric for variable \(metric.variableName).",
             evidence: evidence,
             suggestedActions: [
@@ -265,22 +250,19 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "warning",
             sourceRefIDs: [summaryRefID],
             target: "reduce-parasitic-hotspot",
-            currentValue: .number(totalCapF),
+            currentValue: .scalar(totalCapF),
             requiredValue: nil,
             unit: "F",
             description: "Reduce parasitic hotspot on net \(net.name) in corner \(cornerID).",
             evidence: [
-                "cornerID": .string(cornerID),
-                "netName": .string(net.name),
-                "groundCapF": .number(net.groundCapF),
-                "couplingCapF": .number(net.couplingCapF),
-                "totalCapF": .number(totalCapF),
-                "resistanceOhm": .number(net.resistanceOhm),
-                "nodeCount": .number(Double(net.nodeCount)),
-                "symbolicGoalAtoms": .array([
-                    .string("parasitic-hotspot-reduced"),
-                    .string("artifact:pex-summary"),
-                ]),
+                "cornerID": .text(cornerID),
+                "netName": .text(net.name),
+                "groundCapF": .scalar(net.groundCapF),
+                "couplingCapF": .scalar(net.couplingCapF),
+                "totalCapF": .scalar(totalCapF),
+                "resistanceOhm": .scalar(net.resistanceOhm),
+                "nodeCount": .scalar(Double(net.nodeCount)),
+                "symbolicGoalAtoms": .textList(["parasitic-hotspot-reduced", "artifact:pex-summary"]),
             ],
             suggestedActions: [
                 "identify_layout_geometry_for_hotspot_net",
@@ -303,18 +285,15 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: diagnostic.severity,
             sourceRefIDs: [summaryRefID],
             target: "resolve-pex-summary-diagnostic",
-            currentValue: .string(diagnostic.code),
-            requiredValue: .string("resolved"),
+            currentValue: .text(diagnostic.code),
+            requiredValue: .text("resolved"),
             description: "Resolve PEX summary diagnostic \(diagnostic.code) for corner \(corner.cornerID).",
             evidence: [
-                "cornerID": .string(corner.cornerID),
-                "severity": .string(diagnostic.severity),
-                "code": .string(diagnostic.code),
-                "message": .string(diagnostic.message),
-                "symbolicGoalAtoms": .array([
-                    .string("pex-summary-diagnostic-resolved"),
-                    .string("artifact:pex-summary"),
-                ]),
+                "cornerID": .text(corner.cornerID),
+                "severity": .text(diagnostic.severity),
+                "code": .text(diagnostic.code),
+                "message": .text(diagnostic.message),
+                "symbolicGoalAtoms": .textList(["pex-summary-diagnostic-resolved", "artifact:pex-summary"]),
             ],
             suggestedActions: ["inspect_pex_artifacts", "rerun_pex_after_artifact_repair"]
         )
@@ -325,13 +304,10 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         index: Int,
         summaryRefID: String
     ) throws -> XcircuitePlanningObjective {
-        var evidence: [String: XcircuiteJSONValue] = [
-            "issueKind": .string(issue.kind.rawValue),
-            "message": .string(issue.message),
-            "symbolicGoalAtoms": .array([
-                .string("pex-artifact-set-complete"),
-                .string("artifact:pex-summary"),
-            ]),
+        var evidence: [String: PlanningParameterValue] = [
+            "issueKind": .text(issue.kind.rawValue),
+            "message": .text(issue.message),
+            "symbolicGoalAtoms": .textList(["pex-artifact-set-complete", "artifact:pex-summary"]),
         ]
         insertOptional(issue.artifactID, key: "artifactID", into: &evidence)
         insertOptional(issue.cornerID?.value, key: "cornerID", into: &evidence)
@@ -343,8 +319,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: [summaryRefID],
             target: "complete-pex-artifact-set",
-            currentValue: .string(issue.kind.rawValue),
-            requiredValue: .string("complete"),
+            currentValue: .text(issue.kind.rawValue),
+            requiredValue: .text("complete"),
             description: "Repair incomplete PEX artifact evidence before metric recovery planning.",
             evidence: evidence,
             suggestedActions: ["repair_pex_artifact_manifest", "rerun_pex_summary"]
@@ -355,7 +331,7 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         objective: XcircuitePlanningObjective,
         index: Int,
         hasMetricReport: Bool,
-        pexGateHints: [String: XcircuiteJSONValue]
+        pexGateHints: [String: PlanningParameterValue]
     ) throws -> [XcircuitePlanningCandidateAction] {
         let requiredInputs = hasMetricReport
             ? ["pex-summary", "post-layout-metric-report", "source-netlist-ref", "layout-ref", "pex-technology-ref"]
@@ -408,17 +384,17 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
 
     func pexActionParameterHints(
         objective: XcircuitePlanningObjective,
-        pexGateHints: [String: XcircuiteJSONValue]
-    ) -> [String: XcircuiteJSONValue] {
+        pexGateHints: [String: PlanningParameterValue]
+    ) -> [String: PlanningParameterValue] {
         var hints = mergedHints(objective.evidence, pexGateHints)
         let goalAtoms = pexGoalAtoms(in: objective.evidence)
         if !goalAtoms.isEmpty {
-            hints["symbolicEffects"] = .array(goalAtoms.map { .string($0) })
+            hints["symbolicEffects"] = .textList(goalAtoms)
         }
         return hints
     }
 
-    func pexGoalAtoms(in evidence: [String: XcircuiteJSONValue]) -> [String] {
+    func pexGoalAtoms(in evidence: [String: PlanningParameterValue]) -> [String] {
         stableUniqueStrings(
             stringArrayValue(for: "symbolicGoalAtoms", in: evidence)
                 + stringArrayValue(for: "goalAtoms", in: evidence)
@@ -428,17 +404,12 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
 
     func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let array)? = values[key] else {
+        guard case .textList(let array)? = values[key] else {
             return []
         }
-        return array.compactMap { value in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return string
-        }
+        return array
     }
 
     func stableUniqueStrings(_ values: [String]) -> [String] {
@@ -451,38 +422,40 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         return result
     }
 
-    func pexGateInputHints(summary: PEXRunSummaryReport) -> [String: XcircuiteJSONValue] {
+    func pexGateInputHints(summary: PEXRunSummaryReport) -> [String: PlanningParameterValue] {
         [
-            "pexInputs": .object([
-                "layoutRef": .string("layout-ref"),
-                "sourceNetlistRef": .string("source-netlist-ref"),
-                "technologyRef": .string("pex-technology-ref"),
-                "backendID": .string(summary.summary.backendID),
-                "corners": .array(summary.summary.corners.map { .string($0.cornerID) }),
-            ]),
+            "pexInputs": .pexInputs(
+                PlanningPEXInputs(
+                    layoutReferenceID: "layout-ref",
+                    sourceNetlistReferenceID: "source-netlist-ref",
+                    technologyReferenceID: "pex-technology-ref",
+                    backendID: summary.summary.backendID,
+                    cornerIDs: summary.summary.corners.map(\.cornerID)
+                )
+            ),
         ]
     }
 
     func postLayoutMetricReportMetadata(
         _ report: PostLayoutComparisonReport?
-    ) -> [String: XcircuiteJSONValue] {
+    ) -> [String: PlanningParameterValue] {
         guard let report else {
             return [:]
         }
         return [
-            "status": .string(report.status),
-            "gateStatus": .string(report.gateStatus),
-            "gateViolationCount": .number(Double(report.gateViolations.count)),
-            "comparedVariableCount": .number(Double(report.comparedVariables.count)),
-            "maxAbsoluteDelta": .number(report.maxAbsoluteDelta),
-            "maxRelativeDelta": .number(report.maxRelativeDelta),
+            "status": .text(report.status),
+            "gateStatus": .text(report.gateStatus),
+            "gateViolationCount": .scalar(Double(report.gateViolations.count)),
+            "comparedVariableCount": .scalar(Double(report.comparedVariables.count)),
+            "maxAbsoluteDelta": .scalar(report.maxAbsoluteDelta),
+            "maxRelativeDelta": .scalar(report.maxRelativeDelta),
         ]
     }
 
     func mergedHints(
-        _ lhs: [String: XcircuiteJSONValue],
-        _ rhs: [String: XcircuiteJSONValue]
-    ) -> [String: XcircuiteJSONValue] {
+        _ lhs: [String: PlanningParameterValue],
+        _ rhs: [String: PlanningParameterValue]
+    ) -> [String: PlanningParameterValue] {
         var merged = lhs
         for (key, value) in rhs {
             merged[key] = value

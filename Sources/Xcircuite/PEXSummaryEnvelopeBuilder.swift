@@ -26,7 +26,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
@@ -75,42 +75,27 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
             confidence: confidence
         ) + cornerChannelResults(summary: summary, confidence: confidence)
 
-        let envelope = XcircuiteArtifactEnvelope(
+        let envelope = FlowArtifactEnvelope(
             artifactID: artifactID,
             role: "pex-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: XcircuiteArtifactProducer(producerID: toolID, toolID: toolID),
+            producer: FlowArtifactProducer(producerID: toolID, toolID: toolID),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
-            evaluationSpec: XcircuiteEvaluationSpec(
+            evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",
                 objective: "Evaluate PEX parasitic evidence for stage readiness and post-layout planning.",
                 criteria: criteria,
                 requiredArtifactRoles: ["pex-summary", "parasitic"],
-                confidence: XcircuiteEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false),
-                metadata: [
-                    "backendID": .string(summary.summary.backendID),
-                    "runStatus": .string(summary.summary.status),
-                    "cornerCount": .number(Double(summary.summary.corners.count)),
-                    "multiCornerComparisonBasis": .string(summary.summary.multiCorner.comparisonBasis.rawValue),
-                    "totalNetCount": .number(Double(aggregate.netCount)),
-                    "totalElementCount": .number(Double(aggregate.elementCount)),
-                ]
+                confidence: FlowEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false)
             ),
-            observationSet: XcircuiteObservationSet(
+            observationSet: FlowObservationSet(
                 observationSetID: "\(artifactID)-observations",
                 specID: "\(artifactID)-evaluation-spec",
                 channels: channels,
-                confidence: confidence,
-                metadata: [
-                    "backendID": .string(summary.summary.backendID),
-                    "runID": .string(summary.summary.runID),
-                    "runStatus": .string(summary.summary.status),
-                    "multiCornerComparisonBasis": .string(summary.summary.multiCorner.comparisonBasis.rawValue),
-                    "completenessStatus": .string(summary.completeness.status.rawValue),
-                ]
+                confidence: confidence
             ),
-            evaluationResult: XcircuiteEvaluationResult(
+            evaluationResult: FlowEvaluationResult(
                 evaluationID: "\(artifactID)-evaluation",
                 specID: "\(artifactID)-evaluation-spec",
                 status: evaluationStatus(summary: summary, aggregate: aggregate, gateStatus: gateStatus),
@@ -125,121 +110,97 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     gateStatus: gateStatus,
                     confidence: confidence
                 ),
-                summary: "PEX summary evaluation ended with gate status \(gateStatus.rawValue).",
-                metadata: [
-                    "failedCornerCount": .number(Double(aggregate.failedCornerCount)),
-                    "artifactIssueCount": .number(Double(summary.completeness.issues.count)),
-                    "summaryErrorDiagnosticCount": .number(Double(aggregate.summaryErrorDiagnosticCount)),
-                    "totalCapacitanceF": .number(aggregate.totalCapacitanceF),
-                    "totalResistanceOhm": .number(aggregate.totalResistanceOhm),
-                ]
-            ),
-            metadata: [
-                "gateID": .string("pex"),
-                "gateStatus": .string(gateStatus.rawValue),
-                "stageID": .string(stageID),
-                "toolID": .string(toolID),
-            ]
+                summary: "PEX summary evaluation ended with gate status \(gateStatus.rawValue)."
+            )
         )
 
-        return try context.storage.writeArtifactEnvelope(
-            envelope,
-            runID: context.runID,
-            inProjectAt: context.projectRoot
-        )
+        return try await context.persistArtifactEnvelope(envelope)
     }
 
-    private func baseCriteria(artifactID: String) -> [XcircuiteEvaluationCriterion] {
+    private func baseCriteria(artifactID: String) -> [FlowEvaluationCriterion] {
         [
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-gate-status",
                 channelID: "pex-gate-status",
                 comparator: .equal,
-                target: .string(FlowGateStatus.passed.rawValue)
+                target: .text(FlowGateStatus.passed.rawValue)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-artifact-completeness-status",
                 channelID: "pex-artifact-completeness-status",
                 comparator: .equal,
-                target: .string(PEXArtifactCompletenessStatus.complete.rawValue)
+                target: .text(PEXArtifactCompletenessStatus.complete.rawValue)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-failed-corner-count",
                 channelID: "pex-failed-corner-count",
                 comparator: .equal,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-multi-corner-failed-corner-count",
                 channelID: "pex-multi-corner-failed-corner-count",
                 comparator: .equal,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-summary-error-diagnostic-count",
                 channelID: "pex-summary-error-diagnostic-count",
                 comparator: .equal,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-multi-corner-error-diagnostic-count",
                 channelID: "pex-multi-corner-error-diagnostic-count",
                 comparator: .equal,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-multi-corner-shared-technology",
                 channelID: "pex-multi-corner-comparison-basis",
                 comparator: .equal,
-                target: .string(PEXExtractorMultiCornerComparisonBasis.sharedTechnology.rawValue),
-                required: false,
-                metadata: [
-                    "interpretation": .string(
-                        "Optional technology-scope signal; every PVT promotion still requires foundry correlation evidence."
-                    ),
-                ]
+                target: .text(PEXExtractorMultiCornerComparisonBasis.sharedTechnology.rawValue),
+                required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-tool-evidence",
                 channelID: "pex-tool-evidence-count",
                 comparator: .greaterThanOrEqual,
-                target: .number(1),
+                target: .scalar(1),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-calibration",
                 channelID: "pex-qualified-calibration",
                 comparator: .equal,
-                target: .bool(true),
+                target: .boolean(true),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "pex-summary-artifact",
                 channelID: "pex-summary-artifact-present",
                 comparator: .equal,
-                target: .bool(true),
-                metadata: ["artifactID": .string(artifactID)]
+                target: .boolean(true),
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
         ]
     }
 
-    private func cornerCriteria(summary: PEXRunSummaryReport) -> [XcircuiteEvaluationCriterion] {
+    private func cornerCriteria(summary: PEXRunSummaryReport) -> [FlowEvaluationCriterion] {
         summary.summary.corners.enumerated().flatMap { index, corner in
             let baseID = cornerChannelBase(index: index, corner: corner)
             return [
-                XcircuiteEvaluationCriterion(
+                FlowEvaluationCriterion(
                     criterionID: "\(baseID)-status",
                     channelID: "\(baseID)-status",
                     comparator: .equal,
-                    target: .string(PEXRunStatus.success.rawValue),
-                    metadata: cornerMetadata(index: index, corner: corner)
+                    target: .text(PEXRunStatus.success.rawValue)
                 ),
-                XcircuiteEvaluationCriterion(
+                FlowEvaluationCriterion(
                     criterionID: "\(baseID)-parasitic-ir-present",
                     channelID: "\(baseID)-parasitic-ir-present",
                     comparator: .equal,
-                    target: .bool(true),
-                    metadata: cornerMetadata(index: index, corner: corner)
+                    target: .boolean(true)
                 ),
             ]
         }
@@ -253,156 +214,156 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         toolEvidenceCount: Int,
         hasQualifiedEvidence: Bool,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-summary-artifact-present",
                 status: .observed,
-                value: .bool(true),
+                value: .boolean(true),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-gate-status",
                 status: .observed,
-                value: .string(gateStatus.rawValue),
+                value: .text(gateStatus.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence,
-                metadata: ["gateID": .string("pex")]
+                context: FlowEvaluationContext(gateID: "pex")
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-run-status",
                 status: .observed,
-                value: .string(summary.summary.status),
+                value: .text(summary.summary.status),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-artifact-completeness-status",
                 status: .observed,
-                value: .string(summary.completeness.status.rawValue),
+                value: .text(summary.completeness.status.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-diagnostic-count",
                 status: .observed,
-                value: .number(Double(diagnostics.count)),
+                value: .scalar(Double(diagnostics.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-tool-evidence-count",
                 status: toolEvidenceCount > 0 ? .observed : .missing,
-                value: .number(Double(toolEvidenceCount)),
+                value: .scalar(Double(toolEvidenceCount)),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-qualified-calibration",
                 status: hasQualifiedEvidence ? .observed : .uncalibrated,
-                value: .bool(hasQualifiedEvidence),
+                value: .boolean(hasQualifiedEvidence),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-corner-count",
                 status: .observed,
-                value: .number(Double(summary.summary.corners.count)),
+                value: .scalar(Double(summary.summary.corners.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-successful-corner-count",
                 status: .observed,
-                value: .number(Double(aggregate.successfulCornerCount)),
+                value: .scalar(Double(aggregate.successfulCornerCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-failed-corner-count",
                 status: .observed,
-                value: .number(Double(aggregate.failedCornerCount)),
+                value: .scalar(Double(aggregate.failedCornerCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-total-net-count",
                 status: .observed,
-                value: .number(Double(aggregate.netCount)),
+                value: .scalar(Double(aggregate.netCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-total-element-count",
                 status: .observed,
-                value: .number(Double(aggregate.elementCount)),
+                value: .scalar(Double(aggregate.elementCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-total-ground-capacitance-f",
                 status: .observed,
-                value: .number(aggregate.totalGroundCapF),
+                value: .scalar(aggregate.totalGroundCapF),
                 unit: "F",
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-total-coupling-capacitance-f",
                 status: .observed,
-                value: .number(aggregate.totalCouplingCapF),
+                value: .scalar(aggregate.totalCouplingCapF),
                 unit: "F",
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-total-capacitance-f",
                 status: .observed,
-                value: .number(aggregate.totalCapacitanceF),
+                value: .scalar(aggregate.totalCapacitanceF),
                 unit: "F",
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-total-resistance-ohm",
                 status: .observed,
-                value: .number(aggregate.totalResistanceOhm),
+                value: .scalar(aggregate.totalResistanceOhm),
                 unit: "ohm",
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-artifact-issue-count",
                 status: .observed,
-                value: .number(Double(summary.completeness.issues.count)),
+                value: .scalar(Double(summary.completeness.issues.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-missing-artifact-issue-count",
                 status: .observed,
-                value: .number(Double(issueCount(summary: summary, kind: .missingArtifact))),
+                value: .scalar(Double(issueCount(summary: summary, kind: .missingArtifact))),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-missing-ir-issue-count",
                 status: .observed,
-                value: .number(Double(issueCount(summary: summary, kind: .missingIR))),
+                value: .scalar(Double(issueCount(summary: summary, kind: .missingIR))),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-summary-diagnostic-count",
                 status: .observed,
-                value: .number(Double(aggregate.summaryDiagnosticCount)),
+                value: .scalar(Double(aggregate.summaryDiagnosticCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-summary-error-diagnostic-count",
                 status: .observed,
-                value: .number(Double(aggregate.summaryErrorDiagnosticCount)),
+                value: .scalar(Double(aggregate.summaryErrorDiagnosticCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -412,112 +373,99 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func cornerObservationChannels(
         summary: PEXRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         summary.summary.corners.enumerated().flatMap { index, corner in
             let baseID = cornerChannelBase(index: index, corner: corner)
-            let metadata = cornerMetadata(index: index, corner: corner)
             return [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-status",
                     label: "PEX corner \(corner.cornerID)",
                     status: .observed,
-                    value: .string(corner.status),
+                    value: .text(corner.status),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-net-count",
                     status: .observed,
-                    value: .number(Double(corner.netCount)),
+                    value: .scalar(Double(corner.netCount)),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-element-count",
                     status: .observed,
-                    value: .number(Double(corner.elementCount)),
+                    value: .scalar(Double(corner.elementCount)),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-total-ground-capacitance-f",
                     status: .observed,
-                    value: .number(corner.totalGroundCapF),
+                    value: .scalar(corner.totalGroundCapF),
                     unit: "F",
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-total-coupling-capacitance-f",
                     status: .observed,
-                    value: .number(corner.totalCouplingCapF),
+                    value: .scalar(corner.totalCouplingCapF),
                     unit: "F",
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-total-capacitance-f",
                     status: .observed,
-                    value: .number(corner.totalCapacitanceF),
+                    value: .scalar(corner.totalCapacitanceF),
                     unit: "F",
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-total-resistance-ohm",
                     status: .observed,
-                    value: .number(corner.totalResistanceOhm),
+                    value: .scalar(corner.totalResistanceOhm),
                     unit: "ohm",
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-raw-output-artifact-count",
                     status: .observed,
-                    value: .number(Double(corner.rawOutputArtifactIDs.count)),
+                    value: .scalar(Double(corner.rawOutputArtifactIDs.count)),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-parasitic-ir-present",
                     status: corner.parasiticIRArtifactID == nil ? .missing : .observed,
-                    value: .bool(corner.parasiticIRArtifactID != nil),
+                    value: .boolean(corner.parasiticIRArtifactID != nil),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-spef-roundtrip-present",
                     status: corner.spefRoundTripArtifactID == nil ? .missing : .observed,
-                    value: .bool(corner.spefRoundTripArtifactID != nil),
+                    value: .boolean(corner.spefRoundTripArtifactID != nil),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-top-net-count",
                     status: corner.topNets.isEmpty ? .missing : .observed,
-                    value: .number(Double(corner.topNets.count)),
+                    value: .scalar(Double(corner.topNets.count)),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-diagnostic-count",
                     status: .observed,
-                    value: .number(Double(corner.diagnostics.count)),
+                    value: .scalar(Double(corner.diagnostics.count)),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
             ]
         }
@@ -526,97 +474,86 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func multiCornerObservationChannels(
         summary: PEXRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         let multiCorner = summary.summary.multiCorner
         return [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-successful-corner-count",
                 status: .derived,
-                value: .number(Double(multiCorner.successfulCornerCount)),
+                value: .scalar(Double(multiCorner.successfulCornerCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-comparison-basis",
                 status: .derived,
-                value: .string(multiCorner.comparisonBasis.rawValue),
+                value: .text(multiCorner.comparisonBasis.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-failed-corner-count",
                 status: .derived,
-                value: .number(Double(multiCorner.failedCornerCount)),
+                value: .scalar(Double(multiCorner.failedCornerCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
-                channelID: "pex-multi-corner-failed-corner-ids",
-                status: multiCorner.failedCornerIDs.isEmpty ? .derived : .failed,
-                value: .array(multiCorner.failedCornerIDs.map { .string($0) }),
-                sourceArtifactIDs: [artifactID],
-                confidence: confidence
-            ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-worst-capacitance-corner-id",
                 status: multiCorner.worstCapacitanceCornerID == nil ? .missing : .derived,
                 value: optionalStringValue(multiCorner.worstCapacitanceCornerID),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-total-capacitance-spread-f",
                 status: .derived,
-                value: .number(multiCorner.totalCapacitance.spread),
+                value: .scalar(multiCorner.totalCapacitance.spread),
                 unit: "F",
                 sourceArtifactIDs: [artifactID],
-                confidence: confidence,
-                metadata: spreadMetadata(multiCorner.totalCapacitance)
+                confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-total-capacitance-relative-spread",
                 status: multiCorner.totalCapacitance.relativeSpread == nil ? .missing : .derived,
                 value: optionalNumberValue(multiCorner.totalCapacitance.relativeSpread),
                 sourceArtifactIDs: [artifactID],
-                confidence: confidence,
-                metadata: spreadMetadata(multiCorner.totalCapacitance)
+                confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-worst-resistance-corner-id",
                 status: multiCorner.worstResistanceCornerID == nil ? .missing : .derived,
                 value: optionalStringValue(multiCorner.worstResistanceCornerID),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-total-resistance-spread-ohm",
                 status: .derived,
-                value: .number(multiCorner.totalResistance.spread),
+                value: .scalar(multiCorner.totalResistance.spread),
                 unit: "ohm",
                 sourceArtifactIDs: [artifactID],
-                confidence: confidence,
-                metadata: spreadMetadata(multiCorner.totalResistance)
+                confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-total-resistance-relative-spread",
                 status: multiCorner.totalResistance.relativeSpread == nil ? .missing : .derived,
                 value: optionalNumberValue(multiCorner.totalResistance.relativeSpread),
                 sourceArtifactIDs: [artifactID],
-                confidence: confidence,
-                metadata: spreadMetadata(multiCorner.totalResistance)
+                confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-diagnostic-count",
                 status: .derived,
-                value: .number(Double(multiCorner.diagnostics.count)),
+                value: .scalar(Double(multiCorner.diagnostics.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "pex-multi-corner-error-diagnostic-count",
                 status: .derived,
-                value: .number(Double(multiCornerErrorDiagnosticCount(summary))),
+                value: .scalar(Double(multiCornerErrorDiagnosticCount(summary))),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -626,62 +563,51 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func topNetObservationChannels(
         summary: PEXRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         summary.summary.corners.enumerated().flatMap { cornerIndex, corner in
             corner.topNets.enumerated().flatMap { netIndex, net in
                 let baseID = topNetChannelBase(cornerIndex: cornerIndex, corner: corner, netIndex: netIndex, net: net)
-                let metadata = topNetMetadata(
-                    cornerIndex: cornerIndex,
-                    corner: corner,
-                    netIndex: netIndex,
-                    net: net
-                )
                 return [
-                    XcircuiteObservationChannel(
+                    FlowObservationChannel(
                         channelID: "\(baseID)-total-capacitance-f",
                         label: "PEX top net \(net.name)",
                         status: .observed,
-                        value: .number(net.groundCapF + net.couplingCapF),
+                        value: .scalar(net.groundCapF + net.couplingCapF),
                         unit: "F",
                         sourceArtifactIDs: [artifactID],
-                        confidence: confidence,
-                        metadata: metadata
+                        confidence: confidence
                     ),
-                    XcircuiteObservationChannel(
+                    FlowObservationChannel(
                         channelID: "\(baseID)-ground-capacitance-f",
                         status: .observed,
-                        value: .number(net.groundCapF),
+                        value: .scalar(net.groundCapF),
                         unit: "F",
                         sourceArtifactIDs: [artifactID],
-                        confidence: confidence,
-                        metadata: metadata
+                        confidence: confidence
                     ),
-                    XcircuiteObservationChannel(
+                    FlowObservationChannel(
                         channelID: "\(baseID)-coupling-capacitance-f",
                         status: .observed,
-                        value: .number(net.couplingCapF),
+                        value: .scalar(net.couplingCapF),
                         unit: "F",
                         sourceArtifactIDs: [artifactID],
-                        confidence: confidence,
-                        metadata: metadata
+                        confidence: confidence
                     ),
-                    XcircuiteObservationChannel(
+                    FlowObservationChannel(
                         channelID: "\(baseID)-resistance-ohm",
                         status: .observed,
-                        value: .number(net.resistanceOhm),
+                        value: .scalar(net.resistanceOhm),
                         unit: "ohm",
                         sourceArtifactIDs: [artifactID],
-                        confidence: confidence,
-                        metadata: metadata
+                        confidence: confidence
                     ),
-                    XcircuiteObservationChannel(
+                    FlowObservationChannel(
                         channelID: "\(baseID)-node-count",
                         status: .observed,
-                        value: .number(Double(net.nodeCount)),
+                        value: .scalar(Double(net.nodeCount)),
                         sourceArtifactIDs: [artifactID],
-                        confidence: confidence,
-                        metadata: metadata
+                        confidence: confidence
                     ),
                 ]
             }
@@ -691,46 +617,41 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func multiCornerTopNetObservationChannels(
         summary: PEXRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         summary.summary.multiCorner.topNetSpreads.enumerated().flatMap { index, spread in
             let baseID = multiCornerNetSpreadChannelBase(index: index, spread: spread)
-            let metadata = multiCornerNetSpreadMetadata(index: index, spread: spread)
             return [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-total-capacitance-spread-f",
                     label: "PEX multi-corner net \(spread.netName)",
                     status: .derived,
-                    value: .number(spread.totalCapacitance.spread),
+                    value: .scalar(spread.totalCapacitance.spread),
                     unit: "F",
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-total-capacitance-relative-spread",
                     status: spread.totalCapacitance.relativeSpread == nil ? .missing : .derived,
                     value: optionalNumberValue(spread.totalCapacitance.relativeSpread),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-resistance-spread-ohm",
                     status: .derived,
-                    value: .number(spread.resistance.spread),
+                    value: .scalar(spread.resistance.spread),
                     unit: "ohm",
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-observed-corner-count",
                     status: .derived,
-                    value: .number(Double(spread.observedCornerIDs.count)),
+                    value: .scalar(Double(spread.observedCornerIDs.count)),
                     sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    confidence: confidence
                 ),
             ]
         }
@@ -742,52 +663,52 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         gateStatus: FlowGateStatus,
         diagnostics: [FlowDiagnostic],
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         [
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-gate-status",
                 channelID: "pex-gate-status",
                 status: evaluationStatus(from: gateStatus),
-                observedValue: .string(gateStatus.rawValue),
+                observedValue: .text(gateStatus.rawValue),
                 residual: gateStatus == .passed ? 0 : 1,
                 likelihood: likelihood(from: gateStatus),
                 confidence: confidence,
                 diagnostics: diagnostics.map(runActionDiagnostic)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-summary-artifact",
                 channelID: "pex-summary-artifact-present",
                 status: .accepted,
-                observedValue: .bool(true),
+                observedValue: .boolean(true),
                 residual: 0,
                 likelihood: 1,
                 confidence: confidence,
-                metadata: ["artifactID": .string(artifactID)]
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-artifact-completeness-status",
                 channelID: "pex-artifact-completeness-status",
                 status: completenessStatus(summary.completeness.status),
-                observedValue: .string(summary.completeness.status.rawValue),
+                observedValue: .text(summary.completeness.status.rawValue),
                 residual: summary.completeness.status == .complete ? 0 : Double(summary.completeness.issues.count),
                 likelihood: summary.completeness.status == .complete ? 1 : 0,
                 confidence: confidence
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-failed-corner-count",
                 channelID: "pex-failed-corner-count",
                 status: countStatus(aggregate.failedCornerCount),
-                observedValue: .number(Double(aggregate.failedCornerCount)),
+                observedValue: .scalar(Double(aggregate.failedCornerCount)),
                 residual: Double(aggregate.failedCornerCount),
                 likelihood: countLikelihood(aggregate.failedCornerCount),
                 confidence: confidence
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-summary-error-diagnostic-count",
                 channelID: "pex-summary-error-diagnostic-count",
                 status: countStatus(aggregate.summaryErrorDiagnosticCount),
-                observedValue: .number(Double(aggregate.summaryErrorDiagnosticCount)),
+                observedValue: .scalar(Double(aggregate.summaryErrorDiagnosticCount)),
                 residual: Double(aggregate.summaryErrorDiagnosticCount),
                 likelihood: countLikelihood(aggregate.summaryErrorDiagnosticCount),
                 confidence: confidence
@@ -797,42 +718,35 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
     private func multiCornerChannelResults(
         summary: PEXRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         let multiCorner = summary.summary.multiCorner
         let errorDiagnosticCount = multiCornerErrorDiagnosticCount(summary)
         let sharedTechnology = multiCorner.comparisonBasis == .sharedTechnology
         return [
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-multi-corner-shared-technology",
                 channelID: "pex-multi-corner-comparison-basis",
                 status: sharedTechnology ? .accepted : .rejected,
-                observedValue: .string(multiCorner.comparisonBasis.rawValue),
+                observedValue: .text(multiCorner.comparisonBasis.rawValue),
                 residual: sharedTechnology ? 0 : 1,
                 likelihood: sharedTechnology ? 1 : 0,
-                confidence: confidence,
-                metadata: [
-                    "sharedTechnologyBasis": .bool(sharedTechnology),
-                    "requiresFoundryCorrelation": .bool(true),
-                ]
+                confidence: confidence
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-multi-corner-failed-corner-count",
                 channelID: "pex-multi-corner-failed-corner-count",
                 status: countStatus(multiCorner.failedCornerCount),
-                observedValue: .number(Double(multiCorner.failedCornerCount)),
+                observedValue: .scalar(Double(multiCorner.failedCornerCount)),
                 residual: Double(multiCorner.failedCornerCount),
                 likelihood: countLikelihood(multiCorner.failedCornerCount),
-                confidence: confidence,
-                metadata: [
-                    "failedCornerIDs": .array(multiCorner.failedCornerIDs.map { .string($0) }),
-                ]
+                confidence: confidence
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "pex-multi-corner-error-diagnostic-count",
                 channelID: "pex-multi-corner-error-diagnostic-count",
                 status: countStatus(errorDiagnosticCount),
-                observedValue: .number(Double(errorDiagnosticCount)),
+                observedValue: .scalar(Double(errorDiagnosticCount)),
                 residual: Double(errorDiagnosticCount),
                 likelihood: countLikelihood(errorDiagnosticCount),
                 confidence: confidence,
@@ -843,32 +757,30 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
     private func cornerChannelResults(
         summary: PEXRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         summary.summary.corners.enumerated().flatMap { index, corner in
             let baseID = cornerChannelBase(index: index, corner: corner)
             let hasIR = corner.parasiticIRArtifactID != nil
             return [
-                XcircuiteEvaluationChannelResult(
+                FlowEvaluationChannelResult(
                     criterionID: "\(baseID)-status",
                     channelID: "\(baseID)-status",
                     status: cornerEvaluationStatus(corner.status),
-                    observedValue: .string(corner.status),
+                    observedValue: .text(corner.status),
                     residual: corner.status == PEXRunStatus.success.rawValue ? 0 : 1,
                     likelihood: corner.status == PEXRunStatus.success.rawValue ? 1 : 0,
                     confidence: confidence,
-                    diagnostics: corner.diagnostics.map(runActionDiagnostic),
-                    metadata: cornerMetadata(index: index, corner: corner)
+                    diagnostics: corner.diagnostics.map(runActionDiagnostic)
                 ),
-                XcircuiteEvaluationChannelResult(
+                FlowEvaluationChannelResult(
                     criterionID: "\(baseID)-parasitic-ir-present",
                     channelID: "\(baseID)-parasitic-ir-present",
                     status: hasIR ? .accepted : .rejected,
-                    observedValue: .bool(hasIR),
+                    observedValue: .boolean(hasIR),
                     residual: hasIR ? 0 : 1,
                     likelihood: hasIR ? 1 : 0,
-                    confidence: confidence,
-                    metadata: cornerMetadata(index: index, corner: corner)
+                    confidence: confidence
                 ),
             ]
         }
@@ -879,16 +791,16 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         summary: PEXRunSummaryReport,
         aggregate: AggregateMetrics,
         gateStatus: FlowGateStatus,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
-        var signals: [XcircuiteFeedbackSignal] = []
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
+        var signals: [FlowFeedbackSignal] = []
 
         if gateStatus == .passed
             && summary.completeness.status == .complete
             && aggregate.failedCornerCount == 0
             && aggregate.summaryErrorDiagnosticCount == 0 {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-continue",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-gate-status",
@@ -904,7 +816,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
         if summary.completeness.status != .complete || !summary.completeness.issues.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-artifact-completeness",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-artifact-completeness-status",
@@ -914,8 +826,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     residual: Double(summary.completeness.issues.count),
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-pex-manifest", "repair-pex-artifact-production"],
-                    confidence: confidence,
-                    metadata: completenessMetadata(summary: summary)
+                    confidence: confidence
                 )
             )
         }
@@ -943,7 +854,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
         if gateStatus != .passed && signals.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-repair-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-gate-status",
@@ -960,7 +871,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
         if signals.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-review-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-gate-status",
@@ -980,14 +891,14 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func comparisonBasisSignals(
         artifactID: String,
         summary: PEXRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
         switch summary.summary.multiCorner.comparisonBasis {
         case .sharedTechnology:
             return []
         case .perCornerTechnology:
             return [
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-process-specific-comparison",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-multi-corner-comparison-basis",
@@ -997,16 +908,12 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     residual: 1,
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-pex-summary", "compare-post-layout-metrics"],
-                    confidence: confidence,
-                    metadata: [
-                        "comparisonBasis": .string(PEXExtractorMultiCornerComparisonBasis.perCornerTechnology.rawValue),
-                        "requiresCorrelationEvidence": .bool(true),
-                    ]
+                    confidence: confidence
                 ),
             ]
         case .unknown:
             return [
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-unknown-comparison-basis",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-multi-corner-comparison-basis",
@@ -1016,11 +923,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     residual: 1,
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-pex-summary"],
-                    confidence: confidence,
-                    metadata: [
-                        "comparisonBasis": .string(PEXExtractorMultiCornerComparisonBasis.unknown.rawValue),
-                        "requiresCorrelationEvidence": .bool(true),
-                    ]
+                    confidence: confidence
                 ),
             ]
         }
@@ -1029,14 +932,14 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func failedCornerSignals(
         artifactID: String,
         summary: PEXRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
         summary.summary.corners.enumerated().compactMap { index, corner in
             guard corner.status != PEXRunStatus.success.rawValue || !corner.diagnostics.isEmpty else {
                 return nil
             }
             let baseID = cornerChannelBase(index: index, corner: corner)
-            return XcircuiteFeedbackSignal(
+            return FlowFeedbackSignal(
                 signalID: "\(baseID)-repair-feedback",
                 sourceEvaluationID: "\(artifactID)-evaluation",
                 channelID: "\(baseID)-status",
@@ -1046,8 +949,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                 residual: corner.status == PEXRunStatus.success.rawValue ? 0 : 1,
                 affectedArtifactIDs: [artifactID],
                 suggestedActions: ["inspect-pex-corner", "repair-pex-extraction-inputs"],
-                confidence: confidence,
-                metadata: cornerMetadata(index: index, corner: corner)
+                confidence: confidence
             )
         }
     }
@@ -1055,18 +957,18 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func multiCornerSpreadSignals(
         artifactID: String,
         summary: PEXRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
         let multiCorner = summary.summary.multiCorner
         guard multiCorner.successfulCornerCount > 1 else {
             return []
         }
 
-        var signals: [XcircuiteFeedbackSignal] = []
+        var signals: [FlowFeedbackSignal] = []
         if multiCorner.totalCapacitance.spread > 0,
            let cornerID = multiCorner.worstCapacitanceCornerID {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-multi-corner-capacitance-spread",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-multi-corner-total-capacitance-spread-f",
@@ -1076,15 +978,14 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     residual: multiCorner.totalCapacitance.spread,
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-worst-pex-corner", "compare-post-layout-metrics"],
-                    confidence: confidence,
-                    metadata: spreadMetadata(multiCorner.totalCapacitance)
+                    confidence: confidence
                 )
             )
         }
         if multiCorner.totalResistance.spread > 0,
            let cornerID = multiCorner.worstResistanceCornerID {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-multi-corner-resistance-spread",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "pex-multi-corner-total-resistance-spread-ohm",
@@ -1094,14 +995,13 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     residual: multiCorner.totalResistance.spread,
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-worst-pex-corner", "compare-post-layout-metrics"],
-                    confidence: confidence,
-                    metadata: spreadMetadata(multiCorner.totalResistance)
+                    confidence: confidence
                 )
             )
         }
         if let spread = multiCorner.topNetSpreads.first, spread.totalCapacitance.spread > 0 {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-multi-corner-net-spread",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "\(multiCornerNetSpreadChannelBase(index: 0, spread: spread))-total-capacitance-spread-f",
@@ -1111,8 +1011,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                     residual: spread.totalCapacitance.spread,
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-parasitic-net-spread", "compare-post-layout-metrics"],
-                    confidence: confidence,
-                    metadata: multiCornerNetSpreadMetadata(index: 0, spread: spread)
+                    confidence: confidence
                 )
             )
         }
@@ -1123,14 +1022,14 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func dominantNetSignals(
         artifactID: String,
         summary: PEXRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
         summary.summary.corners.enumerated().compactMap { cornerIndex, corner in
             guard let net = corner.topNets.first else {
                 return nil
             }
             let channelBase = topNetChannelBase(cornerIndex: cornerIndex, corner: corner, netIndex: 0, net: net)
-            return XcircuiteFeedbackSignal(
+            return FlowFeedbackSignal(
                 signalID: "\(channelBase)-post-layout-feedback",
                 sourceEvaluationID: "\(artifactID)-evaluation",
                 channelID: "\(channelBase)-total-capacitance-f",
@@ -1139,8 +1038,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
                 summary: "PEX corner \(corner.cornerID) is dominated by net \(net.name) by capacitance.",
                 affectedArtifactIDs: [artifactID],
                 suggestedActions: ["inspect-dominant-parasitic-net", "compare-post-layout-metrics"],
-                confidence: confidence,
-                metadata: topNetMetadata(cornerIndex: cornerIndex, corner: corner, netIndex: 0, net: net)
+                confidence: confidence
             )
         }
     }
@@ -1148,35 +1046,38 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
     private func dependencies(
         from artifacts: [ArtifactReference],
         excluding summaryArtifact: ArtifactReference
-    ) -> [XcircuiteArtifactDependency] {
+    ) -> [FlowArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }
             .map { artifact in
-                XcircuiteArtifactDependency(
+                FlowArtifactDependency(
                     artifactID: artifact.artifactID,
                     path: artifact.path,
-                    role: artifact.artifactID ?? artifact.kind.rawValue,
+                    role: artifact.artifactID,
                     required: true
                 )
             }
     }
 
     private func hasQualifiedEvidence(context: FlowExecutionContext, toolID: String) -> Bool {
-        context.healthResults[toolID]?.evidence.contains { evidence in
-            evidence.qualification?.qualified == true
-        } == true
+        guard let descriptor = context.toolRegistry.descriptor(toolID: toolID),
+              descriptor.trustProfile.level >= .corpusChecked,
+              context.healthResults[toolID]?.status == .passed else {
+            return false
+        }
+        return descriptor.trustProfile.evidence.contains { $0.hasVerifiableArtifactBinding }
     }
 
-    private func confidence(hasQualifiedEvidence: Bool) -> XcircuiteEvidenceConfidence {
+    private func confidence(hasQualifiedEvidence: Bool) -> FlowEvidenceConfidence {
         if hasQualifiedEvidence {
-            return XcircuiteEvidenceConfidence(
+            return FlowEvidenceConfidence(
                 value: 0.8,
                 posteriorVariance: 0.2,
                 calibrationCoefficient: 0.7,
                 calibrated: true
             )
         }
-        return XcircuiteEvidenceConfidence(
+        return FlowEvidenceConfidence(
             value: 0.35,
             posteriorVariance: 0.65,
             calibrationCoefficient: 0,
@@ -1188,7 +1089,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         summary: PEXRunSummaryReport,
         aggregate: AggregateMetrics,
         gateStatus: FlowGateStatus
-    ) -> XcircuiteEvaluationStatus {
+    ) -> FlowEvaluationStatus {
         if gateStatus == .incomplete || summary.completeness.status == .incomplete {
             return .inconclusive
         }
@@ -1201,7 +1102,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         return .accepted
     }
 
-    private func evaluationStatus(from status: FlowGateStatus) -> XcircuiteEvaluationStatus {
+    private func evaluationStatus(from status: FlowGateStatus) -> FlowEvaluationStatus {
         switch status {
         case .passed, .waived:
             .accepted
@@ -1216,7 +1117,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
     private func completenessStatus(
         _ status: PEXArtifactCompletenessStatus
-    ) -> XcircuiteEvaluationStatus {
+    ) -> FlowEvaluationStatus {
         switch status {
         case .complete:
             .accepted
@@ -1227,7 +1128,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func cornerEvaluationStatus(_ status: String) -> XcircuiteEvaluationStatus {
+    private func cornerEvaluationStatus(_ status: String) -> FlowEvaluationStatus {
         switch status {
         case PEXRunStatus.success.rawValue:
             .accepted
@@ -1238,7 +1139,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func countStatus(_ count: Int) -> XcircuiteEvaluationStatus {
+    private func countStatus(_ count: Int) -> FlowEvaluationStatus {
         count == 0 ? .accepted : .rejected
     }
 
@@ -1325,16 +1226,16 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         summary.completeness.issues.filter { $0.kind == kind }.count
     }
 
-    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> XcircuiteRunActionDiagnostic {
-        XcircuiteRunActionDiagnostic(
+    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> FlowRunDiagnostic {
+        FlowRunDiagnostic(
             severity: runActionSeverity(diagnostic.severity),
             code: diagnostic.code,
             message: diagnostic.message
         )
     }
 
-    private func runActionDiagnostic(_ diagnostic: PEXRunSummaryDiagnostic) -> XcircuiteRunActionDiagnostic {
-        XcircuiteRunActionDiagnostic(
+    private func runActionDiagnostic(_ diagnostic: PEXRunSummaryDiagnostic) -> FlowRunDiagnostic {
+        FlowRunDiagnostic(
             severity: runActionSeverity(diagnostic.severity),
             code: diagnostic.code,
             message: diagnostic.message
@@ -1343,7 +1244,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
 
     private func runActionSeverity(
         _ severity: FlowDiagnosticSeverity
-    ) -> XcircuiteRunActionDiagnosticSeverity {
+    ) -> FlowRunDiagnosticSeverity {
         switch severity {
         case .info:
             .info
@@ -1354,7 +1255,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func runActionSeverity(_ severity: String) -> XcircuiteRunActionDiagnosticSeverity {
+    private func runActionSeverity(_ severity: String) -> FlowRunDiagnosticSeverity {
         switch severity {
         case "error":
             .error
@@ -1382,128 +1283,16 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         "pex-multi-corner-net-\(index)-\(slug(spread.netName))"
     }
 
-    private func cornerMetadata(
-        index: Int,
-        corner: PEXCornerParasiticSummary
-    ) -> [String: XcircuiteJSONValue] {
-        var metadata: [String: XcircuiteJSONValue] = [
-            "cornerIndex": .number(Double(index)),
-            "cornerID": .string(corner.cornerID),
-            "status": .string(corner.status),
-            "unitSystem": .string(corner.unitSystem),
-            "netCount": .number(Double(corner.netCount)),
-            "elementCount": .number(Double(corner.elementCount)),
-            "topNetCount": .number(Double(corner.topNets.count)),
-            "rawOutputArtifactIDs": .array(corner.rawOutputArtifactIDs.map { .string($0) }),
-        ]
-        if let parasiticIRArtifactID = corner.parasiticIRArtifactID {
-            metadata["parasiticIRArtifactID"] = .string(parasiticIRArtifactID)
-        }
-        if let spefRoundTripArtifactID = corner.spefRoundTripArtifactID {
-            metadata["spefRoundTripArtifactID"] = .string(spefRoundTripArtifactID)
-        }
-        if !corner.diagnostics.isEmpty {
-            metadata["diagnostics"] = .array(corner.diagnostics.map { diagnostic in
-                .object([
-                    "severity": .string(diagnostic.severity),
-                    "code": .string(diagnostic.code),
-                    "message": .string(diagnostic.message),
-                ])
-            })
-        }
-        return metadata
+    private func optionalStringValue(_ value: String?) -> FlowMetricValue? {
+        value.map(FlowMetricValue.text)
     }
 
-    private func topNetMetadata(
-        cornerIndex: Int,
-        corner: PEXCornerParasiticSummary,
-        netIndex: Int,
-        net: PEXNetParasiticSummary
-    ) -> [String: XcircuiteJSONValue] {
-        [
-            "cornerIndex": .number(Double(cornerIndex)),
-            "cornerID": .string(corner.cornerID),
-            "netIndex": .number(Double(netIndex)),
-            "netName": .string(net.name),
-            "nodeCount": .number(Double(net.nodeCount)),
-            "groundCapacitanceF": .number(net.groundCapF),
-            "couplingCapacitanceF": .number(net.couplingCapF),
-            "totalCapacitanceF": .number(net.groundCapF + net.couplingCapF),
-            "resistanceOhm": .number(net.resistanceOhm),
-        ]
-    }
-
-    private func multiCornerNetSpreadMetadata(
-        index: Int,
-        spread: PEXNetCornerSpreadSummary
-    ) -> [String: XcircuiteJSONValue] {
-        [
-            "netIndex": .number(Double(index)),
-            "netName": .string(spread.netName),
-            "observedCornerIDs": .array(spread.observedCornerIDs.map { .string($0) }),
-            "missingCornerIDs": .array(spread.missingCornerIDs.map { .string($0) }),
-            "totalCapacitance": .object(spreadMetadata(spread.totalCapacitance)),
-            "resistance": .object(spreadMetadata(spread.resistance)),
-        ]
-    }
-
-    private func spreadMetadata(_ spread: PEXCornerMetricSpreadSummary) -> [String: XcircuiteJSONValue] {
-        var metadata: [String: XcircuiteJSONValue] = [
-            "metric": .string(spread.metric),
-            "unit": .string(spread.unit),
-            "observedCornerCount": .number(Double(spread.observedCornerCount)),
-            "spread": .number(spread.spread),
-        ]
-        if let minCornerID = spread.minCornerID {
-            metadata["minCornerID"] = .string(minCornerID)
-        }
-        if let minValue = spread.minValue {
-            metadata["minValue"] = .number(minValue)
-        }
-        if let maxCornerID = spread.maxCornerID {
-            metadata["maxCornerID"] = .string(maxCornerID)
-        }
-        if let maxValue = spread.maxValue {
-            metadata["maxValue"] = .number(maxValue)
-        }
-        if let relativeSpread = spread.relativeSpread {
-            metadata["relativeSpread"] = .number(relativeSpread)
-        }
-        return metadata
-    }
-
-    private func optionalStringValue(_ value: String?) -> XcircuiteJSONValue {
-        value.map { .string($0) } ?? .null
-    }
-
-    private func optionalNumberValue(_ value: Double?) -> XcircuiteJSONValue {
-        value.map { .number($0) } ?? .null
+    private func optionalNumberValue(_ value: Double?) -> FlowMetricValue? {
+        value.map(FlowMetricValue.scalar)
     }
 
     private func multiCornerErrorDiagnosticCount(_ summary: PEXRunSummaryReport) -> Int {
         summary.summary.multiCorner.diagnostics.filter { $0.severity == "error" }.count
-    }
-
-    private func completenessMetadata(summary: PEXRunSummaryReport) -> [String: XcircuiteJSONValue] {
-        [
-            "status": .string(summary.completeness.status.rawValue),
-            "issues": .array(summary.completeness.issues.map { issue in
-                var values: [String: XcircuiteJSONValue] = [
-                    "kind": .string(issue.kind.rawValue),
-                    "message": .string(issue.message),
-                ]
-                if let artifactID = issue.artifactID {
-                    values["artifactID"] = .string(artifactID)
-                }
-                if let cornerID = issue.cornerID {
-                    values["cornerID"] = .string(cornerID.value)
-                }
-                if let path = issue.path {
-                    values["path"] = .string(path.value)
-                }
-                return .object(values)
-            }),
-        ]
     }
 
     private func slug(_ value: String) -> String {

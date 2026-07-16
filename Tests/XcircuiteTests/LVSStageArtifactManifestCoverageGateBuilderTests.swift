@@ -6,7 +6,7 @@ import DesignFlowKernel
 
 @Suite("LVS stage artifact manifest coverage", .timeLimit(.minutes(1)))
 struct LVSStageArtifactManifestCoverageGateBuilderTests {
-    @Test func validV2ArtifactFamilyPasses() throws {
+    @Test func validCurrentArtifactFamilyPasses() async throws {
         let fixture = try makeFixture()
         defer { removeTemporaryRoot(fixture.root) }
 
@@ -16,11 +16,11 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             projectRoot: fixture.root
         )
 
-        #expect(gate.status == .passed)
+        #expect(gate.status == .passed, "Unexpected diagnostics: \(gate.diagnostics)")
         #expect(gate.diagnostics.isEmpty)
     }
 
-    @Test func missingCorrespondenceFailsClosed() throws {
+    @Test func missingCorrespondenceFailsClosed() async throws {
         let fixture = try makeFixture(includeCorrespondence: false)
         defer { removeTemporaryRoot(fixture.root) }
 
@@ -36,7 +36,7 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         })
     }
 
-    @Test func summaryReadinessMustMatchManifestLineage() throws {
+    @Test func summaryReadinessMustMatchManifestLineage() async throws {
         let fixture = try makeFixture(summaryReadiness: .blocked)
         defer { removeTemporaryRoot(fixture.root) }
 
@@ -52,11 +52,16 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         })
     }
 
-    @Test func indexedTransformLedgerMustBelongToManifest() throws {
+    @Test func indexedTransformLedgerMustBelongToManifest() async throws {
         var fixture = try makeFixture()
         defer { removeTemporaryRoot(fixture.root) }
-        let ledgerURL = fixture.manifestURL.deletingLastPathComponent()
+        let ledgerURL = fixture.root
+            .appending(path: ".xcircuite/runs/different-run/stages/008-lvs/raw")
             .appending(path: "lvs-transform-ledger.json")
+        try FileManager.default.createDirectory(
+            at: ledgerURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try Data("{}".utf8).write(to: ledgerURL, options: .atomic)
         fixture.artifacts.append(try StageArtifactReferenceBuilder().reference(
             for: ledgerURL,
@@ -64,7 +69,6 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             artifactID: "lvs-transform-ledger",
             kind: .report,
             format: .json,
-            producedByRunID: fixture.runID
         ))
 
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
@@ -79,11 +83,16 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         })
     }
 
-    @Test func retainedTransformLedgerMustShareRunLineage() throws {
+    @Test func retainedTransformLedgerMustShareRunLineage() async throws {
         var fixture = try makeFixture()
         defer { removeTemporaryRoot(fixture.root) }
-        let ledgerURL = fixture.manifestURL.deletingLastPathComponent()
+        let ledgerURL = fixture.root
+            .appending(path: ".xcircuite/runs/other-run/stages/008-lvs/raw")
             .appending(path: "lvs-transform-ledger.json")
+        try FileManager.default.createDirectory(
+            at: ledgerURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try Data("{}".utf8).write(to: ledgerURL, options: .atomic)
         fixture.artifacts.append(try StageArtifactReferenceBuilder().reference(
             for: ledgerURL,
@@ -91,16 +100,18 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             artifactID: "lvs-transform-ledger",
             kind: .report,
             format: .json,
-            producedByRunID: "different-run"
         ))
         let manifest = try JSONDecoder().decode(
             LVSArtifactManifest.self,
             from: Data(contentsOf: fixture.manifestURL)
         )
-        let ledgerRecord = try artifactRecord(
+        let ledgerData = try Data(contentsOf: ledgerURL)
+        let ledgerRecord = LVSArtifactRecord(
             id: "lvs-transform-ledger",
             kind: .report,
-            url: ledgerURL
+            path: ledgerURL.path(percentEncoded: false),
+            byteCount: ledgerData.count,
+            sha256: try fixtureSHA256(data: ledgerData)
         )
         let updatedManifest = LVSArtifactManifest(
             schemaVersion: manifest.schemaVersion,
@@ -131,7 +142,7 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         })
     }
 
-    @Test func indexedExtractedLayoutMustBelongToManifest() throws {
+    @Test func indexedExtractedLayoutMustBelongToManifest() async throws {
         var fixture = try makeFixture()
         defer { removeTemporaryRoot(fixture.root) }
         let extractedURL = fixture.manifestURL.deletingLastPathComponent()
@@ -142,7 +153,6 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             projectRoot: fixture.root,
             kind: .netlist,
             format: .spice,
-            producedByRunID: fixture.runID
         ))
 
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
@@ -250,14 +260,12 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
                 projectRoot: root,
                 kind: .report,
                 format: .json,
-                producedByRunID: runID
             ),
             try artifactBuilder.reference(
                 for: manifestURL,
                 projectRoot: root,
                 kind: .report,
                 format: .json,
-                producedByRunID: runID
             ),
             try artifactBuilder.reference(
                 for: summaryURL,
@@ -265,7 +273,6 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
                 artifactID: "lvs-summary",
                 kind: .report,
                 format: .json,
-                producedByRunID: runID
             ),
         ]
         if includeCorrespondence {
@@ -275,7 +282,6 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
                 artifactID: "lvs-correspondence",
                 kind: .report,
                 format: .json,
-                producedByRunID: runID
             ))
         }
         return Fixture(
@@ -297,7 +303,7 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             kind: kind,
             path: url.lastPathComponent,
             byteCount: data.count,
-            sha256: XcircuiteHasher().sha256(data: data)
+            sha256: try fixtureSHA256(data: data)
         )
     }
 
@@ -319,6 +325,6 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let root: URL
         let runID: String
         let manifestURL: URL
-        var artifacts: [XcircuiteFileReference]
+        var artifacts: [ArtifactReference]
     }
 }

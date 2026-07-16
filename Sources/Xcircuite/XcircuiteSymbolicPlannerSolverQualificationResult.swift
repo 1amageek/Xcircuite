@@ -38,12 +38,15 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
         var result = self
         result.qualificationArtifact = artifact
         result.toolHealth.evidence = result.toolHealth.evidence.map { evidence in
-            guard evidence.qualification != nil else {
+            guard evidence.evidenceID == "\(toolID)-symbolic-planner-qualification" else {
                 return evidence
             }
-            var updated = evidence
-            updated.artifact = artifact
-            return updated
+            return ToolEvidence(
+                evidenceID: evidence.evidenceID,
+                kind: evidence.kind,
+                artifact: artifact,
+                checkedAt: evidence.checkedAt
+            )
         }
         return result
     }
@@ -54,12 +57,15 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
         var result = self
         result.qualificationArtifact = nil
         result.toolHealth.evidence = result.toolHealth.evidence.map { evidence in
-            guard evidence.qualification != nil else {
+            guard evidence.evidenceID == "\(toolID)-symbolic-planner-qualification" else {
                 return evidence
             }
-            var updated = evidence
-            updated.artifact = nil
-            return updated
+            return ToolEvidence(
+                evidenceID: evidence.evidenceID,
+                kind: evidence.kind,
+                artifact: nil,
+                checkedAt: evidence.checkedAt
+            )
         }
         return result
     }
@@ -225,116 +231,4 @@ public struct XcircuiteSymbolicPlannerSolverQualificationResult: Codable, Sendab
             )
         )
     }
-}
-
-func foundationArtifactReference(
-    _ reference: XcircuiteFileReference
-) -> ArtifactReference? {
-    guard let hexadecimalValue = reference.sha256,
-          let byteCount = reference.byteCount,
-          byteCount >= 0 else {
-        return nil
-    }
-
-    let location: ArtifactLocation
-    do {
-        if reference.path.hasPrefix("/") {
-            location = try ArtifactLocation(fileURL: URL(filePath: reference.path))
-        } else {
-            location = try ArtifactLocation(workspaceRelativePath: reference.path)
-        }
-        let artifactID: ArtifactID?
-        if let rawValue = reference.artifactID {
-            artifactID = try ArtifactID(rawValue: rawValue)
-        } else {
-            artifactID = nil
-        }
-        let kindRawValue: String = switch reference.kind.rawValue.lowercased() {
-        case "powerintent", "power-intent": "power-intent"
-        case "timinglibrary", "timing-library": "timing-library"
-        case "testpattern", "test-pattern": "test-pattern"
-        case "ruledeck", "rule-deck": "rule-deck"
-        default: reference.kind.rawValue.lowercased()
-        }
-        let formatRawValue: String = switch reference.format.rawValue.lowercased() {
-        case "system_verilog", "system-verilog": "system-verilog"
-        default: reference.format.rawValue.lowercased()
-        }
-        return try ArtifactReference(
-            id: artifactID,
-            locator: ArtifactLocator(
-                location: location,
-                role: .output,
-                kind: try ArtifactKind(rawValue: kindRawValue),
-                format: try ArtifactFormat(rawValue: formatRawValue)
-            ),
-            digest: ContentDigest(
-                algorithm: .sha256,
-                hexadecimalValue: hexadecimalValue
-            ),
-            byteCount: UInt64(byteCount)
-        )
-    } catch {
-        return nil
-    }
-}
-
-func requireFoundationArtifactReference(
-    _ reference: XcircuiteFileReference,
-    field: String
-) throws -> ArtifactReference {
-    guard let foundationReference = foundationArtifactReference(reference) else {
-        throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
-            field: field,
-            path: reference.path,
-            reason: "The legacy artifact reference cannot be represented as a Foundation artifact reference."
-        )
-    }
-    return foundationReference
-}
-
-func legacyArtifactReference(_ reference: ArtifactReference) -> XcircuiteFileReference {
-    legacyArtifactReferenceWithProvenance(reference)
-}
-
-func legacyArtifactReferenceWithProvenance(
-    _ reference: ArtifactReference,
-    producedByRunID: String? = nil,
-    verifiedByRunID: String? = nil
-) -> XcircuiteFileReference {
-    let kind: XcircuiteFileKind
-    switch reference.locator.kind.rawValue {
-    case "parasitics":
-        kind = .parasitic
-    case "power-intent":
-        kind = .powerIntent
-    case "timing.library":
-        kind = .timingLibrary
-    default:
-        kind = XcircuiteFileKind(rawValue: reference.locator.kind.rawValue) ?? .other
-    }
-    let format: XcircuiteFileFormat
-    switch reference.locator.format.rawValue {
-    case "system-verilog":
-        format = .systemVerilog
-    default:
-        format = XcircuiteFileFormat(rawValue: reference.locator.format.rawValue.uppercased()) ?? .unknown
-    }
-    let path: String
-    switch reference.locator.location.storage {
-    case .workspaceRelative:
-        path = reference.locator.location.value
-    case .absoluteFileURL:
-        path = URL(string: reference.locator.location.value)?.path ?? reference.locator.location.value
-    }
-    return XcircuiteFileReference(
-        artifactID: reference.id.rawValue,
-        path: path,
-        kind: kind,
-        format: format,
-        sha256: reference.digest.hexadecimalValue,
-        byteCount: Int64(reference.byteCount),
-        producedByRunID: producedByRunID,
-        verifiedByRunID: verifiedByRunID
-    )
 }

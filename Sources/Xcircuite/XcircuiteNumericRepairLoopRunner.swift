@@ -15,33 +15,51 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
     private let planExecutor: XcircuiteCandidatePlanExecutor
     private let planVerifier: XcircuiteCandidatePlanVerifier
     private let improvementArtifactGenerator: XcircuiteImprovementPlanningArtifactGenerator
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        candidateGenerator: XcircuiteParameterCandidateGenerator = XcircuiteParameterCandidateGenerator(),
-        planSynthesizer: XcircuiteParameterCandidatePlanSynthesizer = XcircuiteParameterCandidatePlanSynthesizer(),
-        planExecutor: XcircuiteCandidatePlanExecutor = XcircuiteCandidatePlanExecutor(),
-        planVerifier: XcircuiteCandidatePlanVerifier = XcircuiteCandidatePlanVerifier(),
-        improvementArtifactGenerator: XcircuiteImprovementPlanningArtifactGenerator = XcircuiteImprovementPlanningArtifactGenerator(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        candidateGenerator: XcircuiteParameterCandidateGenerator? = nil,
+        planSynthesizer: XcircuiteParameterCandidatePlanSynthesizer? = nil,
+        planExecutor: XcircuiteCandidatePlanExecutor? = nil,
+        planVerifier: XcircuiteCandidatePlanVerifier? = nil,
+        improvementArtifactGenerator: XcircuiteImprovementPlanningArtifactGenerator? = nil,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.candidateGenerator = candidateGenerator
-        self.planSynthesizer = planSynthesizer
-        self.planExecutor = planExecutor
-        self.planVerifier = planVerifier
+        self.candidateGenerator = candidateGenerator ?? XcircuiteParameterCandidateGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore,
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+        )
+        self.planSynthesizer = planSynthesizer ?? XcircuiteParameterCandidatePlanSynthesizer(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore,
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+        )
+        self.planExecutor = planExecutor ?? XcircuiteCandidatePlanExecutor(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore,
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+        )
+        self.planVerifier = planVerifier ?? XcircuiteCandidatePlanVerifier(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore,
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+        )
         self.improvementArtifactGenerator = improvementArtifactGenerator
-        self.fileReferenceVerifier = fileReferenceVerifier
+            ?? XcircuiteImprovementPlanningArtifactGenerator(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
     }
 
     public func runNumericRepairLoop(
         request: XcircuiteNumericRepairLoopRequest,
         projectRoot: URL
     ) async throws -> XcircuiteNumericRepairLoopResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         guard request.maxCandidates > 0 else {
             throw XcircuiteNumericRepairLoopError.invalidMaxCandidates(request.maxCandidates)
         }
@@ -54,7 +72,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         var problemID: String?
 
         for iterationIndex in 1...request.maxIterations {
-            let policySelection = try selectPolicy(
+            let policySelection = try await selectPolicy(
                 iterationIndex: iterationIndex,
                 calibrationPolicy: calibrationPolicy,
                 request: request,
@@ -63,7 +81,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                 projectRoot: projectRoot
             )
             let candidateStrategy = policySelection.candidateStrategy
-            let generation = try candidateGenerator.generateParameterCandidates(
+            let generation = try await candidateGenerator.generateParameterCandidates(
                 request: XcircuiteParameterCandidateGenerationRequest(
                     runID: request.runID,
                     problemArtifactID: request.problemArtifactID,
@@ -83,7 +101,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
 
             guard generation.status == "generated",
                   generation.parameterCandidatesArtifact != nil else {
-                let archived = try archiveIterationArtifacts(
+                let archived = try await archiveIterationArtifacts(
                     iterationIndex: iterationIndex,
                     runID: request.runID,
                     refs: [
@@ -111,7 +129,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
 
             let synthesis: XcircuiteParameterCandidatePlanSynthesisResult
             do {
-                synthesis = try planSynthesizer.synthesizeCandidatePlan(
+                synthesis = try await planSynthesizer.synthesizeCandidatePlan(
                     request: XcircuiteParameterCandidatePlanSynthesisRequest(
                         runID: request.runID,
                         problemArtifactID: request.problemArtifactID,
@@ -123,7 +141,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                     projectRoot: projectRoot
                 )
             } catch let error as XcircuiteParameterCandidatePlanSynthesisError {
-                let archived = try archiveIterationArtifacts(
+                let archived = try await archiveIterationArtifacts(
                     iterationIndex: iterationIndex,
                     runID: request.runID,
                     refs: [
@@ -174,12 +192,11 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
                 ),
                 projectRoot: projectRoot
             )
-            let verificationDiagnostics = try planVerificationDiagnostics(
+            let verificationDiagnostics = try await planVerificationDiagnostics(
                 from: verification.planVerificationArtifact,
-                projectRoot: projectRoot,
                 iterationIndex: iterationIndex
             )
-            let archived = try archiveIterationArtifacts(
+            let archived = try await archiveIterationArtifacts(
                 iterationIndex: iterationIndex,
                 runID: request.runID,
                 refs: [
@@ -233,7 +250,11 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
             iterations: iterations
         )
         try validateResult(result, request: request)
-        try artifactStore.persistNumericRepairLoop(result, runID: request.runID, projectRoot: projectRoot)
+        _ = try await artifactStore.persistNumericRepairLoop(
+            result,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
         return result
     }
 
@@ -306,7 +327,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         problemID: String?,
         iterations: [XcircuiteNumericRepairLoopIteration],
         projectRoot: URL
-    ) throws -> PolicySelection {
+    ) async throws -> PolicySelection {
         let baseStrategy = iterations.isEmpty
             ? request.initialCandidateStrategy
             : request.feedbackCandidateStrategy
@@ -345,12 +366,12 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
             problemID: problemID,
             iterations: iterations
         )
-        try artifactStore.persistNumericRepairLoop(
+        _ = try await artifactStore.persistNumericRepairLoop(
             partialResult,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let calibration = try improvementArtifactGenerator.generateImprovementPlanningArtifacts(
+        let calibration = try await improvementArtifactGenerator.generateImprovementPlanningArtifacts(
             request: XcircuiteImprovementPlanningArtifactGenerationRequest(
                 runID: request.runID,
                 problemArtifactID: request.problemArtifactID,
@@ -398,12 +419,11 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
 
     private func planVerificationDiagnostics(
         from reference: ArtifactReference,
-        projectRoot: URL,
         iterationIndex: Int
-    ) throws -> [XcircuiteNumericRepairLoopDiagnostic] {
-        let verification = try workspaceStore.readJSON(
+    ) async throws -> [XcircuiteNumericRepairLoopDiagnostic] {
+        let verification = try JSONDecoder().decode(
             XcircuitePlanVerification.self,
-            from: try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+            from: try await workspaceStore.loadArtifactContent(for: reference)
         )
         return verification.diagnostics.map {
             XcircuiteNumericRepairLoopDiagnostic(
@@ -434,7 +454,7 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         runID: String,
         refs: [(String, ArtifactReference?)],
         projectRoot: URL
-    ) throws -> [ArtifactReference] {
+    ) async throws -> [ArtifactReference] {
         var archived: [ArtifactReference] = []
         for (role, maybeRef) in refs {
             guard let sourceRef = maybeRef else {
@@ -451,76 +471,28 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
             }
             let sourceURL = try sourceRef.locator.location.resolvedFileURL(relativeTo: projectRoot)
             let archiveRelativePath = ".xcircuite/runs/\(runID)/planning/numeric-repair-loop/iterations/\(iterationIndex)/\(role)-\(sourceURL.lastPathComponent)"
-            let archiveURL = try workspaceStore.url(
-                forProjectRelativePath: archiveRelativePath,
-                inProjectAt: projectRoot
-            )
-            try workspaceStore.ensureDirectory(at: archiveURL.deletingLastPathComponent())
-            if FileManager.default.fileExists(atPath: archiveURL.path(percentEncoded: false)) {
-                throw XcircuiteNumericRepairLoopError.archiveArtifactAlreadyExists(path: archiveRelativePath)
-            }
-            let temporaryURL = archiveURL
-                .deletingLastPathComponent()
-                .appending(path: ".\(archiveURL.lastPathComponent).\(UUID().uuidString).tmp")
+            let archivedReference: ArtifactReference
             do {
-                try FileManager.default.copyItem(at: sourceURL, to: temporaryURL)
-                try FileManager.default.moveItem(at: temporaryURL, to: archiveURL)
-            } catch {
-                try removeTemporaryArchiveFile(temporaryURL)
-                throw error
+                archivedReference = try await workspaceStore.persistArtifact(
+                    content: Data(contentsOf: sourceURL, options: [.mappedIfSafe]),
+                    id: ArtifactID(
+                        rawValue: "planning-numeric-repair-loop-iteration-\(iterationIndex)-\(role)"
+                    ),
+                    locator: ArtifactLocator(
+                        location: try ArtifactLocation(workspaceRelativePath: archiveRelativePath),
+                        role: .output,
+                        kind: sourceRef.locator.kind,
+                        format: sourceRef.locator.format
+                    ),
+                    runID: runID,
+                    mode: .createOnly
+                )
+            } catch XcircuiteWorkspaceStoreError.artifactAlreadyExists(let path) {
+                throw XcircuiteNumericRepairLoopError.archiveArtifactAlreadyExists(path: path)
             }
-            let archivedLegacyRef = try workspaceStore.fileReference(
-                forProjectRelativePath: archiveRelativePath,
-                artifactID: "planning-numeric-repair-loop-iteration-\(iterationIndex)-\(role)",
-                kind: legacyFileKind(for: sourceRef.locator.kind),
-                format: legacyFileFormat(for: sourceRef.locator.format),
-                inProjectAt: projectRoot,
-                producedByRunID: runID
-            )
-            try workspaceStore.upsertRunArtifact(archivedLegacyRef, runID: runID, inProjectAt: projectRoot)
-            archived.append(try requireFoundationArtifactReference(
-                archivedLegacyRef,
-                field: "numeric-repair-loop-iteration-\(iterationIndex)-\(role)"
-            ))
+            archived.append(archivedReference)
         }
         return archived
-    }
-
-    private func legacyFileKind(for kind: ArtifactKind) -> XcircuiteFileKind {
-        switch kind.rawValue {
-        case "parasitics":
-            return .parasitic
-        case "power-intent":
-            return .powerIntent
-        case "timing.library":
-            return .timingLibrary
-        default:
-            return XcircuiteFileKind(rawValue: kind.rawValue) ?? .other
-        }
-    }
-
-    private func legacyFileFormat(for format: ArtifactFormat) -> XcircuiteFileFormat {
-        switch format.rawValue {
-        case "system-verilog":
-            return .systemVerilog
-        default:
-            return XcircuiteFileFormat(rawValue: format.rawValue.uppercased()) ?? .unknown
-        }
-    }
-
-    private func removeTemporaryArchiveFile(_ url: URL) throws {
-        let path = url.path(percentEncoded: false)
-        guard FileManager.default.fileExists(atPath: path) else {
-            return
-        }
-        do {
-            try FileManager.default.removeItem(at: url)
-        } catch {
-            throw XcircuiteNumericRepairLoopError.archiveTemporaryCleanupFailed(
-                path: path,
-                message: error.localizedDescription
-            )
-        }
     }
 
     private func validateResult(

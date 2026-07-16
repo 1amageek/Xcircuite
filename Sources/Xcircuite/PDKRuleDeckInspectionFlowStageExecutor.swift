@@ -67,7 +67,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let manifestURL = try manifestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -82,7 +82,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
                 projectRootPath: context.projectRoot.path(percentEncoded: false)
             )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let artifact = try support.persistResult(result, stageID: stageID, context: context)
             return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {

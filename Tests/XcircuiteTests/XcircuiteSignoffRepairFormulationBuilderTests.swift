@@ -2,7 +2,7 @@ import DRCEngine
 import Foundation
 import LVSEngine
 import Testing
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
@@ -12,10 +12,10 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         let root = try makeTemporaryRoot("signoff-repair-formulation")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-formulation"
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeReports(root: root, runID: runID, registerArtifacts: true)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeReports(root: root, runID: runID, registerArtifacts: true)
 
         let json = try await XcircuiteFlowCLICommand.run(arguments: [
             "formulate-signoff-repair-planning-problem",
@@ -39,19 +39,18 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         #expect(result.status == "compiled")
         #expect(result.sourceReports.map(\.sourceKind) == ["drc", "lvs"])
         #expect(result.sourceReports.allSatisfy { $0.integrityStatus == "verified" })
-        #expect(result.sourceReports.allSatisfy { $0.producedByRunID == runID })
         #expect(result.sourceReports.allSatisfy { ($0.sha256 ?? "").isEmpty == false })
         #expect(result.sourceReports.allSatisfy { ($0.byteCount ?? 0) > 0 })
         #expect(result.compilation.formulationArtifact.path == ".xcircuite/runs/\(runID)/planning/repair-formulation.json")
         #expect(result.compilation.problemArtifact.path == ".xcircuite/runs/\(runID)/planning/problem.json")
 
-        let formulation = try store.readJSON(
+        let formulation = try await store.readJSON(
             XcircuiteRepairPlanFormulation.self,
-            from: root.appending(path: result.compilation.formulationArtifact.path)
+            from: result.compilation.formulationArtifact.path
         )
         #expect(formulation.formulationID == "signoff-repair-formulation-\(runID)")
         #expect(formulation.sourceRefs.map(\.refID) == ["drc-repair-hints", "lvs-repair-hints"])
-        #expect(formulation.sourceRefs.allSatisfy { $0.metadata["artifactIntegrityStatus"] == .string("verified") })
+        #expect(formulation.sourceRefs.allSatisfy { $0.metadata["artifactIntegrityStatus"] == .text("verified") })
         #expect(formulation.sourceRefs.allSatisfy { $0.metadata["artifactSHA256"] != nil })
         #expect(formulation.initialStateRefs.contains { $0.refID == "action-domain-snapshot" })
         #expect(formulation.goals.map(\.domain).sorted() == ["drc", "lvs"])
@@ -59,9 +58,9 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         #expect(formulation.riskClassifications.contains { $0.requiredApprovals == ["lvs-policy-review"] })
         #expect(formulation.constraints.contains { $0.kind == "human-approval" })
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: result.compilation.problemArtifact.path)
+            from: result.compilation.problemArtifact.path
         )
         #expect(problem.problemID == "signoff-repair-problem")
         #expect(problem.sourceRefs.first?.kind == "repair-plan-formulation")
@@ -110,11 +109,8 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
             $0.atom == "lvs-modelmismatch-resolved" && $0.roles.contains("goal")
         })
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/\(runID)/manifest.json")
-        )
-        let artifactIDs = Set(manifest.artifacts.map(\.artifactID))
+        let ledger = try await store.loadRunLedger(runID: runID)
+        let artifactIDs = Set(ledger.runManifest.artifacts.map(\.artifactID))
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.actionDomainArtifactID))
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.repairPlanFormulationArtifactID))
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.problemArtifactID))
@@ -122,16 +118,17 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID))
     }
 
-    @Test func builderRejectsSignoffRepairReportsWithoutActionableHints() throws {
+    @Test func builderRejectsSignoffRepairReportsWithoutActionableHints() async throws {
         let root = try makeTemporaryRoot("signoff-repair-empty")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-empty"
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         let reportsDirectory = root.appending(path: "reports")
         try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
-        try store.writeJSON(
+        try writeJSON(
             DRCRepairHintReport(
                 status: "ready",
                 reportURL: nil,
@@ -142,21 +139,21 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
                 hints: [],
                 unsupportedDiagnosticIndexes: []
             ),
-            to: reportsDirectory.appending(path: "drc-repair-hints.json"),
-            forProjectAt: root
+            to: reportsDirectory.appending(path: "drc-repair-hints.json")
         )
-        let reportRef = try store.fileReference(
+        let reportRef = try await store.makeArtifactReference(
             forProjectRelativePath: "reports/drc-repair-hints.json",
             artifactID: "drc-repair-hints",
             kind: .report,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(reportRef, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(reportRef, runID: runID, store: store, projectRoot: root)
 
         do {
-            _ = try XcircuiteSignoffRepairFormulationBuilder().compile(
+            _ = try await XcircuiteSignoffRepairFormulationBuilder(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).compile(
                 request: XcircuiteSignoffRepairFormulationRequest(
                     runID: runID,
                     drcRepairHintPath: "reports/drc-repair-hints.json"
@@ -169,17 +166,21 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         }
     }
 
-    @Test func builderRejectsUnregisteredRepairHintReportPath() throws {
+    @Test func builderRejectsUnregisteredRepairHintReportPath() async throws {
         let root = try makeTemporaryRoot("signoff-repair-unregistered-report")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-unregistered"
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeReports(root: root, runID: runID, registerArtifacts: false)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeReports(root: root, runID: runID, registerArtifacts: false)
 
         do {
-            _ = try XcircuiteSignoffRepairFormulationBuilder().compile(
+            _ = try await XcircuiteSignoffRepairFormulationBuilder(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).compile(
                 request: XcircuiteSignoffRepairFormulationRequest(
                     runID: runID,
                     drcRepairHintPath: "reports/drc-repair-hints.json"
@@ -197,20 +198,24 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         }
     }
 
-    @Test func builderRejectsStaleRegisteredRepairHintReport() throws {
+    @Test func builderRejectsStaleRegisteredRepairHintReport() async throws {
         let root = try makeTemporaryRoot("signoff-repair-stale-report")
         defer { removeTemporaryRoot(root) }
         let runID = "run-signoff-stale"
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeReports(root: root, runID: runID, registerArtifacts: true)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeReports(root: root, runID: runID, registerArtifacts: true)
         let reportURL = root.appending(path: "reports/drc-repair-hints.json")
         let original = try String(contentsOf: reportURL, encoding: .utf8)
         try "\(original)\n".write(to: reportURL, atomically: true, encoding: .utf8)
 
         do {
-            _ = try XcircuiteSignoffRepairFormulationBuilder().compile(
+            _ = try await XcircuiteSignoffRepairFormulationBuilder(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).compile(
                 request: XcircuiteSignoffRepairFormulationRequest(
                     runID: runID,
                     drcRepairHintPath: "reports/drc-repair-hints.json"
@@ -229,39 +234,35 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
         }
     }
 
-    private func writeReports(root: URL, runID: String, registerArtifacts: Bool) throws {
+    private func writeReports(root: URL, runID: String, registerArtifacts: Bool) async throws {
         let reportsDirectory = root.appending(path: "reports")
         try FileManager.default.createDirectory(at: reportsDirectory, withIntermediateDirectories: true)
-        let store = XcircuiteWorkspaceStore()
-        try store.writeJSON(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try writeJSON(
             makeDRCRepairHints(),
-            to: reportsDirectory.appending(path: "drc-repair-hints.json"),
-            forProjectAt: root
+            to: reportsDirectory.appending(path: "drc-repair-hints.json")
         )
-        try store.writeJSON(
+        try writeJSON(
             makeLVSRepairHints(),
-            to: reportsDirectory.appending(path: "lvs-repair-hints.json"),
-            forProjectAt: root
+            to: reportsDirectory.appending(path: "lvs-repair-hints.json")
         )
         guard registerArtifacts else { return }
-        let drcRef = try store.fileReference(
-            forProjectRelativePath: "reports/drc-repair-hints.json",
+        let drcRef = try StageArtifactReferenceBuilder().reference(
+            for: reportsDirectory.appending(path: "drc-repair-hints.json"),
+            projectRoot: root,
             artifactID: "drc-repair-hints",
             kind: .report,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        let lvsRef = try store.fileReference(
-            forProjectRelativePath: "reports/lvs-repair-hints.json",
+        let lvsRef = try StageArtifactReferenceBuilder().reference(
+            for: reportsDirectory.appending(path: "lvs-repair-hints.json"),
+            projectRoot: root,
             artifactID: "lvs-repair-hints",
             kind: .report,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(drcRef, runID: runID, inProjectAt: root)
-        try store.upsertRunArtifact(lvsRef, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(drcRef, runID: runID, store: store, projectRoot: root)
+        _ = try await retainTestArtifact(lvsRef, runID: runID, store: store, projectRoot: root)
     }
 
     private func makeDRCRepairHints() -> DRCRepairHintReport {
@@ -340,6 +341,12 @@ struct XcircuiteSignoffRepairFormulationBuilderTests {
             ],
             unsupportedDiagnosticIndexes: []
         )
+    }
+
+    private func writeJSON<Value: Encodable>(_ value: Value, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(value).write(to: url, options: .atomic)
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

@@ -1,112 +1,33 @@
 {
-  "oracleScopes" : [
-    {
-      "algorithmVersion" : "netgen-subprocess",
-      "binaryDigest" : "62f64b3533da33bab70bd09925e459fc5fd514a7a70963d1787bfc2866c9d18b",
-      "deckDigest" : "7a33f3f54fab57a9d9b0887ac7b7b64ce6c454110e8b7f01f3cfb90a1282dc94",
-      "implementationID" : "netgen-external",
-      "processProfileID" : "process-neutral"
-    },
-    {
-      "algorithmVersion" : "netgen-subprocess",
-      "binaryDigest" : "62f64b3533da33bab70bd09925e459fc5fd514a7a70963d1787bfc2866c9d18b",
-      "deckDigest" : "7a33f3f54fab57a9d9b0887ac7b7b64ce6c454110e8b7f01f3cfb90a1282dc94",
-      "implementationID" : "netgen-external",
-      "processProfileID" : "sky130.open-pdk.digital-mos.signoff"
-    }
-  ],
-  "reportPath" : "qualification/lvs-corpus-report.json",
-  "reportSHA256" : "140252fdc44b9bb9fb295ae1f96ab700aa7a80337fd1e4bd78b643f3639f061d",
-  "schemaVersion" : 2,
-  "status" : "passed",
-  "summary" : {
-    "blockedAssertionCount" : 0,
-    "disagreementClassCounts" : {
-      "comparisonMismatch" : 22
-    },
-    "durationBudgetPassedCaseCount" : 40,
-    "expectationMatchedCaseCount" : 40,
-    "failedAssertionCount" : 0,
-    "failureCategoryCounts" : {
-
-    },
-    "observedAssertionCounts" : {
-      "cancellation:cancelled" : 1,
-      "correspondenceArtifact" : 40,
-      "determinism:stable" : 1,
-      "diagnosticRule:LVS_MODEL_MISMATCH" : 2,
-      "durationBudget:within-budget" : 40,
-      "extractionArtifact" : 20,
-      "extractionProductionEligibility:eligible" : 20,
-      "hierarchyDepth:1" : 5,
-      "manifestArtifact" : 40,
-      "oracleAgreement:true" : 40,
-      "oracleIndependence:ready" : 40,
-      "reportArtifact" : 40,
-      "structureClass:analog" : 10,
-      "verdict:match" : 38,
-      "verdict:mismatch" : 2
-    },
-    "oracleAgreementPassedCaseCount" : 40,
-    "oracleAgreementRate" : 1,
-    "oracleCaseCount" : 40,
-    "oracleExecutionFailedCaseCount" : 0,
-    "oracleReadinessBlockedCaseCount" : 0,
-    "passRate" : 1,
-    "primaryExecutionFailedCaseCount" : 0
-  },
-  "toolEvidence" : {
-    "artifact" : {
-      "format" : "JSON",
-      "kind" : "report",
-      "path" : "qualification/lvs-corpus-report.json",
-      "sha256" : "140252fdc44b9bb9fb295ae1f96ab700aa7a80337fd1e4bd78b643f3639f061d"
-    },
-    "checkedAt" : "2026-07-12T05:51:45Z",
-    "evidenceID" : "lvs-production-promoted-1",
-    "kind" : "corpus",
-    "qualification" : {
-      "failureCodes" : [
-
-      ],
-      "observedCounts" : {
-        "blockedAssertionCount" : 0,
-        "budgetExceededCaseCount" : 0,
-        "caseCount" : 40,
-        "completePrimaryIdentityCaseCount" : 40,
-        "durationBudgetPassedCaseCount" : 40,
-        "failedAssertionCount" : 0,
-        "independentOracleAgreementPassedCaseCount" : 40,
-        "independentOracleCaseCount" : 40,
-        "matchedCaseCount" : 40,
-        "nonIndependentOracleCaseCount" : 0,
-        "observedAssertionKindCount" : 15,
-        "oracleAgreementPassedCaseCount" : 40,
-        "oracleCaseCount" : 40,
-        "oracleExecutionFailedCaseCount" : 0,
-        "oracleIntegrityFailureCount" : 0,
-        "oracleReadinessBlockedCaseCount" : 0,
-        "primaryExecutionFailedCaseCount" : 0,
-        "qualificationScopeCount" : 1,
-        "reportIntegrityFailureCount" : 0,
-        "requiredObservedAssertionCount" : 15
+  "schemaVersion": 1,
+  "status": "passed",
+  "reportPath": "qualification/lvs-corpus-report.json",
+  "reportSHA256": "b016262729ac8207d35cf6b8947f7c02feeed28f3661550d7d2006f6be2dcac7",
+  "toolEvidence": {
+    "evidenceID": "lvs-production-promoted-1",
+    "kind": "corpus",
+    "artifact": {
+      "id": "lvs-corpus-report",
+      "locator": {
+        "location": {
+          "storage": "workspaceRelative",
+          "value": "qualification/lvs-corpus-report.json"
+        },
+        "role": "output",
+        "kind": "evidence",
+        "format": "json"
       },
-      "observedMetrics" : {
-        "durationBudgetPassRate" : 1,
-        "independentOracleRate" : 1,
-        "oracleAgreementRate" : 1,
-        "passRate" : 1,
-        "totalDurationSeconds" : 14.048765778541565
+      "digest": {
+        "algorithm": "sha256",
+        "hexadecimalValue": "b016262729ac8207d35cf6b8947f7c02feeed28f3661550d7d2006f6be2dcac7"
       },
-      "policyID" : "custom",
-      "qualified" : true,
-      "scope" : {
-        "algorithmVersion" : "layout-extraction-canonical-graph-v2",
-        "binaryDigest" : "5e8e7994b9982845fc553ea04b9c3169bd1bde2425d1b8a2730f48c0260dd400",
-        "deckDigest" : "31287ea98453d1a4a0fe9e18f8e2a9a0aa411bea3e5eae9db3dd5e450bcd57c0",
-        "implementationID" : "lvsengine-native",
-        "processProfileID" : "sky130.open-pdk.digital-mos.signoff"
+      "byteCount": 1805,
+      "producer": {
+        "kind": "engine",
+        "identifier": "native-lvs-qualification-fixture",
+        "version": "1"
       }
-    }
+    },
+    "checkedAt": "2026-07-14T03:33:20.000Z"
   }
 }

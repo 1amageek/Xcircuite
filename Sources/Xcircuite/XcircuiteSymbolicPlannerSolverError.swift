@@ -30,7 +30,7 @@ public enum XcircuiteSymbolicPlannerSolverError: Error, LocalizedError, Equatabl
         field: String,
         artifactID: String?,
         path: String,
-        status: XcircuiteFileReferenceIntegrityStatus,
+        status: FlowArtifactVerificationStatus,
         message: String
     )
     case invalidSolverQualificationReference(field: String, value: String)

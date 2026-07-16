@@ -45,7 +45,7 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let resolvedRoots = try resolveSearchRoots(context: context)
             let request = PDKDiscoveryRequest(
@@ -55,7 +55,7 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
                 requiredProcessID: requiredProcessID
             )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let artifact = try support.persistResult(result, stageID: stageID, context: context)
             return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {

@@ -5,7 +5,7 @@ import DesignFlowKernel
 
 @Suite("Project path boundary")
 struct ProjectPathBoundaryTests {
-    @Test func artifactReferenceAllowsRegularProjectFile() throws {
+    @Test func artifactReferenceAllowsRegularProjectFile() async throws {
         let root = try makeTemporaryRoot("path-boundary-regular")
         defer { removeTemporaryRoot(root) }
         let artifactURL = root.appending(path: "artifact.json")
@@ -17,7 +17,6 @@ struct ProjectPathBoundaryTests {
             artifactID: "artifact-json",
             kind: .report,
             format: .json,
-            producedByRunID: "run-path-boundary"
         )
 
         #expect(reference.path == "artifact.json")
@@ -25,7 +24,7 @@ struct ProjectPathBoundaryTests {
         #expect(reference.sha256 != nil)
     }
 
-    @Test func artifactReferenceRejectsSymlinkEscapingProjectBeforeHashing() throws {
+    @Test func artifactReferenceRejectsSymlinkEscapingProjectBeforeHashing() async throws {
         let root = try makeTemporaryRoot("path-boundary-reference")
         defer { removeTemporaryRoot(root) }
         let externalRoot = try makeTemporaryRoot("path-boundary-external")
@@ -45,12 +44,11 @@ struct ProjectPathBoundaryTests {
                 artifactID: "linked-artifact-json",
                 kind: .report,
                 format: .json,
-                producedByRunID: "run-path-boundary"
             )
         }
     }
 
-    @Test func outputPathGuardRejectsSymlinkDirectoryEscapingProject() throws {
+    @Test func outputPathGuardRejectsSymlinkDirectoryEscapingProject() async throws {
         let root = try makeTemporaryRoot("path-boundary-output")
         defer { removeTemporaryRoot(root) }
         let externalRoot = try makeTemporaryRoot("path-boundary-output-external")
@@ -71,7 +69,7 @@ struct ProjectPathBoundaryTests {
         }
     }
 
-    @Test func boundaryAllowsResolvedProjectRootSymlink() throws {
+    @Test func boundaryAllowsResolvedProjectRootSymlink() async throws {
         let actualRoot = try makeTemporaryRoot("path-boundary-actual")
         defer { removeTemporaryRoot(actualRoot) }
         let linkRoot = FileManager.default.temporaryDirectory

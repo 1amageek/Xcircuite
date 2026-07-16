@@ -7,12 +7,12 @@ public struct XcircuitePlanVerification: Codable, Sendable, Hashable {
     public var planID: String
     public var runID: String
     public var verificationMode: String
-    public var candidatePlanRef: XcircuiteFileReference
+    public var candidatePlanRef: ArtifactReference
     public var stepResults: [XcircuitePlanVerificationStepResult]
     public var gateResults: [XcircuitePlanVerificationGateResult]
     public var correctnessGateResults: [XcircuitePlanningCorrectnessGateResult]
     public var riskReviews: [XcircuitePlanRiskReview]
-    public var artifactRefs: [XcircuiteFileReference]
+    public var artifactRefs: [ArtifactReference]
     public var initialSymbolicState: [String]
     public var finalSymbolicState: [String]
     public var goalCoverageStatus: String
@@ -28,12 +28,12 @@ public struct XcircuitePlanVerification: Codable, Sendable, Hashable {
         planID: String,
         runID: String,
         verificationMode: String,
-        candidatePlanRef: XcircuiteFileReference,
+        candidatePlanRef: ArtifactReference,
         stepResults: [XcircuitePlanVerificationStepResult],
         gateResults: [XcircuitePlanVerificationGateResult],
         correctnessGateResults: [XcircuitePlanningCorrectnessGateResult] = [],
         riskReviews: [XcircuitePlanRiskReview] = [],
-        artifactRefs: [XcircuiteFileReference],
+        artifactRefs: [ArtifactReference],
         initialSymbolicState: [String] = [],
         finalSymbolicState: [String] = [],
         goalCoverageStatus: String = "not-evaluated",
@@ -100,7 +100,7 @@ public struct XcircuitePlanVerification: Codable, Sendable, Hashable {
         self.planID = try container.decode(String.self, forKey: .planID)
         self.runID = try container.decode(String.self, forKey: .runID)
         self.verificationMode = try container.decode(String.self, forKey: .verificationMode)
-        self.candidatePlanRef = try container.decode(XcircuiteFileReference.self, forKey: .candidatePlanRef)
+        self.candidatePlanRef = try container.decode(ArtifactReference.self, forKey: .candidatePlanRef)
         self.stepResults = try container.decode([XcircuitePlanVerificationStepResult].self, forKey: .stepResults)
         self.gateResults = try container.decode([XcircuitePlanVerificationGateResult].self, forKey: .gateResults)
         self.correctnessGateResults = try container.decode(
@@ -111,7 +111,7 @@ public struct XcircuitePlanVerification: Codable, Sendable, Hashable {
             [XcircuitePlanRiskReview].self,
             forKey: .riskReviews
         )
-        self.artifactRefs = try container.decode([XcircuiteFileReference].self, forKey: .artifactRefs)
+        self.artifactRefs = try container.decode([ArtifactReference].self, forKey: .artifactRefs)
         self.initialSymbolicState = try container.decode([String].self, forKey: .initialSymbolicState)
         self.finalSymbolicState = try container.decode([String].self, forKey: .finalSymbolicState)
         self.goalCoverageStatus = try container.decode(String.self, forKey: .goalCoverageStatus)

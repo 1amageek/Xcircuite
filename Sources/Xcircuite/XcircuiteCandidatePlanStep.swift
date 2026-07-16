@@ -14,7 +14,7 @@ public struct XcircuiteCandidatePlanStep: Codable, Sendable, Hashable {
     public var missingInputRefs: [String]
     public var verificationGates: [String]
     public var reason: String
-    public var parameterHints: [String: XcircuiteJSONValue]
+    public var parameterHints: [String: PlanningParameterValue]
     public var blockers: [String]
 
     public init(
@@ -30,7 +30,7 @@ public struct XcircuiteCandidatePlanStep: Codable, Sendable, Hashable {
         missingInputRefs: [String],
         verificationGates: [String],
         reason: String,
-        parameterHints: [String: XcircuiteJSONValue],
+        parameterHints: [String: PlanningParameterValue],
         blockers: [String]
     ) {
         self.stepID = stepID

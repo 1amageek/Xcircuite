@@ -76,9 +76,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-cli")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-cli"
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: workspaceStore)
 
         let specURL = root.appending(path: "input/opamp-spec.json")
         let specOutput = try await XcircuiteFlowCLICommand.run(arguments: [
@@ -288,9 +288,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-waveform-metrics")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-waveform-metrics"
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: workspaceStore)
 
         let acCSV = """
         frequency,V(vout)_real,V(vout)_imag
@@ -442,9 +442,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-merged-metrics")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-merged-metrics"
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: workspaceStore)
 
         let spec = OpAmpSpec(
             specID: "merged-opamp",
@@ -577,9 +577,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-deck-run")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-deck-run"
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: workspaceStore)
 
         let deckSet = makeExecutableOpAmpDeckSet()
         let spec = OpAmpSpec(
@@ -657,9 +657,9 @@ struct OpAmpDesignFlowTests {
         let root = try makeTemporaryRoot("opamp-post-layout")
         defer { removeTemporaryRoot(root) }
         let runID = "run-opamp-post-layout"
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.ensureRunDirectory(for: runID, inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: workspaceStore)
 
         let spec = OpAmpSpec.makeDefault(
             specID: "post-layout-opamp",
@@ -929,36 +929,36 @@ private struct OpAmpTopologyListCLIResult: Sendable, Hashable, Decodable {
 
 private struct OpAmpSizingCLIResult: Sendable, Hashable, Decodable {
     var result: OpAmpSizingResult
-    var artifactReferences: [XcircuiteFileReference]
+    var artifactReferences: [ArtifactReference]
 }
 
 private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpEvaluationReport
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
     var metricExtraction: OpAmpSimulationMetricExtraction?
 }
 
 private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpSimulationDeckValidationReport
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }
 
 private struct OpAmpSimulationDeckRunCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpSimulationDeckExecutionReport
-    var artifactReferences: [XcircuiteFileReference]
+    var artifactReferences: [ArtifactReference]
 }
 
 private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Decodable {
     var extraction: OpAmpSimulationMetricExtraction
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }
 
 private struct OpAmpMetricExtractionMergeCLIResult: Sendable, Hashable, Decodable {
     var extraction: OpAmpSimulationMetricExtraction
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }
 
 private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Decodable {
     var report: OpAmpPostLayoutComparisonReport
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }

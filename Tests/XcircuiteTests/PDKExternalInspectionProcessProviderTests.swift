@@ -154,7 +154,7 @@ struct PDKExternalInspectionProcessProviderTests {
             assetID: "cells",
             format: .lef
         )
-        let context = makeContext(root: root, runID: runID)
+        let context = try makeContext(root: root, runID: runID)
         let result = try await executor.execute(
             stage: FlowStageDefinition(stageID: stageID, displayName: "External PDK standard view"),
             context: context
@@ -181,7 +181,7 @@ struct PDKExternalInspectionProcessProviderTests {
     }
 
     @Test("runtime specifications select the external PDK providers")
-    func runtimeSpecificationSelectsExternalProviders() throws {
+    func runtimeSpecificationSelectsExternalProviders() async throws {
         let configuration = PDKExternalInspectionProcessConfiguration(
             executablePath: "/bin/sh",
             arguments: ["{{requestPath}}", "{{resultPath}}"],
@@ -223,7 +223,7 @@ struct PDKExternalInspectionProcessProviderTests {
         return root
     }
 
-    private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
+    private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
         let runDirectory = root
             .appending(path: ".xcircuite")
             .appending(path: "runs")
@@ -237,7 +237,7 @@ struct PDKExternalInspectionProcessProviderTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            storage: XcircuiteWorkspaceStore(),
+            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

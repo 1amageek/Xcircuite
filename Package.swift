@@ -56,7 +56,7 @@ let package = Package(
                 .product(name: "LogicLowering", package: "LogicEngine"),
                 .product(name: "LogicSimulation", package: "LogicEngine"),
                 .product(name: "LogicSynthesis", package: "LogicEngine"),
-                .product(name: "LogicQualification", package: "LogicEngine"),
+                .product(name: "LogicEvidence", package: "LogicEngine"),
                 .product(name: "RTLVerificationEngine", package: "RTLVerificationEngine"),
                 .product(name: "RTLVerificationCore", package: "RTLVerificationEngine"),
                 .product(name: "DFTCore", package: "DFTEngine"),
@@ -65,15 +65,15 @@ let package = Package(
                 .product(name: "PhysicalDesignCore", package: "PhysicalDesignEngine"),
                 .product(name: "ElectricalSignoffCore", package: "ElectricalSignoffEngine"),
                 .product(name: "ElectricalSignoffEngine", package: "ElectricalSignoffEngine"),
-                .product(name: "ElectricalSignoffQualification", package: "ElectricalSignoffEngine"),
+                .product(name: "ElectricalSignoffEvidence", package: "ElectricalSignoffEngine"),
                 .product(name: "ReleaseEngine", package: "ReleaseEngine"),
-                .product(name: "QualificationEngine", package: "ReleaseEngine"),
             ]
         ),
         .target(
             name: "XcircuiteFlowCLISupport",
             dependencies: [
                 "Xcircuite",
+                .product(name: "CircuiteFoundation", package: "CircuiteFoundation"),
                 .product(name: "DesignFlowKernel", package: "DesignFlowKernel"),
             ]
         ),
@@ -99,7 +99,7 @@ let package = Package(
                 .product(name: "LogicLowering", package: "LogicEngine"),
                 .product(name: "LogicSimulation", package: "LogicEngine"),
                 .product(name: "LogicSynthesis", package: "LogicEngine"),
-                .product(name: "LogicQualification", package: "LogicEngine"),
+                .product(name: "LogicEvidence", package: "LogicEngine"),
                 .product(name: "PhysicalDesignCore", package: "PhysicalDesignEngine"),
                 .product(name: "DFTCore", package: "DFTEngine"),
                 .product(name: "PDKCore", package: "PDKKit"),
@@ -110,11 +110,10 @@ let package = Package(
                 .product(name: "LayoutTech", package: "semiconductor-layout"),
                 .product(name: "ElectricalSignoffCore", package: "ElectricalSignoffEngine"),
                 .product(name: "ElectricalSignoffEngine", package: "ElectricalSignoffEngine"),
-                .product(name: "ElectricalSignoffQualification", package: "ElectricalSignoffEngine"),
+                .product(name: "ElectricalSignoffEvidence", package: "ElectricalSignoffEngine"),
                 .product(name: "ReleaseCore", package: "ReleaseEngine"),
                 .product(name: "SignoffEngine", package: "ReleaseEngine"),
                 .product(name: "TapeoutEngine", package: "ReleaseEngine"),
-                .product(name: "QualificationEngine", package: "ReleaseEngine"),
             ],
             exclude: [
                 "Fixtures",

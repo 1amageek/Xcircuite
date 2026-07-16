@@ -1,18 +1,19 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let hasher: XcircuiteHasher
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let fileFingerprinter: any FileFingerprinting
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        hasher: XcircuiteHasher = XcircuiteHasher(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
+        workspaceStore: XcircuiteWorkspaceStore,
+        fileFingerprinter: any FileFingerprinting = LocalFileFingerprinter(),
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.workspaceStore = workspaceStore
-        self.hasher = hasher
+        self.fileFingerprinter = fileFingerprinter
         self.identifierValidator = identifierValidator
     }
 
@@ -21,7 +22,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
         qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportURL: URL? = nil
-    ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
+    ) async throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
         try validate(
             request: request,
             qualification: qualification,
@@ -49,7 +50,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             externalOracleInfrastructureReady: externalSummary.ready,
             blockers: blockers
         )
-        return makeAssessment(
+        return try makeAssessment(
             request: normalizedRequest,
             qualification: qualification,
             retainedSignoffReport: retainedSignoffReport,
@@ -68,29 +69,30 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportURL: URL?,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
-        let assessmentWithoutSelfRef = try assess(
+    ) async throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
+        let assessmentWithoutSelfRef = try await assess(
             request: request,
             qualification: qualification,
             retainedSignoffReport: retainedSignoffReport,
             retainedSignoffReportURL: retainedSignoffReportURL
         )
-        let suiteDirectory = try suiteDirectoryURL(suiteID: qualification.suiteID, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: suiteDirectory)
         let assessmentPath = suiteProjectRelativePath(
             suiteID: qualification.suiteID,
             fileName: "promotion-assessment.json"
         )
-        let assessmentURL = try workspaceStore.url(forProjectRelativePath: assessmentPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(assessmentWithoutSelfRef, to: assessmentURL, forProjectAt: projectRoot)
-        let assessmentArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: assessmentPath,
-            artifactID: "generated-layout-signoff-promotion-assessment",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let assessmentReference = try await workspaceStore.persistProjectArtifact(
+            content: encoder.encode(assessmentWithoutSelfRef),
+            id: ArtifactID(rawValue: "generated-layout-signoff-promotion-assessment"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: assessmentPath),
+                role: .output,
+                kind: .report,
+                format: .json
+            )
         )
-        try workspaceStore.upsertFileReference(assessmentArtifact, forProjectAt: projectRoot)
+        let assessmentArtifact = try artifactFingerprint(assessmentReference)
 
         var assessment = assessmentWithoutSelfRef
         assessment.assessmentArtifact = assessmentArtifact
@@ -172,13 +174,13 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
         request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
         qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
-        retainedSignoffReportArtifact: XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactReference?,
+        retainedSignoffReportArtifact: XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint?,
         externalSummary: ExternalOracleSummary,
         generatedOracleReady: Bool,
         blockers: [XcircuiteGeneratedLayoutSignoffPromotionAssessment.Blocker],
         status: XcircuiteGeneratedLayoutSignoffPromotionAssessment.Status,
-        assessmentArtifact: XcircuiteFileReference?
-    ) -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
+        assessmentArtifact: ArtifactReference?
+    ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
         XcircuiteGeneratedLayoutSignoffPromotionAssessment(
             promotionID: request.promotionID,
             suiteID: qualification.suiteID,
@@ -205,9 +207,9 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
                 generatedOracleReady: generatedOracleReady,
                 externalSummary: externalSummary
             ),
-            qualificationArtifact: qualification.qualificationArtifact,
+            qualificationArtifact: try qualification.qualificationArtifact.map(artifactFingerprint),
             retainedSignoffReportArtifact: retainedSignoffReportArtifact,
-            assessmentArtifact: assessmentArtifact
+            assessmentArtifact: try assessmentArtifact.map(artifactFingerprint)
         )
     }
 
@@ -413,11 +415,22 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
 
     private func artifactReference(
         for url: URL
-    ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactReference {
-        try XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactReference(
+    ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint {
+        let fingerprint = try fileFingerprinter.fingerprint(fileAt: url)
+        return try XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint(
             path: url.path(percentEncoded: false),
-            sha256: try hasher.sha256(fileAt: url),
-            byteCount: try hasher.byteCount(fileAt: url)
+            sha256: fingerprint.digest.hexadecimalValue,
+            byteCount: Int64(fingerprint.byteCount)
+        )
+    }
+
+    private func artifactFingerprint(
+        _ reference: ArtifactReference
+    ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint {
+        try XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint(
+            path: reference.locator.location.value,
+            sha256: reference.digest.hexadecimalValue,
+            byteCount: Int64(reference.byteCount)
         )
     }
 
@@ -450,15 +463,8 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
         }
     }
 
-    private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try workspaceStore.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
-            inProjectAt: projectRoot
-        )
-    }
-
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func blocker(

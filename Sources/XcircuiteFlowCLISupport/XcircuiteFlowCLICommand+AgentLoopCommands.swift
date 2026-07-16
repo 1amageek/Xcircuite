@@ -4,13 +4,17 @@ import Xcircuite
 import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
-    static func summarizeLoop(arguments: [String]) throws -> String {
+    static func summarizeLoop(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return summarizeLoopHelpText
         }
         let options = try parseAgentLoopOptions(arguments: arguments)
         let profile = try loadAgentLoopProfile(from: options.profileURL)
-        let result = try DefaultFlowRunLoopSnapshotBuilder().summarizeLoop(
+        let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let result = try await DefaultFlowRunLoopSnapshotBuilder(
+            loader: store,
+            evidencePersistence: store
+        ).summarizeLoop(
             runID: options.runID,
             projectRoot: options.projectRoot,
             profile: profile,
@@ -19,13 +23,21 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: options.pretty)
     }
 
-    static func evaluateRunGuard(arguments: [String]) throws -> String {
+    static func evaluateRunGuard(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return evaluateRunGuardHelpText
         }
         let options = try parseAgentLoopOptions(arguments: arguments)
         let profile = try loadAgentLoopProfile(from: options.profileURL)
-        let result = try DefaultFlowRunGuardEvaluator().evaluateRunGuard(
+        let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let snapshotBuilder = DefaultFlowRunLoopSnapshotBuilder(
+            loader: store,
+            evidencePersistence: store
+        )
+        let result = try await DefaultFlowRunGuardEvaluator(
+            snapshotBuilder: snapshotBuilder,
+            persistence: store
+        ).evaluateRunGuard(
             runID: options.runID,
             projectRoot: options.projectRoot,
             profile: profile,
@@ -34,13 +46,17 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: options.pretty)
     }
 
-    static func compareArtifacts(arguments: [String]) throws -> String {
+    static func compareArtifacts(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return compareArtifactsHelpText
         }
         let options = try parseEvaluationOptions(arguments: arguments)
         let profile = try loadEvaluationProfile(from: options.profileURL)
-        let result = try DefaultFlowRunCrossArtifactEvaluator().compareArtifacts(
+        let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
+        let result = try await DefaultFlowRunCrossArtifactEvaluator(
+            loader: store,
+            evidencePersistence: store
+        ).compareArtifacts(
             runID: options.runID,
             projectRoot: options.projectRoot,
             profile: profile,
@@ -121,17 +137,17 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    private static func loadAgentLoopProfile(from url: URL?) throws -> XcircuiteAgentLoopProfile {
+    private static func loadAgentLoopProfile(from url: URL?) throws -> FlowAgentLoopProfile {
         guard let url else {
             return .makeDefault()
         }
         let profile = try decodeJSONFile(
-            XcircuiteAgentLoopProfile.self,
+            FlowAgentLoopProfile.self,
             from: url,
             option: "--profile"
         )
         do {
-            try XcircuiteAgentLoopProfileValidator().validate(profile)
+            try FlowAgentLoopProfileValidator().validate(profile)
         } catch {
             throw XcircuiteFlowCLIError.invalidValue(
                 option: "--profile",
@@ -182,12 +198,12 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    private static func loadEvaluationProfile(from url: URL?) throws -> XcircuiteEvaluationProfile? {
+    private static func loadEvaluationProfile(from url: URL?) throws -> FlowEvaluationProfile? {
         guard let url else {
             return nil
         }
         return try decodeJSONFile(
-            XcircuiteEvaluationProfile.self,
+            FlowEvaluationProfile.self,
             from: url,
             option: "--profile"
         )

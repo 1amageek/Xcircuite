@@ -45,7 +45,7 @@ struct PhysicalDesignFlowStageExecutorTests {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         try encoder.encode(request).write(to: requestURL, options: [.atomic])
         let runDirectory = root
-            .appending(path: XcircuiteWorkspace.directoryName)
+            .appending(path: XcircuiteWorkspaceLayout.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
@@ -53,7 +53,7 @@ struct PhysicalDesignFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            storage: XcircuiteWorkspaceStore(),
+            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -100,13 +100,13 @@ struct PhysicalDesignFlowStageExecutorTests {
         )
         let requestURL = root.appending(path: "request.json")
         try JSONEncoder().encode(request).write(to: requestURL, options: [.atomic])
-        let runDirectory = root.appending(path: XcircuiteWorkspace.directoryName).appending(path: "runs").appending(path: runID)
+        let runDirectory = root.appending(path: XcircuiteWorkspaceLayout.directoryName).appending(path: "runs").appending(path: runID)
         try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
         let context = FlowExecutionContext(
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            storage: XcircuiteWorkspaceStore(),
+            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -178,17 +178,35 @@ struct PhysicalDesignFlowStageExecutorTests {
             intent: "Run physical design and obtain human review.",
             stages: stages
         )
-        let initial = try await DefaultFlowOrchestrator().run(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let orchestrator = DefaultFlowOrchestrator(
+            infrastructure: workspaceStore,
+            ledgerPersistence: workspaceStore,
+            progressStore: FlowRunProgressStore(persistence: workspaceStore)
+        )
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        let ledgerInspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
+        let initial = try await orchestrator.run(
             request: operation,
             toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: executors
         )
-        #expect(initial.status == .blocked)
+        #expect(
+            initial.status == .blocked,
+            "Unexpected physical review run result: \(initial.stages)"
+        )
         #expect(initial.stages.last?.artifacts.contains { $0.artifactID == "physical-design-review-packet" } == true)
         #expect(initial.stages.last?.gates.contains { $0.gateID == "approval" && $0.status == .incomplete } == true)
 
-        _ = try DefaultFlowGateApprovalRecorder().recordApproval(
+        _ = try await DefaultFlowGateApprovalRecorder(
+            loader: workspaceStore,
+            inspector: ledgerInspector,
+            ledgerPersistence: workspaceStore
+        ).recordApproval(
             FlowGateApprovalRequest(
                 projectRoot: root,
                 runID: runID,
@@ -198,7 +216,12 @@ struct PhysicalDesignFlowStageExecutorTests {
                 note: "Reviewed immutable layout revision and design diff."
             )
         )
-        let resumed = try await DefaultFlowRunResumer().resumeRun(
+        let resumed = try await DefaultFlowRunResumer(
+            loader: workspaceStore,
+            orchestrator: orchestrator,
+            inspector: ledgerInspector,
+            artifactPersistence: workspaceStore
+        ).resumeRun(
             request: FlowRunResumeRequest(projectRoot: root, runID: runID),
             toolRegistry: ToolRegistry(),
             healthResults: [:],

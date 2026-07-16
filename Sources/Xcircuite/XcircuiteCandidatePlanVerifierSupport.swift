@@ -6,7 +6,7 @@ import DesignFlowKernel
 
 struct ActionDomainSnapshotContext: Sendable, Hashable {
     var snapshot: XcircuitePlanningActionDomainSnapshot
-    var reference: XcircuiteFileReference
+    var reference: ArtifactReference
 }
 
 struct SymbolicVerificationSummary: Sendable, Hashable {
@@ -25,28 +25,9 @@ struct GateExecutionEvaluation: Sendable, Hashable {
     var artifactReferences: [ArtifactReference]
 }
 
-func foundationArtifactReferences(
-    _ references: [XcircuiteFileReference],
-    field: String
-) throws -> [ArtifactReference] {
-    try references.map { reference in
-        guard let artifact = foundationArtifactReference(reference) else {
-            throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
-                path: reference.path,
-                reason: "\(field) contains an artifact without a valid digest or byte count."
-            )
-        }
-        return artifact
-    }
-}
-
 func uniqueArtifactReferences(_ references: [ArtifactReference]) -> [ArtifactReference] {
     var seen: Set<ArtifactID> = []
     return references.filter { seen.insert($0.id).inserted }
-}
-
-func legacyArtifactReferences(_ references: [ArtifactReference]) -> [XcircuiteFileReference] {
-    references.map(legacyArtifactReference)
 }
 
 enum StandardLayoutSupport: Sendable, Hashable {

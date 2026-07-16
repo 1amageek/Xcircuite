@@ -4,18 +4,18 @@ import DesignFlowKernel
 public struct XcircuiteCandidatePlanRiskApprovalRequest: Codable, Sendable, Hashable {
     public var runID: String
     public var approvalID: String
-    public var verdict: XcircuiteApprovalRecord.Verdict
+    public var verdict: FlowApprovalRecord.Verdict
     public var reviewer: String
-    public var reviewerKind: XcircuiteRunActionActor.Kind
+    public var reviewerKind: FlowRunActor.Kind
     public var note: String
     public var decidedAt: Date
 
     public init(
         runID: String,
         approvalID: String,
-        verdict: XcircuiteApprovalRecord.Verdict = .approved,
+        verdict: FlowApprovalRecord.Verdict = .approved,
         reviewer: String,
-        reviewerKind: XcircuiteRunActionActor.Kind = .human,
+        reviewerKind: FlowRunActor.Kind = .human,
         note: String = "",
         decidedAt: Date = Date()
     ) {
@@ -42,10 +42,10 @@ public struct XcircuiteCandidatePlanRiskApprovalRequest: Codable, Sendable, Hash
         let container = try decoder.container(keyedBy: CodingKeys.self)
         runID = try container.decode(String.self, forKey: .runID)
         approvalID = try container.decode(String.self, forKey: .approvalID)
-        verdict = try container.decode(XcircuiteApprovalRecord.Verdict.self, forKey: .verdict)
+        verdict = try container.decode(FlowApprovalRecord.Verdict.self, forKey: .verdict)
         reviewer = try container.decode(String.self, forKey: .reviewer)
         reviewerKind = try container.decodeIfPresent(
-            XcircuiteRunActionActor.Kind.self,
+            FlowRunActor.Kind.self,
             forKey: .reviewerKind
         ) ?? .human
         note = try container.decode(String.self, forKey: .note)

@@ -3,7 +3,7 @@ import Foundation
 public struct XcircuiteProblemTranslationAuditGate: Sendable {
     private let auditor: XcircuiteProblemTranslationAuditor
 
-    public init(auditor: XcircuiteProblemTranslationAuditor = XcircuiteProblemTranslationAuditor()) {
+    public init(auditor: XcircuiteProblemTranslationAuditor) {
         self.auditor = auditor
     }
 
@@ -11,8 +11,8 @@ public struct XcircuiteProblemTranslationAuditGate: Sendable {
         runID: String,
         problemPath: String,
         projectRoot: URL
-    ) throws -> XcircuiteProblemTranslationAuditResult {
-        try auditor.auditProblemTranslation(
+    ) async throws -> XcircuiteProblemTranslationAuditResult {
+        try await auditor.auditProblemTranslation(
             request: XcircuiteProblemTranslationAuditRequest(
                 runID: runID,
                 problemPath: problemPath
@@ -25,8 +25,8 @@ public struct XcircuiteProblemTranslationAuditGate: Sendable {
         runID: String,
         problemPath: String,
         projectRoot: URL
-    ) throws -> XcircuiteProblemTranslationAuditResult {
-        let result = try refreshAudit(
+    ) async throws -> XcircuiteProblemTranslationAuditResult {
+        let result = try await refreshAudit(
             runID: runID,
             problemPath: problemPath,
             projectRoot: projectRoot
@@ -41,7 +41,7 @@ public struct XcircuiteProblemTranslationAuditGate: Sendable {
         return result
     }
 
-    public func validationDiagnostics(
+    public static func validationDiagnostics(
         for audit: XcircuiteProblemTranslationAudit
     ) -> [XcircuitePlanningProblemValidationDiagnostic] {
         guard audit.blocking else {

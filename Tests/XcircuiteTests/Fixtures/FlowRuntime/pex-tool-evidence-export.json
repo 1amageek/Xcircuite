@@ -2,62 +2,32 @@
   "schemaVersion": 1,
   "status": "passed",
   "reportPath": "qualification/pex-spef-corpus-report.json",
-  "reportSHA256": "3333333333333333333333333333333333333333333333333333333333333333",
-  "summary": {
-    "caseCount": 7,
-    "coverageTagCounts": {
-      "pex.spef.connections": 7,
-      "pex.spef.coordinates": 1,
-      "pex.spef.coupling-cap": 7,
-      "pex.spef.ground-cap": 7,
-      "pex.spef.large-design": 5,
-      "pex.spef.name-map": 7,
-      "pex.spef.net-name-consistency": 1,
-      "pex.spef.no-merging": 1,
-      "pex.spef.openroad": 7,
-      "pex.spef.ports": 6,
-      "pex.spef.resistance": 7,
-      "pex.spef.short-resover": 1
-    },
-    "failedCaseCount": 0,
-    "passRate": 1,
-    "passedCaseCount": 7,
-    "totalCouplingCapF": 1.3529818269649193e-12,
-    "totalElementCount": 44014,
-    "totalGroundCapF": 6.702479219229999e-12,
-    "totalNetCount": 1889,
-    "totalResistanceOhm": 196021.60116839994
-  },
+  "reportSHA256": "c994862ca3a1a0bee78be11e21d400ffac0dc0f06095489f61a92123bb615c21",
   "toolEvidence": {
     "evidenceID": "pex-spef-corpus-2026-06-19",
     "kind": "corpus",
     "artifact": {
-      "path": "qualification/pex-spef-corpus-report.json",
-      "kind": "report",
-      "format": "JSON",
-      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      "id": "pex-spef-corpus-report",
+      "locator": {
+        "location": {
+          "storage": "workspaceRelative",
+          "value": "qualification/pex-spef-corpus-report.json"
+        },
+        "role": "output",
+        "kind": "evidence",
+        "format": "json"
+      },
+      "digest": {
+        "algorithm": "sha256",
+        "hexadecimalValue": "c994862ca3a1a0bee78be11e21d400ffac0dc0f06095489f61a92123bb615c21"
+      },
+      "byteCount": 1783,
+      "producer": {
+        "kind": "engine",
+        "identifier": "mock-pex-qualification-fixture",
+        "version": "1"
+      }
     },
-    "checkedAt": "2026-06-19T00:00:00Z",
-    "qualification": {
-      "qualified": true,
-      "policyID": "strict",
-      "observedMetrics": {
-        "passRate": 1,
-        "totalCouplingCapF": 1.3529818269649193e-12,
-        "totalGroundCapF": 6.702479219229999e-12,
-        "totalResistanceOhm": 196021.60116839994
-      },
-      "observedCounts": {
-        "caseCount": 7,
-        "coverageTagCount": 12,
-        "coveredRequiredCoverageTagCount": 12,
-        "failedCaseCount": 0,
-        "passedCaseCount": 7,
-        "requiredCoverageTagCount": 12,
-        "totalElementCount": 44014,
-        "totalNetCount": 1889
-      },
-      "failureCodes": []
-    }
+    "checkedAt": "2026-07-14T03:33:20.000Z"
   }
 }

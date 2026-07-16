@@ -17,7 +17,7 @@ struct PEXFlowStageExecutorTests {
         _ = try writeText("tt-deck", name: "deck-tt.rc", root: root)
         _ = try writeText("ss-deck", name: "deck-ss.rc", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex",
@@ -99,33 +99,33 @@ struct PEXFlowStageExecutorTests {
         #expect(evaluation.status == .accepted)
         let totalNetCount = summary.summary.corners.reduce(0) { $0 + $1.netCount }
         let totalCapacitanceF = summary.summary.corners.reduce(0) { $0 + $1.totalCapacitanceF }
-        #expect(channelValue("pex-corner-count", in: observations) == .number(2))
-        #expect(channelValue("pex-failed-corner-count", in: observations) == .number(0))
-        #expect(channelValue("pex-total-net-count", in: observations) == .number(Double(totalNetCount)))
-        #expect(channelValue("pex-total-capacitance-f", in: observations) == .number(totalCapacitanceF))
-        #expect(channelValue("pex-multi-corner-successful-corner-count", in: observations) == .number(2))
-        #expect(channelValue("pex-multi-corner-comparison-basis", in: observations) == .string("perCornerTechnology"))
-        #expect(channelValue("pex-multi-corner-failed-corner-count", in: observations) == .number(0))
-        #expect(channelValue("pex-multi-corner-worst-capacitance-corner-id", in: observations) == .string("ss"))
-        #expect(channelValue("pex-multi-corner-worst-resistance-corner-id", in: observations) == .string("ss"))
-        #expect(channelValue("pex-multi-corner-total-capacitance-spread-f", in: observations) == .number(summary.summary.multiCorner.totalCapacitance.spread))
-        #expect(channelValue("pex-multi-corner-total-resistance-spread-ohm", in: observations) == .number(summary.summary.multiCorner.totalResistance.spread))
+        #expect(channelValue("pex-corner-count", in: observations) == .scalar(2))
+        #expect(channelValue("pex-failed-corner-count", in: observations) == .scalar(0))
+        #expect(channelValue("pex-total-net-count", in: observations) == .scalar(Double(totalNetCount)))
+        #expect(channelValue("pex-total-capacitance-f", in: observations) == .scalar(totalCapacitanceF))
+        #expect(channelValue("pex-multi-corner-successful-corner-count", in: observations) == .scalar(2))
+        #expect(channelValue("pex-multi-corner-comparison-basis", in: observations) == .text("perCornerTechnology"))
+        #expect(channelValue("pex-multi-corner-failed-corner-count", in: observations) == .scalar(0))
+        #expect(channelValue("pex-multi-corner-worst-capacitance-corner-id", in: observations) == .text("ss"))
+        #expect(channelValue("pex-multi-corner-worst-resistance-corner-id", in: observations) == .text("ss"))
+        #expect(channelValue("pex-multi-corner-total-capacitance-spread-f", in: observations) == .scalar(summary.summary.multiCorner.totalCapacitance.spread))
+        #expect(channelValue("pex-multi-corner-total-resistance-spread-ohm", in: observations) == .scalar(summary.summary.multiCorner.totalResistance.spread))
         let ttStatusChannel = try #require(observations.channels.first {
             $0.channelID.hasPrefix("pex-corner-") && $0.channelID.hasSuffix("-tt-status")
         })
         let ttIRChannel = try #require(observations.channels.first {
             $0.channelID.hasPrefix("pex-corner-") && $0.channelID.hasSuffix("-tt-parasitic-ir-present")
         })
-        #expect(ttStatusChannel.value == .string(PEXRunStatus.success.rawValue))
-        #expect(ttIRChannel.value == .bool(true))
+        #expect(ttStatusChannel.value == .text(PEXRunStatus.success.rawValue))
+        #expect(ttIRChannel.value == .boolean(true))
         #expect(channelResult("pex-failed-corner-count", in: evaluation)?.status == .accepted)
         #expect(channelResult("pex-multi-corner-comparison-basis", in: evaluation)?.status == .rejected)
         #expect(channelResult("pex-multi-corner-failed-corner-count", in: evaluation)?.status == .accepted)
         #expect(channelResult("pex-multi-corner-error-diagnostic-count", in: evaluation)?.status == .accepted)
         #expect(channelResult(ttIRChannel.channelID, in: evaluation)?.status == .accepted)
-        #expect(channelValue("pex-tool-evidence-count", in: observations) == .number(1))
+        #expect(channelValue("pex-tool-evidence-count", in: observations) == .scalar(1))
         #expect(observations.missingChannelIDs.isEmpty)
-        #expect(observations.uncalibratedChannelIDs.isEmpty)
+        #expect(observations.uncalibratedChannelIDs == ["pex-qualified-calibration"])
         #expect(evaluation.feedbackSignals.first?.routingLevel == .localSurface)
         #expect(evaluation.feedbackSignals.contains {
             $0.channelID?.contains("top-net") == true
@@ -178,7 +178,7 @@ struct PEXFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex-postlayout-review",
@@ -226,9 +226,9 @@ struct PEXFlowStageExecutorTests {
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
         let evaluation = try #require(envelope.evaluationResult)
-        #expect(channelValue("pex-multi-corner-comparison-basis", in: observations) == .string("sharedTechnology"))
+        #expect(channelValue("pex-multi-corner-comparison-basis", in: observations) == .text("sharedTechnology"))
         #expect(channelResult("pex-multi-corner-comparison-basis", in: evaluation)?.status == .accepted)
-        #expect(channelValue("pex-multi-corner-worst-capacitance-corner-id", in: observations) == .string("ss"))
+        #expect(channelValue("pex-multi-corner-worst-capacitance-corner-id", in: observations) == .text("ss"))
         #expect(channelValue("pex-multi-corner-total-capacitance-spread-f", in: observations) != nil)
         #expect(observations.channels.contains {
             $0.channelID.contains("pex-multi-corner-net-")
@@ -241,7 +241,11 @@ struct PEXFlowStageExecutorTests {
             $0.path.contains("/ir/") && $0.path.hasSuffix(".json")
         })
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundleStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let bundle = try await DefaultFlowRunReviewBundler(
+            loader: bundleStore,
+            persistence: bundleStore
+        ).makeReviewBundle(
             runID: "run-pex-postlayout-review",
             projectRoot: root
         )
@@ -270,7 +274,7 @@ struct PEXFlowStageExecutorTests {
         } == true)
     }
 
-    @Test func pexManifestCoverageGateRejectsDigestAndByteCountMismatch() throws {
+    @Test func pexManifestCoverageGateRejectsDigestAndByteCountMismatch() async throws {
         let root = try makeTemporaryRoot("pex-manifest-mismatch")
         defer { removeTemporaryRoot(root) }
 
@@ -285,7 +289,7 @@ struct PEXFlowStageExecutorTests {
             stage: .persistence,
             cornerID: cornerID,
             relativePath: PEXArtifactPath("ir/tt.json"),
-            sha256: "matching-ir-sha",
+            sha256: String(repeating: "b", count: 64),
             byteCount: 128,
             createdAt: now,
             status: .available
@@ -296,7 +300,7 @@ struct PEXFlowStageExecutorTests {
             stage: .backendExecution,
             cornerID: cornerID,
             relativePath: PEXArtifactPath("raw/tt.spef"),
-            sha256: "manifest-raw-sha",
+            sha256: String(repeating: "c", count: 64),
             byteCount: 64,
             createdAt: now,
             status: .available
@@ -322,20 +326,20 @@ struct PEXFlowStageExecutorTests {
         let gate = StageArtifactManifestCoverageGateBuilder().pexGate(
             manifestURL: manifestURL,
             artifacts: [
-                XcircuiteFileReference(
+                try fixtureArtifactReference(
                     artifactID: "ir-tt",
                     path: ".xcircuite/runs/run-pex/stages/009-pex/raw/ir/tt.json",
-                    kind: .parasitic,
+                    kind: .parasitics,
                     format: .json,
-                    sha256: "matching-ir-sha",
+                    sha256: String(repeating: "b", count: 64),
                     byteCount: 1
                 ),
-                XcircuiteFileReference(
+                try fixtureArtifactReference(
                     artifactID: "raw-tt",
                     path: ".xcircuite/runs/run-pex/stages/009-pex/raw/raw/tt.spef",
-                    kind: .parasitic,
+                    kind: .parasitics,
                     format: .spef,
-                    sha256: "flow-raw-sha",
+                    sha256: String(repeating: "d", count: 64),
                     byteCount: 64
                 ),
             ],
@@ -356,7 +360,7 @@ struct PEXFlowStageExecutorTests {
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
         let engineState = FlakyPEXEngineState()
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex-retry",
@@ -411,13 +415,17 @@ struct PEXFlowStageExecutorTests {
         #expect(attempts.map(\.attemptIndex) == [1, 2])
         #expect(attempts[0].retryDecision.matchedDiagnosticCodes == ["PEX_BACKEND_EXECUTION_FAILED"])
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(runID: "run-pex-retry", projectRoot: root)
+        let ledger = try await XcircuiteWorkspaceStore(projectRoot: root).loadRunLedger(runID: "run-pex-retry")
         #expect(ledger.progressEvents.map(\.kind).contains(.stageRetryScheduled))
         let summary = DefaultFlowRunLedgerSummarizer().summarize(ledger)
         #expect(summary.stages.first?.attemptCount == 2)
         #expect(summary.stages.first?.retryCount == 1)
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundleStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let bundle = try await DefaultFlowRunReviewBundler(
+            loader: bundleStore,
+            persistence: bundleStore
+        ).makeReviewBundle(
             runID: "run-pex-retry",
             projectRoot: root
         )
@@ -433,7 +441,7 @@ struct PEXFlowStageExecutorTests {
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex",
@@ -481,7 +489,7 @@ struct PEXFlowStageExecutorTests {
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex-cancel",
@@ -518,7 +526,7 @@ struct PEXFlowStageExecutorTests {
         #expect(stage.gates.contains { $0.gateID == "cancellation" && $0.status == .failed })
         #expect(stage.diagnostics.contains { $0.code == "RUN_CANCELLATION_REQUESTED" })
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(runID: "run-pex-cancel", projectRoot: root)
+        let ledger = try await XcircuiteWorkspaceStore(projectRoot: root).loadRunLedger(runID: "run-pex-cancel")
         #expect(ledger.cancellationRequest?.requestedBy == "mock-pex")
         #expect(ledger.progressEvents.contains { $0.kind == .cancellationObserved })
     }
@@ -530,7 +538,7 @@ struct PEXFlowStageExecutorTests {
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex",
@@ -578,8 +586,8 @@ struct PEXFlowStageExecutorTests {
         let observations = try #require(envelope.observationSet)
         let evaluation = try #require(envelope.evaluationResult)
         #expect(evaluation.status == .inconclusive)
-        #expect(channelValue("pex-artifact-completeness-status", in: observations) == .string(PEXArtifactCompletenessStatus.incomplete.rawValue))
-        #expect(channelValue("pex-corner-0-tt-parasitic-ir-present", in: observations) == .bool(false))
+        #expect(channelValue("pex-artifact-completeness-status", in: observations) == .text(PEXArtifactCompletenessStatus.incomplete.rawValue))
+        #expect(channelValue("pex-corner-0-tt-parasitic-ir-present", in: observations) == .boolean(false))
         #expect(observations.missingChannelIDs.contains("pex-corner-0-tt-parasitic-ir-present"))
         #expect(channelResult("pex-artifact-completeness-status", in: evaluation)?.status == .inconclusive)
         #expect(channelResult("pex-corner-0-tt-parasitic-ir-present", in: evaluation)?.status == .rejected)
@@ -596,7 +604,7 @@ struct PEXFlowStageExecutorTests {
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex",
@@ -650,7 +658,7 @@ struct PEXFlowStageExecutorTests {
             root: externalRoot
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex",
@@ -701,7 +709,7 @@ struct PEXFlowStageExecutorTests {
         let netlistURL = try writeText(".subckt TESTCELL\n.ends\n", name: "source.cir", root: root)
         let externalManifestURL = externalRoot.appending(path: "manifest.json")
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-pex",
@@ -764,6 +772,15 @@ struct PEXFlowStageExecutorTests {
         return url
     }
 
+    private func makeOrchestrator(root: URL) throws -> DefaultFlowOrchestrator {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return DefaultFlowOrchestrator(
+            infrastructure: store,
+            ledgerPersistence: store,
+            progressStore: FlowRunProgressStore(persistence: store)
+        )
+    }
+
     private func makeTemporaryRoot(_ name: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "PEXFlowStageExecutorTests-\(name)-\(UUID().uuidString)")
@@ -787,9 +804,9 @@ struct PEXFlowStageExecutorTests {
     private func decodeArtifactEnvelope(
         _ reference: ArtifactReference,
         root: URL
-    ) throws -> XcircuiteArtifactEnvelope {
+    ) throws -> FlowArtifactEnvelope {
         try JSONDecoder().decode(
-            XcircuiteArtifactEnvelope.self,
+            FlowArtifactEnvelope.self,
             from: Data(contentsOf: root.appending(path: reference.path))
         )
     }
@@ -808,15 +825,15 @@ struct PEXFlowStageExecutorTests {
 
     private func channelValue(
         _ channelID: String,
-        in observations: XcircuiteObservationSet
-    ) -> XcircuiteJSONValue? {
+        in observations: FlowObservationSet
+    ) -> FlowMetricValue? {
         observations.channels.first { $0.channelID == channelID }?.value
     }
 
     private func channelResult(
         _ channelID: String,
-        in evaluation: XcircuiteEvaluationResult
-    ) -> XcircuiteEvaluationChannelResult? {
+        in evaluation: FlowEvaluationResult
+    ) -> FlowEvaluationChannelResult? {
         evaluation.channelResults.first { $0.channelID == channelID }
     }
 
@@ -907,7 +924,10 @@ struct PEXFlowStageExecutorTests {
         let runID: String
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
-            _ = try DefaultFlowRunCancellationRecorder().requestCancellation(
+            let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            _ = try await DefaultFlowRunCancellationRecorder(
+                progressStore: FlowRunProgressStore(persistence: store)
+            ).requestCancellation(
                 projectRoot: projectRoot,
                 runID: runID,
                 requestedBy: "mock-pex",

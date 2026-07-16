@@ -13,7 +13,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
@@ -41,46 +41,27 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             confidence: confidence
         ) + bucketChannelResults(summary: summary, confidence: confidence)
 
-        let envelope = XcircuiteArtifactEnvelope(
+        let envelope = FlowArtifactEnvelope(
             artifactID: artifactID,
             role: "lvs-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: XcircuiteArtifactProducer(producerID: toolID, toolID: toolID),
+            producer: FlowArtifactProducer(producerID: toolID, toolID: toolID),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
-            evaluationSpec: XcircuiteEvaluationSpec(
+            evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",
                 objective: "Evaluate LVS mismatch evidence for stage readiness and repair planning.",
                 criteria: criteria,
                 requiredArtifactRoles: ["lvs-summary"],
-                confidence: XcircuiteEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false),
-                metadata: [
-                    "backendID": .string(summary.summary.backendID),
-                    "topCell": .string(summary.summary.topCell),
-                    "layoutInputKind": .string(summary.summary.layoutInputKind),
-                    "executionStatus": .string(summary.summary.executionStatus.rawValue),
-                    "verdict": .string(summary.summary.verdict.rawValue),
-                    "readiness": .string(summary.summary.readiness.rawValue),
-                    "activeMismatchCount": .number(Double(summary.summary.activeMismatchCount)),
-                    "mismatchBucketCount": .number(Double(summary.summary.mismatchBuckets.count)),
-                ]
+                confidence: FlowEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false)
             ),
-            observationSet: XcircuiteObservationSet(
+            observationSet: FlowObservationSet(
                 observationSetID: "\(artifactID)-observations",
                 specID: "\(artifactID)-evaluation-spec",
                 channels: channels,
-                confidence: confidence,
-                metadata: [
-                    "backendID": .string(summary.summary.backendID),
-                    "toolName": .string(summary.summary.toolName),
-                    "topCell": .string(summary.summary.topCell),
-                    "layoutInputKind": .string(summary.summary.layoutInputKind),
-                    "executionStatus": .string(summary.summary.executionStatus.rawValue),
-                    "verdict": .string(summary.summary.verdict.rawValue),
-                    "readiness": .string(summary.summary.readiness.rawValue),
-                ]
+                confidence: confidence
             ),
-            evaluationResult: XcircuiteEvaluationResult(
+            evaluationResult: FlowEvaluationResult(
                 evaluationID: "\(artifactID)-evaluation",
                 specID: "\(artifactID)-evaluation-spec",
                 status: evaluationStatus(summary: summary, gateStatus: gateStatus),
@@ -94,83 +75,67 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                     gateStatus: gateStatus,
                     confidence: confidence
                 ),
-                summary: "LVS summary evaluation ended with gate status \(gateStatus.rawValue).",
-                metadata: [
-                    "activeMismatchCount": .number(Double(summary.summary.activeMismatchCount)),
-                    "waivedMismatchCount": .number(Double(summary.summary.waivedMismatchCount)),
-                    "unusedWaiverCount": .number(Double(summary.summary.unusedWaiverIDs.count)),
-                    "blockingReasonCount": .number(Double(summary.summary.blockingReasons.count)),
-                ]
-            ),
-            metadata: [
-                "gateID": .string("lvs"),
-                "gateStatus": .string(gateStatus.rawValue),
-                "stageID": .string(stageID),
-                "toolID": .string(toolID),
-            ]
+                summary: "LVS summary evaluation ended with gate status \(gateStatus.rawValue)."
+            )
         )
 
-        return try context.storage.writeArtifactEnvelope(
-            envelope,
-            runID: context.runID,
-            inProjectAt: context.projectRoot
-        )
+        return try await context.persistArtifactEnvelope(envelope)
     }
 
-    private func baseCriteria(artifactID: String) -> [XcircuiteEvaluationCriterion] {
+    private func baseCriteria(artifactID: String) -> [FlowEvaluationCriterion] {
         [
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "lvs-gate-status",
                 channelID: "lvs-gate-status",
                 comparator: .equal,
-                target: .string(FlowGateStatus.passed.rawValue)
+                target: .text(FlowGateStatus.passed.rawValue)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "lvs-active-mismatch-count",
                 channelID: "lvs-active-mismatch-count",
                 comparator: .equal,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "lvs-unused-waiver-count",
                 channelID: "lvs-unused-waiver-count",
                 comparator: .equal,
-                target: .number(0),
+                target: .scalar(0),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "lvs-tool-evidence",
                 channelID: "lvs-tool-evidence-count",
                 comparator: .greaterThanOrEqual,
-                target: .number(1),
+                target: .scalar(1),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "lvs-calibration",
                 channelID: "lvs-qualified-calibration",
                 comparator: .equal,
-                target: .bool(true),
+                target: .boolean(true),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "lvs-summary-artifact",
                 channelID: "lvs-summary-artifact-present",
                 comparator: .equal,
-                target: .bool(true),
-                metadata: ["artifactID": .string(artifactID)]
+                target: .boolean(true),
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
         ]
     }
 
-    private func bucketCriteria(summary: LVSRunSummaryReport) -> [XcircuiteEvaluationCriterion] {
+    private func bucketCriteria(summary: LVSRunSummaryReport) -> [FlowEvaluationCriterion] {
         summary.summary.mismatchBuckets.enumerated().map { index, bucket in
             let baseID = bucketChannelBase(index: index, bucket: bucket)
-            return XcircuiteEvaluationCriterion(
+            return FlowEvaluationCriterion(
                 criterionID: "\(baseID)-active-count",
                 channelID: "\(baseID)-active-count",
                 comparator: .equal,
-                target: .number(0),
-                metadata: bucketMetadata(index: index, bucket: bucket)
+                target: .scalar(0),
+                context: bucketContext(index: index, bucket: bucket)
             )
         }
     }
@@ -182,110 +147,110 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         toolEvidenceCount: Int,
         hasQualifiedEvidence: Bool,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-summary-artifact-present",
                 status: .observed,
-                value: .bool(true),
+                value: .boolean(true),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-gate-status",
                 status: .observed,
-                value: .string(gateStatus.rawValue),
+                value: .text(gateStatus.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence,
-                metadata: ["gateID": .string("lvs")]
+                context: FlowEvaluationContext(gateID: "lvs")
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-diagnostic-count",
                 status: .observed,
-                value: .number(Double(diagnostics.count)),
+                value: .scalar(Double(diagnostics.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-tool-evidence-count",
                 status: toolEvidenceCount > 0 ? .observed : .missing,
-                value: .number(Double(toolEvidenceCount)),
+                value: .scalar(Double(toolEvidenceCount)),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-qualified-calibration",
                 status: hasQualifiedEvidence ? .observed : .uncalibrated,
-                value: .bool(hasQualifiedEvidence),
+                value: .boolean(hasQualifiedEvidence),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-execution-status",
                 status: .observed,
-                value: .string(summary.summary.executionStatus.rawValue),
+                value: .text(summary.summary.executionStatus.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-verdict",
                 status: .observed,
-                value: .string(summary.summary.verdict.rawValue),
+                value: .text(summary.summary.verdict.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-readiness",
                 status: .observed,
-                value: .string(summary.summary.readiness.rawValue),
+                value: .text(summary.summary.readiness.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-active-mismatch-count",
                 status: .observed,
-                value: .number(Double(summary.summary.activeMismatchCount)),
+                value: .scalar(Double(summary.summary.activeMismatchCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-waived-mismatch-count",
                 status: .observed,
-                value: .number(Double(summary.summary.waivedMismatchCount)),
+                value: .scalar(Double(summary.summary.waivedMismatchCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-mismatch-bucket-count",
                 status: .observed,
-                value: .number(Double(summary.summary.mismatchBuckets.count)),
+                value: .scalar(Double(summary.summary.mismatchBuckets.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-unused-waiver-count",
                 status: .observed,
-                value: .number(Double(summary.summary.unusedWaiverIDs.count)),
+                value: .scalar(Double(summary.summary.unusedWaiverIDs.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-extracted-layout-netlist-present",
                 status: summary.summary.extractedLayoutNetlistURL == nil ? .missing : .observed,
-                value: .bool(summary.summary.extractedLayoutNetlistURL != nil),
+                value: .boolean(summary.summary.extractedLayoutNetlistURL != nil),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-error-diagnostic-count",
                 status: .observed,
-                value: .number(Double(summary.summary.diagnosticSummary.errorCount)),
+                value: .scalar(Double(summary.summary.diagnosticSummary.errorCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-waived-error-count",
                 status: .observed,
-                value: .number(Double(summary.summary.diagnosticSummary.waivedErrorCount)),
+                value: .scalar(Double(summary.summary.diagnosticSummary.waivedErrorCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -295,52 +260,52 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
     private func policyObservationChannels(
         summary: LVSRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         guard let policy = summary.summary.devicePolicySummary else {
             return [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "lvs-device-policy-present",
                     status: .missing,
-                    value: .bool(false),
+                    value: .boolean(false),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence
                 ),
             ]
         }
         return [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-device-policy-present",
                 status: .observed,
-                value: .bool(true),
+                value: .boolean(true),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-device-policy-status",
                 status: .observed,
-                value: .string(policy.status.rawValue),
+                value: .text(policy.status.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-device-policy-applied-rule-count",
                 status: .observed,
-                value: .number(Double(policy.appliedRuleCount)),
+                value: .scalar(Double(policy.appliedRuleCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-device-policy-ignored-rule-count",
                 status: .observed,
-                value: .number(Double(policy.ignoredRuleCount)),
+                value: .scalar(Double(policy.ignoredRuleCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "lvs-device-policy-unobserved-rule-count",
                 status: .observed,
-                value: .number(Double(policy.unobservedRuleCount)),
+                value: .scalar(Double(policy.unobservedRuleCount)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -350,68 +315,60 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
     private func bucketObservationChannels(
         summary: LVSRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         summary.summary.mismatchBuckets.enumerated().flatMap { index, bucket in
             let baseID = bucketChannelBase(index: index, bucket: bucket)
-            let metadata = bucketMetadata(index: index, bucket: bucket)
+            let context = bucketContext(index: index, bucket: bucket)
             return [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-active-count",
                     label: bucketLabel(bucket),
                     status: .observed,
-                    value: .number(Double(bucket.activeCount)),
+                    value: .scalar(Double(bucket.activeCount)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-waived-count",
                     status: .observed,
-                    value: .number(Double(bucket.waivedCount)),
+                    value: .scalar(Double(bucket.waivedCount)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-layout-count",
                     status: bucket.layoutCount == nil ? .missing : .observed,
-                    value: bucket.layoutCount.map { .number(Double($0)) },
+                    value: bucket.layoutCount.map { .scalar(Double($0)) },
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-schematic-count",
                     status: bucket.schematicCount == nil ? .missing : .observed,
-                    value: bucket.schematicCount.map { .number(Double($0)) },
+                    value: bucket.schematicCount.map { .scalar(Double($0)) },
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-layout-port-count",
                     status: .observed,
-                    value: .number(Double(bucket.layoutPorts.count)),
+                    value: .scalar(Double(bucket.layoutPorts.count)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-schematic-port-count",
                     status: .observed,
-                    value: .number(Double(bucket.schematicPorts.count)),
+                    value: .scalar(Double(bucket.schematicPorts.count)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: metadata
-                ),
-                XcircuiteObservationChannel(
-                    channelID: "\(baseID)-suggested-fixes",
-                    status: bucket.suggestedFixes.isEmpty ? .missing : .observed,
-                    value: .array(bucket.suggestedFixes.map { .string($0) }),
-                    sourceArtifactIDs: [artifactID],
-                    confidence: confidence,
-                    metadata: metadata
+                    context: context
                 ),
             ]
         }
@@ -422,43 +379,43 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         gateStatus: FlowGateStatus,
         diagnostics: [FlowDiagnostic],
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         [
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "lvs-gate-status",
                 channelID: "lvs-gate-status",
                 status: evaluationStatus(from: gateStatus),
-                observedValue: .string(gateStatus.rawValue),
+                observedValue: .text(gateStatus.rawValue),
                 residual: gateStatus == .passed ? 0 : 1,
                 likelihood: likelihood(from: gateStatus),
                 confidence: confidence,
                 diagnostics: diagnostics.map(runActionDiagnostic)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "lvs-summary-artifact",
                 channelID: "lvs-summary-artifact-present",
                 status: .accepted,
-                observedValue: .bool(true),
+                observedValue: .boolean(true),
                 residual: 0,
                 likelihood: 1,
                 confidence: confidence,
-                metadata: ["artifactID": .string(artifactID)]
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "lvs-active-mismatch-count",
                 channelID: "lvs-active-mismatch-count",
                 status: countStatus(summary.summary.activeMismatchCount),
-                observedValue: .number(Double(summary.summary.activeMismatchCount)),
+                observedValue: .scalar(Double(summary.summary.activeMismatchCount)),
                 residual: Double(summary.summary.activeMismatchCount),
                 likelihood: countLikelihood(summary.summary.activeMismatchCount),
                 confidence: confidence
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "lvs-unused-waiver-count",
                 channelID: "lvs-unused-waiver-count",
                 status: summary.summary.unusedWaiverIDs.isEmpty ? .accepted : .needsHumanReview,
-                observedValue: .number(Double(summary.summary.unusedWaiverIDs.count)),
+                observedValue: .scalar(Double(summary.summary.unusedWaiverIDs.count)),
                 residual: Double(summary.summary.unusedWaiverIDs.count),
                 likelihood: countLikelihood(summary.summary.unusedWaiverIDs.count),
                 confidence: confidence
@@ -468,19 +425,19 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
 
     private func bucketChannelResults(
         summary: LVSRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         summary.summary.mismatchBuckets.enumerated().map { index, bucket in
             let baseID = bucketChannelBase(index: index, bucket: bucket)
-            return XcircuiteEvaluationChannelResult(
+            return FlowEvaluationChannelResult(
                 criterionID: "\(baseID)-active-count",
                 channelID: "\(baseID)-active-count",
                 status: countStatus(bucket.activeCount),
-                observedValue: .number(Double(bucket.activeCount)),
+                observedValue: .scalar(Double(bucket.activeCount)),
                 residual: Double(bucket.activeCount),
                 likelihood: countLikelihood(bucket.activeCount),
                 confidence: confidence,
-                metadata: bucketMetadata(index: index, bucket: bucket)
+                context: bucketContext(index: index, bucket: bucket)
             )
         }
     }
@@ -489,15 +446,15 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         summary: LVSRunSummaryReport,
         gateStatus: FlowGateStatus,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
-        var signals: [XcircuiteFeedbackSignal] = []
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
+        var signals: [FlowFeedbackSignal] = []
         let activeBuckets = summary.summary.mismatchBuckets.enumerated()
             .filter { $0.element.activeCount > 0 }
 
         if gateStatus == .passed && activeBuckets.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-continue",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "lvs-gate-status",
@@ -515,7 +472,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             let originalIndex = indexedBucket.offset
             let bucket = indexedBucket.element
             let baseID = bucketChannelBase(index: originalIndex, bucket: bucket)
-            return XcircuiteFeedbackSignal(
+            return FlowFeedbackSignal(
                 signalID: "\(baseID)-repair-feedback",
                 sourceEvaluationID: "\(artifactID)-evaluation",
                 channelID: "\(baseID)-active-count",
@@ -525,14 +482,13 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                 residual: Double(bucket.activeCount),
                 affectedArtifactIDs: [artifactID],
                 suggestedActions: suggestedActions(for: bucket),
-                confidence: confidence,
-                metadata: bucketMetadata(index: originalIndex, bucket: bucket)
+                confidence: confidence
             )
         })
 
         if !summary.summary.unusedWaiverIDs.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-unused-waivers",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "lvs-unused-waiver-count",
@@ -542,17 +498,14 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
                     residual: Double(summary.summary.unusedWaiverIDs.count),
                     affectedArtifactIDs: [artifactID],
                     suggestedActions: ["inspect-lvs-waivers", "remove-stale-waivers"],
-                    confidence: confidence,
-                    metadata: [
-                        "unusedWaiverIDs": .array(summary.summary.unusedWaiverIDs.map { .string($0) }),
-                    ]
+                    confidence: confidence
                 )
             )
         }
 
         if gateStatus != .passed && activeBuckets.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-incomplete-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "lvs-gate-status",
@@ -569,7 +522,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
 
         if signals.isEmpty {
             signals.append(
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-review-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "lvs-gate-status",
@@ -589,35 +542,38 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
     private func dependencies(
         from artifacts: [ArtifactReference],
         excluding summaryArtifact: ArtifactReference
-    ) -> [XcircuiteArtifactDependency] {
+    ) -> [FlowArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }
             .map { artifact in
-                XcircuiteArtifactDependency(
+                FlowArtifactDependency(
                     artifactID: artifact.artifactID,
                     path: artifact.path,
-                    role: artifact.artifactID ?? artifact.kind.rawValue,
+                    role: artifact.artifactID,
                     required: true
                 )
             }
     }
 
     private func hasQualifiedEvidence(context: FlowExecutionContext, toolID: String) -> Bool {
-        context.healthResults[toolID]?.evidence.contains { evidence in
-            evidence.qualification?.qualified == true
-        } == true
+        guard let descriptor = context.toolRegistry.descriptor(toolID: toolID),
+              descriptor.trustProfile.level >= .corpusChecked,
+              context.healthResults[toolID]?.status == .passed else {
+            return false
+        }
+        return descriptor.trustProfile.evidence.contains { $0.hasVerifiableArtifactBinding }
     }
 
-    private func confidence(hasQualifiedEvidence: Bool) -> XcircuiteEvidenceConfidence {
+    private func confidence(hasQualifiedEvidence: Bool) -> FlowEvidenceConfidence {
         if hasQualifiedEvidence {
-            return XcircuiteEvidenceConfidence(
+            return FlowEvidenceConfidence(
                 value: 0.8,
                 posteriorVariance: 0.2,
                 calibrationCoefficient: 0.7,
                 calibrated: true
             )
         }
-        return XcircuiteEvidenceConfidence(
+        return FlowEvidenceConfidence(
             value: 0.35,
             posteriorVariance: 0.65,
             calibrationCoefficient: 0,
@@ -628,7 +584,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
     private func evaluationStatus(
         summary: LVSRunSummaryReport,
         gateStatus: FlowGateStatus
-    ) -> XcircuiteEvaluationStatus {
+    ) -> FlowEvaluationStatus {
         if gateStatus == .blocked || summary.summary.readiness == .blocked {
             return .blocked
         }
@@ -641,7 +597,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         return .accepted
     }
 
-    private func evaluationStatus(from status: FlowGateStatus) -> XcircuiteEvaluationStatus {
+    private func evaluationStatus(from status: FlowGateStatus) -> FlowEvaluationStatus {
         switch status {
         case .passed, .waived:
             .accepted
@@ -654,7 +610,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func countStatus(_ count: Int) -> XcircuiteEvaluationStatus {
+    private func countStatus(_ count: Int) -> FlowEvaluationStatus {
         count == 0 ? .accepted : .rejected
     }
 
@@ -703,8 +659,8 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> XcircuiteRunActionDiagnostic {
-        XcircuiteRunActionDiagnostic(
+    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> FlowRunDiagnostic {
+        FlowRunDiagnostic(
             severity: runActionSeverity(diagnostic.severity),
             code: diagnostic.code,
             message: diagnostic.message
@@ -713,7 +669,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
 
     private func runActionSeverity(
         _ severity: FlowDiagnosticSeverity
-    ) -> XcircuiteRunActionDiagnosticSeverity {
+    ) -> FlowRunDiagnosticSeverity {
         switch severity {
         case .info:
             .info
@@ -724,7 +680,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func routingLevel(for bucket: LVSMismatchBucketSummary) -> XcircuiteFeedbackRoutingLevel {
+    private func routingLevel(for bucket: LVSMismatchBucketSummary) -> FlowFeedbackRoutingLevel {
         if requiresPolicyRepair(bucket) {
             return .structureMapping
         }
@@ -775,40 +731,23 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         return "bucket"
     }
 
-    private func bucketMetadata(index: Int, bucket: LVSMismatchBucketSummary) -> [String: XcircuiteJSONValue] {
-        var metadata: [String: XcircuiteJSONValue] = [
-            "bucketIndex": .number(Double(index)),
-            "activeCount": .number(Double(bucket.activeCount)),
-            "waivedCount": .number(Double(bucket.waivedCount)),
-            "layoutPorts": .array(bucket.layoutPorts.map { .string($0) }),
-            "schematicPorts": .array(bucket.schematicPorts.map { .string($0) }),
-            "suggestedFixes": .array(bucket.suggestedFixes.map { .string($0) }),
-        ]
-        if let ruleID = bucket.ruleID {
-            metadata["ruleID"] = .string(ruleID)
-        }
-        if let category = bucket.category {
-            metadata["category"] = .string(category)
-        }
-        if let componentSignature = bucket.componentSignature {
-            metadata["componentSignature"] = .string(componentSignature)
-        }
-        if let parameterName = bucket.parameterName {
-            metadata["parameterName"] = .string(parameterName)
-        }
-        if let layoutModel = bucket.layoutModel {
-            metadata["layoutModel"] = .string(layoutModel)
-        }
-        if let schematicModel = bucket.schematicModel {
-            metadata["schematicModel"] = .string(schematicModel)
-        }
-        if let layoutCount = bucket.layoutCount {
-            metadata["layoutCount"] = .number(Double(layoutCount))
-        }
-        if let schematicCount = bucket.schematicCount {
-            metadata["schematicCount"] = .number(Double(schematicCount))
-        }
-        return metadata
+    private func bucketContext(index: Int, bucket: LVSMismatchBucketSummary) -> FlowEvaluationContext {
+        FlowEvaluationContext(
+            category: bucket.category,
+            ruleID: bucket.ruleID,
+            parameterName: bucket.parameterName,
+            componentSignature: bucket.componentSignature,
+            layoutModel: bucket.layoutModel,
+            schematicModel: bucket.schematicModel,
+            layoutCount: bucket.layoutCount,
+            schematicCount: bucket.schematicCount,
+            bucketIndex: index,
+            activeCount: bucket.activeCount,
+            waivedCount: bucket.waivedCount,
+            layoutPorts: bucket.layoutPorts,
+            schematicPorts: bucket.schematicPorts,
+            suggestedActions: bucket.suggestedFixes
+        )
     }
 
     private func slug(_ value: String) -> String {

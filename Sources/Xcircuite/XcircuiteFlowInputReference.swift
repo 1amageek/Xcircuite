@@ -94,7 +94,7 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         case .stageArtifact(let artifact):
             return try resolveStageArtifact(artifact, projectRoot: projectRoot, runDirectory: runDirectory)
         case .stageRawArtifact(let artifact):
-            try XcircuiteIdentifierValidator().validate(artifact.stageID, kind: .stageID)
+            try FlowIdentifierValidator().validate(artifact.stageID, kind: .stageID)
             let components = try Self.validatedRelativePathComponents(artifact.relativePath)
             var url = Self.stageRawDirectory(runDirectory: runDirectory, stageID: artifact.stageID)
             for component in components {
@@ -174,9 +174,9 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         projectRoot: URL,
         runDirectory: URL
     ) throws -> URL {
-        try XcircuiteIdentifierValidator().validate(selector.stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(selector.stageID, kind: .stageID)
         if let artifactID = selector.artifactID {
-            try XcircuiteIdentifierValidator().validate(artifactID, kind: .artifactID)
+            try FlowIdentifierValidator().validate(artifactID, kind: .artifactID)
         }
         let pathSuffixComponents = try selector.pathSuffix.map(Self.validatedRelativePathComponents)
         let stageDirectory = Self.stageDirectory(runDirectory: runDirectory, stageID: selector.stageID)

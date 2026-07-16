@@ -2,7 +2,6 @@ import DFTCore
 import DesignFlowKernel
 import CircuiteFoundation
 import Foundation
-import QualificationEngine
 import ReleaseCore
 import ReleaseEngine
 import SignoffEngine
@@ -13,8 +12,6 @@ protocol ReleaseStageExecutionResult: Sendable {
     var diagnostics: [DesignDiagnostic] { get }
 }
 
-extension ReleaseQualificationResult: ReleaseStageExecutionResult {}
-extension ReleaseProfileEligibilityResult: ReleaseStageExecutionResult {}
 extension SignoffResult: ReleaseStageExecutionResult {}
 extension TapeoutResult: ReleaseStageExecutionResult {}
 
@@ -30,23 +27,18 @@ struct ReleaseStageExecutionSupport: Sendable {
         stageID: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let stageDirectory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: stageDirectory)
-        let outputURL = stageDirectory.appending(path: "result.json")
+    ) async throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(result).write(to: outputURL, options: .atomic)
-        return try artifactBuilder.reference(
-            for: outputURL,
-            projectRoot: context.projectRoot,
+        return try await context.persistArtifact(
+            encoder.encode(result),
             artifactID: artifactID,
+            stageID: stageID,
+            fileName: "result.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            format: ArtifactFormat.json,
+            mode: .replaceable
         )
     }
 
@@ -55,23 +47,18 @@ struct ReleaseStageExecutionSupport: Sendable {
         stageID: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let stageDirectory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: stageDirectory)
-        let outputURL = stageDirectory.appending(path: "foundation-evidence.json")
+    ) async throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(evidence).write(to: outputURL, options: .atomic)
-        return try artifactBuilder.reference(
-            for: outputURL,
-            projectRoot: context.projectRoot,
+        return try await context.persistArtifact(
+            encoder.encode(evidence),
             artifactID: artifactID,
+            stageID: stageID,
+            fileName: "foundation-evidence.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            format: ArtifactFormat.json,
+            mode: .replaceable
         )
     }
 
@@ -111,8 +98,8 @@ struct ReleaseStageExecutionSupport: Sendable {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     func failureResult(stageID: String, code: String, message: String) -> FlowStageResult {

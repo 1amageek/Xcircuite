@@ -4,16 +4,16 @@ import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let hasher: XcircuiteHasher
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let fileFingerprinter: any FileFingerprinting
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        hasher: XcircuiteHasher = XcircuiteHasher(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
+        workspaceStore: XcircuiteWorkspaceStore,
+        fileFingerprinter: any FileFingerprinting = LocalFileFingerprinter(),
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.workspaceStore = workspaceStore
-        self.hasher = hasher
+        self.fileFingerprinter = fileFingerprinter
         self.identifierValidator = identifierValidator
     }
 
@@ -21,7 +21,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
         retainedSignoffReport: XcircuiteRetainedSignoffReport,
         retainedSignoffReportURL: URL
-    ) throws -> XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult {
+    ) async throws -> XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult {
         try validate(report: report, retainedSignoffReport: retainedSignoffReport)
         let evidenceByDomain = try retainedEvidenceByDomain(
             retainedSignoffReport: retainedSignoffReport,
@@ -40,31 +40,23 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
         retainedSignoffReport: XcircuiteRetainedSignoffReport,
         retainedSignoffReportURL: URL,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult {
-        let resultWithoutSelfRef = try attach(
+    ) async throws -> XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentResult {
+        let resultWithoutSelfRef = try await attach(
             report: report,
             retainedSignoffReport: retainedSignoffReport,
             retainedSignoffReportURL: retainedSignoffReportURL
         )
-        let suiteDirectory = try suiteDirectoryURL(suiteID: report.suiteID, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: suiteDirectory)
-
         let reportPath = suiteProjectRelativePath(
             suiteID: report.suiteID,
             fileName: "corpus-report-ready-oracle-evidence.json"
         )
-        let reportURL = try workspaceStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
         var reportWithoutSelfRef = resultWithoutSelfRef.updatedReport
         reportWithoutSelfRef.reportArtifact = nil
-        try workspaceStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: reportPath,
-            artifactID: "generated-layout-signoff-ready-oracle-corpus-report",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let reportArtifact = try await workspaceStore.persistProjectJSON(
+            reportWithoutSelfRef,
+            id: "generated-layout-signoff-ready-oracle-corpus-report",
+            path: reportPath
         )
-        try workspaceStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var updatedReport = resultWithoutSelfRef.updatedReport
         updatedReport.reportArtifact = reportArtifact
@@ -73,10 +65,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
             status: resultWithoutSelfRef.status,
             summary: resultWithoutSelfRef.summary,
             updatedReport: updatedReport,
-            reportArtifact: try requireFoundationArtifactReference(
-                reportArtifact,
-                field: "generated-layout-signoff-ready-oracle-corpus-report"
-            ),
+            reportArtifact: reportArtifact,
             diagnostics: resultWithoutSelfRef.diagnostics
         )
     }
@@ -196,13 +185,14 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
     private func retainedReportEvidenceRef(
         _ retainedSignoffReportURL: URL
     ) throws -> XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleEvidenceReference {
-        XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleEvidenceReference(
+        let fingerprint = try fileFingerprinter.fingerprint(fileAt: retainedSignoffReportURL)
+        return XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleEvidenceReference(
             role: "retained-signoff-report",
             path: retainedSignoffReportURL.path(percentEncoded: false),
             kind: "report",
             format: "JSON",
-            sha256: try hasher.sha256(fileAt: retainedSignoffReportURL),
-            byteCount: try hasher.byteCount(fileAt: retainedSignoffReportURL)
+            sha256: fingerprint.digest.hexadecimalValue,
+            byteCount: Int64(fingerprint.byteCount)
         )
     }
 
@@ -257,15 +247,8 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
         }
     }
 
-    private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try workspaceStore.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
-            inProjectAt: projectRoot
-        )
-    }
-
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func diagnostic(

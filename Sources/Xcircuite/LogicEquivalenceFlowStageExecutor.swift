@@ -33,7 +33,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -101,9 +101,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
             let result = try await verificationEngine.execute(verificationRequest)
-            try context.checkCancellation()
+            try await context.checkCancellation()
 
-            let resultArtifact = try support.persistResult(
+            let resultArtifact = try await support.persistResult(
                 result,
                 fileName: "logic-equivalence-result.json",
                 artifactID: "logic-equivalence-result",
@@ -112,7 +112,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             )
             let evidence = makeEvidence(request: request, result: result)
             try evidence.validate()
-            let evidenceArtifact = try persistJSON(
+            let evidenceArtifact = try await persistJSON(
                 evidence,
                 fileName: "logic-equivalence-evidence.json",
                 artifactID: "logic-equivalence-evidence",
@@ -123,7 +123,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 request: request,
                 evidence: evidence
             )
-            let acceptanceArtifact = try persistJSON(
+            let acceptanceArtifact = try await persistJSON(
                 acceptance,
                 fileName: "logic-synthesis-acceptance.json",
                 artifactID: "logic-synthesis-acceptance",
@@ -135,7 +135,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 acceptance: acceptance,
                 stageID: stageID
             )
-            let reviewArtifact = try persistJSON(
+            let reviewArtifact = try await persistJSON(
                 review,
                 fileName: "logic-equivalence-review.json",
                 artifactID: "logic-equivalence-review",
@@ -165,7 +165,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                     "logic-equivalence-audit",
                 ]
             )
-            let auditArtifact = try persistJSON(
+            let auditArtifact = try await persistJSON(
                 audit,
                 fileName: "logic-equivalence-audit.json",
                 artifactID: "logic-equivalence-audit",
@@ -248,9 +248,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             return nil
         }
 
-        let audit = try context.storage.readJSON(
+        let audit = try JSONDecoder().decode(
             RTLVerificationStageAuditRecord.self,
-            from: auditURL
+            from: Data(contentsOf: auditURL)
         )
         let requiredArtifactIDs = [
             "logic-equivalence-result",
@@ -269,17 +269,17 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             return nil
         }
 
-        let result = try context.storage.readJSON(
+        let result = try JSONDecoder().decode(
             RTLVerificationResult.self,
-            from: resultURL
+            from: Data(contentsOf: resultURL)
         )
         guard result.runID == context.runID,
               result.status == audit.status else {
             return nil
         }
-        let evidence = try context.storage.readJSON(
+        let evidence = try JSONDecoder().decode(
             LogicSynthesisEquivalenceEvidence.self,
-            from: evidenceURL
+            from: Data(contentsOf: evidenceURL)
         )
         try evidence.validate()
         guard evidence.runID == request.runID,
@@ -290,9 +290,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 "The persisted logic equivalence evidence does not match the request."
             )
         }
-        let acceptance = try context.storage.readJSON(
+        let acceptance = try JSONDecoder().decode(
             LogicSynthesisAcceptanceResult.self,
-            from: acceptanceURL
+            from: Data(contentsOf: acceptanceURL)
         )
         let expectedAcceptance = NativeLogicSynthesisAcceptanceEvaluator().evaluate(
             request: request,
@@ -303,9 +303,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 "The persisted synthesis acceptance does not match the equivalence evidence."
             )
         }
-        let review = try context.storage.readJSON(
+        let review = try JSONDecoder().decode(
             RTLVerificationReviewArtifact.self,
-            from: reviewURL
+            from: Data(contentsOf: reviewURL)
         )
         let expectedReview = makeReviewArtifact(
             result: result,
@@ -320,7 +320,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
               review.findings == expectedReview.findings,
               review.diagnostics == expectedReview.diagnostics,
               review.appliedWaivers == expectedReview.appliedWaivers,
-              review.qualification == expectedReview.qualification,
+              review.record == expectedReview.record,
               review.approvalRequired == expectedReview.approvalRequired,
               review.suggestedActions == expectedReview.suggestedActions else {
             throw LogicExecutionError.invalidArtifact(
@@ -328,7 +328,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             )
         }
         guard audit.status == result.status,
-              audit.qualificationState == result.payload.qualification.state else {
+              audit.evidenceMaturity == result.payload.record.maturity else {
             throw LogicExecutionError.invalidArtifact(
                 "The persisted logic equivalence audit does not match the result envelope."
             )
@@ -450,20 +450,22 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         stageID: String,
         context: FlowExecutionContext,
         directoryName: String = "raw"
-    ) throws -> ArtifactReference {
-        let directory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: directoryName)
-        try context.storage.ensureDirectory(at: directory)
-        let url = directory.appending(path: fileName)
-        try context.storage.writeJSON(value, to: url, forProjectAt: context.projectRoot)
-        return try artifactBuilder.reference(
-            for: url,
-            projectRoot: context.projectRoot,
-            artifactID: artifactID,
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+    ) async throws -> ArtifactReference {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try await context.infrastructure.persistArtifact(
+            content: encoder.encode(value),
+            id: ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(context.runID)/stages/\(stageID)/\(directoryName)/\(fileName)"
+                ),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            runID: context.runID,
+            mode: .replaceable
         )
     }
 
@@ -492,7 +494,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             findings: result.payload.findings,
             diagnostics: result.diagnostics + rtlDiagnostics(acceptance.diagnostics),
             appliedWaivers: result.payload.appliedWaivers,
-            qualification: result.payload.qualification,
+            record: result.payload.record,
             approvalRequired: acceptance.state != .accepted || result.status != .completed,
             suggestedActions: actions
         )
@@ -515,7 +517,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             runID: result.runID,
             requestDigest: requestDigest,
             status: result.status,
-            qualificationState: result.payload.qualification.state,
+            evidenceMaturity: result.payload.record.maturity,
             artifactIDs: artifactIDs + [acceptanceAction],
             resumable: result.status == .completed || result.status == .blocked,
             nextActions: [acceptanceAction]

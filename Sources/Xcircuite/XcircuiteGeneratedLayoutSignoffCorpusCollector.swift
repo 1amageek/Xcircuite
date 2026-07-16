@@ -6,13 +6,13 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     private let ledgerLoader: any FlowRunLedgerLoading
     private let reviewBundler: any FlowRunReviewBundling
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
-        ledgerLoader: any FlowRunLedgerLoading = FlowRunLedgerLoader(),
-        reviewBundler: any FlowRunReviewBundling = DefaultFlowRunReviewBundler(),
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
+        ledgerLoader: any FlowRunLedgerLoading,
+        reviewBundler: any FlowRunReviewBundling,
+        workspaceStore: XcircuiteWorkspaceStore,
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.ledgerLoader = ledgerLoader
         self.reviewBundler = reviewBundler
@@ -23,10 +23,11 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     public func collect(
         request: XcircuiteGeneratedLayoutSignoffCorpusRequest,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusReport {
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusReport {
         try validate(request)
-        let caseResults = try request.cases.map { corpusCase in
-            try collectCase(corpusCase, projectRoot: projectRoot)
+        var caseResults: [XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult] = []
+        for corpusCase in request.cases {
+            caseResults.append(try await collectCase(corpusCase, projectRoot: projectRoot))
         }
         return makeReport(
             request: request,
@@ -39,25 +40,18 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     public func collectAndPersist(
         request: XcircuiteGeneratedLayoutSignoffCorpusRequest,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusReport {
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusReport {
         try validate(request)
-        let suiteDirectory = try suiteDirectoryURL(suiteID: request.suiteID, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: suiteDirectory)
-
         let suiteSpecPath = suiteProjectRelativePath(suiteID: request.suiteID, fileName: "corpus-suite.json")
-        let suiteSpecURL = try workspaceStore.url(forProjectRelativePath: suiteSpecPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(request, to: suiteSpecURL, forProjectAt: projectRoot)
-        let suiteSpecArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: suiteSpecPath,
-            artifactID: "generated-layout-signoff-corpus-suite",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let suiteSpecArtifact = try await workspaceStore.persistProjectJSON(
+            request,
+            id: "generated-layout-signoff-corpus-suite",
+            path: suiteSpecPath
         )
-        try workspaceStore.upsertFileReference(suiteSpecArtifact, forProjectAt: projectRoot)
 
-        let caseResults = try request.cases.map { corpusCase in
-            try collectCase(corpusCase, projectRoot: projectRoot)
+        var caseResults: [XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult] = []
+        for corpusCase in request.cases {
+            caseResults.append(try await collectCase(corpusCase, projectRoot: projectRoot))
         }
         let reportWithoutSelfRef = makeReport(
             request: request,
@@ -66,16 +60,11 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
             reportArtifact: nil
         )
         let reportPath = suiteProjectRelativePath(suiteID: request.suiteID, fileName: "corpus-report.json")
-        let reportURL = try workspaceStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: reportPath,
-            artifactID: "generated-layout-signoff-corpus-report",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let reportArtifact = try await workspaceStore.persistProjectJSON(
+            reportWithoutSelfRef,
+            id: "generated-layout-signoff-corpus-report",
+            path: reportPath
         )
-        try workspaceStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var report = reportWithoutSelfRef
         report.reportArtifact = reportArtifact
@@ -320,9 +309,9 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     private func collectCase(
         _ corpusCase: XcircuiteGeneratedLayoutSignoffCorpusRequest.CaseRequest,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult {
-        let ledger = try ledgerLoader.loadRunLedger(runID: corpusCase.runID, projectRoot: projectRoot)
-        let bundle = try reviewBundler.makeReviewBundle(runID: corpusCase.runID, projectRoot: projectRoot)
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult {
+        let ledger = try await ledgerLoader.loadRunLedger(runID: corpusCase.runID)
+        let bundle = try await reviewBundler.makeReviewBundle(runID: corpusCase.runID, projectRoot: projectRoot)
         let expectedStagesByID = Dictionary(
             corpusCase.expectedStages.map { ($0.stageID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -345,8 +334,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
         let runStatusMatches = ledger.runManifest.status.flowStatus == corpusCase.expectedRunStatus
         let stageStatusMatches = stageResults.allSatisfy(\.statusMatches)
         let diagnostics = stageResults.flatMap(\.diagnostics)
-        let sourceArtifacts = try generatedLayoutSourceArtifacts(from: bundle)
-        let signoffArtifacts = try generatedLayoutSignoffArtifacts(from: bundle)
+        let sourceArtifacts = generatedLayoutSourceArtifacts(from: ledger)
+        let signoffArtifacts = generatedLayoutSignoffArtifacts(from: ledger)
         let status: XcircuiteGeneratedLayoutSignoffCorpusReport.Status =
             runStatusMatches && stageStatusMatches ? .passed : .failed
 
@@ -398,8 +387,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     private func makeReport(
         request: XcircuiteGeneratedLayoutSignoffCorpusRequest,
         caseResults: [XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult],
-        suiteSpecArtifact: XcircuiteFileReference?,
-        reportArtifact: XcircuiteFileReference?
+        suiteSpecArtifact: ArtifactReference?,
+        reportArtifact: ArtifactReference?
     ) -> XcircuiteGeneratedLayoutSignoffCorpusReport {
         let coveredTags = Array(Set(caseResults.flatMap(\.coverageTags))).sorted()
         let missingTags = request.requiredCoverageTags
@@ -441,36 +430,32 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     }
 
     private func generatedLayoutSourceArtifacts(
-        from bundle: FlowRunReviewBundle
-    ) throws -> [XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference] {
-        try bundle.artifacts
+        from ledger: FlowRunLedger
+    ) -> [ArtifactReference] {
+        ledger.artifacts
             .filter { artifact in
-                artifact.role == "stage-result"
-                    || artifact.artifactID == "layout-command-result"
+                artifact.artifactID == "layout-command-result"
                     || artifact.artifactID == "layout-command-manifest"
                     || artifact.artifactID == "layout-command-effective-request"
                     || artifact.artifactID == "drc-layout"
                     || artifact.artifactID == "layout-gds"
                     || artifact.artifactID == "layout-oasis"
             }
-            .map(artifactReference)
-            .sorted(by: artifactReferenceSortOrder)
+            .sorted { $0.path < $1.path }
     }
 
     private func generatedLayoutSignoffArtifacts(
-        from bundle: FlowRunReviewBundle
-    ) throws -> [XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference] {
-        try bundle.artifacts
+        from ledger: FlowRunLedger
+    ) -> [ArtifactReference] {
+        ledger.artifacts
             .filter { artifact in
-                artifact.role == "stage-summary"
-                    || artifact.artifactID == "drc-summary"
+                artifact.artifactID == "drc-summary"
                     || artifact.artifactID == "lvs-summary"
                     || artifact.artifactID == "pex-summary"
                     || artifact.artifactID == "post-layout-comparison"
                     || artifact.artifactID == "simulation-summary"
             }
-            .map(artifactReference)
-            .sorted(by: artifactReferenceSortOrder)
+            .sorted { $0.path < $1.path }
     }
 
     private func inferredFamily(for stage: FlowStageResult) -> XcircuiteGeneratedLayoutSignoffStageFamily {
@@ -506,23 +491,6 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
         return counts
     }
 
-    private func artifactReference(
-        _ artifact: FlowRunReviewArtifact
-    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference {
-        try XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference(
-            role: artifact.role,
-            artifactID: artifact.artifactID,
-            stageID: artifact.stageID,
-            path: artifact.path,
-            kind: artifact.kind.rawValue,
-            format: artifact.format.rawValue,
-            sha256: artifact.sha256,
-            byteCount: artifact.byteCount,
-            integrityStatus: artifact.integrity?.status.rawValue,
-            integrityMessage: artifact.integrity?.message
-        )
-    }
-
     private func reportDiagnostic(_ diagnostic: FlowDiagnostic) -> XcircuiteGeneratedLayoutSignoffCorpusReport.Diagnostic {
         XcircuiteGeneratedLayoutSignoffCorpusReport.Diagnostic(
             severity: diagnostic.severity,
@@ -531,20 +499,30 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
         )
     }
 
-    private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try workspaceStore.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
-            inProjectAt: projectRoot
+    private func artifactReference(
+        _ artifact: FlowRunReviewArtifact
+    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactSnapshot {
+        try XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactSnapshot(
+            role: artifact.role,
+            artifactID: artifact.artifactID,
+            stageID: artifact.stageID,
+            path: artifact.path,
+            kind: artifact.kind.rawValue,
+            format: artifact.format.rawValue,
+            sha256: artifact.sha256,
+            byteCount: artifact.byteCount.flatMap(Int64.init(exactly:)),
+            integrityStatus: artifact.integrity?.status.rawValue,
+            integrityMessage: artifact.integrity?.message
         )
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func artifactReferenceSortOrder(
-        _ left: XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference,
-        _ right: XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference
+        _ left: XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactSnapshot,
+        _ right: XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactSnapshot
     ) -> Bool {
         if left.stageID != right.stageID {
             return (left.stageID ?? "") < (right.stageID ?? "")
@@ -559,7 +537,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     }
 }
 
-private extension XcircuiteRunStatus {
+private extension FlowRunStatus {
     var flowStatus: FlowRunStatus {
         switch self {
         case .created:

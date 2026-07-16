@@ -1,13 +1,16 @@
+import CircuiteFoundation
+import DesignFlowKernel
 import Foundation
 import Testing
 import Xcircuite
-import DesignFlowKernel
 
 @Suite("Xcircuite symbolic planner PEX repair-domain corpus")
 struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
     @Test func qualifySymbolicPlannerSolverCorpusCoversPEXRepairDomain() async throws {
         let root = try makeTemporaryRoot("symbolic-planner-pex-repair-domain-corpus")
         defer { removeTemporaryRoot(root) }
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
         let fixtures: [PEXRepairFixture] = [
             .capacitanceBudget,
             .couplingBudget,
@@ -17,8 +20,17 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
             .postLayoutSimulationRegression,
         ]
         for fixture in fixtures {
-            try prepareRun(root: root, runID: fixture.runID, repair: fixture)
-            _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+            try await prepareRun(
+                root: root,
+                runID: fixture.runID,
+                repair: fixture,
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
+            _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            ).exportSymbolicPlannerProblem(
                 request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: fixture.runID),
                 projectRoot: root
             )
@@ -26,7 +38,9 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
         let solverURL = root.appending(path: "pex-repair-domain-symbolic-planner.sh")
         try writePEXRepairMockPlanner(to: solverURL)
 
-        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier().qualify(
+        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+            artifactStore: artifactStore
+        ).qualify(
             request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
                 suiteID: "pex-repair-domain-corpus",
                 toolID: "mock-pex-repair-planner",
@@ -112,8 +126,8 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
         #expect(result.caseResults.map(\.observedActionIDs) == fixtures.map { [$0.actionID] })
         #expect(result.caseResults.allSatisfy { $0.goalCoverageStatus == "covered" })
         #expect(result.toolHealth.status == .passed)
-        #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["coverageRate"] == 1)
-        #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["passRate"] == 1)
+        #expect(result.toolHealth.evidence.first?.kind == .corpus)
+        #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
         #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
         #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
     }
@@ -121,27 +135,32 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
     private func prepareRun(
         root: URL,
         runID: String,
-        repair: PEXRepairFixture
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        repair: PEXRepairFixture,
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await prepareTestRun(runID: runID, store: workspaceStore)
+        _ = try await artifactStore.persistPlanningProblem(
             makePlanningProblem(runID: runID, repair: repair),
             runID: runID,
             projectRoot: root
         )
-        let snapshotURL = root.appending(path: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json")
-        try store.writeJSON(makeActionDomainSnapshot(runID: runID, repair: repair), to: snapshotURL, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json",
-            artifactID: XcircuitePlanningArtifactStore.actionDomainArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        _ = try await workspaceStore.persistArtifact(
+            content: encoder.encode(makeActionDomainSnapshot(runID: runID, repair: repair)),
+            id: ArtifactID(rawValue: XcircuitePlanningArtifactStore.actionDomainArtifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json"
+                ),
+                role: .output,
+                kind: .other,
+                format: .json
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 
     private func makePlanningProblem(
@@ -157,7 +176,7 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
                     kind: "layout",
                     artifactID: "layout-gds",
                     metadata: [
-                        "symbolicStateAtoms": .array([.string(repair.mismatchAtom)]),
+                        "symbolicStateAtoms": .textList([repair.mismatchAtom]),
                     ]
                 ),
                 XcircuitePlanningReference(
@@ -186,11 +205,11 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
                         "technology-input",
                     ],
                     target: repair.target,
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: repair.objectiveDescription,
                     evidence: [
-                        "symbolicGoalAtoms": .array([.string(repair.goalAtom)]),
+                        "symbolicGoalAtoms": .textList([repair.goalAtom]),
                     ]
                 ),
             ],
@@ -367,8 +386,7 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
     }
 
     private func writePEXRepairMockPlanner(to solverURL: URL) throws {
-        try XcircuiteWorkspaceStore().writeText(
-            """
+        let script = """
             #!/bin/sh
             case "$1" in
               *run-pex-capacitance*) printf '0.000: (a-fix-pex-capacitance) [1.000]\\n' ;;
@@ -379,9 +397,8 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
               *run-pex-post-layout-simulation*) printf '0.000: (a-fix-pex-post-layout-simulation) [1.000]\\n' ;;
               *) exit 2 ;;
             esac
-            """,
-            to: solverURL
-        )
+            """
+        try Data(script.utf8).write(to: solverURL, options: .atomic)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
             ofItemAtPath: solverURL.path(percentEncoded: false)

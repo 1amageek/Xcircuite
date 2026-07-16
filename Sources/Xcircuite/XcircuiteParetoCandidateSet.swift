@@ -498,7 +498,7 @@ public struct XcircuiteParetoCandidateSet: Codable, Sendable, Hashable {
 
     fileprivate static func validateIdentifier(_ value: String, field: String) throws {
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+            try FlowIdentifierValidator().validate(value, kind: .artifactID)
         } catch {
             throw XcircuiteParetoCandidateSetValidationError.invalidIdentifier(field: field, value: value)
         }

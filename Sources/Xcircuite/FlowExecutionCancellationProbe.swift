@@ -3,19 +3,18 @@ import DesignFlowKernel
 
 struct FlowExecutionCancellationProbe {
     static func make(context: FlowExecutionContext) -> @Sendable () async throws -> Bool {
-        make(runID: context.runID, projectRoot: context.projectRoot)
+        {
+            try await context.loadCancellationRequest() != nil
+        }
     }
 
     static func make(
         runID: String,
-        projectRoot: URL,
-        progressStore: FlowRunProgressStore = FlowRunProgressStore()
+        projectRoot: URL
     ) -> @Sendable () async throws -> Bool {
         {
-            try progressStore.loadCancellationRequest(
-                runID: runID,
-                projectRoot: projectRoot
-            ) != nil
+            let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            return try await store.loadCancellationRequest(runID: runID) != nil
         }
     }
 }

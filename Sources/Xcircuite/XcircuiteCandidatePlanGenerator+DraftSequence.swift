@@ -7,7 +7,7 @@ extension XcircuiteCandidatePlanGenerator {
         problemPath: String,
         strategy: String,
         actionDomainSnapshot: XcircuitePlanningActionDomainSnapshot? = nil,
-        actionDomainSnapshotRef: XcircuiteFileReference? = nil,
+        actionDomainSnapshotRef: ArtifactReference? = nil,
         rejectedPlanFeedback: XcircuiteRejectedPlanFeedbackSummary,
         calibrationContext: SymbolicCalibrationContext?,
         policyTrace: XcircuiteSymbolicPlannerPolicyTrace?

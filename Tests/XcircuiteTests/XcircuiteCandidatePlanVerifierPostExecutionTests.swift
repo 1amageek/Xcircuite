@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import Foundation
 import LayoutAutoGen
 import LayoutCore
@@ -7,21 +8,24 @@ import PEXEngine
 import Testing
 @testable import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRunsNativeDRCGateAndAcceptsPassingPlan() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-drc-pass")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-3", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-3", store: store)
+        _ = try await artifactStore.persistCandidatePlan(
             makeExecutableDRCPlan(runID: "run-3", width: 2, requiredWidth: 1),
             runID: "run-3",
             projectRoot: root
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-3"),
             projectRoot: root
         )
@@ -45,22 +49,19 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.accepted)
         #expect(result.nextActions.isEmpty)
 
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.verificationMode == "post-execution")
         #expect(verification.gateResults.contains { $0.gateID == "native-drc" && $0.status == "passed" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-native-drc-summary" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-native-drc-layout" })
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-3/manifest.json")
-        )
-        #expect(manifest.artifacts.contains { $0.artifactID == "planning-native-drc-summary" })
+        let ledger = try await store.loadRunLedger(runID: "run-3")
+        #expect(ledger.artifacts.contains { $0.id.rawValue == "planning-native-drc-summary" })
 
-        let action = try #require(store.loadRunActions(runID: "run-3", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-3")).last)
         #expect(action.actionKind == "planning.verify-candidate-plan")
         #expect(action.status == .succeeded)
     }
@@ -68,20 +69,27 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRejectsNativeDRCViolation() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-drc-fail")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-4", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-4", store: store)
+        _ = try await artifactStore.persistCandidatePlan(
             makeExecutableDRCPlan(runID: "run-4", width: 0.5, requiredWidth: 1),
             runID: "run-4",
             projectRoot: root
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-4"),
             projectRoot: root
         )
 
-        let verificationResult = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let verificationResult = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-4",
                 verificationMode: "post-execution"
@@ -93,36 +101,43 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verificationResult.accepted == false)
         #expect(verificationResult.nextActions.contains("repair-verification-gate:native-drc"))
 
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verificationResult.planVerificationArtifact.path)
+            from: verificationResult.planVerificationArtifact.path
         )
         #expect(verification.gateResults.contains { $0.gateID == "native-drc" && $0.status == "failed" })
         #expect(verification.diagnostics.contains { $0.code == "M1.width" })
-        let action = try #require(store.loadRunActions(runID: "run-4", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-4")).last)
         #expect(action.status == .failed)
     }
 
     @Test func postExecutionVerificationRejectsNativeDRCWhenRequestedTopCellIsMissing() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-drc-missing-top")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         let runID = "run-drc-missing-top"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         var plan = makeExecutableDRCPlan(runID: runID, width: 2, requiredWidth: 1)
-        plan.steps[0].parameterHints["topCell"] = .string("missing_top")
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        plan.steps[0].parameterHints["topCell"] = .text("missing_top")
+        _ = try await artifactStore.persistCandidatePlan(
             plan,
             runID: runID,
             projectRoot: root
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: runID,
                 verificationMode: "post-execution"
@@ -132,9 +147,9 @@ extension XcircuiteCandidatePlanVerifierTests {
 
         #expect(result.status == "rejected")
         #expect(result.accepted == false)
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         let gate = try #require(verification.gateResults.first { $0.gateID == "native-drc" })
         #expect(gate.status == "failed")
@@ -145,8 +160,9 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRunsNativeLVSGateAndAcceptsMatchingNetlists() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-lvs-pass")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareExecutableLVSRun(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableLVSRun(
             root: root,
             runID: "run-5",
             layoutNetlist: """
@@ -160,14 +176,22 @@ extension XcircuiteCandidatePlanVerifierTests {
             M1 out in vdd vdd pmos W=1u L=0.15u
             M2 out in vss vss nmos W=1u L=0.15u
             .ends inv
-            """
+            """,
+            store: store,
+            artifactStore: artifactStore
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-5"),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-5",
                 verificationMode: "post-execution"
@@ -178,18 +202,15 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "accepted")
         #expect(result.accepted)
         #expect(result.nextActions.isEmpty)
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "passed" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-native-lvs-summary" })
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-5/manifest.json")
-        )
-        #expect(manifest.artifacts.contains { $0.artifactID == "planning-native-lvs-summary" })
-        let action = try #require(store.loadRunActions(runID: "run-5", inProjectAt: root).last)
+        let ledger = try await store.loadRunLedger(runID: "run-5")
+        #expect(ledger.artifacts.contains { $0.artifactID == "planning-native-lvs-summary" })
+        let action = try #require((try await store.loadRunActions(runID: "run-5")).last)
         #expect(action.status == .succeeded)
     }
 
@@ -201,16 +222,22 @@ extension XcircuiteCandidatePlanVerifierTests {
                     "candidate-plan-post-execution-lvs-produced-\(layoutCase.id)-\(circuitCase.id)"
                 )
                 defer { removeTemporaryRoot(root) }
-                let store = XcircuiteWorkspaceStore()
+                let store = try XcircuiteWorkspaceStore(projectRoot: root)
+                let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
                 let runID = "run-produced-lvs-\(layoutCase.id)-\(circuitCase.id)"
-                try prepareProducedStandardLayoutLVSRun(
+                try await prepareProducedStandardLayoutLVSRun(
                     root: root,
                     runID: runID,
                     layoutCase: layoutCase,
-                    circuitCase: circuitCase
+                    circuitCase: circuitCase,
+                    store: store,
+                    artifactStore: artifactStore
                 )
 
-                let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+                let result = try await XcircuiteCandidatePlanVerifier(
+                    workspaceStore: store,
+                    artifactStore: artifactStore
+                ).verifyCandidatePlan(
                     request: XcircuiteCandidatePlanVerificationRequest(
                         runID: runID,
                         verificationMode: "post-execution"
@@ -219,9 +246,9 @@ extension XcircuiteCandidatePlanVerifierTests {
                 )
                 #expect(result.status == "accepted", "case=\(corpusID)")
                 #expect(result.accepted, "case=\(corpusID)")
-                let verification = try store.readJSON(
+                let verification = try await store.readJSON(
                     XcircuitePlanVerification.self,
-                    from: root.appending(path: result.planVerificationArtifact.path)
+                    from: result.planVerificationArtifact.path
                 )
                 #expect(
                     verification.artifactRefs.contains { $0.artifactID == layoutCase.artifactID },
@@ -235,7 +262,7 @@ extension XcircuiteCandidatePlanVerifierTests {
                     verification.artifactRefs.contains { $0.artifactID == "planning-native-lvs-summary" },
                     "case=\(corpusID)"
                 )
-                let action = try #require(store.loadRunActions(runID: runID, inProjectAt: root).last)
+                let action = try #require((try await store.loadRunActions(runID: runID)).last)
                 #expect(action.status == .succeeded, "case=\(corpusID)")
             }
         }
@@ -244,8 +271,9 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRejectsNativeLVSMismatch() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-lvs-fail")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareExecutableLVSRun(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableLVSRun(
             root: root,
             runID: "run-6",
             layoutNetlist: """
@@ -259,14 +287,22 @@ extension XcircuiteCandidatePlanVerifierTests {
             M1 out in vdd vdd pmos W=2u L=0.15u
             M2 out in vss vss nmos W=1u L=0.15u
             .ends inv
-            """
+            """,
+            store: store,
+            artifactStore: artifactStore
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-6"),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-6",
                 verificationMode: "post-execution"
@@ -277,27 +313,39 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "rejected")
         #expect(result.accepted == false)
         #expect(result.nextActions.contains("repair-verification-gate:native-lvs"))
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "failed" })
         #expect(verification.diagnostics.contains { $0.code == "LVS_PARAMETER_MISMATCH" })
-        let action = try #require(store.loadRunActions(runID: "run-6", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-6")).last)
         #expect(action.status == .failed)
     }
 
     @Test func postExecutionVerificationBlocksMockPEXSummaryEvenWhenPlanAllowsMockBackend() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-mock-plan-allow")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareExecutablePEXRun(root: root, runID: "run-7")
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutablePEXRun(
+            root: root,
+            runID: "run-7",
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-7"),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-7",
                 verificationMode: "post-execution"
@@ -307,41 +355,53 @@ extension XcircuiteCandidatePlanVerifierTests {
 
         #expect(result.status == "blocked")
         #expect(result.accepted == false)
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         let gate = try #require(verification.gateResults.first { $0.gateID == "pex-summary-gate" })
         #expect(gate.status == "blocked")
         #expect(gate.diagnostics.contains { $0.code == "pex-mock-backend-not-approved" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-summary" } == false)
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-manifest" } == false)
-        let action = try #require(store.loadRunActions(runID: "run-7", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-7")).last)
         #expect(action.status == .blocked)
     }
 
     @Test func postExecutionVerificationBlocksPEXSummaryGateWithoutExplicitBackend() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-missing-backend")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         let runID = "run-pex-missing-backend"
-        try prepareExecutablePEXRun(root: root, runID: runID)
+        try await prepareExecutablePEXRun(
+            root: root,
+            runID: runID,
+            store: store,
+            artifactStore: artifactStore
+        )
         var plan = makeExecutablePEXPlan(runID: runID)
         try updatePEXInputs(in: &plan) { inputs in
-            inputs.removeValue(forKey: "backendID")
-            inputs.removeValue(forKey: "allowMockBackend")
+            inputs.backendID = ""
+            inputs.allowMockBackend = false
         }
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             plan,
             runID: runID,
             projectRoot: root
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: runID,
                 verificationMode: "post-execution"
@@ -351,9 +411,9 @@ extension XcircuiteCandidatePlanVerifierTests {
 
         #expect(result.status == "blocked")
         #expect(result.accepted == false)
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         let gate = try #require(verification.gateResults.first { $0.gateID == "pex-summary-gate" })
         #expect(gate.status == "blocked")
@@ -364,24 +424,36 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationBlocksPEXSummaryGateWhenMockBackendIsNotApproved() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-mock-not-approved")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         let runID = "run-pex-mock-not-approved"
-        try prepareExecutablePEXRun(root: root, runID: runID)
+        try await prepareExecutablePEXRun(
+            root: root,
+            runID: runID,
+            store: store,
+            artifactStore: artifactStore
+        )
         var plan = makeExecutablePEXPlan(runID: runID)
         try updatePEXInputs(in: &plan) { inputs in
-            inputs.removeValue(forKey: "allowMockBackend")
+            inputs.allowMockBackend = false
         }
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             plan,
             runID: runID,
             projectRoot: root
         )
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: runID,
                 verificationMode: "post-execution"
@@ -391,9 +463,9 @@ extension XcircuiteCandidatePlanVerifierTests {
 
         #expect(result.status == "blocked")
         #expect(result.accepted == false)
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         let gate = try #require(verification.gateResults.first { $0.gateID == "pex-summary-gate" })
         #expect(gate.status == "blocked")
@@ -405,11 +477,21 @@ extension XcircuiteCandidatePlanVerifierTests {
         for layoutCase in producedLayoutCorpusCases() {
             let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-produced-\(layoutCase.id)")
             defer { removeTemporaryRoot(root) }
-            let store = XcircuiteWorkspaceStore()
+            let store = try XcircuiteWorkspaceStore(projectRoot: root)
+            let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
             let runID = "run-produced-pex-\(layoutCase.id)"
-            try prepareProducedStandardLayoutPEXRun(root: root, runID: runID, layoutCase: layoutCase)
+            try await prepareProducedStandardLayoutPEXRun(
+                root: root,
+                runID: runID,
+                layoutCase: layoutCase,
+                store: store,
+                artifactStore: artifactStore
+            )
 
-            let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+            let result = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
                 request: XcircuiteCandidatePlanVerificationRequest(
                     runID: runID,
                     verificationMode: "post-execution"
@@ -419,9 +501,9 @@ extension XcircuiteCandidatePlanVerifierTests {
 
             #expect(result.status == "blocked", "format=\(layoutCase.id)")
             #expect(result.accepted == false, "format=\(layoutCase.id)")
-            let verification = try store.readJSON(
+            let verification = try await store.readJSON(
                 XcircuitePlanVerification.self,
-                from: root.appending(path: result.planVerificationArtifact.path)
+                from: result.planVerificationArtifact.path
             )
             let gate = try #require(
                 verification.gateResults.first { $0.gateID == "pex-summary-gate" },
@@ -433,7 +515,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             )
             #expect(gate.diagnostics.contains { $0.code == "pex-mock-backend-not-approved" })
             #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-manifest" } == false)
-            let action = try #require(store.loadRunActions(runID: runID, inProjectAt: root).last)
+            let action = try #require((try await store.loadRunActions(runID: runID)).last)
             #expect(action.status == .blocked, "format=\(layoutCase.id)")
         }
     }
@@ -441,14 +523,27 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionVerificationRunsSimulationMetricGateAndAcceptsMeasurements() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-sim-pass")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareExecutableSimulationRun(root: root, runID: "run-8", target: 1.0)
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableSimulationRun(
+            root: root,
+            runID: "run-8",
+            target: 1.0,
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-8"),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-8",
                 verificationMode: "post-execution"
@@ -459,42 +554,52 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "accepted")
         #expect(result.accepted)
         #expect(result.nextActions.isEmpty)
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.gateResults.contains { $0.gateID == "simulation-metric-gate" && $0.status == "passed" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-simulation-summary" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-simulation-measurements" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-simulation-waveform" })
         let summaryRef = try #require(verification.artifactRefs.first { $0.artifactID == "planning-simulation-summary" })
-        let summary = try store.readJSON(
+        let summary = try await store.readJSON(
             XcircuiteSimulationMetricReport.self,
-            from: root.appending(path: summaryRef.path)
+            from: summaryRef.path
         )
         #expect(summary.status == "passed")
         #expect(summary.source == "corespice")
         #expect(summary.verdicts.contains { $0.name == "vfinal" && $0.status == "passed" })
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-8/manifest.json")
-        )
-        #expect(manifest.artifacts.contains { $0.artifactID == "planning-simulation-summary" })
-        let action = try #require(store.loadRunActions(runID: "run-8", inProjectAt: root).last)
+        let ledger = try await store.loadRunLedger(runID: "run-8")
+        #expect(ledger.artifacts.contains { $0.artifactID == "planning-simulation-summary" })
+        let action = try #require((try await store.loadRunActions(runID: "run-8")).last)
         #expect(action.status == .succeeded)
     }
 
     @Test func postExecutionVerificationRejectsSimulationMetricOutOfTolerance() async throws {
         let root = try makeTemporaryRoot("candidate-plan-post-execution-sim-fail")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareExecutableSimulationRun(root: root, runID: "run-9", target: 0.5)
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableSimulationRun(
+            root: root,
+            runID: "run-9",
+            target: 0.5,
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-9"),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-9",
                 verificationMode: "post-execution"
@@ -505,18 +610,19 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "rejected")
         #expect(result.accepted == false)
         #expect(result.nextActions.contains("repair-verification-gate:simulation-metric-gate"))
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.gateResults.contains { $0.gateID == "simulation-metric-gate" && $0.status == "failed" })
         #expect(verification.diagnostics.contains { $0.code == "SIMULATION_MEASUREMENT_OUT_OF_TOLERANCE" })
         let rejectedPlansArtifact = try #require(result.rejectedPlansArtifact)
         #expect(rejectedPlansArtifact.artifactID == XcircuitePlanningArtifactStore.rejectedPlansArtifactID)
         #expect(rejectedPlansArtifact.path == ".xcircuite/runs/run-9/planning/rejected-plans.jsonl")
-        let rejectedRecords = try readJSONLines(
+        let rejectedRecords = try await readJSONLines(
             XcircuiteRejectedPlanRecord.self,
-            from: root.appending(path: rejectedPlansArtifact.path)
+            from: rejectedPlansArtifact.path,
+            store: store
         )
         let rejectedRecord = try #require(rejectedRecords.last)
         #expect(rejectedRecord.status == "rejected")
@@ -534,15 +640,12 @@ extension XcircuiteCandidatePlanVerifierTests {
                 && $0.diagnosticCodes.contains("SIMULATION_MEASUREMENT_OUT_OF_TOLERANCE")
         })
         #expect(rejectedRecord.nextActions.contains("repair-verification-gate:simulation-metric-gate"))
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-9/manifest.json")
-        )
-        #expect(manifest.artifacts.contains {
+        let ledger = try await store.loadRunLedger(runID: "run-9")
+        #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.rejectedPlansArtifactID
                 && $0.path == rejectedPlansArtifact.path
         })
-        let action = try #require(store.loadRunActions(runID: "run-9", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-9")).last)
         #expect(action.status == .failed)
         #expect(action.outputs.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.rejectedPlansArtifactID
@@ -553,9 +656,10 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func postExecutionRejectedPlanRecordsSourceParameterCandidateIDFromEditReport() async throws {
         let root = try makeTemporaryRoot("candidate-plan-rejected-source-candidate")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-10", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-10", store: store)
         let plan = XcircuiteCandidatePlan(
             planID: "run-10-parameter-plan",
             problemID: "run-10-parameter-problem",
@@ -597,13 +701,13 @@ extension XcircuiteCandidatePlanVerifierTests {
             unresolvedObjectives: [],
             blockers: []
         )
-        let candidatePlanRef = try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let candidatePlanRef = try await artifactStore.persistCandidatePlan(
             plan,
             runID: "run-10",
             projectRoot: root
         )
         let reportPath = ".xcircuite/runs/run-10/planning/executions/run-10-parameter-plan/step-1/netlist-parameter-edit-report.json"
-        try writeJSON(
+        try await store.writeJSON(
             XcircuiteNetlistParameterEditReport(
                 runID: "run-10",
                 problemID: "run-10-parameter-problem",
@@ -615,16 +719,14 @@ extension XcircuiteCandidatePlanVerifierTests {
                 outputNetlistArtifactID: "candidate-step-1-edited-netlist",
                 edits: []
             ),
-            path: reportPath,
-            root: root
+            to: reportPath
         )
-        let reportRef = try store.fileReference(
+        let reportRef = try await store.makeArtifactReference(
             forProjectRelativePath: reportPath,
             artifactID: "candidate-step-1-netlist-parameter-edit-report",
+            role: .output,
             kind: .report,
-            format: .json,
-            inProjectAt: root,
-            producedByRunID: "run-10"
+            format: .json
         )
         let execution = XcircuiteCandidatePlanExecution(
             runID: "run-10",
@@ -640,20 +742,23 @@ extension XcircuiteCandidatePlanVerifierTests {
                     domainID: "simulation-analysis",
                     operationID: "simulation.set-netlist-parameters",
                     status: "executed",
-                    artifactReferences: [try requireFoundationArtifactReference(reportRef, field: "report-step")]
+                    artifactReferences: [reportRef]
                 ),
             ],
-            artifactReferences: [try requireFoundationArtifactReference(reportRef, field: "report-execution")],
+            artifactReferences: [reportRef],
             diagnostics: [],
             nextActions: []
         )
-        try XcircuitePlanningArtifactStore().persistPlanExecution(
+        _ = try await artifactStore.persistPlanExecution(
             execution,
             runID: "run-10",
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-10",
                 verificationMode: "post-execution"
@@ -663,9 +768,10 @@ extension XcircuiteCandidatePlanVerifierTests {
 
         #expect(result.status == "blocked")
         let rejectedPlansArtifact = try #require(result.rejectedPlansArtifact)
-        let rejectedRecords = try readJSONLines(
+        let rejectedRecords = try await readJSONLines(
             XcircuiteRejectedPlanRecord.self,
-            from: root.appending(path: rejectedPlansArtifact.path)
+            from: rejectedPlansArtifact.path,
+            store: store
         )
         let rejectedRecord = try #require(rejectedRecords.last)
         #expect(rejectedRecord.status == "blocked")

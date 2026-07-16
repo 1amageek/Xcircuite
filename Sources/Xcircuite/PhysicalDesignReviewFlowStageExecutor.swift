@@ -29,7 +29,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let manifestURL = try manifestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -42,7 +42,6 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 kind: .report,
                 format: .json
             )
-            let manifestArtifact = manifestReference
             let gate = PhysicalDesignReviewGate(
                 artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
             )
@@ -50,8 +49,8 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 manifestReference: manifestReference,
                 decisionScope: decisionScope
             )
-            try context.checkCancellation()
-            let packetReference = try persist(
+            try await context.checkCancellation()
+            let packetReference = try await persist(
                 packet,
                 fileName: "physical-design-review-packet.json",
                 artifactID: "physical-design-review-packet",
@@ -73,7 +72,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                         diagnostics: [diagnostic]
                     )
                 ],
-                artifacts: [manifestArtifact, packetReference]
+                artifacts: [packetReference]
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -87,7 +86,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
     }
 
     public func validateApproval(
-        _ approval: XcircuiteApprovalRecord,
+        _ approval: FlowApprovalRecord,
         reviewedResult: FlowStageResult,
         context: FlowExecutionContext
     ) throws -> [FlowDiagnostic] {
@@ -106,7 +105,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 actions: ["rerun_physical_design_review_stage"]
             )]
         }
-        let packetURL = try XcircuiteWorkspace(projectRoot: context.projectRoot)
+        let packetURL = try XcircuiteWorkspaceLayout(projectRoot: context.projectRoot)
             .url(forProjectRelativePath: packetReference.path)
         let packetData = try Data(contentsOf: packetURL)
         let decoder = JSONDecoder()
@@ -147,8 +146,8 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
         guard !decisionScope.isEmpty, Set(decisionScope).count == decisionScope.count else {
             throw PhysicalDesignReviewFlowError.invalidDecisionScope
         }
@@ -159,12 +158,14 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         projectRoot: URL
     ) -> [FlowDiagnostic] {
         var diagnostics: [FlowDiagnostic] = []
-        let package = XcircuiteWorkspace(projectRoot: projectRoot)
-        let hasher = XcircuiteHasher()
+        let package = XcircuiteWorkspaceLayout(projectRoot: projectRoot)
+        let digester = SHA256ContentDigester()
         do {
             let manifestURL = try package.url(forProjectRelativePath: packet.manifestReference.path)
             let manifestData = try Data(contentsOf: manifestURL)
-            let manifestDigest = hasher.sha256(data: manifestData)
+            let manifestDigest = try digester
+                .digest(data: manifestData, using: .sha256)
+                .hexadecimalValue
             if manifestDigest != packet.manifestDigest || packet.manifestReference.sha256 != manifestDigest {
                 diagnostics.append(diagnostic(
                     code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_TAMPERED",
@@ -192,7 +193,9 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             for (path, expectedDigest) in packet.artifactDigests {
                 let artifactURL = try package.url(forProjectRelativePath: path)
                 let artifactData = try Data(contentsOf: artifactURL)
-                let actualDigest = hasher.sha256(data: artifactData)
+                let actualDigest = try digester
+                    .digest(data: artifactData, using: .sha256)
+                    .hexadecimalValue
                 if actualDigest != expectedDigest {
                     diagnostics.append(diagnostic(
                         code: "PHYSICAL_DESIGN_REVIEW_ARTIFACT_TAMPERED",
@@ -224,19 +227,13 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         fileName: String,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let directory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: directory)
-        let url = directory.appending(path: fileName)
+    ) async throws -> ArtifactReference {
         let data = try PhysicalDesignJSONCodec().encode(value)
-        try data.write(to: url, options: .atomic)
-        return try StageArtifactReferenceBuilder().reference(
-            for: url,
-            projectRoot: context.projectRoot,
+        return try await context.persistArtifact(
+            data,
             artifactID: artifactID,
+            stageID: stageID,
+            fileName: fileName,
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )

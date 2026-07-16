@@ -6,14 +6,14 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     private let ledgerLoader: any FlowRunLedgerLoading
     private let reviewBundler: any FlowRunReviewBundling
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let identifierValidator: FlowIdentifierValidator
     private let stageClassifier: XcircuiteGeneratedLayoutSignoffStageClassifier
 
     public init(
-        ledgerLoader: any FlowRunLedgerLoading = FlowRunLedgerLoader(),
-        reviewBundler: any FlowRunReviewBundling = DefaultFlowRunReviewBundler(),
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator(),
+        ledgerLoader: any FlowRunLedgerLoading,
+        reviewBundler: any FlowRunReviewBundling,
+        workspaceStore: XcircuiteWorkspaceStore,
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator(),
         stageClassifier: XcircuiteGeneratedLayoutSignoffStageClassifier = XcircuiteGeneratedLayoutSignoffStageClassifier()
     ) {
         self.ledgerLoader = ledgerLoader
@@ -26,10 +26,10 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     public func collect(
         request: XcircuiteGeneratedLayoutFailureLadderRequest,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutFailureLadderReport {
+    ) async throws -> XcircuiteGeneratedLayoutFailureLadderReport {
         try validate(request)
-        let ledger = try ledgerLoader.loadRunLedger(runID: request.runID, projectRoot: projectRoot)
-        let bundle = try reviewBundler.makeReviewBundle(runID: request.runID, projectRoot: projectRoot)
+        let ledger = try await ledgerLoader.loadRunLedger(runID: request.runID)
+        let bundle = try await reviewBundler.makeReviewBundle(runID: request.runID, projectRoot: projectRoot)
         let stageNodes = makeStageNodes(
             request: request,
             ledger: ledger,
@@ -53,21 +53,14 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     public func collectAndPersist(
         request: XcircuiteGeneratedLayoutFailureLadderRequest,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutFailureLadderReport {
-        let reportWithoutSelfRef = try collect(request: request, projectRoot: projectRoot)
+    ) async throws -> XcircuiteGeneratedLayoutFailureLadderReport {
+        let reportWithoutSelfRef = try await collect(request: request, projectRoot: projectRoot)
         let reportPath = reportProjectRelativePath(runID: request.runID, ladderID: request.ladderID)
-        let reportURL = try workspaceStore.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: reportPath,
-            artifactID: request.ladderID,
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: request.runID,
-            verifiedByRunID: request.runID
+        let reportArtifact = try await workspaceStore.persistProjectJSON(
+            reportWithoutSelfRef,
+            id: request.ladderID,
+            path: reportPath
         )
-        try workspaceStore.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var report = reportWithoutSelfRef
         report.reportArtifact = reportArtifact
@@ -135,7 +128,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
         bundle: FlowRunReviewBundle,
         stageNodes: [XcircuiteGeneratedLayoutFailureLadderReport.StageNode],
         suggestedActions: [XcircuiteGeneratedLayoutFailureLadderReport.SuggestedAction],
-        reportArtifact: XcircuiteFileReference?
+        reportArtifact: ArtifactReference?
     ) -> XcircuiteGeneratedLayoutFailureLadderReport {
         let firstFailure = stageNodes.first(where: \.isFirstFailure)
         let affectedDownstreamStageIDs = stageNodes
@@ -372,8 +365,8 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
 
     private func artifactReference(
         _ artifact: FlowRunReviewArtifact
-    ) -> XcircuiteGeneratedLayoutFailureLadderReport.ArtifactReference {
-        XcircuiteGeneratedLayoutFailureLadderReport.ArtifactReference(
+    ) -> XcircuiteGeneratedLayoutFailureLadderReport.ArtifactSnapshot {
+        XcircuiteGeneratedLayoutFailureLadderReport.ArtifactSnapshot(
             role: artifact.role,
             artifactID: artifact.artifactID,
             stageID: artifact.stageID,
@@ -381,7 +374,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
             kind: artifact.kind.rawValue,
             format: artifact.format.rawValue,
             sha256: artifact.sha256,
-            byteCount: artifact.byteCount,
+            byteCount: artifact.byteCount.flatMap(Int64.init(exactly:)),
             integrityStatus: artifact.integrity?.status.rawValue,
             integrityMessage: artifact.integrity?.message
         )
@@ -434,12 +427,12 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
     }
 
     private func reportProjectRelativePath(runID: String, ladderID: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/reports/generated-layout-failure-ladder-\(ladderID).json"
+        "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/reports/generated-layout-failure-ladder-\(ladderID).json"
     }
 
     private func artifactReferenceSortOrder(
-        _ left: XcircuiteGeneratedLayoutFailureLadderReport.ArtifactReference,
-        _ right: XcircuiteGeneratedLayoutFailureLadderReport.ArtifactReference
+        _ left: XcircuiteGeneratedLayoutFailureLadderReport.ArtifactSnapshot,
+        _ right: XcircuiteGeneratedLayoutFailureLadderReport.ArtifactSnapshot
     ) -> Bool {
         if left.role != right.role {
             return left.role < right.role

@@ -27,14 +27,14 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage, context: context)
-            let plan = try loadPlan(context: context)
+            let plan = try await loadPlan(context: context)
             let candidate = try selectCandidate(from: plan)
             try validateProvenance(plan: plan, candidate: candidate)
             let executor = physicalDesignExecutorWithProjectStore(context: context)
             let result = try await executor.execute(request.physicalDesignRequest)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let newDigest = result.payload.physicalDesign?.layoutDigest
             let lineage = XcircuiteElectricalRepairRevisionResult.DigestLineage(
                 parentLayoutDigest: request.physicalDesignRequest.inputLayout?.layoutDigest ?? plan.layoutDigest ?? "",
@@ -49,7 +49,7 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
                 physicalDesignResult: result,
                 digestLineage: lineage
             )
-            let wrapperReference = try persist(persisted, context: context)
+            let wrapperReference = try await persist(persisted, context: context)
             var diagnostics = result.diagnostics.map { diagnostic in
                 let severity: FlowDiagnosticSeverity
                 switch diagnostic.severity {
@@ -121,24 +121,22 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
         guard request.physicalDesignRequest.inputLayout != nil else {
             throw XcircuiteElectricalRepairRevisionError.invalidRequest("an immutable repair revision requires a canonical input layout reference")
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func loadPlan(context: FlowExecutionContext) throws -> ElectricalSignoffRepairPlan {
-        let integrity = XcircuiteFileReferenceVerifier().verify(
-            request.repairPlanArtifact,
-            projectRoot: context.projectRoot
-        )
-        guard integrity.status == .verified else {
-            throw XcircuiteElectricalRepairRevisionError.sourceIntegrity(integrity.message)
+    private func loadPlan(context: FlowExecutionContext) async throws -> ElectricalSignoffRepairPlan {
+        let integrity = await context.infrastructure.verifyArtifact(request.repairPlanArtifact)
+        guard integrity.isVerified else {
+            throw XcircuiteElectricalRepairRevisionError.sourceIntegrity(integrity.diagnosticMessage)
         }
-        let url = try XcircuiteWorkspace(projectRoot: context.projectRoot)
-            .url(forProjectRelativePath: request.repairPlanArtifact.path)
         do {
+            let content = try await context.infrastructure.loadArtifactContent(
+                for: request.repairPlanArtifact
+            )
             return try JSONDecoder().decode(
                 ElectricalSignoffRepairPlan.self,
-                from: Data(contentsOf: url)
+                from: content
             )
         } catch {
             throw XcircuiteElectricalRepairRevisionError.invalidPlan(error.localizedDescription)
@@ -201,17 +199,14 @@ public struct ElectricalSignoffRepairRevisionFlowStageExecutor: FlowStageExecuto
     private func persist(
         _ result: XcircuiteElectricalRepairRevisionResult,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let relativePath = ".xcircuite/runs/\(context.runID)/electrical-signoff/repair-revision.json"
-        let url = try context.storage.url(forProjectRelativePath: relativePath, inProjectAt: context.projectRoot)
-        try context.storage.ensureDirectory(at: url.deletingLastPathComponent())
-        try context.storage.writeJSON(result, to: url, forProjectAt: context.projectRoot)
-        return try StageArtifactReferenceBuilder().reference(
-            for: url,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await context.persistJSONArtifact(
+            result,
             artifactID: "electrical-signoff-repair-revision",
+            stageID: stageID,
+            fileName: "repair-revision.json",
             kind: ArtifactKind.designDiff,
-            format: ArtifactFormat.json
+            mode: .replaceable
         )
     }
 

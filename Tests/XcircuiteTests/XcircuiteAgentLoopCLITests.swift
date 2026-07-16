@@ -1,8 +1,9 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import Testing
+import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 @Suite("xcircuite-flow agent loop", .timeLimit(.minutes(2)))
 struct XcircuiteAgentLoopCLITests {
@@ -10,23 +11,22 @@ struct XcircuiteAgentLoopCLITests {
         let root = try makeTemporaryRoot("missing-evidence")
         defer { removeTemporaryRoot(root) }
         let runID = "run-xcircuite-agent-loop"
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.ensureRunDirectory(for: runID, inProjectAt: root)
-        try store.appendRunAction(
-            XcircuiteRunActionRecord(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await store.appendRunAction(
+            FlowRunActionRecord(
                 actionID: "action-1",
                 runID: runID,
-                actor: XcircuiteRunActionActor(kind: .agent, identifier: "external-agent"),
+                actor: FlowRunActor(kind: .agent, identifier: "external-agent"),
                 actionKind: "layout.edit",
                 status: .succeeded
             ),
-            inProjectAt: root
         )
-        let profile = XcircuiteAgentLoopProfile(
+        let profile = FlowAgentLoopProfile(
             profileID: "xcircuite-loop-profile",
             requiredEvidence: [
-                XcircuiteAgentLoopProfile.RequiredEvidence(
+                FlowAgentLoopProfile.RequiredEvidence(
                     evidenceID: "required-drc",
                     artifactRole: "drc-summary"
                 ),
@@ -57,10 +57,10 @@ struct XcircuiteAgentLoopCLITests {
         let root = try makeTemporaryRoot("compare-artifacts")
         defer { removeTemporaryRoot(root) }
         let runID = "run-xcircuite-compare-artifacts"
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.ensureRunDirectory(for: runID, inProjectAt: root)
-        try writeSimulationSummaryEnvelope(root: root, runID: runID)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeSimulationSummaryEnvelope(root: root, runID: runID)
 
         let output = try await XcircuiteFlowCLICommand.run(arguments: [
             "compare-artifacts",
@@ -91,9 +91,9 @@ struct XcircuiteAgentLoopCLITests {
             "--pretty",
         ])
         let outputData = try #require(output.data(using: .utf8))
-        let outputProfile = try JSONDecoder().decode(XcircuiteEvaluationProfile.self, from: outputData)
+        let outputProfile = try JSONDecoder().decode(FlowEvaluationProfile.self, from: outputData)
         let fileProfile = try JSONDecoder().decode(
-            XcircuiteEvaluationProfile.self,
+            FlowEvaluationProfile.self,
             from: Data(contentsOf: profileURL)
         )
 
@@ -103,8 +103,8 @@ struct XcircuiteAgentLoopCLITests {
         #expect(fileProfile.artifactRoles.contains { $0.role == "simulation-summary" && $0.required })
     }
 
-    private func writeSimulationSummaryEnvelope(root: URL, runID: String) throws {
-        let store = XcircuiteWorkspaceStore()
+    private func writeSimulationSummaryEnvelope(root: URL, runID: String) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let summaryPath = ".xcircuite/runs/\(runID)/evidence/simulation-summary.json"
         let summaryURL = root.appending(path: summaryPath)
         try FileManager.default.createDirectory(
@@ -112,33 +112,31 @@ struct XcircuiteAgentLoopCLITests {
             withIntermediateDirectories: true
         )
         try Data(#"{"status":"accepted"}"#.utf8).write(to: summaryURL, options: .atomic)
-        let reference = try store.fileReference(
+        let reference = try await store.makeArtifactReference(
             forProjectRelativePath: summaryPath,
             artifactID: "simulation-summary",
             kind: .report,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        let envelope = XcircuiteArtifactEnvelope(
+        let envelope = FlowArtifactEnvelope(
             artifactID: "simulation-summary",
             role: "simulation-summary",
             reference: try foundationReference(reference),
-            evaluationResult: XcircuiteEvaluationResult(
+            evaluationResult: FlowEvaluationResult(
                 evaluationID: "simulation-evaluation",
                 specID: "opamp-spec",
                 status: .accepted,
                 channelResults: [
-                    XcircuiteEvaluationChannelResult(
+                    FlowEvaluationChannelResult(
                         channelID: "gain",
                         status: .accepted,
-                        observedValue: .number(60)
+                        observedValue: .scalar(60)
                     ),
                 ],
                 summary: "Simulation summary accepted."
             )
         )
-        try store.writeArtifactEnvelope(envelope, runID: runID, inProjectAt: root)
+        _ = try await persistTestArtifactEnvelope(envelope, runID: runID, store: store)
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

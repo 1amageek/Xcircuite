@@ -8,8 +8,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
     public var status: Status
     public var summary: Summary
     public var failures: [Failure]
-    public var policyArtifact: XcircuiteFileReference?
-    public var qualificationArtifact: XcircuiteFileReference?
+    public var policyArtifact: ArtifactReference?
+    public var qualificationArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -18,8 +18,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
         status: Status,
         summary: Summary,
         failures: [Failure],
-        policyArtifact: XcircuiteFileReference? = nil,
-        qualificationArtifact: XcircuiteFileReference? = nil
+        policyArtifact: ArtifactReference? = nil,
+        qualificationArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suiteID = suiteID

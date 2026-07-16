@@ -8,7 +8,7 @@ public enum XcircuitePlanningProblemGenerationError: Error, LocalizedError, Equa
     case artifactIntegrityFailed(
         artifactID: String?,
         path: String,
-        status: XcircuiteFileReferenceIntegrityStatus,
+        status: FlowArtifactVerificationStatus,
         message: String
     )
     case explicitPathNotFound(path: String)

@@ -16,7 +16,7 @@ struct LogicDesignFlowStageExecutorTests {
         let sourceURL = root.appending(path: "top.sv")
         try Data("`include \"defs.svh\"\nmodule top(input logic a, output logic y); assign y = a & `ADAPTER_VALUE; endmodule".utf8)
             .write(to: sourceURL, options: [.atomic])
-        let context = makeContext(root: root, runID: "logic-elaboration-adapter")
+        let context = try await makeContext(root: root, runID: "logic-elaboration-adapter")
 
         let result = try await LogicElaborationFlowStageExecutor(
             sourceInput: .path(sourceURL.path),
@@ -50,7 +50,7 @@ struct LogicDesignFlowStageExecutorTests {
             leaf u_leaf(.a(a), .y(y));
         endmodule
         """.utf8).write(to: sourceURL, options: [.atomic])
-        let context = makeContext(root: root, runID: "logic-hierarchy-elaboration-adapter")
+        let context = try await makeContext(root: root, runID: "logic-hierarchy-elaboration-adapter")
 
         let result = try await LogicElaborationFlowStageExecutor(
             sourceInput: .path(sourceURL.path),
@@ -65,7 +65,7 @@ struct LogicDesignFlowStageExecutorTests {
             Issue.record("Expected the flattened logic-design artifact")
             return
         }
-        let snapshotURL = try XcircuiteWorkspace(projectRoot: root).url(
+        let snapshotURL = try XcircuiteWorkspaceLayout(projectRoot: root).url(
             forProjectRelativePath: snapshotArtifact.path
         )
         let snapshot = try LogicDesignSnapshotCodec.decode(try Data(contentsOf: snapshotURL))
@@ -86,7 +86,7 @@ struct LogicDesignFlowStageExecutorTests {
         ))
         let designURL = root.appending(path: "design.json")
         try LogicDesignSnapshotCodec.encode(snapshot).write(to: designURL, options: [.atomic])
-        let context = makeContext(root: root, runID: "logic-power-adapter")
+        let context = try await makeContext(root: root, runID: "logic-power-adapter")
 
         let result = try await PowerIntentFlowStageExecutor(
             sourceInput: .path(sourceURL.path),
@@ -107,21 +107,14 @@ struct LogicDesignFlowStageExecutorTests {
             .appending(path: "stages/logic.power-intent/raw/power-intent.json").path))
     }
 
-    private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
-        let runDirectory = root
-            .appending(path: XcircuiteWorkspace.directoryName)
-            .appending(path: "runs")
-            .appending(path: runID)
-        do {
-            try FileManager.default.createDirectory(at: runDirectory, withIntermediateDirectories: true)
-        } catch {
-            Issue.record("Failed to create run directory: \(error)")
-        }
+    private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
         return FlowExecutionContext(
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            storage: XcircuiteWorkspaceStore(),
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

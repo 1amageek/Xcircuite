@@ -167,8 +167,21 @@ extension XcircuiteCandidatePlanVerifier {
         var hint = CandidatePlanLVSInputHint()
         for step in plan.steps.sorted(by: { $0.order < $1.order })
             where step.verificationGates.contains("native-lvs") {
-            if let decoded: CandidatePlanLVSInputHint = try decodedHint("lvsInputs", from: step) {
-                hint.merge(decoded)
+            if case .lvsInputs(let inputs)? = step.parameterHints["lvsInputs"] {
+                hint.merge(CandidatePlanLVSInputHint(
+                    layoutNetlistRefID: inputs.layoutNetlistReferenceID,
+                    layoutGDSRefID: inputs.layoutGDSReferenceID,
+                    schematicNetlistRefID: inputs.schematicNetlistReferenceID,
+                    technologyRefID: inputs.technologyReferenceID,
+                    extractionDeckRefID: inputs.extractionDeckReferenceID,
+                    processProfileID: inputs.processProfileID,
+                    waiverRefID: inputs.waiverReferenceID,
+                    modelEquivalenceRefID: inputs.modelEquivalenceReferenceID,
+                    terminalEquivalenceRefID: inputs.terminalEquivalenceReferenceID,
+                    topCell: inputs.topCell,
+                    layoutFormat: inputs.layoutFormat,
+                    backendID: inputs.backendID
+                ))
             }
             hint.merge(CandidatePlanLVSInputHint(
                 layoutNetlistRef: stringHint("layoutNetlistRef", step: step),
@@ -216,19 +229,22 @@ extension XcircuiteCandidatePlanVerifier {
 
     func sourcePlanningProblem(
         for plan: XcircuiteCandidatePlan,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) throws -> XcircuiteCircuitPlanningProblem? {
         let problemURL: URL
         if let path = plan.sourceProblemRef.path {
-            problemURL = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            problemURL = try projectURL(for: path, projectRoot: projectRoot)
         } else if let artifactID = plan.sourceProblemRef.artifactID,
                   let artifact = manifest.artifacts.first(where: { $0.artifactID == artifactID }) {
-            problemURL = try workspaceStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
+            problemURL = try projectURL(for: artifact.path, projectRoot: projectRoot)
         } else {
             return nil
         }
-        let problem = try workspaceStore.readJSON(XcircuiteCircuitPlanningProblem.self, from: problemURL)
+        let problem = try JSONDecoder().decode(
+            XcircuiteCircuitPlanningProblem.self,
+            from: Data(contentsOf: problemURL)
+        )
         guard problem.runID == plan.runID else {
             throw CandidatePlanGateExecutionError.sourceProblemRunMismatch(
                 expected: plan.runID,
@@ -240,15 +256,15 @@ extension XcircuiteCandidatePlanVerifier {
 
     func url(
         for reference: XcircuitePlanningReference,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) throws -> URL {
         if let path = reference.path {
-            return try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            return try projectURL(for: path, projectRoot: projectRoot)
         }
         if let artifactID = reference.artifactID,
            let artifact = manifest.artifacts.first(where: { $0.artifactID == artifactID }) {
-            return try workspaceStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
+            return try projectURL(for: artifact.path, projectRoot: projectRoot)
         }
         throw CandidatePlanGateExecutionError.planningReferencePathMissing(reference.refID)
     }
@@ -338,18 +354,38 @@ extension XcircuiteCandidatePlanVerifier {
 
     func nativeDRCExportSpec(from plan: XcircuiteCandidatePlan) throws -> LayoutCommandDRCExportSpec? {
         for step in plan.steps.sorted(by: { $0.order < $1.order }) {
-            if let spec: LayoutCommandDRCExportSpec = try decodedHint("drcExportSpec", from: step) {
+            if case .drcExportSpec(let spec)? = step.parameterHints["drcExportSpec"] {
                 return spec
             }
-            if let rules: [NativeDRCRule] = try decodedHint("drcRules", from: step) {
+            if case .drcRules(let planningRules)? = step.parameterHints["drcRules"] {
+                let rules = try planningRules.map { rule in
+                    guard let kind = NativeDRCRule.Kind(rawValue: rule.kind) else {
+                        throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
+                            path: step.stepID,
+                            reason: "Unsupported DRC rule kind \(rule.kind)."
+                        )
+                    }
+                    return NativeDRCRule(
+                        id: rule.ruleID,
+                        kind: kind,
+                        layer: rule.layer,
+                        value: rule.requiredValue
+                    )
+                }
                 guard !rules.isEmpty else {
                     continue
+                }
+                let viaDefinitions: [LayoutCommandDRCViaDefinition]
+                if case .drcViaDefinitions(let values)? = step.parameterHints["viaDefinitions"] {
+                    viaDefinitions = values
+                } else {
+                    viaDefinitions = []
                 }
                 return LayoutCommandDRCExportSpec(
                     technologyID: stringHint("technologyID", step: step) ?? "planning-native-drc",
                     topCell: stringHint("topCell", step: step) ?? stringHint("cellName", step: step) ?? "top",
                     unit: stringHint("unit", step: step) ?? "micrometer",
-                    viaDefinitions: (try decodedHint("viaDefinitions", from: step)) ?? [],
+                    viaDefinitions: viaDefinitions,
                     rules: rules
                 )
             }
@@ -359,13 +395,13 @@ extension XcircuiteCandidatePlanVerifier {
 
     func latestLayoutDocumentRef(
         from execution: XcircuiteCandidatePlanExecution
-    ) -> XcircuiteFileReference? {
+    ) -> ArtifactReference? {
         execution.stepResults
             .sorted { $0.order > $1.order }
             .lazy
             .compactMap { result in
-                legacyArtifactReferences(result.artifactReferences).first { reference in
-                    reference.artifactID?.hasSuffix("layout-document") == true
+                result.artifactReferences.first { reference in
+                    reference.artifactID.hasSuffix("layout-document")
                 }
             }
             .first

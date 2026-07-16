@@ -13,7 +13,6 @@ public struct XcircuiteSignoffRepairFormulationResult: Codable, Sendable, Hashab
         public var artifactID: String?
         public var sha256: String?
         public var byteCount: Int64?
-        public var producedByRunID: String?
         public var integrityStatus: String?
 
         public init(
@@ -28,7 +27,6 @@ public struct XcircuiteSignoffRepairFormulationResult: Codable, Sendable, Hashab
             artifactID: String? = nil,
             sha256: String? = nil,
             byteCount: Int64? = nil,
-            producedByRunID: String? = nil,
             integrityStatus: String? = nil
         ) {
             self.sourceKind = sourceKind
@@ -42,7 +40,6 @@ public struct XcircuiteSignoffRepairFormulationResult: Codable, Sendable, Hashab
             self.artifactID = artifactID
             self.sha256 = sha256
             self.byteCount = byteCount
-            self.producedByRunID = producedByRunID
             self.integrityStatus = integrityStatus
         }
     }

@@ -10,24 +10,33 @@ import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifierTests {
-    @Test func missingInputReferenceBlocksPlanVerification() throws {
+    @Test func missingInputReferenceBlocksPlanVerification() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-missing-input")
+        defer { removeTemporaryRoot(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         var problem = makeDRCPlanningProblem()
         problem.initialStateRefs = []
-        let plan = try XcircuiteCandidatePlanGenerator().makeCandidatePlan(
+        let plan = try XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makeCandidatePlan(
             problem: problem,
             problemPath: ".xcircuite/runs/run-1/planning/problem.json"
         )
-        let candidatePlanRef = XcircuiteFileReference(
+        let candidatePlanRef = try fixtureArtifactReference(
             artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
             path: ".xcircuite/runs/run-1/planning/candidate-plan.json",
             kind: .other,
             format: .json,
-            sha256: "abc",
+            sha256: String(repeating: "a", count: 64),
             byteCount: 12,
-            producedByRunID: "run-1"
         )
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makePlanVerification(
             plan: plan,
             candidatePlanRef: candidatePlanRef
         )
@@ -38,22 +47,31 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.nextActions.contains("provide-input-ref:layout-ref"))
     }
 
-    @Test func lvsPolicyRepairPlanBlocksAcceptanceOnApprovalGate() throws {
-        let plan = try XcircuiteCandidatePlanGenerator().makeCandidatePlan(
+    @Test func lvsPolicyRepairPlanBlocksAcceptanceOnApprovalGate() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-lvs-approval-gate")
+        defer { removeTemporaryRoot(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        let plan = try XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makeCandidatePlan(
             problem: makeLVSPlanningProblem(),
             problemPath: ".xcircuite/runs/run-2/planning/problem.json"
         )
-        let candidatePlanRef = XcircuiteFileReference(
+        let candidatePlanRef = try fixtureArtifactReference(
             artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
             path: ".xcircuite/runs/run-2/planning/candidate-plan.json",
             kind: .other,
             format: .json,
-            sha256: "abc",
+            sha256: String(repeating: "a", count: 64),
             byteCount: 12,
-            producedByRunID: "run-2"
         )
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makePlanVerification(
             plan: plan,
             candidatePlanRef: candidatePlanRef
         )
@@ -65,7 +83,11 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.nextActions.contains("run-verification-gate:native-lvs"))
     }
 
-    @Test func riskRequiredApprovalAddsReviewAndSyntheticApprovalGate() throws {
+    @Test func riskRequiredApprovalAddsReviewAndSyntheticApprovalGate() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-risk-approval-gate")
+        defer { removeTemporaryRoot(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         var plan = makeSingleStepPlan(
             runID: "run-risk",
             domainID: "layout-edit",
@@ -86,9 +108,12 @@ extension XcircuiteCandidatePlanVerifierTests {
             ),
         ]
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-risk")
+            candidatePlanRef: try candidatePlanRef(runID: "run-risk")
         )
 
         #expect(verification.accepted == false)
@@ -103,12 +128,13 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.nextActions.contains("request-human-approval:policy-repair-approval"))
     }
 
-    @Test func recordedRiskApprovalPassesSyntheticApprovalGate() throws {
+    @Test func recordedRiskApprovalPassesSyntheticApprovalGate() async throws {
         let root = try makeTemporaryRoot("candidate-plan-approved-risk-integrity")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-risk-approved", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-risk-approved", store: store)
         var plan = makeSingleStepPlan(
             runID: "run-risk-approved",
             domainID: "layout-edit",
@@ -128,20 +154,27 @@ extension XcircuiteCandidatePlanVerifierTests {
                 mitigationActions: ["approval-gate", "native-lvs"]
             ),
         ]
-        let candidatePlanRef = try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let candidatePlanRef = try await artifactStore.persistCandidatePlan(
             plan,
             runID: "run-risk-approved",
             projectRoot: root
         )
-        let approval = XcircuiteApprovalRecord(
+        let approval = FlowApprovalRecord(
             runID: "run-risk-approved",
             stageID: "policy-repair-approval",
             verdict: .approved,
             reviewer: "reviewer-1",
-            note: "Approved for policy repair regression."
+            note: "Approved for policy repair regression.",
+            evidence: FlowApprovalEvidenceBinding(
+                plan: candidatePlanRef,
+                stageResult: candidatePlanRef
+            )
         )
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makePlanVerification(
             plan: plan,
             candidatePlanRef: candidatePlanRef,
             approvals: [approval],
@@ -150,7 +183,7 @@ extension XcircuiteCandidatePlanVerifierTests {
 
         #expect(verification.accepted)
         #expect(verification.riskReviews.first?.status == "approved")
-        #expect(verification.riskReviews.first?.approvalReviews.map(\.status) == ["approved"])
+        #expect(verification.riskReviews.first?.approvalReviews.map { $0.status } == ["approved"])
         #expect(verification.gateResults.contains {
             $0.gateID == "approval-gate" && $0.status == "passed"
         })

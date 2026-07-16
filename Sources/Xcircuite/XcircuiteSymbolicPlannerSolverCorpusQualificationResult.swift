@@ -15,8 +15,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
     public var missingRequiredCoverageTags: [String]
     public var coverageTagCounts: [String: Int]
     public var failureCodes: [String]
-    public var suiteSpecArtifact: XcircuiteFileReference?
-    public var corpusArtifact: XcircuiteFileReference?
+    public var suiteSpecArtifact: ArtifactReference?
+    public var corpusArtifact: ArtifactReference?
     public var toolHealth: ToolHealthCheckResult
 
     public init(
@@ -33,8 +33,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualificationResult: Codable, 
         missingRequiredCoverageTags: [String] = [],
         coverageTagCounts: [String: Int] = [:],
         failureCodes: [String],
-        suiteSpecArtifact: XcircuiteFileReference? = nil,
-        corpusArtifact: XcircuiteFileReference? = nil,
+        suiteSpecArtifact: ArtifactReference? = nil,
+        corpusArtifact: ArtifactReference? = nil,
         toolHealth: ToolHealthCheckResult
     ) {
         self.schemaVersion = schemaVersion

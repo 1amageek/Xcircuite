@@ -6,7 +6,7 @@ import DesignFlowKernel
 
 extension XcircuiteDiagnosticPlanningProblemBuilder {
     func actionDomainPath(runID: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(XcircuitePlanningArtifactStore.actionDomainRelativePath)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/\(XcircuitePlanningArtifactStore.actionDomainRelativePath)"
     }
 
     func identifier(_ rawValue: String) throws -> String {
@@ -23,40 +23,40 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             .joined(separator: "-")
         let trimmed = String(collapsed.prefix(120)).trimmingCharacters(in: CharacterSet(charactersIn: ".-_"))
         let value = trimmed.isEmpty ? "planning-id" : trimmed
-        try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+        try FlowIdentifierValidator().validate(value, kind: .artifactID)
         return value
     }
 
     func insertOptional(
         _ value: String?,
         key: String,
-        into dictionary: inout [String: XcircuiteJSONValue]
+        into dictionary: inout [String: PlanningParameterValue]
     ) {
         guard let value else {
             return
         }
-        dictionary[key] = .string(value)
+        dictionary[key] = .text(value)
     }
 
     func insertOptional(
         _ value: Double?,
         key: String,
-        into dictionary: inout [String: XcircuiteJSONValue]
+        into dictionary: inout [String: PlanningParameterValue]
     ) {
         guard let value else {
             return
         }
-        dictionary[key] = .number(value)
+        dictionary[key] = .scalar(value)
     }
 
     func insertOptional(
         _ value: Int?,
         key: String,
-        into dictionary: inout [String: XcircuiteJSONValue]
+        into dictionary: inout [String: PlanningParameterValue]
     ) {
         guard let value else {
             return
         }
-        dictionary[key] = .number(Double(value))
+        dictionary[key] = .scalar(Double(value))
     }
 }

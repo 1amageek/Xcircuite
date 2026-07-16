@@ -1,15 +1,16 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct SimulationGoldenCorpusRunner: Sendable {
     private let engine: any SimulationExecuting
     private let comparisonService: SimulationGoldenComparisonService
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
         engine: any SimulationExecuting = CoreSpiceSimulationEngine(),
         comparisonService: SimulationGoldenComparisonService = SimulationGoldenComparisonService(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.engine = engine
         self.comparisonService = comparisonService
@@ -300,7 +301,9 @@ public struct SimulationGoldenCorpusRunner: Sendable {
             path: url.path(percentEncoded: false),
             kind: kind,
             format: format,
-            sha256: XcircuiteHasher().sha256(data: data),
+            sha256: try SHA256ContentDigester()
+                .digest(data: data, using: .sha256)
+                .hexadecimalValue,
             byteCount: Int64(data.count)
         )
     }

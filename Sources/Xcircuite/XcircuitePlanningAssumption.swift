@@ -9,7 +9,7 @@ public struct XcircuitePlanningAssumption: Codable, Sendable, Hashable {
     public var confidence: Double?
     public var sourceRefIDs: [String]
     public var requiredBeforeExecution: Bool
-    public var evidence: [String: XcircuiteJSONValue]
+    public var evidence: [String: PlanningParameterValue]
 
     public init(
         assumptionID: String,
@@ -19,7 +19,7 @@ public struct XcircuitePlanningAssumption: Codable, Sendable, Hashable {
         confidence: Double? = nil,
         sourceRefIDs: [String] = [],
         requiredBeforeExecution: Bool = false,
-        evidence: [String: XcircuiteJSONValue] = [:]
+        evidence: [String: PlanningParameterValue] = [:]
     ) {
         self.assumptionID = assumptionID
         self.source = source

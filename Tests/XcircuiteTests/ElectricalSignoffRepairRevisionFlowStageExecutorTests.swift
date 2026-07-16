@@ -8,7 +8,6 @@ import PhysicalDesignCore
 import Testing
 import TimingCore
 import ToolQualification
-import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Electrical signoff repair revision")
@@ -18,7 +17,9 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-repair-revision-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let runID = "electrical-repair-revision-run"
-        let store = XcircuiteWorkspaceStore()
+        let designDigest = String(repeating: "d", count: 64)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: store)
         let snapshot = PhysicalDesignSnapshot(
             topCell: "top",
             die: PhysicalDesignSnapshot.Rect(x: 0, y: 0, width: 100_000, height: 100_000),
@@ -30,11 +31,9 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         )
         let snapshotData = try PhysicalDesignJSONCodec().encode(snapshot)
         let layoutPath = ".xcircuite/input/layout.json"
-        let layoutURL = try store.url(forProjectRelativePath: layoutPath, inProjectAt: root)
-        try store.ensureDirectory(at: layoutURL.deletingLastPathComponent())
-        try snapshotData.write(to: layoutURL)
+        try await store.write(snapshotData, to: layoutPath)
         let layoutDigest = try SHA256ContentDigester().digest(data: snapshotData).hexadecimalValue
-        let layoutReference = XcircuiteFileReference(
+        let layoutReference = try fixtureArtifactReference(
             artifactID: "base-layout",
             path: layoutPath,
             kind: .layout,
@@ -44,7 +43,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         )
         let plan = ElectricalSignoffRepairPlan(
             runID: runID,
-            designDigest: "design-digest",
+            designDigest: designDigest,
             layoutDigest: layoutDigest,
             pdkDigest: String(repeating: "c", count: 64),
             candidates: [ElectricalSignoffRepairPlan.Candidate(
@@ -60,9 +59,8 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         )
         let planData = try JSONEncoder().encode(plan)
         let planPath = ".xcircuite/repair-plan.json"
-        let planURL = try store.url(forProjectRelativePath: planPath, inProjectAt: root)
-        try planData.write(to: planURL)
-        let planReference = XcircuiteFileReference(
+        try await store.write(planData, to: planPath)
+        let planReference = try fixtureArtifactReference(
             artifactID: "electrical-signoff-repair-plan",
             path: planPath,
             kind: .report,
@@ -101,7 +99,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             design: LogicDesignReference(
                 artifact: designReference.locator,
                 topDesignName: "top",
-                designDigest: "design-digest"
+                designDigest: designDigest
             ),
             constraints: TimingConstraintReference(
                 artifact: constraintReference,
@@ -133,8 +131,8 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
         let context = FlowExecutionContext(
             projectRoot: root,
             runID: runID,
-            runDirectory: root.appending(path: ".xcircuite/runs/\(runID)"),
-            storage: store,
+            runDirectory: runDirectory,
+            infrastructure: store,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -144,10 +142,15 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == FlowStageStatus.succeeded)
+        #expect(
+            result.status == FlowStageStatus.succeeded,
+            "Unexpected repair result diagnostics: \(result.diagnostics)"
+        )
         let wrapperReference = try #require(result.artifacts.first { $0.artifactID == "electrical-signoff-repair-revision" })
-        let wrapperURL = try store.url(forProjectRelativePath: wrapperReference.path, inProjectAt: root)
-        let persisted = try JSONDecoder().decode(XcircuiteElectricalRepairRevisionResult.self, from: Data(contentsOf: wrapperURL))
+        let persisted = try JSONDecoder().decode(
+            XcircuiteElectricalRepairRevisionResult.self,
+            from: try await store.read(from: wrapperReference.path)
+        )
         #expect(persisted.committedNewRevision)
         #expect(persisted.rerunRequired)
         #expect(persisted.digestLineage.parentLayoutDigest == layoutDigest)

@@ -25,14 +25,14 @@ extension XcircuiteFlowRuntimeTests {
                             stageID: "007-drc",
                             layoutPath: "layout.json",
                             topCell: "TOP",
-                            tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                            tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                         )
                     ),
                 ]
             ),
             root: root
         )
-        let runSpecURL = try writeRunSpec(
+        let runSpecURL = try await writeRunSpec(
             XcircuiteFlowRunSpec(
                 runID: "run-1",
                 intent: "Run DRC with approval",
@@ -63,7 +63,16 @@ extension XcircuiteFlowRuntimeTests {
         let initial = try JSONDecoder().decode(FlowRunResult.self, from: initialData)
         #expect(initial.status == .blocked)
 
-        _ = try DefaultFlowGateApprovalRecorder().recordApproval(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        _ = try await DefaultFlowGateApprovalRecorder(
+            loader: workspaceStore,
+            inspector: DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler),
+            ledgerPersistence: workspaceStore
+        ).recordApproval(
             FlowGateApprovalRequest(
                 projectRoot: root,
                 runID: "run-1",
@@ -92,7 +101,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(result.summary.nextActions.map(\.kind) == ["archiveOrContinue"])
     }
 
-    @Test func runCLIUsesQualifiedEvidenceFromRuntimeConfig() async throws {
+    @Test func runCLIRejectsUnboundEvidenceFromRuntimeConfig() async throws {
         let root = try makeTemporaryRoot("runtime-cli-qualified-evidence")
         defer { removeTemporaryRoot(root) }
         _ = try writeLayout(cleanLayout(), root: root)
@@ -110,16 +119,7 @@ extension XcircuiteFlowRuntimeTests {
                                 evidence: [
                                     ToolEvidence(
                                         evidenceID: "drc-corpus-2026-06-18",
-                                        kind: .corpus,
-                                        qualification: ToolEvidenceQualificationSummary(
-                                            qualified: true,
-                                            policyID: "strict",
-                                            observedMetrics: [
-                                                "durationBudgetPassRate": 1,
-                                                "passRate": 1,
-                                            ],
-                                            observedCounts: ["caseCount": 5]
-                                        )
+                                        kind: .corpus
                                     ),
                                 ]
                             )
@@ -129,7 +129,7 @@ extension XcircuiteFlowRuntimeTests {
             ),
             root: root
         )
-        let runSpecURL = try writeRunSpec(
+        let runSpecURL = try await writeRunSpec(
             XcircuiteFlowRunSpec(
                 runID: "run-1",
                 intent: "Run DRC with qualified corpus evidence",
@@ -144,38 +144,30 @@ extension XcircuiteFlowRuntimeTests {
             root: root
         )
 
-        let json = try await XcircuiteFlowCLICommand.run(
-            arguments: [
-                "run",
-                "--project-root",
-                root.path(percentEncoded: false),
-                "--run-spec",
-                runSpecURL.path(percentEncoded: false),
-                "--runtime-config",
-                specURL.path(percentEncoded: false),
-            ]
-        )
-        let data = try #require(json.data(using: .utf8))
-        let result = try JSONDecoder().decode(FlowRunResult.self, from: data)
-
-        #expect(result.status == .succeeded)
-        let toolchain = try readToolchainManifest(in: root, runID: "run-1")
-        let record = try #require(toolchain.stages.first)
-        #expect(record.requiredTool?.requiredQualifiedEvidenceKinds == [.corpus])
-        #expect(record.selectedToolID == "native-drc")
-        #expect(record.selectedDecision?.status == .eligible)
-        let evidence = try #require(record.selectedHealth?.evidence.first)
-        #expect(evidence.evidenceID == "drc-corpus-2026-06-18")
-        #expect(evidence.kind == .corpus)
-        #expect(evidence.qualification?.qualified == true)
-        #expect(evidence.qualification?.observedMetrics["passRate"] == 1)
-        #expect(evidence.qualification?.observedCounts["caseCount"] == 5)
+        await #expect(throws: XcircuiteFlowRuntimeSpecError.invalidToolEvidence(
+            stageID: "007-drc",
+            evidenceID: "drc-corpus-2026-06-18",
+            reason: "corpus evidence requires a verifiable artifact binding"
+        )) {
+            _ = try await XcircuiteFlowCLICommand.run(
+                arguments: [
+                    "run",
+                    "--project-root",
+                    root.path(percentEncoded: false),
+                    "--run-spec",
+                    runSpecURL.path(percentEncoded: false),
+                    "--runtime-config",
+                    specURL.path(percentEncoded: false),
+                ]
+            )
+        }
     }
 
-    @Test func runCLIAcceptsQualifiedEvidenceFixtureContracts() async throws {
+    @Test func runCLIAcceptsFoundationArtifactEvidenceFixture() async throws {
         let root = try makeTemporaryRoot("runtime-cli-qualified-fixture")
         defer { removeTemporaryRoot(root) }
         _ = try writeLayout(cleanLayout(), root: root)
+        try installQualificationEvidenceFixtures(in: root)
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -192,7 +184,7 @@ extension XcircuiteFlowRuntimeTests {
         let result = try JSONDecoder().decode(FlowRunResult.self, from: data)
 
         #expect(result.status == .succeeded)
-        let toolchain = try readToolchainManifest(in: root, runID: "run-1")
+        let toolchain = try await readToolchainManifest(in: root, runID: "run-1")
         let record = try #require(toolchain.stages.first)
         #expect(record.requiredTool?.requiredQualifiedEvidenceKinds == [.corpus])
         #expect(record.requiredTool?.maximumEvidenceAgeSeconds == 4_102_444_800)
@@ -200,10 +192,9 @@ extension XcircuiteFlowRuntimeTests {
         #expect(record.selectedDecision?.status == .eligible)
         let evidence = try #require(record.selectedHealth?.evidence.first)
         #expect(evidence.evidenceID == "drc-corpus-2026-06-18")
-        #expect(evidence.qualification?.policyID == "strict")
-        #expect(evidence.qualification?.qualified == true)
-        #expect(evidence.qualification?.failureCodes.isEmpty == true)
-        #expect(evidence.checkedAt?.timeIntervalSince1970 == 1_781_740_800)
+        #expect(evidence.hasVerifiableArtifactBinding)
+        #expect(evidence.artifact?.path == "qualification/drc-corpus-report.json")
+        #expect(evidence.checkedAt?.timeIntervalSince1970 == 1_784_000_000)
     }
 
     @Test func runCLIBlocksQualifiedSignoffFixtureWhenPEXIsMock() async throws {
@@ -214,6 +205,7 @@ extension XcircuiteFlowRuntimeTests {
         _ = try writeNetlist(matchingLVSNetlist(), name: "schematic.spice", root: root)
         _ = try writeNetlist("mock gds payload\n", name: "layout.gds", root: root)
         _ = try writeNetlist(".subckt TOP in out vdd vss\n.ends TOP\n", name: "source.cir", root: root)
+        try installQualificationEvidenceFixtures(in: root)
         let updatedRuntimeURL = root.appending(path: "qualified-signoff-runtime-with-evidence.json")
 
         _ = try await XcircuiteFlowCLICommand.run(
@@ -284,12 +276,11 @@ extension XcircuiteFlowRuntimeTests {
         )
         let runData = try #require(runJSON.data(using: .utf8))
         let result = try JSONDecoder().decode(FlowRunResult.self, from: runData)
-
         #expect(result.status == .blocked)
         let blockedStage = try #require(result.stages.first { $0.stageID == "009-pex" })
         #expect(blockedStage.status == .blocked)
         #expect(blockedStage.gates.contains(where: { $0.gateID == "tool-trust" && $0.status == .failed }))
-        let toolchain = try readToolchainManifest(in: root, runID: "signoff-run-1")
+        let toolchain = try await readToolchainManifest(in: root, runID: "signoff-run-1")
         #expect(toolchain.stages.count == 3)
         let drcRecord = try #require(toolchain.stages.first { $0.stageID == "007-drc" })
         let lvsRecord = try #require(toolchain.stages.first { $0.stageID == "008-lvs" })
@@ -311,18 +302,17 @@ extension XcircuiteFlowRuntimeTests {
         let lvsEvidence = try #require(lvsRecord.selectedHealth?.evidence.first)
         #expect(drcEvidence.evidenceID == "drc-corpus-2026-06-18")
         #expect(lvsEvidence.evidenceID == "lvs-production-promoted-1")
-        #expect(drcEvidence.qualification?.qualified == true)
-        #expect(lvsEvidence.qualification?.qualified == true)
+        #expect(drcEvidence.hasVerifiableArtifactBinding)
+        #expect(lvsEvidence.hasVerifiableArtifactBinding)
         #expect(drcEvidence.artifact?.path == "qualification/drc-corpus-report.json")
         #expect(lvsEvidence.artifact?.path.hasSuffix("lvs-corpus-report.json") == true)
-        #expect(drcEvidence.qualification?.observedCounts["coveredRequiredCoverageTagCount"] == 32)
-        #expect(lvsEvidence.qualification?.observedCounts["requiredObservedAssertionCount"] == 15)
     }
 
     @Test func attachEvidenceCLIProducesRunnableQualifiedRuntimeConfig() async throws {
         let root = try makeTemporaryRoot("runtime-cli-attach-evidence")
         defer { removeTemporaryRoot(root) }
         _ = try writeLayout(cleanLayout(), root: root)
+        try installQualificationEvidenceFixtures(in: root)
         let initialRuntimeURL = try writeRuntimeSpec(
             XcircuiteFlowRuntimeSpec(
                 executors: [
@@ -373,8 +363,8 @@ extension XcircuiteFlowRuntimeTests {
         }
         let attachedEvidence = try #require(drcSpec.tool.evidence.first)
         #expect(attachedEvidence.evidenceID == "drc-corpus-2026-06-18")
-        #expect(attachedEvidence.artifact?.sha256 == "1111111111111111111111111111111111111111111111111111111111111111")
-        #expect(attachedEvidence.qualification?.observedMetrics["oracleAgreementRate"] == 1)
+        #expect(attachedEvidence.artifact?.sha256 == "ef3329acd2818d5731b8ad53ae2ba839d2c36430d43c316ed791bb28bf51f51d")
+        #expect(attachedEvidence.hasVerifiableArtifactBinding)
 
         let runJSON = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -391,20 +381,20 @@ extension XcircuiteFlowRuntimeTests {
         let result = try JSONDecoder().decode(FlowRunResult.self, from: runData)
 
         #expect(result.status == .succeeded)
-        let toolchain = try readToolchainManifest(in: root, runID: "run-1")
+        let toolchain = try await readToolchainManifest(in: root, runID: "run-1")
         let record = try #require(toolchain.stages.first)
         let evidence = try #require(record.selectedHealth?.evidence.first)
         #expect(evidence.evidenceID == "drc-corpus-2026-06-18")
         #expect(evidence.artifact?.path == "qualification/drc-corpus-report.json")
-        #expect(evidence.artifact?.sha256 == "1111111111111111111111111111111111111111111111111111111111111111")
-        #expect(evidence.qualification?.qualified == true)
+        #expect(evidence.artifact?.sha256 == "ef3329acd2818d5731b8ad53ae2ba839d2c36430d43c316ed791bb28bf51f51d")
+        #expect(evidence.hasVerifiableArtifactBinding)
     }
 
-    @Test func evidenceExportRejectsUnsupportedSchemaVersion() throws {
+    @Test func evidenceExportRejectsUnsupportedSchemaVersion() async throws {
         let root = try makeTemporaryRoot("runtime-evidence-schema")
         defer { removeTemporaryRoot(root) }
         let exportURL = root.appending(path: "evidence.json")
-        try writeJSON(
+        try await writeJSON(
             XcircuiteFlowEvidenceExport(
                 schemaVersion: 3,
                 toolEvidence: ToolEvidence(evidenceID: "drc-corpus", kind: .corpus)
@@ -444,7 +434,7 @@ extension XcircuiteFlowRuntimeTests {
             root: root
         )
         let evidenceURL = root.appending(path: "failed-evidence.json")
-        try writeJSON(
+        try await writeJSON(
             XcircuiteFlowEvidenceExport(
                 status: "failed",
                 reportPath: "qualification/drc-corpus-report.json",
@@ -452,18 +442,13 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-failed",
                     kind: .corpus,
-                    artifact: try foundationReference(XcircuiteFileReference(
+                    artifact: try foundationReference(try fixtureArtifactReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,
                         sha256: String(repeating: "1", count: 64),
                         byteCount: 0
-                    )),
-                    qualification: ToolEvidenceQualificationSummary(
-                        qualified: false,
-                        policyID: "strict",
-                        failureCodes: ["case-failed"]
-                    )
+                    ))
                 )
             ),
             to: evidenceURL
@@ -514,7 +499,7 @@ extension XcircuiteFlowRuntimeTests {
             root: root
         )
         let evidenceURL = root.appending(path: "mismatched-evidence.json")
-        try writeJSON(
+        try await writeJSON(
             XcircuiteFlowEvidenceExport(
                 status: "passed",
                 reportPath: "qualification/drc-corpus-report.json",
@@ -522,19 +507,13 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-mismatch",
                     kind: .corpus,
-                    artifact: try foundationReference(XcircuiteFileReference(
+                    artifact: try foundationReference(try fixtureArtifactReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,
                         sha256: String(repeating: "1", count: 64),
                         byteCount: 0
-                    )),
-                    qualification: ToolEvidenceQualificationSummary(
-                        qualified: true,
-                        policyID: "strict",
-                        observedMetrics: ["passRate": 1],
-                        observedCounts: ["caseCount": 24]
-                    )
+                    ))
                 )
             ),
             to: evidenceURL
@@ -563,7 +542,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecValidationRejectsEmptyExecutorList() throws {
+    @Test func runtimeSpecValidationRejectsEmptyExecutorList() async throws {
         let spec = XcircuiteFlowRuntimeSpec(executors: [])
 
         do {
@@ -576,7 +555,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecValidationRejectsUnqualifiedCorpusEvidence() throws {
+    @Test func runtimeSpecValidationRejectsUnqualifiedCorpusEvidence() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .nativeDRC(
@@ -589,12 +568,7 @@ extension XcircuiteFlowRuntimeTests {
                             evidence: [
                                 ToolEvidence(
                                     evidenceID: "drc-corpus-unqualified",
-                                    kind: .corpus,
-                                    qualification: ToolEvidenceQualificationSummary(
-                                        qualified: false,
-                                        policyID: "strict",
-                                        failureCodes: ["case-failed"]
-                                    )
+                                    kind: .corpus
                                 ),
                             ]
                         )
@@ -610,14 +584,14 @@ extension XcircuiteFlowRuntimeTests {
             #expect(error == .invalidToolEvidence(
                 stageID: "007-drc",
                 evidenceID: "drc-corpus-unqualified",
-                reason: "corpus evidence must be qualified before runtime attachment"
+                reason: "corpus evidence requires a verifiable artifact binding"
             ))
         } catch {
             throw error
         }
     }
 
-    @Test func runtimeSpecValidationRejectsBareQualifiedCorpusEvidence() throws {
+    @Test func runtimeSpecValidationRejectsBareQualifiedCorpusEvidence() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .nativeDRC(
@@ -630,8 +604,7 @@ extension XcircuiteFlowRuntimeTests {
                             evidence: [
                                 ToolEvidence(
                                     evidenceID: "drc-corpus-bare",
-                                    kind: .corpus,
-                                    qualification: ToolEvidenceQualificationSummary(qualified: true)
+                                    kind: .corpus
                                 ),
                             ]
                         )
@@ -647,14 +620,14 @@ extension XcircuiteFlowRuntimeTests {
             #expect(error == .invalidToolEvidence(
                 stageID: "007-drc",
                 evidenceID: "drc-corpus-bare",
-                reason: "qualified evidence must include artifact, policyID, observedMetrics, or observedCounts"
+                reason: "corpus evidence requires a verifiable artifact binding"
             ))
         } catch {
             throw error
         }
     }
 
-    @Test func runtimeSpecValidationRejectsDuplicateExecutorStageIDs() throws {
+    @Test func runtimeSpecValidationRejectsDuplicateExecutorStageIDs() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .nativeDRC(
@@ -727,7 +700,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runSpecValidationRejectsEmptyStageList() throws {
+    @Test func runSpecValidationRejectsEmptyStageList() async throws {
         let spec = XcircuiteFlowRunSpec(
             runID: "run-1",
             intent: "Run nothing",
@@ -744,7 +717,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runSpecValidationRejectsDuplicateStageIDs() throws {
+    @Test func runSpecValidationRejectsDuplicateStageIDs() async throws {
         let spec = XcircuiteFlowRunSpec(
             runID: "run-1",
             intent: "Run duplicate stages",
@@ -781,7 +754,7 @@ extension XcircuiteFlowRuntimeTests {
             ),
             root: root
         )
-        let runURL = try writeRunSpec(
+        let runURL = try await writeRunSpec(
             XcircuiteFlowRunSpec(
                 runID: "run-1",
                 intent: "Validate DRC run",
@@ -828,7 +801,7 @@ extension XcircuiteFlowRuntimeTests {
             ),
             root: root
         )
-        let runURL = try writeRunSpec(
+        let runURL = try await writeRunSpec(
             XcircuiteFlowRunSpec(
                 runID: "run-1",
                 intent: "Validate missing simulation executor",
@@ -880,7 +853,7 @@ extension XcircuiteFlowRuntimeTests {
             ),
             root: root
         )
-        let runURL = try writeRunSpec(
+        let runURL = try await writeRunSpec(
             XcircuiteFlowRunSpec(
                 runID: "run-1",
                 intent: "Require qualified DRC corpus evidence",
@@ -918,7 +891,7 @@ extension XcircuiteFlowRuntimeTests {
                 && $0.diagnostics.contains { $0.code == "MISSING_REQUIRED_EVIDENCE" }
         })
 
-        let toolchain = try readToolchainManifest(in: root, runID: "run-1")
+        let toolchain = try await readToolchainManifest(in: root, runID: "run-1")
         let record = try #require(toolchain.stages.first)
         #expect(record.selectedToolID == nil)
         #expect(record.evaluations.first?.decision.status == .rejected)

@@ -11,7 +11,7 @@ public struct XcircuitePlanningRiskClassification: Codable, Sendable, Hashable {
     public var affectedActionIDs: [String]
     public var requiredApprovals: [String]
     public var mitigationActions: [String]
-    public var evidence: [String: XcircuiteJSONValue]
+    public var evidence: [String: PlanningParameterValue]
 
     public init(
         riskID: String,
@@ -23,7 +23,7 @@ public struct XcircuitePlanningRiskClassification: Codable, Sendable, Hashable {
         affectedActionIDs: [String] = [],
         requiredApprovals: [String] = [],
         mitigationActions: [String] = [],
-        evidence: [String: XcircuiteJSONValue] = [:]
+        evidence: [String: PlanningParameterValue] = [:]
     ) {
         self.riskID = riskID
         self.category = category

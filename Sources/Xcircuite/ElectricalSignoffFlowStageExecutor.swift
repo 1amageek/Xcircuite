@@ -29,7 +29,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         stage: FlowStageDefinition,
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
-        try context.checkCancellation()
+        try await context.checkCancellation()
         guard stage.stageID == stageID else {
             return failureResult(stageID: stage.stageID, code: "ELECTRICAL_SIGNOFF_STAGE_MISMATCH", message: "The configured electrical signoff stage does not match the requested stage.")
         }
@@ -37,8 +37,8 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
             return failureResult(stageID: stage.stageID, code: "ELECTRICAL_SIGNOFF_RUN_MISMATCH", message: "The electrical signoff request run ID does not match the flow run.")
         }
         do {
-            try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-            try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+            try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+            try FlowIdentifierValidator().validate(toolID, kind: .toolID)
         } catch {
             return failureResult(stageID: stage.stageID, code: "ELECTRICAL_SIGNOFF_IDENTIFIER_INVALID", message: error.localizedDescription)
         }
@@ -46,7 +46,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         let runResult: ElectricalSignoffRunResult
         do {
             runResult = try await engine.execute(request, axes: axes)
-            try context.checkCancellation()
+            try await context.checkCancellation()
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
@@ -55,12 +55,12 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
 
         var diagnostics: [FlowDiagnostic] = []
         var gates: [FlowGateResult] = []
-        let persistedRunResult = try persistRunResult(runResult, context: context)
+        let persistedRunResult = try await persistRunResult(runResult, context: context)
         let foundationEvidence = try ElectricalSignoffFoundationEvidence(
             result: runResult,
             provenance: try foundationProvenance(for: runResult, request: request)
         )
-        let persistedFoundationEvidence = try persistFoundationEvidence(
+        let persistedFoundationEvidence = try await persistFoundationEvidence(
             foundationEvidence,
             context: context
         )
@@ -108,7 +108,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         }
         let repairPlan = ElectricalSignoffRepairPlan(runResult: runResult)
         if !repairPlan.candidates.isEmpty {
-            let repairPlanReference = try persistRepairPlan(repairPlan, context: context)
+            let repairPlanReference = try await persistRepairPlan(repairPlan, context: context)
             artifacts.append(repairPlanReference)
             diagnostics.append(FlowDiagnostic(
                 severity: .warning,
@@ -163,63 +163,60 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
     private func persistRepairPlan(
         _ plan: ElectricalSignoffRepairPlan,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
-        let relativePath = "\(relativeDirectory)/repair-plan.json"
-        let fileURL = try context.storage.url(
-            forProjectRelativePath: relativePath,
-            inProjectAt: context.projectRoot
-        )
-        try context.storage.ensureDirectory(at: fileURL.deletingLastPathComponent())
-        try context.storage.writeJSON(plan, to: fileURL, forProjectAt: context.projectRoot)
-        return try StageArtifactReferenceBuilder().reference(
-            for: fileURL,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await persist(
+            plan,
             artifactID: "electrical-signoff-repair-plan",
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            fileName: "repair-plan.json",
+            context: context
         )
     }
 
     private func persistRunResult(
         _ runResult: ElectricalSignoffRunResult,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
-        let relativePath = "\(relativeDirectory)/run-result.json"
-        let fileURL = try context.storage.url(
-            forProjectRelativePath: relativePath,
-            inProjectAt: context.projectRoot
-        )
-        try context.storage.ensureDirectory(at: fileURL.deletingLastPathComponent())
-        try context.storage.writeJSON(runResult, to: fileURL, forProjectAt: context.projectRoot)
-        return try StageArtifactReferenceBuilder().reference(
-            for: fileURL,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await persist(
+            runResult,
             artifactID: "electrical-signoff-run-result",
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            fileName: "run-result.json",
+            context: context
         )
     }
 
     private func persistFoundationEvidence(
         _ evidence: ElectricalSignoffFoundationEvidence,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let relativeDirectory = ".xcircuite/runs/\(context.runID)/electrical-signoff"
-        let relativePath = "\(relativeDirectory)/foundation-evidence.json"
-        let fileURL = try context.storage.url(
-            forProjectRelativePath: relativePath,
-            inProjectAt: context.projectRoot
-        )
-        try context.storage.ensureDirectory(at: fileURL.deletingLastPathComponent())
-        try context.storage.writeJSON(evidence, to: fileURL, forProjectAt: context.projectRoot)
-        return try StageArtifactReferenceBuilder().reference(
-            for: fileURL,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await persist(
+            evidence,
             artifactID: "electrical-signoff-foundation-evidence",
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            fileName: "foundation-evidence.json",
+            context: context
+        )
+    }
+
+    private func persist<Value: Encodable>(
+        _ value: Value,
+        artifactID: String,
+        fileName: String,
+        context: FlowExecutionContext
+    ) async throws -> ArtifactReference {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try await context.infrastructure.persistArtifact(
+            content: encoder.encode(value),
+            id: ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(context.runID)/electrical-signoff/\(fileName)"
+                ),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            runID: context.runID,
+            mode: .replaceable
         )
     }
 

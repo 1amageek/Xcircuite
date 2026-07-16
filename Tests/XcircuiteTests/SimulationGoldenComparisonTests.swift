@@ -5,7 +5,7 @@ import XcircuiteFlowCLISupport
 
 @Suite("Simulation golden comparison", .timeLimit(.minutes(1)))
 struct SimulationGoldenComparisonTests {
-    @Test func serviceComparesGoldenWaveformAndRecordsWorstPoint() throws {
+    @Test func serviceComparesGoldenWaveformAndRecordsWorstPoint() async throws {
         let golden = """
         time,V(out),I(vdd)
         0,0,0
@@ -45,7 +45,7 @@ struct SimulationGoldenComparisonTests {
         #expect(comparison.worstPoint?.candidateValue == 0.97)
     }
 
-    @Test func serviceFailsGateForMissingVariableAndToleranceViolation() throws {
+    @Test func serviceFailsGateForMissingVariableAndToleranceViolation() async throws {
         let golden = """
         time,V(out),I(vdd)
         0,0,0
@@ -77,7 +77,7 @@ struct SimulationGoldenComparisonTests {
         })
     }
 
-    @Test func serviceFailsGateForPartialCandidateSweepCoverageByDefault() throws {
+    @Test func serviceFailsGateForPartialCandidateSweepCoverageByDefault() async throws {
         let golden = """
         time,V(out)
         0,0
@@ -101,7 +101,7 @@ struct SimulationGoldenComparisonTests {
         #expect(report.diagnostics.contains { $0.contains("Candidate sweep has insufficient increasing points") })
     }
 
-    @Test func serviceFailsGateForMissingGoldenVariableByDefault() throws {
+    @Test func serviceFailsGateForMissingGoldenVariableByDefault() async throws {
         let golden = """
         time,V(out),I(vdd)
         0,0,0
@@ -123,7 +123,7 @@ struct SimulationGoldenComparisonTests {
         #expect(report.gateViolations.contains { $0.contains("missing golden variable I(vdd)") })
     }
 
-    @Test func serviceMatchesWaveformVariablesCaseInsensitively() throws {
+    @Test func serviceMatchesWaveformVariablesCaseInsensitively() async throws {
         let golden = """
         time,V(out)
         0,0
@@ -146,7 +146,7 @@ struct SimulationGoldenComparisonTests {
         #expect(report.comparedVariables.map(\.variableName) == ["V(out)"])
     }
 
-    @Test func serviceFailsGateWhenNoNumericToleranceIsConfigured() throws {
+    @Test func serviceFailsGateWhenNoNumericToleranceIsConfigured() async throws {
         let golden = """
         time,V(out)
         0,0
@@ -214,7 +214,7 @@ struct SimulationGoldenComparisonTests {
         #expect(persistedReport.comparedVariables.first?.variableName == "V(out)")
     }
 
-    @Test func actionDomainSnapshotIncludesGoldenComparisonOperation() throws {
+    @Test func actionDomainSnapshotIncludesGoldenComparisonOperation() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "simulation-golden-action-domain",
             generatedAt: "2026-06-29T00:00:00Z"

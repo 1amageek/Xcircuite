@@ -1,10 +1,10 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 import Darwin
@@ -14,12 +14,19 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func runSymbolicPlannerSolverFamilyBatchPersistsPlannerFamilyCertificateFixtures() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-certificate-fixtures")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
-    let store = XcircuiteWorkspaceStore()
+    _ = try await exportSymbolicPlannerProblem(
+        root: root,
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
     let fastDownwardSolverURL = root.appending(path: "fast-downward-family-symbolic-planner.sh")
     try writeMockPlanner(to: fastDownwardSolverURL, planText: "0.000: (a-fix-m1-width) [1.000]\n")
     let metricFFSolverURL = root.appending(path: "metric-ff-family-symbolic-planner.sh")
@@ -28,7 +35,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     let certificateDirectory = root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/certificates")
     try FileManager.default.createDirectory(at: certificateDirectory, withIntermediateDirectories: true)
     let fastDownwardCertificatePath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/certificates/fast-downward.txt"
-    try store.writeText(
+    try await store.writeWorkspaceText(
         """
         Fast Downward 24.06
         Solution found.
@@ -38,10 +45,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         Best solution cost so far: 1
         Actual search time: 0.01s
         """,
-        to: root.appending(path: fastDownwardCertificatePath)
+        to: fastDownwardCertificatePath
     )
     let metricFFCertificatePath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/certificates/metric-ff.txt"
-    try store.writeText(
+    try await store.writeWorkspaceText(
         """
         Metric-FF v2.1
         ff: found legal plan as follows
@@ -49,7 +56,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         plan length: 1
         plan cost: 1
         """,
-        to: root.appending(path: metricFFCertificatePath)
+        to: metricFFCertificatePath
     )
 
     let spec = XcircuiteSymbolicPlannerSolverFamilyBatchRequest(
@@ -79,7 +86,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         promoteSelectedPlan: false
     )
     let specURL = root.appending(path: "solver-family-certificate-fixtures.json")
-    try store.writeJSON(spec, to: specURL, forProjectAt: root)
+    try writeJSONFile(spec, to: specURL)
 
     let json = try await XcircuiteFlowCLICommand.run(
         arguments: [
@@ -107,18 +114,18 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     })
     #expect(result.comparisonResult.comparison.candidates[0].selectionScore > result.comparisonResult.comparison.candidates[1].selectionScore)
 
-    let fastDownwardSnapshot = try store.readJSON(
+    let fastDownwardSnapshot = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverCertificateParseResult.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-certificate-fixtures/candidates/candidate-0-fast-downward/solver-certificate.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-certificate-fixtures/candidates/candidate-0-fast-downward/solver-certificate.json"
     )
     #expect(fastDownwardSnapshot.certificate?.solverFamily == "fast-downward")
     #expect(fastDownwardSnapshot.certificate?.optimalityStatus == "optimal")
     #expect(fastDownwardSnapshot.certificate?.lowerBound == 1)
     #expect(fastDownwardSnapshot.certificate?.upperBound == 1)
 
-    let metricFFSnapshot = try store.readJSON(
+    let metricFFSnapshot = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverCertificateParseResult.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-certificate-fixtures/candidates/candidate-1-metric-ff/solver-certificate.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-certificate-fixtures/candidates/candidate-1-metric-ff/solver-certificate.json"
     )
     #expect(metricFFSnapshot.certificate?.solverFamily == "metric-ff")
     #expect(metricFFSnapshot.certificate?.optimalityStatus == nil)
@@ -128,7 +135,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func discoverInstalledSymbolicPlannerSolversCLIWritesLaneArtifactAndBatchSpec() async throws {
     let root = try makeTemporaryRoot("installed-symbolic-planner-lane")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
     let binURL = root.appending(path: "bin")
     try FileManager.default.createDirectory(at: binURL, withIntermediateDirectories: true)
     let fastDownwardURL = binURL.appending(path: "fast-downward.py")
@@ -167,15 +181,15 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.lane.batchRequest?.candidates.first?.requireNativeCertificate == true)
     #expect(result.laneArtifact.artifactID == "\(XcircuitePlanningArtifactStore.symbolicPlannerInstalledSolverLaneArtifactID)-installed-fixture-lane")
 
-    let persistedLane = try XcircuiteWorkspaceStore().readJSON(
+    let persistedLane = try await store.readJSON(
         XcircuiteSymbolicPlannerInstalledSolverLane.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/installed-solver-lane.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/installed-solver-lane.json"
     )
     #expect(persistedLane.batchRequest?.candidates.count == 1)
 
-    let writtenBatchSpec = try XcircuiteWorkspaceStore().readJSON(
+    let writtenBatchSpec = try JSONDecoder().decode(
         XcircuiteSymbolicPlannerSolverFamilyBatchRequest.self,
-        from: batchSpecURL
+        from: Data(contentsOf: batchSpecURL)
     )
     #expect(writtenBatchSpec.comparisonID == "installed-fixture-lane")
     #expect(writtenBatchSpec.candidates.map(\.toolID) == ["fast-downward"])
@@ -184,7 +198,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func discoverInstalledSymbolicPlannerSolversPrefersLaterExecutableOverEarlierNonExecutableFile() async throws {
     let root = try makeTemporaryRoot("installed-symbolic-planner-lane-path-priority")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
     let staleBinURL = root.appending(path: "stale-bin")
     let workingBinURL = root.appending(path: "working-bin")
     try FileManager.default.createDirectory(at: staleBinURL, withIntermediateDirectories: true)
@@ -243,9 +264,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         ],
         promoteSelectedPlan: false
     )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner().run(
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).run(
             request: request,
             projectRoot: root
         )
@@ -269,9 +295,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         ],
         promoteSelectedPlan: false
     )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner().run(
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).run(
             request: request,
             projectRoot: root
         )
@@ -296,9 +327,14 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         ],
         promoteSelectedPlan: false
     )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner().run(
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).run(
             request: request,
             projectRoot: root
         )
@@ -315,12 +351,19 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func compareAndPromoteSymbolicPlannerSolverFamilyCLISelectsQualifiedCertificate() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-comparison")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
-    let store = XcircuiteWorkspaceStore()
+    _ = try await exportSymbolicPlannerProblem(
+        root: root,
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
     let solverURL = root.appending(path: "family-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let failedSolverURL = root.appending(path: "failed-family-symbolic-planner.sh")
@@ -348,19 +391,18 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     qualified.qualificationArtifact = nil
     let qualifiedSolverPlanPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family-inputs/qualified-solver-plan.txt"
-    try FileManager.default.createDirectory(
-        at: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family-inputs"),
-        withIntermediateDirectories: true
+    let qualifiedSolverPlanRef = try await store.persistArtifact(
+        content: Data("0.000: (a-fix-m1-width) [1.000]\n".utf8),
+        id: try ArtifactID(rawValue: "qualified-family-solver-plan-input"),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: qualifiedSolverPlanPath),
+            role: .output,
+            kind: .other,
+            format: .text
+        ),
+        runID: "run-pddl",
+        mode: .replaceable
     )
-    try store.writeText("0.000: (a-fix-m1-width) [1.000]\n", to: root.appending(path: qualifiedSolverPlanPath))
-    let qualifiedSolverPlanLegacyRef = try store.fileReference(
-        forProjectRelativePath: qualifiedSolverPlanPath,
-        kind: .other,
-        format: .text,
-        inProjectAt: root,
-        producedByRunID: "run-pddl"
-    )
-    let qualifiedSolverPlanRef = try foundationReference(qualifiedSolverPlanLegacyRef)
     qualified.solverResult.solverPlanArtifact = qualifiedSolverPlanRef
     if var importResult = qualified.solverResult.importResult {
         importResult.solverPlanArtifact = qualifiedSolverPlanRef
@@ -393,8 +435,8 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try FileManager.default.createDirectory(at: inputDirectory, withIntermediateDirectories: true)
     let qualifiedPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family-inputs/qualified.json"
     let failedPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family-inputs/failed.json"
-    try store.writeJSON(qualified, to: root.appending(path: qualifiedPath), forProjectAt: root)
-    try store.writeJSON(failed, to: root.appending(path: failedPath), forProjectAt: root)
+    try await store.writeJSON(qualified, to: qualifiedPath)
+    try await store.writeJSON(failed, to: failedPath)
 
     let comparisonJSON = try await XcircuiteFlowCLICommand.run(
         arguments: [
@@ -432,15 +474,12 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.comparison.candidates[0].selectionScore > result.comparison.candidates[1].selectionScore)
     #expect(result.comparisonArtifact.artifactID == "\(XcircuitePlanningArtifactStore.symbolicPlannerSolverFamilyComparisonArtifactID)-solver-family-regression")
 
-    let persisted = try store.readJSON(
+    let persisted = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverFamilyComparison.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-regression/solver-family-comparison.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-regression/solver-family-comparison.json"
     )
     #expect(persisted.selectedToolID == "mock-qualified-family-planner")
-    let manifest = try store.readJSON(
-        XcircuiteRunManifest.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    )
+    let manifest = (try await store.loadRunLedger(runID: "run-pddl")).runManifest
     #expect(manifest.artifacts.contains {
         $0.artifactID == "\(XcircuitePlanningArtifactStore.symbolicPlannerSolverFamilyComparisonArtifactID)-solver-family-regression"
     })
@@ -472,9 +511,9 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(promotionResult.promotion.diagnostics.map(\.code) == ["promoted-plan-verification-not-accepted"])
     #expect(promotionResult.promotionArtifact.artifactID == "\(XcircuitePlanningArtifactStore.symbolicPlannerSolverFamilyPromotionArtifactID)-solver-family-regression")
 
-    let promotedPlan = try store.readJSON(
+    let promotedPlan = try await store.readJSON(
         XcircuiteCandidatePlan.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/candidate-plan.json")
+        from: ".xcircuite/runs/run-pddl/planning/candidate-plan.json"
     )
     #expect(promotedPlan.steps.map(\.actionID) == ["fix-m1-width"])
     let promotedSolverPlanText = try String(
@@ -482,10 +521,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         encoding: .utf8
     )
     #expect(promotedSolverPlanText == "0.000: (a-fix-m1-width) [1.000]\n")
-    let promotedManifest = try store.readJSON(
-        XcircuiteRunManifest.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    )
+    let promotedManifest = (try await store.loadRunLedger(runID: "run-pddl")).runManifest
     #expect(promotedManifest.artifacts.contains {
         $0.artifactID == "\(XcircuitePlanningArtifactStore.symbolicPlannerSolverFamilyPromotionArtifactID)-solver-family-regression"
     })
@@ -494,12 +530,19 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func runSymbolicPlannerSolverFamilyBatchCLIQualifiesComparesAndPromotes() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-batch")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
-    let store = XcircuiteWorkspaceStore()
+    _ = try await exportSymbolicPlannerProblem(
+        root: root,
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
     let qualifiedSolverURL = root.appending(path: "batch-qualified-symbolic-planner.sh")
     try writeMockPlanner(to: qualifiedSolverURL, planText: "0.000: (a-fix-m1-width) [1.000]\n")
     let failedSolverURL = root.appending(path: "batch-failed-symbolic-planner.sh")
@@ -523,7 +566,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         ]
     )
     let specURL = root.appending(path: "solver-family-batch-spec.json")
-    try store.writeJSON(spec, to: specURL, forProjectAt: root)
+    try writeJSONFile(spec, to: specURL)
 
     let batchJSON = try await XcircuiteFlowCLICommand.run(
         arguments: [
@@ -561,9 +604,9 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
     let selectedQualification = result.comparisonResult.comparison.selectedQualificationArtifact
     #expect(selectedQualification?.path.contains("/candidates/candidate-0-qualified/solver-qualification.json") == true)
-    let qualifiedSnapshot = try store.readJSON(
+    let qualifiedSnapshot = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverQualificationResult.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-batch-regression/candidates/candidate-0-qualified/solver-qualification.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-family/solver-family-batch-regression/candidates/candidate-0-qualified/solver-qualification.json"
     )
     #expect(qualifiedSnapshot.qualificationArtifact == nil)
     #expect(qualifiedSnapshot.toolHealth.evidence.first?.artifact == nil)
@@ -574,9 +617,9 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     #expect(qualifiedSolverPlanText == "0.000: (a-fix-m1-width) [1.000]\n")
 
-    let promotedPlan = try store.readJSON(
+    let promotedPlan = try await store.readJSON(
         XcircuiteCandidatePlan.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/candidate-plan.json")
+        from: ".xcircuite/runs/run-pddl/planning/candidate-plan.json"
     )
     #expect(promotedPlan.steps.map(\.actionID) == ["fix-m1-width"])
     let promotedSolverPlanText = try String(
@@ -585,10 +628,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
     #expect(promotedSolverPlanText == "0.000: (a-fix-m1-width) [1.000]\n")
 
-    let manifest = try store.readJSON(
-        XcircuiteRunManifest.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    )
+    let manifest = (try await store.loadRunLedger(runID: "run-pddl")).runManifest
     let promotionArtifactID = try #require(result.promotionResult?.promotionArtifact.artifactID)
     let qualifiedSolverPlanArtifactID = try #require(qualifiedCandidate.solverPlanArtifact?.artifactID)
     #expect(manifest.artifacts.contains { $0.artifactID == result.batchArtifact.artifactID })
@@ -601,17 +641,25 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func qualifySymbolicPlannerSolverValidatesProofArtifactWithExternalChecker() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-proof-validation")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
+    _ = try await exportSymbolicPlannerProblem(
+        root: root,
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
     let solverURL = root.appending(path: "proof-qualified-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "Optimal solution found\\n0.000: (a-fix-m1-width) [1.000]\\n")
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
-    try XcircuiteWorkspaceStore().writeText(
+    try await store.writeWorkspaceText(
         "proof-ok\n",
-        to: root.appending(path: proofPath)
+        to: proofPath
     )
     let checkerURL = root.appending(path: "proof-checker.sh")
     try writeMockProofChecker(to: checkerURL, expectedText: "proof-ok", success: true)
@@ -651,23 +699,21 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.proofValidation?.standardErrorArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerProofValidationStderrArtifactID)
     #expect(result.proofValidationArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerProofValidationArtifactID)
     #expect(result.toolHealth.status == .passed)
-    let evidence = try #require(result.toolHealth.evidence.first?.qualification)
-    #expect(evidence.observedCounts["proofValidationAttemptCount"] == 1)
-    #expect(evidence.observedCounts["proofValidationValidatedCount"] == 1)
-    #expect(evidence.observedCounts["proofValidationErrorCount"] == 0)
-    #expect(evidence.failureCodes == [])
+    let evidence = try #require(result.toolHealth.evidence.first)
+    #expect(evidence.kind == .corpus)
+    #expect(evidence.artifact == result.qualificationArtifact)
+    #expect(evidence.hasVerifiableArtifactBinding)
+    #expect(result.proofValidation != nil)
+    #expect(result.proofValidation?.diagnostics.contains { $0.severity == "error" } == false)
 
-    let persistedValidation = try XcircuiteWorkspaceStore().readJSON(
+    let persistedValidation = try await store.readJSON(
         XcircuiteSymbolicPlannerProofValidation.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/proof-validation.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/proof-validation.json"
     )
     #expect(persistedValidation.status == "validated")
     #expect(persistedValidation.standardOutputArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerProofValidationStdoutArtifactID)
 
-    let manifest = try XcircuiteWorkspaceStore().readJSON(
-        XcircuiteRunManifest.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    )
+    let manifest = (try await store.loadRunLedger(runID: "run-pddl")).runManifest
     let artifactIDs = Set(manifest.artifacts.map(\.artifactID))
     #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerProofValidationArtifactID))
     #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerProofValidationStdoutArtifactID))
@@ -677,22 +723,33 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func qualifySymbolicPlannerSolverFailsWhenProofCheckerRejectsArtifact() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-proof-validation-fail")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
+    _ = try await exportSymbolicPlannerProblem(
+        root: root,
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
     let solverURL = root.appending(path: "proof-rejected-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
     let proofPath = ".xcircuite/runs/run-pddl/planning/symbolic-planner/solver-proof.txt"
-    try XcircuiteWorkspaceStore().writeText(
+    try await store.writeWorkspaceText(
         "proof-bad\n",
-        to: root.appending(path: proofPath)
+        to: proofPath
     )
     let checkerURL = root.appending(path: "rejecting-proof-checker.sh")
     try writeMockProofChecker(to: checkerURL, expectedText: "proof-ok", success: false)
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).qualify(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest(
             runID: "run-pddl",
             toolID: "mock-proof-rejected-planner",
@@ -712,29 +769,33 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.diagnostics.contains {
         $0.code == "proof-validation-proof-checker-non-zero-exit"
     })
-    let evidence = try #require(result.toolHealth.evidence.first?.qualification)
-    #expect(evidence.qualified == false)
-    #expect(evidence.observedCounts["proofValidationAttemptCount"] == 1)
-    #expect(evidence.observedCounts["proofValidationValidatedCount"] == 0)
-    #expect(evidence.observedCounts["proofValidationErrorCount"] == 1)
-    #expect(evidence.failureCodes.contains("proof-validation-proof-checker-non-zero-exit"))
+    let evidence = try #require(result.toolHealth.evidence.first)
+    #expect(evidence.kind == .corpus)
+    #expect(evidence.artifact == result.qualificationArtifact)
+    #expect(evidence.hasVerifiableArtifactBinding)
+    #expect(result.proofValidation != nil)
+    #expect(result.proofValidation?.diagnostics.contains {
+        $0.code == "proof-checker-non-zero-exit"
+    } == true)
 }
 
 @Test func qualifySymbolicPlannerSolverFailsWhenSolverCostClaimDoesNotMatchEvaluatedCost() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-cost-policy-fail")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
-    )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(root: root, runID: "run-pddl", workspaceStore: store, artifactStore: artifactStore)
+    _ = try await exportSymbolicPlannerProblem(root: root, workspaceStore: store, artifactStore: artifactStore)
     let solverURL = root.appending(path: "expensive-symbolic-planner.sh")
     try writeMockPlanner(
         to: solverURL,
         planText: "Optimal solution found\\n0.000: (a-fix-m1-width) [1.000]\\ncost = 4 (unit cost)\\n"
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).qualify(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest(
             runID: "run-pddl",
             toolID: "mock-expensive-planner",
@@ -752,26 +813,28 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.planCostEvaluation?.evaluatedCost == 1)
     #expect(result.diagnostics.contains { $0.code == "solver-cost-claim-mismatch" })
     #expect(!result.diagnostics.contains { $0.code == "solver-cost-exceeds-bound" })
-    #expect(result.toolHealth.evidence.first?.qualification?.failureCodes.contains("solver-cost-claim-mismatch") == true)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["solverClaimPlanCost"] == 4)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["evaluatedPlanCost"] == 1)
+    #expect(result.toolHealth.diagnostics.contains { $0.code == "solver-cost-claim-mismatch" })
+    #expect(result.solverMetadata?.planCost == 4)
+    #expect(result.planCostEvaluation?.evaluatedCost == 1)
 }
 
 @Test func qualifySymbolicPlannerSolverFailsWhenEvaluatedCostExceedsBound() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-evaluated-cost-policy-fail")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
-    )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(root: root, runID: "run-pddl", workspaceStore: store, artifactStore: artifactStore)
+    _ = try await exportSymbolicPlannerProblem(root: root, workspaceStore: store, artifactStore: artifactStore)
     let solverURL = root.appending(path: "two-step-symbolic-planner.sh")
     try writeMockPlanner(
         to: solverURL,
         planText: "Optimal solution found\\n0.000: (a-fix-m1-width) [1.000]\\n1.000: (a-fix-m1-width) [1.000]\\nplan length: 2\\ncost = 2 (unit cost)\\n"
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).qualify(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest(
             runID: "run-pddl",
             toolID: "mock-two-step-planner",
@@ -789,25 +852,33 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.planCostEvaluation?.planLength == 2)
     #expect(result.planCostEvaluation?.evaluatedCost == 2)
     #expect(result.diagnostics.contains { $0.code == "solver-cost-exceeds-bound" })
-    #expect(result.toolHealth.evidence.first?.qualification?.failureCodes.contains("solver-cost-exceeds-bound") == true)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["evaluatedPlanCost"] == 2)
+    #expect(result.toolHealth.diagnostics.contains { $0.code == "solver-cost-exceeds-bound" })
+    #expect(result.planCostEvaluation?.evaluatedCost == 2)
 }
 
 @Test func qualifySymbolicPlannerSolverFailsWhenReplayPreconditionsAreUnsatisfied() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-replay-policy-fail")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl", includeViolationAtom: false)
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: "run-pddl",
+        includeViolationAtom: false,
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
+    _ = try await exportSymbolicPlannerProblem(root: root, workspaceStore: store, artifactStore: artifactStore)
     let solverURL = root.appending(path: "invalid-replay-symbolic-planner.sh")
     try writeMockPlanner(
         to: solverURL,
         planText: "Optimal solution found\\n0.000: (a-fix-m1-width) [1.000]\\ncost = 1 (unit cost)\\n"
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).qualify(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest(
             runID: "run-pddl",
             toolID: "mock-invalid-replay-planner",
@@ -825,28 +896,32 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.planReplayValidation?.missingGoalAtoms == ["drc-width-fixed"])
     #expect(result.diagnostics.contains { $0.code == "plan-replay-preconditions-unsatisfied" })
     #expect(result.diagnostics.contains { $0.code == "plan-replay-goals-unsatisfied" })
-    #expect(result.toolHealth.evidence.first?.qualification?.failureCodes.contains("plan-replay-preconditions-unsatisfied") == true)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedCounts["planReplayErrorCount"] == 2)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedCounts["planReplayMissingPreconditionAtomCount"] == 1)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedCounts["planReplayMissingGoalAtomCount"] == 1)
+    #expect(result.toolHealth.diagnostics.contains { $0.code == "plan-replay-preconditions-unsatisfied" })
+    #expect(result.planReplayValidation?.diagnostics.filter { $0.severity == "error" }.count == 2)
+    #expect(result.planReplayValidation?.steps.reduce(0) {
+        $0 + $1.missingPreconditionAtoms.count
+    } == 1)
+    #expect(result.planReplayValidation?.missingGoalAtoms.count == 1)
     #expect(result.planReplayValidationArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerPlanReplayValidationArtifactID)
 }
 
 @Test func qualifySymbolicPlannerSolverFailsWhenOptimalityIsRequiredButMissing() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-optimality-policy-fail")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
-    )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(root: root, runID: "run-pddl", workspaceStore: store, artifactStore: artifactStore)
+    _ = try await exportSymbolicPlannerProblem(root: root, workspaceStore: store, artifactStore: artifactStore)
     let solverURL = root.appending(path: "satisficing-symbolic-planner.sh")
     try writeMockPlanner(
         to: solverURL,
         planText: "Satisficing solution found\\n0.000: (a-fix-m1-width) [1.000]\\ncost = 1 (unit cost)\\n"
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).qualify(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest(
             runID: "run-pddl",
             toolID: "mock-satisficing-planner",
@@ -861,22 +936,24 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.status == "failed")
     #expect(result.solverMetadata?.optimalityStatus == "satisficing")
     #expect(result.diagnostics.contains { $0.code == "optimality-not-qualified" })
-    #expect(result.toolHealth.evidence.first?.qualification?.failureCodes.contains("optimality-not-qualified") == true)
-    #expect(result.toolHealth.evidence.first?.qualification?.observedCounts["solverOptimalityClaimCount"] == 0)
+    #expect(result.toolHealth.diagnostics.contains { $0.code == "optimality-not-qualified" })
+    #expect(result.solverMetadata?.optimalityStatus != "optimal")
 }
 
 @Test func qualifySymbolicPlannerSolverFailsWhenExpectedActionIsMissing() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-qualification-fail")
     defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
-        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
-        projectRoot: root
-    )
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(root: root, runID: "run-pddl", workspaceStore: store, artifactStore: artifactStore)
+    _ = try await exportSymbolicPlannerProblem(root: root, workspaceStore: store, artifactStore: artifactStore)
     let solverURL = root.appending(path: "wrong-symbolic-planner.sh")
     try writeMockPlanner(to: solverURL, planText: "0.000: (a-fix-m1-width) [1.000]\\n")
 
-    let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+    let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).qualify(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest(
             runID: "run-pddl",
             toolID: "mock-failing-planner",
@@ -891,22 +968,25 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.observedActionIDs == ["fix-m1-width"])
     #expect(result.goalCoverageStatus == "covered")
     #expect(result.diagnostics.contains { $0.code == "expected-actions-missing" })
-    #expect(result.toolHealth.evidence.first?.qualification?.qualified == false)
-    #expect(result.toolHealth.evidence.first?.qualification?.failureCodes.contains("expected-actions-missing") == true)
+    #expect(result.toolHealth.evidence.first?.kind == .corpus)
+    #expect(result.toolHealth.diagnostics.contains { $0.code == "expected-actions-missing" })
     #expect(result.qualificationArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationArtifactID)
 }
 
 @Test func promoteSymbolicPlannerSolverFamilyRejectsMismatchedComparisonID() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-promotion-mismatched-comparison")
     defer { removeTemporaryRoot(root) }
-    let fixture = try preparePromotionFixture(
+    let fixture = try await preparePromotionFixture(
         root: root,
         runID: "run-pddl",
         comparisonID: "actual-comparison"
     )
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter().promote(
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter(
+            workspaceStore: fixture.workspaceStore,
+            artifactStore: fixture.artifactStore
+        ).promote(
             request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest(
                 runID: "run-pddl",
                 comparisonID: "expected-comparison",
@@ -927,18 +1007,19 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 @Test func promoteSymbolicPlannerSolverFamilyRejectsAmbiguousCanonicalManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-promotion-duplicate-comparison")
     defer { removeTemporaryRoot(root) }
-    let fixture = try preparePromotionFixture(
+    let fixture = try await preparePromotionFixture(
         root: root,
         runID: "run-pddl",
         comparisonID: "duplicate-comparison"
     )
-    let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    try XcircuiteRunManifestTamper.append([fixture.comparisonArtifact], to: manifestURL)
+    let ledgerURL = root.appending(path: ".xcircuite/runs/run-pddl/ledger.json")
+    try XcircuiteRunLedgerTamper.append([fixture.comparisonArtifact], to: ledgerURL)
 
-    await #expect(throws: XcircuiteWorkspaceError.decodeFailed(
-        "manifest.json: Invalid run manifest for run-pddl: artifact path '\(fixture.comparisonArtifact.path)' must be unique."
-    )) {
-        _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter().promote(
+    do {
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter(
+            workspaceStore: fixture.workspaceStore,
+            artifactStore: fixture.artifactStore
+        ).promote(
             request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest(
                 runID: "run-pddl",
                 comparisonID: "duplicate-comparison",
@@ -946,38 +1027,53 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             ),
             projectRoot: root
         )
+        Issue.record("Expected an invalid run ledger error.")
+    } catch let error as FlowRunLedgerPersistenceError {
+        guard case .storageFailed(let reason) = error else {
+            Issue.record("Expected storageFailed, got \(error).")
+            return
+        }
+        #expect(reason.contains("must be unique"))
     }
 }
 
 @Test func compareSymbolicPlannerSolverFamilyRejectsAmbiguousCanonicalManifest() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-duplicate-qualification")
     defer { removeTemporaryRoot(root) }
-    let fixture = try preparePromotionFixture(
+    let fixture = try await preparePromotionFixture(
         root: root,
         runID: "run-pddl",
         comparisonID: "duplicate-qualification"
     )
-    let manifestURL = root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    try XcircuiteRunManifestTamper.append([fixture.qualificationArtifact], to: manifestURL)
+    let ledgerURL = root.appending(path: ".xcircuite/runs/run-pddl/ledger.json")
+    try XcircuiteRunLedgerTamper.append([fixture.qualificationArtifact], to: ledgerURL)
 
-    #expect(throws: XcircuiteWorkspaceError.decodeFailed(
-        "manifest.json: Invalid run manifest for run-pddl: artifact path '\(fixture.qualificationArtifact.path)' must be unique."
-    )) {
-        _ = try XcircuiteSymbolicPlannerSolverFamilyComparator().compare(
+    do {
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyComparator(
+            workspaceStore: fixture.workspaceStore,
+            artifactStore: fixture.artifactStore
+        ).compare(
             request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest(
                 runID: "run-pddl",
                 comparisonID: "duplicate-qualification-comparison",
-                qualificationArtifactIDs: [fixture.qualificationArtifact.artifactID].compactMap { $0 }
+                qualificationArtifactIDs: [fixture.qualificationArtifact.artifactID]
             ),
             projectRoot: root
         )
+        Issue.record("Expected an invalid run ledger error.")
+    } catch let error as FlowRunLedgerPersistenceError {
+        guard case .storageFailed(let reason) = error else {
+            Issue.record("Expected storageFailed, got \(error).")
+            return
+        }
+        #expect(reason.contains("must be unique"))
     }
 }
 
 @Test func promoteSymbolicPlannerSolverFamilyRejectsTamperedQualificationArtifact() async throws {
     let root = try makeTemporaryRoot("symbolic-planner-solver-family-promotion-tampered-qualification")
     defer { removeTemporaryRoot(root) }
-    let fixture = try preparePromotionFixture(
+    let fixture = try await preparePromotionFixture(
         root: root,
         runID: "run-pddl",
         comparisonID: "tampered-qualification"
@@ -986,7 +1082,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     try "tampered".write(to: tamperedQualificationURL, atomically: true, encoding: .utf8)
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter().promote(
+        _ = try await XcircuiteSymbolicPlannerSolverFamilyPromoter(
+            workspaceStore: fixture.workspaceStore,
+            artifactStore: fixture.artifactStore
+        ).promote(
             request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest(
                 runID: "run-pddl",
                 comparisonID: "tampered-qualification",
@@ -1010,24 +1109,28 @@ private func preparePromotionFixture(
     root: URL,
     runID: String,
     comparisonID: String
-) throws -> PromotionFixture {
-    try prepareRun(root: root, runID: runID)
-    let store = XcircuiteWorkspaceStore()
-    let artifactStore = XcircuitePlanningArtifactStore()
+) async throws -> PromotionFixture {
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareRun(
+        root: root,
+        runID: runID,
+        workspaceStore: store,
+        artifactStore: artifactStore
+    )
     let solverPlanPath = ".xcircuite/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/fixture-solver-plan.txt"
-    try FileManager.default.createDirectory(
-        at: root.appending(path: ".xcircuite/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)"),
-        withIntermediateDirectories: true
+    let solverPlanReference = try await store.persistArtifact(
+        content: Data("0.000: (a-fix-m1-width) [1.000]\n".utf8),
+        id: try ArtifactID(rawValue: "\(comparisonID)-fixture-solver-plan"),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: solverPlanPath),
+            role: .output,
+            kind: .other,
+            format: .text
+        ),
+        runID: runID,
+        mode: .replaceable
     )
-    try store.writeText("0.000: (a-fix-m1-width) [1.000]\n", to: root.appending(path: solverPlanPath))
-    let solverPlanLegacyReference = try store.fileReference(
-        forProjectRelativePath: solverPlanPath,
-        kind: .other,
-        format: .text,
-        inProjectAt: root,
-        producedByRunID: runID
-    )
-    let solverPlanReference = try foundationReference(solverPlanLegacyReference)
     let candidatePlan = XcircuiteCandidatePlan(
         planID: "fixture-plan",
         problemID: "\(runID)-problem",
@@ -1068,9 +1171,9 @@ private func preparePromotionFixture(
         problemID: "\(runID)-problem",
         planID: "fixture-plan",
         importedActionCount: 1,
-        solverPlanArtifact: try foundationReference(solverPlanLegacyReference),
-        pddlExportArtifact: try foundationReference(solverPlanLegacyReference),
-        candidatePlanArtifact: try foundationReference(solverPlanLegacyReference),
+        solverPlanArtifact: solverPlanReference,
+        pddlExportArtifact: solverPlanReference,
+        candidatePlanArtifact: solverPlanReference,
         candidatePlan: candidatePlan,
         diagnostics: []
     )
@@ -1105,7 +1208,7 @@ private func preparePromotionFixture(
         toolHealth: ToolHealthCheckResult(toolID: "fixture-symbolic-planner", status: .passed),
         diagnostics: []
     )
-    let qualificationArtifact = try artifactStore.persistSymbolicPlannerSolverFamilyQualification(
+    let qualificationArtifact = try await artifactStore.persistSymbolicPlannerSolverFamilyQualification(
         qualification,
         runID: runID,
         comparisonID: comparisonID,
@@ -1136,7 +1239,7 @@ private func preparePromotionFixture(
         solverExitCode: 0,
         didTimeout: false,
         didCancel: false,
-        qualificationArtifact: try foundationReference(qualificationArtifact),
+        qualificationArtifact: qualificationArtifact,
         planVerificationArtifact: nil,
         diagnostics: []
     )
@@ -1145,30 +1248,54 @@ private func preparePromotionFixture(
         runID: runID,
         comparisonID: comparisonID,
         selectionPolicy: "qualified-first",
-        requestedQualificationArtifactIDs: [qualificationArtifact.artifactID].compactMap { $0 },
+        requestedQualificationArtifactIDs: [qualificationArtifact.artifactID],
         requestedQualificationPaths: [],
         selectedCandidateIndex: 0,
         selectedToolID: "fixture-symbolic-planner",
-        selectedQualificationArtifact: try foundationReference(qualificationArtifact),
+        selectedQualificationArtifact: qualificationArtifact,
         candidateCount: 1,
         qualifiedCandidateCount: 1,
         failedCandidateCount: 0,
         candidates: [candidate]
     )
-    let comparisonArtifact = try artifactStore.persistSymbolicPlannerSolverFamilyComparison(
+    let comparisonArtifact = try await artifactStore.persistSymbolicPlannerSolverFamilyComparison(
         comparison,
         runID: runID,
         projectRoot: root
     )
     return PromotionFixture(
         comparisonArtifact: comparisonArtifact,
-        qualificationArtifact: qualificationArtifact
+        qualificationArtifact: qualificationArtifact,
+        workspaceStore: store,
+        artifactStore: artifactStore
     )
 }
 
 private struct PromotionFixture {
-    var comparisonArtifact: XcircuiteFileReference
-    var qualificationArtifact: XcircuiteFileReference
+    let comparisonArtifact: ArtifactReference
+    let qualificationArtifact: ArtifactReference
+    let workspaceStore: XcircuiteWorkspaceStore
+    let artifactStore: XcircuitePlanningArtifactStore
+}
+
+private func writeJSONFile<Value: Encodable>(_ value: Value, to url: URL) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    try encoder.encode(value).write(to: url, options: [.atomic])
+}
+
+private func exportSymbolicPlannerProblem(
+    root: URL,
+    workspaceStore: XcircuiteWorkspaceStore,
+    artifactStore: XcircuitePlanningArtifactStore
+) async throws -> XcircuiteSymbolicPlannerPDDLExportResult {
+    return try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: workspaceStore,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
+        request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
+        projectRoot: root
+    )
 }
 
 }

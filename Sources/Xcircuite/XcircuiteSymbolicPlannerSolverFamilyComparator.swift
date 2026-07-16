@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import ToolQualification
 import DesignFlowKernel
 
@@ -8,29 +9,29 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
             workspaceStore: workspaceStore,
-            fileReferenceVerifier: fileReferenceVerifier
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
         )
     }
 
     public func compare(
         request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerSolverFamilyComparisonResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
+    ) async throws -> XcircuiteSymbolicPlannerSolverFamilyComparisonResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
         guard !request.qualificationArtifactIDs.isEmpty || !request.qualificationPaths.isEmpty else {
             throw XcircuiteSymbolicPlannerSolverError.emptySolverFamilyComparison
         }
 
-        let inputs = try qualificationInputs(request: request, projectRoot: projectRoot)
+        let inputs = try await qualificationInputs(request: request, projectRoot: projectRoot)
         var candidates: [XcircuiteSymbolicPlannerSolverFamilyCandidateResult] = []
         for (index, input) in inputs.enumerated() {
             guard input.qualification.runID == request.runID else {
@@ -86,31 +87,27 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
             candidates: selectedCandidates,
             diagnostics: diagnostics
         )
-        let comparisonArtifact = try artifactStore.persistSymbolicPlannerSolverFamilyComparison(
+        let comparisonArtifact = try await artifactStore.persistSymbolicPlannerSolverFamilyComparison(
             comparison,
             runID: request.runID,
             projectRoot: projectRoot
         )
         return XcircuiteSymbolicPlannerSolverFamilyComparisonResult(
             comparison: comparison,
-            comparisonArtifact: try requireFoundationArtifactReference(
-                comparisonArtifact,
-                field: "comparison.comparisonArtifact"
-            )
+            comparisonArtifact: comparisonArtifact
         )
     }
 
     private func qualificationInputs(
         request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest,
         projectRoot: URL
-    ) throws -> [QualificationInput] {
-        let manifest = try artifactReferenceResolver.runManifest(
-            runID: request.runID,
-            projectRoot: projectRoot
+    ) async throws -> [QualificationInput] {
+        let manifest = try await artifactReferenceResolver.runManifest(
+            runID: request.runID
         )
         var inputs: [QualificationInput] = []
         for artifactID in request.qualificationArtifactIDs {
-            let reference = try artifactReferenceResolver.uniqueManifestArtifact(
+            let reference = try await artifactReferenceResolver.uniqueManifestArtifact(
                 artifactID: artifactID,
                 field: "qualificationArtifact",
                 expectedFormat: .json,
@@ -118,38 +115,32 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let qualification = try workspaceStore.readJSON(
+            let qualification = try JSONDecoder().decode(
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
-                from: workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+                from: await workspaceStore.loadArtifactContent(for: reference)
             )
             inputs.append(
                 QualificationInput(
-                    reference: try requireFoundationArtifactReference(
-                        reference,
-                        field: "comparison.qualificationArtifact"
-                    ),
+                    reference: reference,
                     qualification: qualification
                 )
             )
         }
         for path in request.qualificationPaths {
-            let reference = try artifactReferenceResolver.projectFileReference(
+            let reference = try await artifactReferenceResolver.projectFileReference(
                 path: path,
                 field: "qualificationArtifact",
                 expectedFormat: .json,
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let qualification = try workspaceStore.readJSON(
+            let qualification = try JSONDecoder().decode(
                 XcircuiteSymbolicPlannerSolverQualificationResult.self,
-                from: workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+                from: await workspaceStore.loadArtifactContent(for: reference)
             )
             inputs.append(
                 QualificationInput(
-                    reference: try requireFoundationArtifactReference(
-                        reference,
-                        field: "comparison.qualificationArtifact"
-                    ),
+                    reference: reference,
                     qualification: qualification
                 )
             )

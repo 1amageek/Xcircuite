@@ -8,8 +8,8 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
     private let artifactVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
         artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
@@ -20,19 +20,19 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
     public func importSolverPlan(
         request: XcircuiteSymbolicPlannerPlanImportRequest,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerPlanImportResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let problemPath = try requiredProblemPath(
+    ) async throws -> XcircuiteSymbolicPlannerPlanImportResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let problemPath = try await requiredProblemPath(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try workspaceStore.readJSON(
+        let problem = try await workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: problemPath
         )
         guard problem.runID == request.runID else {
             throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
@@ -41,16 +41,16 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
 
-        let pddlExportRef = try pddlExportReference(
+        let pddlExportRef = try await pddlExportReference(
             explicitPath: request.pddlExportPath,
             artifactID: request.pddlExportArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let pddlExport = try workspaceStore.readJSON(
+        let pddlExport = try await workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: workspaceStore.url(forProjectRelativePath: pddlExportRef.path, inProjectAt: projectRoot)
+            from: pddlExportRef.path
         )
         guard pddlExport.runID == request.runID else {
             throw XcircuiteSymbolicPlannerPlanImportError.runMismatch(
@@ -65,33 +65,27 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
 
-        let solverPlanText = try loadSolverPlanText(
+        let solverPlanText = try await loadSolverPlanText(
             request: request,
             manifest: manifest,
             projectRoot: projectRoot
         )
-        let solverPlanArtifact = try foundationArtifact(
-            artifactStore.persistSymbolicPlannerSolverPlan(
+        let solverPlanArtifact = try await artifactStore.persistSymbolicPlannerSolverPlan(
                 solverPlanText,
                 runID: request.runID,
                 projectRoot: projectRoot
-            ),
-            field: "solver-plan"
-        )
+            )
         let draft = makeCandidatePlan(
             problem: problem,
             problemPath: problemPath,
             pddlExport: pddlExport,
             solverPlanText: solverPlanText
         )
-        let candidatePlanArtifact = try foundationArtifact(
-            artifactStore.persistCandidatePlan(
+        let candidatePlanArtifact = try await artifactStore.persistCandidatePlan(
                 draft.plan,
                 runID: request.runID,
                 projectRoot: projectRoot
-            ),
-            field: "candidate-plan"
-        )
+            )
         return XcircuiteSymbolicPlannerPlanImportResult(
             status: draft.diagnostics.contains(where: { $0.severity == "error" }) ? "imported-with-errors" : "imported",
             runID: request.runID,
@@ -312,14 +306,14 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
 
     private func loadSolverPlanText(
         request: XcircuiteSymbolicPlannerPlanImportRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> String {
+    ) async throws -> String {
         if let solverPlanText = request.solverPlanText {
             return solverPlanText
         }
         if let solverPlanPath = request.solverPlanPath {
-            let reference = try verifiedProjectFileReference(
+            let reference = try await verifiedProjectFileReference(
                 path: solverPlanPath,
                 artifactID: request.solverPlanArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID,
                 field: "solver-plan",
@@ -327,7 +321,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            let url = try workspaceStore.url(forProjectRelativePath: reference.path, inProjectAt: projectRoot)
+            let url = try await workspaceStore.url(for: reference.path)
             return try String(contentsOf: url, encoding: .utf8)
         }
         let artifactID = request.solverPlanArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverPlanArtifactID
@@ -341,23 +335,23 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
         let verifiedReference = try verifiedArtifactReference(
-            foundationArtifact(reference, field: "solver-plan"),
+            reference,
             field: "solver-plan",
             projectRoot: projectRoot
         )
-        let url = try workspaceStore.url(forProjectRelativePath: verifiedReference.path, inProjectAt: projectRoot)
+        let url = try await workspaceStore.url(for: verifiedReference.path)
         return try String(contentsOf: url, encoding: .utf8)
     }
 
     private func pddlExportReference(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         if let explicitPath {
-            return try verifiedManifestProjectFileReference(
+            return try await verifiedManifestProjectFileReference(
                 path: explicitPath,
                 artifactID: artifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
                 field: "pddl-export",
@@ -377,7 +371,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
         return try verifiedArtifactReference(
-            foundationArtifact(reference, field: "pddl-export"),
+            reference,
             field: "pddl-export",
             projectRoot: projectRoot
         )
@@ -386,12 +380,12 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
     private func requiredProblemPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> String {
+    ) async throws -> String {
         if let explicitPath {
-            return try verifiedManifestProjectFileReference(
+            return try await verifiedManifestProjectFileReference(
                 path: explicitPath,
                 artifactID: artifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
                 field: "planning-problem",
@@ -411,7 +405,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
             )
         }
         return try verifiedArtifactReference(
-            foundationArtifact(reference, field: "planning-problem"),
+            reference,
             field: "planning-problem",
             projectRoot: projectRoot
         ).path
@@ -421,20 +415,18 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         path: String,
         artifactID: String,
         field: String,
-        format: XcircuiteFileFormat,
+        format: ArtifactFormat,
         runID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference {
-        let reference = try workspaceStore.fileReference(
+    ) async throws -> ArtifactReference {
+        let reference = try await workspaceStore.makeArtifactReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
-            format: format,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
+            format: format
         )
         return try verifiedArtifactReference(
-            foundationArtifact(reference, field: field),
+            reference,
             field: field,
             projectRoot: projectRoot
         )
@@ -444,18 +436,16 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         path: String,
         artifactID: String,
         field: String,
-        format: XcircuiteFileFormat,
-        manifest: XcircuiteRunManifest,
+        format: ArtifactFormat,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference {
-        let explicitReference = try workspaceStore.fileReference(
+    ) async throws -> ArtifactReference {
+        let explicitReference = try await workspaceStore.makeArtifactReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
-            format: format,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
+            format: format
         )
         guard let manifestReference = manifest.artifacts.first(where: { $0.artifactID == artifactID }) else {
             throw XcircuiteSymbolicPlannerPlanImportError.artifactNotFound(
@@ -463,17 +453,8 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 artifactID: artifactID
             )
         }
-        guard manifestReference.producedByRunID == runID else {
-            throw manifestReferenceMismatch(
-                field: field,
-                artifactID: artifactID,
-                path: explicitReference.path,
-                manifestPath: manifestReference.path,
-                reason: "Run manifest artifact provenance does not match the requested run."
-            )
-        }
-        let explicitArtifact = try foundationArtifact(explicitReference, field: field)
-        let manifestArtifact = try foundationArtifact(manifestReference, field: field)
+        let explicitArtifact = explicitReference
+        let manifestArtifact = manifestReference
         try validateExplicitReference(
             explicitArtifact,
             matches: manifestArtifact,
@@ -548,30 +529,16 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 field: field,
                 artifactID: reference.artifactID,
                 path: reference.path,
-                status: legacyIntegrityStatus(for: issue),
-                message: legacyIntegrityMessage(for: issue)
+                status: verificationStatus(for: issue),
+                message: integrityMessage(for: issue)
             )
         }
         return reference
     }
 
-    private func foundationArtifact(
-        _ reference: XcircuiteFileReference,
-        field: String
-    ) throws -> ArtifactReference {
-        guard let converted = foundationArtifactReference(reference) else {
-            throw XcircuiteSymbolicPlannerPlanImportError.invalidArtifactReference(
-                field: field,
-                path: reference.path,
-                reason: "The verified legacy reference does not contain a valid digest and byte count."
-            )
-        }
-        return converted
-    }
-
-    private func legacyIntegrityStatus(
+    private func verificationStatus(
         for issue: ArtifactIntegrityIssue?
-    ) -> XcircuiteFileReferenceIntegrityStatus {
+    ) -> FlowArtifactVerificationStatus {
         switch issue?.code {
         case .missingFile:
             return .missingArtifact
@@ -588,7 +555,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
         }
     }
 
-    private func legacyIntegrityMessage(
+    private func integrityMessage(
         for issue: ArtifactIntegrityIssue?
     ) -> String {
         switch issue?.code {
@@ -651,21 +618,16 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
 
     private func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let items)? = values[key] else {
+        guard case .textList(let items)? = values[key] else {
             return []
         }
-        return items.compactMap { item in
-            guard case .string(let value) = item else {
-                return nil
-            }
-            return value
-        }
+        return items
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func identifier(_ rawValue: String) -> String {

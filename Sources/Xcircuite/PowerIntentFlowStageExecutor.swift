@@ -37,7 +37,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let sourceURL = try sourceInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -82,28 +82,18 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                 sources: [PowerIntentSourceUnit(path: sourceReference.path, source: source, format: format)]
             )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
 
             var persistedResult = result
             var artifacts = [sourceReference, designReference]
             if let intent = result.payload.intent {
-                let directory = context.runDirectory
-                    .appending(path: "stages")
-                    .appending(path: stageID)
-                    .appending(path: "raw")
-                try context.storage.ensureDirectory(at: directory)
-                let intentURL = directory.appending(path: "power-intent.json")
-                try context.storage.writeJSON(
+                let intentReference = try await context.persistJSONArtifact(
                     intent,
-                    to: intentURL,
-                    forProjectAt: context.projectRoot
-                )
-                let intentReference = try support.artifactBuilder.reference(
-                    for: intentURL,
-                    projectRoot: context.projectRoot,
                     artifactID: "power-intent",
+                    stageID: stageID,
+                    fileName: "power-intent.json",
                     kind: ArtifactKind.powerIntent,
-                    format: ArtifactFormat.json
+                    mode: .replaceable
                 )
                 var payload = result.payload
                 payload.reference = PowerIntentReference(
@@ -120,7 +110,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                 )
                 artifacts.append(intentReference)
             }
-            let resultArtifact = try persistResult(persistedResult, context: context)
+            let resultArtifact = try await persistResult(persistedResult, context: context)
             return makeStageResult(
                 result: persistedResult,
                 resultArtifact: resultArtifact,
@@ -141,20 +131,14 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     private func persistResult(
         _ result: PowerIntentParsingResult,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let directory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: directory)
-        let url = directory.appending(path: "power-intent-result.json")
-        try context.storage.writeJSON(result, to: url, forProjectAt: context.projectRoot)
-        return try support.artifactBuilder.reference(
-            for: url,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await context.persistJSONArtifact(
+            result,
             artifactID: "\(stageID)-result",
+            stageID: stageID,
+            fileName: "power-intent-result.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            mode: .replaceable
         )
     }
 

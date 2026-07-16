@@ -155,30 +155,30 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let rawDirectory = context.runDirectory
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
-            try context.storage.ensureDirectory(at: rawDirectory)
-            try context.checkCancellation()
+            try FileManager.default.createDirectory(at: rawDirectory, withIntermediateDirectories: true)
+            try await context.checkCancellation()
 
             let request = try preparedRequest(
                 context: context,
                 workingDirectory: rawDirectory
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let executionResult = try await engine.run(
                 request,
                 cancellationCheck: FlowExecutionCancellationProbe.make(context: context)
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let persistedSummary = try persistSummaryArtifact(
                 from: executionResult,
                 projectRoot: context.projectRoot
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
             var artifacts = try artifactReferences(
                 from: executionResult,
                 summaryURL: persistedSummary.url,
@@ -186,7 +186,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             )
             let gateStatus = gateStatus(from: executionResult.result)
             let flowDiagnostics = executionResult.result.diagnostics.map(flowDiagnostic)
-            let envelopeArtifact = try LVSSummaryEnvelopeBuilder().envelopeReference(
+            let envelopeArtifact = try await LVSSummaryEnvelopeBuilder().envelopeReference(
                 summary: persistedSummary.summary,
                 summaryArtifactID: "lvs-summary",
                 stageArtifacts: artifacts,
@@ -261,7 +261,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             switch error {
             case .cancelled:
                 do {
-                    try context.checkCancellation()
+                    try await context.checkCancellation()
                 } catch let cancellationError as FlowRunCancellationError {
                     throw cancellationError
                 }
@@ -356,7 +356,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        let validator = XcircuiteIdentifierValidator()
+        let validator = FlowIdentifierValidator()
         try validator.validate(stage.stageID, kind: .stageID)
         try validator.validate(toolID, kind: .toolID)
     }

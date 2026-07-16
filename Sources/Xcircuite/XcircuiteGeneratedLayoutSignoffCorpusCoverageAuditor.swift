@@ -3,11 +3,11 @@ import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
+        workspaceStore: XcircuiteWorkspaceStore,
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.workspaceStore = workspaceStore
         self.identifierValidator = identifierValidator
@@ -16,7 +16,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
     public func audit(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
         policy: XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditPolicy
-    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit {
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit {
         try validate(report: report, policy: policy)
         let normalizedPolicy = normalize(policy)
         return makeAudit(
@@ -31,26 +31,18 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
         policy: XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditPolicy,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit {
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit {
         try validate(report: report, policy: policy)
         let normalizedPolicy = normalize(policy)
-        let suiteDirectory = try suiteDirectoryURL(suiteID: report.suiteID, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: suiteDirectory)
-
         let policyPath = suiteProjectRelativePath(
             suiteID: report.suiteID,
             fileName: "corpus-coverage-audit-policy.json"
         )
-        let policyURL = try workspaceStore.url(forProjectRelativePath: policyPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(normalizedPolicy, to: policyURL, forProjectAt: projectRoot)
-        let policyArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: policyPath,
-            artifactID: "generated-layout-signoff-corpus-coverage-audit-policy",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let policyArtifact = try await workspaceStore.persistProjectJSON(
+            normalizedPolicy,
+            id: "generated-layout-signoff-corpus-coverage-audit-policy",
+            path: policyPath
         )
-        try workspaceStore.upsertFileReference(policyArtifact, forProjectAt: projectRoot)
 
         let auditWithoutSelfRef = makeAudit(
             report: report,
@@ -62,16 +54,11 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
             suiteID: report.suiteID,
             fileName: "corpus-coverage-audit.json"
         )
-        let auditURL = try workspaceStore.url(forProjectRelativePath: auditPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(auditWithoutSelfRef, to: auditURL, forProjectAt: projectRoot)
-        let auditArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: auditPath,
-            artifactID: "generated-layout-signoff-corpus-coverage-audit",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let auditArtifact = try await workspaceStore.persistProjectJSON(
+            auditWithoutSelfRef,
+            id: "generated-layout-signoff-corpus-coverage-audit",
+            path: auditPath
         )
-        try workspaceStore.upsertFileReference(auditArtifact, forProjectAt: projectRoot)
 
         var audit = auditWithoutSelfRef
         audit.auditArtifact = auditArtifact
@@ -111,12 +98,14 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
     private func makeAudit(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
         policy: XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditPolicy,
-        policyArtifact: XcircuiteFileReference?,
-        auditArtifact: XcircuiteFileReference?
+        policyArtifact: ArtifactReference?,
+        auditArtifact: ArtifactReference?
     ) -> XcircuiteGeneratedLayoutSignoffCorpusCoverageAudit {
         let coveredTags = unique(report.caseResults.flatMap(\.coverageTags)).sorted()
-        let sourceFormats = unique(report.caseResults.flatMap(\.sourceArtifactRefs).map { normalizeFormat($0.format) })
-        let signoffArtifactIDs = unique(report.caseResults.flatMap(\.signoffArtifactRefs).compactMap(\.artifactID)).sorted()
+        let sourceFormats = unique(
+            report.caseResults.flatMap(\.sourceArtifactRefs).map { normalizeFormat($0.format.rawValue) }
+        )
+        let signoffArtifactIDs = unique(report.caseResults.flatMap(\.signoffArtifactRefs).map(\.artifactID)).sorted()
         let stageFamilies = sortedStageFamilies(unique(report.caseResults.flatMap(\.stageResults).map(\.family)))
         let readyOracleEvidenceRefCount = report.caseResults
             .flatMap(\.oracleReadiness)
@@ -318,15 +307,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor: Sendable {
         format.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
-    private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try workspaceStore.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)",
-            inProjectAt: projectRoot
-        )
-    }
-
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func missingRequirement(

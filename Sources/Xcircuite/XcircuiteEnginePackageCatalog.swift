@@ -39,9 +39,9 @@ public enum XcircuiteEnginePackageCatalog {
         ),
         XcircuiteEnginePackageDescriptor(
             packageID: "LogicEngine",
-            products: ["LogicLowering", "LogicSimulation", "LogicSynthesis", "LogicQualification"],
-            stageIDs: ["logic.lower", "logic.simulate", "logic.synthesize", "logic.equivalence", "logic.qualification"],
-            inputArtifactRoles: ["rtl-snapshot", "logic-design", "timing-library", "timing-constraints", "logic-equivalence-request", "logic-qualification-report", "logic-process-qualification-evidence", "logic-release-approval"],
+            products: ["LogicLowering", "LogicSimulation", "LogicSynthesis", "LogicEvidence"],
+            stageIDs: ["logic.lower", "logic.simulate", "logic.synthesize", "logic.equivalence"],
+            inputArtifactRoles: ["rtl-snapshot", "logic-design", "timing-library", "timing-constraints", "logic-equivalence-request"],
             outputArtifactRoles: [
                 "execution-design",
                 "logic-trace",
@@ -67,9 +67,6 @@ public enum XcircuiteEnginePackageCatalog {
                 "dft.scan",
                 "dft.atpg",
                 "dft.bist",
-                "dft.qualification",
-                "dft.release-evidence",
-                "dft.release",
             ],
             inputArtifactRoles: [
                 "mapped-design",
@@ -77,22 +74,13 @@ public enum XcircuiteEnginePackageCatalog {
                 "pdk-reference",
                 "dft-oracle-corpus",
                 "dft-oracle-observations",
-                "dft-qualification-evidence",
-                "dft-process-qualification-build-request",
-                "dft-process-qualification-evidence",
-                "dft-downstream-evidence",
-                "dft-release-approval",
             ],
             outputArtifactRoles: [
                 "test-design",
                 "test-patterns",
                 "fault-coverage-report",
-                "dft-qualification-provenance",
-                "dft-process-qualification-evidence",
-                "dft-downstream-evidence-bundle",
-                "dft-release-result",
-                "dft-release-eligibility",
-                "dft-release-artifact-bundle",
+                "dft-corpus-observations",
+                "dft-oracle-correlation",
             ]
         ),
         XcircuiteEnginePackageDescriptor(
@@ -111,25 +99,23 @@ public enum XcircuiteEnginePackageCatalog {
         ),
         XcircuiteEnginePackageDescriptor(
             packageID: "ElectricalSignoffEngine",
-            products: ["PowerIntegrityEngine", "ERCEngine", "ESDEngine", "LatchUpEngine", "AgingEngine", "ElectricalSignoffQualification"],
-            stageIDs: ["electrical.power-integrity", "electrical.erc", "electrical.esd", "electrical.latch-up", "electrical.aging", "electrical-signoff.standard-layout-import", "electrical-signoff", "electrical-signoff.qualification", "electrical-signoff.process-qualification", "electrical-signoff.repair-revision", "electrical-signoff.release-gate"],
-            inputArtifactRoles: ["logic-design", "physical-design", "power-intent", "parasitics", "pdk-reference", "standard-layout", "layout-technology", "electrical-qualification-spec", "electrical-process-qualification-request", "electrical-process-corpus", "electrical-process-oracle", "electrical-process-health", "electrical-process-approval", "electrical-process-evidence", "electrical-release-policy", "electrical-repair-plan"],
-            outputArtifactRoles: ["electrical-standard-physical-snapshot", "electrical-signoff-report", "electrical-signoff-run-result", "electrical-qualification-report", "electrical-tool-evidence", "electrical-process-qualification", "electrical-process-qualification-evidence", "electrical-repair-plan", "electrical-repair-revision", "electrical-release-gate", "electrical-release-artifact-bundle"]
+            products: ["PowerIntegrityEngine", "ERCEngine", "ESDEngine", "LatchUpEngine", "AgingEngine", "ElectricalSignoffEvidence"],
+            stageIDs: ["electrical.power-integrity", "electrical.erc", "electrical.esd", "electrical.latch-up", "electrical.aging", "electrical-signoff.standard-layout-import", "electrical-signoff", "electrical-signoff.corpus", "electrical-signoff.repair-revision"],
+            inputArtifactRoles: ["logic-design", "physical-design", "power-intent", "parasitics", "pdk-reference", "standard-layout", "layout-technology", "electrical-corpus-spec", "electrical-oracle-observations", "electrical-repair-plan"],
+            outputArtifactRoles: ["electrical-standard-physical-snapshot", "electrical-signoff-report", "electrical-signoff-run-result", "electrical-corpus-report", "electrical-repair-plan", "electrical-repair-revision"]
         ),
         XcircuiteEnginePackageDescriptor(
             packageID: "ReleaseEngine",
-            products: ["QualificationEngine", "SignoffEngine", "TapeoutEngine"],
-            stageIDs: ["release.qualification", "release.signoff", "release.tapeout"],
+            products: ["ReleaseEngine", "SignoffEngine", "TapeoutEngine"],
+            stageIDs: ["release.authorization", "release.signoff", "release.tapeout"],
             inputArtifactRoles: [
-                "qualification-suite",
-                "qualification-report",
-                "qualification-evidence",
                 "signoff-evidence",
                 "physical-design",
                 "pdk-reference",
-                "tool-qualification"
+                "tool-trust-decision",
+                "flow-approval-record"
             ],
-            outputArtifactRoles: ["release-qualification-result", "signoff-bundle", "tapeout-release"]
+            outputArtifactRoles: ["release-authorization-decision", "signoff-bundle", "tapeout-release"]
         ),
     ]
 }

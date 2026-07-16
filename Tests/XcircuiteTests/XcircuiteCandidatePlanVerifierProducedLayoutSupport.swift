@@ -121,7 +121,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         stepID: String,
         layoutCase: ProducedLayoutCorpusCase,
         circuitCase: ProducedCircuitCorpusCase
-    ) throws -> XcircuiteFileReference {
+    ) async throws -> ArtifactReference {
         let tech = LayoutTechDatabase.sampleProcess()
         let document = try makeProducedLayoutDocument(circuitCase: circuitCase, tech: tech)
         let artifactPath = ".xcircuite/runs/\(runID)/planning/executions/\(planID)/\(stepID)/\(layoutCase.fileName)"
@@ -131,13 +131,11 @@ extension XcircuiteCandidatePlanVerifierTests {
             withIntermediateDirectories: true
         )
         try MaskDataFormatConverter(tech: tech).exportDocument(document, to: artifactURL, format: layoutCase.layoutFileFormat)
-        return try XcircuiteWorkspaceStore().fileReference(
+        return try await XcircuiteWorkspaceStore(projectRoot: root).makeArtifactReference(
             forProjectRelativePath: artifactPath,
             artifactID: layoutCase.artifactID,
             kind: .layout,
             format: layoutCase.xcircuiteFileFormat,
-            inProjectAt: root,
-            producedByRunID: runID
         )
     }
 
@@ -601,7 +599,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         return root
     }
 
-    func writeText(_ text: String, path: String, root: URL) throws {
+    func writeText(_ text: String, path: String, root: URL) async throws {
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -610,7 +608,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    func writeJSON<T: Encodable>(_ value: T, path: String, root: URL) throws {
+    func writeJSON<T: Encodable>(_ value: T, path: String, root: URL) async throws {
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -622,8 +620,13 @@ extension XcircuiteCandidatePlanVerifierTests {
         try data.write(to: url, options: .atomic)
     }
 
-    func readJSONLines<T: Decodable>(_ type: T.Type, from url: URL) throws -> [T] {
-        let text = try String(contentsOf: url, encoding: .utf8)
+    func readJSONLines<T: Decodable>(
+        _ type: T.Type,
+        from relativePath: String,
+        store: XcircuiteWorkspaceStore
+    ) async throws -> [T] {
+        let data = try await store.read(from: relativePath)
+        let text = try #require(String(data: data, encoding: .utf8))
         let decoder = JSONDecoder()
         return try text
             .split(separator: "\n")

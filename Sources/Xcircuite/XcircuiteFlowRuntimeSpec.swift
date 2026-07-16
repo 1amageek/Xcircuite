@@ -64,6 +64,7 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
             toolRegistry: try ToolRegistry(validating: toolBindings.descriptors),
             healthResults: toolBindings.healthResults,
             executors: executors,
+            workspaceStore: try XcircuiteWorkspaceStore(projectRoot: projectRoot),
             toolchainProfile: toolchainProfile
         )
     }

@@ -17,7 +17,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsLayoutCommandDRCExportIntoDRCStage() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-drc")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
+        try await writeLayoutCommandRequest(root: root)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -31,7 +31,7 @@ extension XcircuiteFlowRuntimeTests {
                                 NativeDRCRule(id: "M1.width", kind: .minimumWidth, layer: "M1", value: 0.5),
                             ]
                         ),
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -46,12 +46,12 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -98,9 +98,9 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let outsideRoot = try makeTemporaryRoot("layout-command-outside-run-target")
         defer { removeTemporaryRoot(outsideRoot) }
-        try writeLayoutCommandRequest(root: root)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
+        try await writeLayoutCommandRequest(root: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
         let outsideRunDirectory = outsideRoot.appending(path: "run-1")
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
@@ -114,7 +114,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: outsideRunDirectory,
-                storage: workspaceStore,
+                infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -130,10 +130,10 @@ extension XcircuiteFlowRuntimeTests {
     @Test func layoutCommandExecutorRejectsRunnerResultPathMismatch() async throws {
         let root = try makeTemporaryRoot("layout-command-result-path-mismatch")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        try await writeLayoutCommandRequest(root: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -146,7 +146,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                storage: workspaceStore,
+                infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -162,10 +162,10 @@ extension XcircuiteFlowRuntimeTests {
     @Test func layoutCommandExecutorRejectsRunnerOutputDigestMismatch() async throws {
         let root = try makeTemporaryRoot("layout-command-output-digest-mismatch")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        try await writeLayoutCommandRequest(root: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -178,7 +178,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                storage: workspaceStore,
+                infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -193,10 +193,10 @@ extension XcircuiteFlowRuntimeTests {
     @Test func layoutCommandExecutorRejectsUnpassedRunnerStatusWithValidArtifacts() async throws {
         let root = try makeTemporaryRoot("layout-command-unpassed-runner-status")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        let runDirectory = try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        try await writeLayoutCommandRequest(root: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        let runDirectory = try await prepareTestRun(runID: "run-1", store: workspaceStore)
         let executor = LayoutCommandFlowStageExecutor(
             stageID: "006-layout",
             requestURL: root.appending(path: "layout-command-request.json"),
@@ -209,7 +209,7 @@ extension XcircuiteFlowRuntimeTests {
                 projectRoot: root,
                 runID: "run-1",
                 runDirectory: runDirectory,
-                storage: workspaceStore,
+                infrastructure: workspaceStore,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -227,7 +227,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeExpandsLayoutCommandViasIntoDRCExport() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-via-drc")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequestWithVia(root: root)
+        try await writeLayoutCommandRequestWithVia(root: root)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -267,7 +267,7 @@ extension XcircuiteFlowRuntimeTests {
                                 ),
                             ]
                         ),
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -282,12 +282,12 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -334,7 +334,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func layoutCommandDRCExportRejectsViasWithoutDefinitions() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-via-missing-def")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequestWithVia(root: root)
+        try await writeLayoutCommandRequestWithVia(root: root)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -348,12 +348,12 @@ extension XcircuiteFlowRuntimeTests {
                                 NativeDRCRule(id: "VIA1.width", kind: .minimumWidth, layer: "VIA1", value: 0.2),
                             ]
                         ),
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -379,7 +379,7 @@ extension XcircuiteFlowRuntimeTests {
         })
     }
 
-    @Test func runtimeSpecRoundTripsLayoutCommandDRCViaDefinitions() throws {
+    @Test func runtimeSpecRoundTripsLayoutCommandDRCViaDefinitions() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -429,8 +429,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsLayoutCommandStandardGDSExportIntoLVSStage() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-gds-lvs")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -452,7 +452,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeLVS(
@@ -470,12 +470,12 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistPath: "circuits/top.spice",
                         topCell: "top",
                         technologyPath: "tech/process.json",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -513,8 +513,8 @@ extension XcircuiteFlowRuntimeTests {
             let root = try makeTemporaryRoot("runtime-layout-command-\(layoutCase.name)-lvs")
             defer { removeTemporaryRoot(root) }
             let artifactFormat = try ArtifactFormat(rawValue: layoutCase.artifactFormat.rawValue.lowercased())
-            try writeLayoutCommandRequest(root: root)
-            try writeStandardLayoutTechnology(root: root)
+            try await writeLayoutCommandRequest(root: root)
+            try await writeStandardLayoutTechnology(root: root)
             _ = try writeNetlist(
                 """
                 .subckt top
@@ -536,7 +536,7 @@ extension XcircuiteFlowRuntimeTests {
                                     technologyInput: .path("tech/process.json")
                                 ),
                             ],
-                            tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                            tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                         )
                     ),
                     .nativeLVS(
@@ -554,12 +554,12 @@ extension XcircuiteFlowRuntimeTests {
                             schematicNetlistPath: "circuits/top.spice",
                             topCell: "top",
                             technologyPath: "tech/process.json",
-                            tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                            tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                         )
                     ),
                 ]
             )
-            let runtime = try spec.makeRuntime(projectRoot: root)
+            let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
             let result = try await runtime.run(
                 request: FlowOperationRequest(
@@ -599,8 +599,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func layoutCommandStandardExportRejectsUnsupportedFormat() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-standard-export-unsupported")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -614,12 +614,12 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -648,8 +648,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsLayoutCommandStandardGDSExportIntoPEXStage() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-gds-pex")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -671,7 +671,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .mockPEX(
@@ -695,7 +695,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -741,8 +741,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsLayoutCommandOASISExportIntoPEXStage() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command-oasis-pex")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -764,7 +764,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .mockPEX(
@@ -788,7 +788,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(

@@ -5,7 +5,7 @@ public enum XcircuiteCandidatePlanGenerationError: Error, LocalizedError, Equata
     case missingProblemReference
     case artifactNotFound(runID: String, artifactID: String)
     case invalidArtifactReference(path: String, reason: String)
-    case artifactIntegrityFailed(path: String, status: XcircuiteFileReferenceIntegrityStatus, message: String)
+    case artifactIntegrityFailed(path: String, status: FlowArtifactVerificationStatus, message: String)
     case artifactProducerRunMismatch(expected: String, actual: String)
     case runMismatch(expected: String, actual: String)
     case invalidRejectedPlanJSONLine(path: String, line: Int)

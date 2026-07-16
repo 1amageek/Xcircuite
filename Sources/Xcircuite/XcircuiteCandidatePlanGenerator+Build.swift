@@ -1,13 +1,14 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanGenerator {
     func makeCandidatePlanBuild(
         request: XcircuiteCandidatePlanGenerationRequest,
         projectRoot: URL
-    ) throws -> CandidatePlanBuild {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
+    ) async throws -> CandidatePlanBuild {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
         let problemPath = try requiredPath(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
@@ -15,9 +16,9 @@ extension XcircuiteCandidatePlanGenerator {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try workspaceStore.readJSON(
+        let problem = try JSONDecoder().decode(
             XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: Data(contentsOf: projectURL(for: problemPath, projectRoot: projectRoot))
         )
         guard problem.runID == request.runID else {
             throw XcircuiteCandidatePlanGenerationError.runMismatch(
@@ -25,7 +26,12 @@ extension XcircuiteCandidatePlanGenerator {
                 actual: problem.runID
             )
         }
-        let translationAuditResult = try XcircuiteProblemTranslationAuditGate().requireFreshNonBlockingAudit(
+        let translationAuditResult = try await XcircuiteProblemTranslationAuditGate(
+            auditor: XcircuiteProblemTranslationAuditor(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
+        ).requireFreshNonBlockingAudit(
             runID: request.runID,
             problemPath: problemPath,
             projectRoot: projectRoot
@@ -49,7 +55,7 @@ extension XcircuiteCandidatePlanGenerator {
             ?? effectiveRequest.paretoCandidatesArtifactID
         effectiveRequest.paretoCandidatesPath = policySelection.trace.paretoCandidatesArtifact?.path
             ?? effectiveRequest.paretoCandidatesPath
-        let actionDomainContext = try loadOrPersistActionDomainSnapshot(
+        let actionDomainContext = try await loadOrPersistActionDomainSnapshot(
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
@@ -85,9 +91,9 @@ extension XcircuiteCandidatePlanGenerator {
     }
 
     func validateFamilyRequest(_ request: XcircuiteSymbolicPlannerFamilyRunRequest) throws {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         do {
-            try XcircuiteIdentifierValidator().validate(request.familyRunID, kind: .artifactID)
+            try FlowIdentifierValidator().validate(request.familyRunID, kind: .artifactID)
         } catch {
             throw XcircuiteCandidatePlanGenerationError.invalidPlannerFamilyRunID(request.familyRunID)
         }
@@ -102,12 +108,12 @@ extension XcircuiteCandidatePlanGenerator {
     func rejectExistingFamilyRunOutputs(
         request: XcircuiteSymbolicPlannerFamilyRunRequest,
         projectRoot: URL
-    ) throws {
+    ) async throws {
         let familyPathPrefix = symbolicPlannerFamilyPathPrefix(
             runID: request.runID,
             familyRunID: request.familyRunID
         )
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
+        let manifest = try await loadRunManifest(runID: request.runID)
         if manifest.artifacts.contains(where: { $0.path.hasPrefix(familyPathPrefix) }) {
             throw XcircuiteCandidatePlanGenerationError.familyRunAlreadyExists(
                 runID: request.runID,
@@ -116,7 +122,7 @@ extension XcircuiteCandidatePlanGenerator {
             )
         }
 
-        let familyDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
+        let familyDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
             .runDirectoryURL(for: request.runID)
             .appending(path: "planning")
             .appending(path: "symbolic-planner")
@@ -159,52 +165,46 @@ extension XcircuiteCandidatePlanGenerator {
         candidateIndex: Int,
         familyRunID: String,
         projectRoot: URL
-    ) throws -> FamilyCandidateArtifacts {
+    ) async throws -> FamilyCandidateArtifacts {
         let slotID = familyCandidateSlotID(index: candidateIndex, strategy: requestedStrategy)
-        let runDirectory = try XcircuiteWorkspace(projectRoot: projectRoot).runDirectoryURL(for: build.problem.runID)
-        let candidateDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "family")
-            .appending(path: familyRunID)
-            .appending(path: "candidates")
-            .appending(path: slotID)
-        try workspaceStore.ensureDirectory(at: candidateDirectory)
-        let planURL = candidateDirectory.appending(path: "candidate-plan.json")
-        let traceURL = candidateDirectory.appending(path: "symbolic-planner-trace.json")
-        try workspaceStore.writeJSON(build.draft.plan, to: planURL, forProjectAt: projectRoot)
-        try workspaceStore.writeJSON(build.draft.trace, to: traceURL, forProjectAt: projectRoot)
-
         let basePath = symbolicPlannerFamilyPathPrefix(
             runID: build.problem.runID,
             familyRunID: familyRunID
         ) + "candidates/\(slotID)"
-        let planArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: "\(basePath)/candidate-plan.json",
-            artifactID: familyCandidateArtifactID(
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let planArtifact = try await workspaceStore.persistArtifact(
+            content: encoder.encode(build.draft.plan),
+            id: ArtifactID(rawValue: familyCandidateArtifactID(
                 prefix: "planning-symbolic-planner-family-candidate-plan",
                 familyRunID: familyRunID,
                 slotID: slotID
+            )),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: "\(basePath)/candidate-plan.json"),
+                role: .output,
+                kind: .other,
+                format: .json
             ),
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: build.problem.runID
+            runID: build.problem.runID,
+            mode: .immutable
         )
-        let traceArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: "\(basePath)/symbolic-planner-trace.json",
-            artifactID: familyCandidateArtifactID(
+        let traceArtifact = try await workspaceStore.persistArtifact(
+            content: encoder.encode(build.draft.trace),
+            id: ArtifactID(rawValue: familyCandidateArtifactID(
                 prefix: "planning-symbolic-planner-family-candidate-trace",
                 familyRunID: familyRunID,
                 slotID: slotID
+            )),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: "\(basePath)/symbolic-planner-trace.json"),
+                role: .output,
+                kind: .other,
+                format: .json
             ),
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: build.problem.runID
+            runID: build.problem.runID,
+            mode: .immutable
         )
-        try workspaceStore.upsertRunArtifact(planArtifact, runID: build.problem.runID, inProjectAt: projectRoot)
-        try workspaceStore.upsertRunArtifact(traceArtifact, runID: build.problem.runID, inProjectAt: projectRoot)
         return FamilyCandidateArtifacts(plan: planArtifact, trace: traceArtifact)
     }
 
@@ -323,14 +323,8 @@ extension XcircuiteCandidatePlanGenerator {
             unresolvedObjectiveIDs: candidate.build.draft.trace.unresolvedObjectiveIDs,
             missingGoalAtoms: candidate.build.draft.trace.missingGoalAtoms,
             blockers: candidate.build.draft.plan.blockers,
-            candidatePlanArtifact: try requireFoundationArtifactReference(
-                candidate.candidatePlanArtifact,
-                field: "family-candidate-plan"
-            ),
-            symbolicPlannerTraceArtifact: try requireFoundationArtifactReference(
-                candidate.symbolicPlannerTraceArtifact,
-                field: "family-symbolic-planner-trace"
-            ),
+            candidatePlanArtifact: candidate.candidatePlanArtifact,
+            symbolicPlannerTraceArtifact: candidate.symbolicPlannerTraceArtifact,
             policyTrace: candidate.build.draft.trace.policyTrace,
             calibrationTrace: candidate.build.draft.trace.calibrationTrace
         )
@@ -382,7 +376,7 @@ extension XcircuiteCandidatePlanGenerator {
     }
 
     func symbolicPlannerFamilyPathPrefix(runID: String, familyRunID: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRunID)/"
+        "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRunID)/"
     }
 
     func familyCandidateArtifactID(prefix: String, familyRunID: String, slotID: String) -> String {
@@ -398,7 +392,8 @@ extension XcircuiteCandidatePlanGenerator {
     }
 
     func artifactDigest(from value: String, limit: Int) -> String {
-        String(XcircuiteHasher().sha256(data: Data(value.utf8)).prefix(limit))
+        let derivedID = ArtifactID(stableKey: value).rawValue
+        return String(derivedID.dropFirst("derived-".count).prefix(limit))
     }
 
     func artifactSlug(from value: String, limit: Int) -> String {

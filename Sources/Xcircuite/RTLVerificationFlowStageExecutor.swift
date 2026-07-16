@@ -16,7 +16,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     private let referenceInput: XcircuiteFlowInputReference?
     private let additionalReferenceInputs: [XcircuiteFlowInputReference]
     private let constraintsInput: XcircuiteFlowInputReference?
-    private let qualificationInput: XcircuiteFlowInputReference?
+    private let evidenceInput: XcircuiteFlowInputReference?
     private let topModuleName: String
     private let policy: RTLVerificationPolicy
     private let frontend: RTLVerificationFrontendOptions
@@ -39,7 +39,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         referenceInput: XcircuiteFlowInputReference? = nil,
         additionalReferenceInputs: [XcircuiteFlowInputReference] = [],
         constraintsInput: XcircuiteFlowInputReference? = nil,
-        qualificationInput: XcircuiteFlowInputReference? = nil,
+        evidenceInput: XcircuiteFlowInputReference? = nil,
         topModuleName: String,
         policy: RTLVerificationPolicy = RTLVerificationPolicy(),
         frontend: RTLVerificationFrontendOptions = RTLVerificationFrontendOptions(),
@@ -60,7 +60,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         self.referenceInput = referenceInput
         self.additionalReferenceInputs = additionalReferenceInputs
         self.constraintsInput = constraintsInput
-        self.qualificationInput = qualificationInput
+        self.evidenceInput = evidenceInput
         self.topModuleName = topModuleName
         self.policy = policy
         self.frontend = frontend
@@ -82,7 +82,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         referenceInput: XcircuiteFlowInputReference? = nil,
         additionalReferenceInputs: [XcircuiteFlowInputReference] = [],
         constraintsInput: XcircuiteFlowInputReference? = nil,
-        qualificationInput: XcircuiteFlowInputReference? = nil,
+        evidenceInput: XcircuiteFlowInputReference? = nil,
         topModuleName: String
     ) -> RTLVerificationFlowStageExecutor {
         RTLVerificationFlowStageExecutor(
@@ -93,7 +93,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             referenceInput: referenceInput,
             additionalReferenceInputs: additionalReferenceInputs,
             constraintsInput: constraintsInput,
-            qualificationInput: qualificationInput,
+            evidenceInput: evidenceInput,
             topModuleName: topModuleName
         )
     }
@@ -103,7 +103,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let resolvedRTL = try rtlInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -191,25 +191,25 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 constraintReference = nil
                 constraintArtifact = nil
             }
-            let qualificationInputValue: RTLVerificationQualificationInput?
-            let qualificationArtifact: ArtifactReference?
-            if let qualificationInput {
-                let resolvedQualification = try qualificationInput.resolveExisting(
+            let evidenceInputValue: RTLVerificationEvidenceInput?
+            let evidenceArtifact: ArtifactReference?
+            if let evidenceInput {
+                let resolvedEvidence = try evidenceInput.resolveExisting(
                     projectRoot: context.projectRoot,
                     runDirectory: context.runDirectory
                 )
-                qualificationArtifact = try artifactBuilder.reference(
-                    for: resolvedQualification,
+                evidenceArtifact = try artifactBuilder.reference(
+                    for: resolvedEvidence,
                     projectRoot: context.projectRoot,
-                    artifactID: "rtl-qualification-input",
+                    artifactID: "rtl-evidence-input",
                     role: .input,
                     kind: ArtifactKind.report,
                     format: ArtifactFormat.json
                 )
-                let loadedQualification = try loadQualificationInput(from: resolvedQualification)
+                let loadedEvidence = try loadEvidenceInput(from: resolvedEvidence)
                 do {
-                    try RTLVerificationQualificationInputArtifactAuditor().audit(
-                        loadedQualification,
+                    try RTLVerificationEvidenceInputArtifactAuditor().audit(
+                        loadedEvidence,
                         reader: FileSystemRTLArtifactReader(projectRoot: context.projectRoot)
                     )
                 } catch {
@@ -218,17 +218,17 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                         message: error.localizedDescription
                     )
                 }
-                qualificationInputValue = loadedQualification
+                evidenceInputValue = loadedEvidence
             } else {
-                qualificationInputValue = nil
-                qualificationArtifact = nil
+                evidenceInputValue = nil
+                evidenceArtifact = nil
             }
             var requestInputs = [rtlReference] + additionalRTLReferences
             if let constraintArtifact {
                 requestInputs.append(constraintArtifact)
             }
-            if let qualificationArtifact {
-                requestInputs.append(qualificationArtifact)
+            if let evidenceArtifact {
+                requestInputs.append(evidenceArtifact)
             }
             let request = RTLVerificationRequest(
                 runID: context.runID,
@@ -246,15 +246,15 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 frontend: frontend,
                 proofView: proofView,
                 assumptions: assumptions,
-                qualificationInput: qualificationInputValue
+                evidenceInput: evidenceInputValue
             )
-            if let blocked = toolQualificationBlocker(request: request, context: context) {
+            if let blocked = await toolQualificationBlocker(request: request, context: context) {
                 return blocked
             }
-            if let blocked = oracleToolQualificationBlocker(request: request, context: context) {
+            if let blocked = await oracleToolQualificationBlocker(request: request, context: context) {
                 return blocked
             }
-            if let resumable = try loadResumableResult(request: request, context: context) {
+            if let resumable = try await loadResumableResult(request: request, context: context) {
                 return stageResult(
                     envelope: resumable.envelope,
                     resultArtifacts: resumable.artifacts
@@ -271,7 +271,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 verificationEngine = RTLVerificationEngine(environment: environment)
             }
             let nativeEnvelope = try await verificationEngine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let envelope: RTLVerificationResult
             if oracleToolID != nil {
                 do {
@@ -302,7 +302,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                         native: nativeEnvelope,
                         error: error
                     )
-                    let resultArtifacts = try persistEnvelope(
+                    let resultArtifacts = try await persistEnvelope(
                         failedEnvelope,
                         request: request,
                         context: context
@@ -315,7 +315,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             } else {
                 envelope = nativeEnvelope
             }
-            let resultArtifacts = try persistEnvelope(
+            let resultArtifacts = try await persistEnvelope(
                 envelope,
                 request: request,
                 context: context
@@ -332,8 +332,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
         guard stageID == analysis.stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: analysis.stageID, actual: stageID)
         }
@@ -342,7 +342,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     private func toolQualificationBlocker(
         request: RTLVerificationRequest,
         context: FlowExecutionContext
-    ) -> FlowStageResult? {
+    ) async -> FlowStageResult? {
         guard toolID != RTLVerificationExecutionSupport.implementationID else {
             return nil
         }
@@ -352,24 +352,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 message: "No ToolQualification descriptor is registered for \(toolID)."
             )
         }
-        let minimumLevel: ToolQualificationLevel
-        switch request.policy.minimumQualification {
-        case .unassessed:
-            minimumLevel = .unknown
-        case .smokeChecked:
-            minimumLevel = .smokeChecked
-        case .corpusChecked:
-            minimumLevel = .corpusChecked
-        case .oracleCorrelated:
-            minimumLevel = .oracleChecked
-        case .processQualified, .releaseEligible:
-            minimumLevel = .productionEligible
-        }
-        let decision = RTLVerificationToolQualificationAdapter().evaluate(
+        let decision = await RTLVerificationToolTrustPolicy().evaluate(
             descriptor: descriptor,
             request: request,
             health: context.healthResults[toolID],
-            minimumLevel: minimumLevel,
+            minimumLevel: .productionEligible,
+            artifactReader: context.infrastructure,
             evaluatedAt: Date()
         )
         guard decision.status == .eligible else {
@@ -392,7 +380,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     private func oracleToolQualificationBlocker(
         request: RTLVerificationRequest,
         context: FlowExecutionContext
-    ) -> FlowStageResult? {
+    ) async -> FlowStageResult? {
         guard let oracleToolID else {
             return nil
         }
@@ -424,11 +412,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 message: "RTL oracle \(oracleToolID) must declare an executable path."
             )
         }
-        let decision = RTLVerificationToolQualificationAdapter().evaluate(
+        let decision = await RTLVerificationToolTrustPolicy().evaluate(
             descriptor: descriptor,
             request: request,
             health: context.healthResults[oracleToolID],
             minimumLevel: .oracleChecked,
+            artifactReader: context.infrastructure,
             evaluatedAt: Date()
         )
         guard decision.status == .eligible else {
@@ -473,53 +462,22 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             version: descriptor.version,
             supportedAnalyses: [request.analysis],
             supportedProofViews: [request.proofView],
-            qualified: true,
-            qualification: oracleQualification(for: descriptor),
             limitations: descriptor.trustProfile.knownLimitations,
             timeoutSeconds: oracleTimeoutSeconds
         )
+        let trustDecision = await RTLVerificationToolTrustPolicy().evaluate(
+            descriptor: descriptor,
+            request: request,
+            health: context.healthResults[oracleToolID],
+            minimumLevel: .oracleChecked,
+            artifactReader: context.infrastructure
+        )
         let executor = ExternalRTLVerificationOracleExecutor(
             descriptor: externalDescriptor,
+            trustDecision: trustDecision,
             additionalArguments: oracleAdditionalArguments
         )
         return try await executor.execute(request, native: native)
-    }
-
-    private func oracleQualification(for descriptor: ToolDescriptor) -> RTLVerificationQualificationReport {
-        let evidence = descriptor.trustProfile.evidence.map { item in
-            RTLVerificationQualificationEvidence(
-                evidenceID: "toolqualification:\(item.evidenceID)",
-                kind: qualificationEvidenceKind(for: item.kind),
-                artifactIDs: item.artifact.map { [$0.artifactID].compactMap { $0 } } ?? [],
-                summary: "ToolQualification evidence \(item.evidenceID) admitted the independent RTL oracle.",
-                checkedAt: item.checkedAt ?? Date()
-            )
-        }
-        return RTLVerificationQualificationReport(
-            implementationID: descriptor.toolID,
-            implementationVersion: descriptor.version,
-            state: .oracleCorrelated,
-            evidence: evidence,
-            blockers: [],
-            limitations: descriptor.trustProfile.knownLimitations
-        )
-    }
-
-    private func qualificationEvidenceKind(
-        for kind: ToolEvidenceKind
-    ) -> RTLVerificationQualificationEvidenceKind {
-        switch kind {
-        case .smoke:
-            return .smoke
-        case .corpus:
-            return .corpus
-        case .oracle:
-            return .oracleCorrelation
-        case .healthCheck:
-            return .healthCheck
-        case .productionApproval:
-            return .releaseApproval
-        }
     }
 
     private func oracleProvenance(context: FlowExecutionContext) -> String {
@@ -535,31 +493,25 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         request: RTLVerificationRequest,
         evidence: RTLVerificationOracleEvidenceBuildResult
     ) throws -> RTLVerificationResult {
-        var qualificationInput = request.qualificationInput ?? RTLVerificationQualificationInput()
-        if !qualificationInput.oracleReports.contains(evidence.evidence.report) {
-            qualificationInput.oracleReports.append(evidence.evidence.report)
+        var evidenceInput = request.evidenceInput ?? RTLVerificationEvidenceInput()
+        if !evidenceInput.oracleReports.contains(evidence.evidence.report) {
+            evidenceInput.oracleReports.append(evidence.evidence.report)
         }
-        if !qualificationInput.oracleEvidence.contains(evidence.evidence) {
-            qualificationInput.oracleEvidence.append(evidence.evidence)
+        if !evidenceInput.oracleEvidence.contains(evidence.evidence) {
+            evidenceInput.oracleEvidence.append(evidence.evidence)
         }
         let requestDigest = try RTLVerificationRequestDigest.make(request)
-        let qualification = RTLVerificationQualificationEvaluator().evaluate(
-            implementationID: native.payload.qualification.implementationID,
-            implementationVersion: native.payload.qualification.implementationVersion,
-            healthEvidence: qualificationInput.healthEvidence,
-            corpusEvaluations: qualificationInput.corpusEvaluations,
-            oracleReports: qualificationInput.oracleReports,
-            oracleEvidence: qualificationInput.oracleEvidence,
-            processQualification: qualificationInput.processQualification,
-            processEvidence: qualificationInput.processEvidence,
-            releaseApproval: qualificationInput.releaseApproval,
+        let assessment = RTLVerificationEvidenceEvaluator().evaluate(
+            implementationID: native.payload.record.implementationID,
+            implementationVersion: native.payload.record.implementationVersion,
+            corpusEvaluations: evidenceInput.corpusEvaluations,
+            oracleReports: evidenceInput.oracleReports,
+            oracleEvidence: evidenceInput.oracleEvidence,
             expectedRequestDigest: requestDigest,
-            actualRequestDigest: requestDigest,
-            analysis: request.analysis,
-            proofView: request.proofView
+            checkedAt: Date()
         )
         var payload = native.payload
-        payload.qualification = qualification
+        payload.record = assessment
         var diagnostics = native.diagnostics
         let correlationPassed = evidence.evidence.report.matched
             && evidence.evidence.report.independenceVerified
@@ -578,19 +530,9 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 coverage: payload.coverage,
                 policy: request.policy,
                 proofStatus: payload.proofStatus,
-                qualification: qualification
+                assessment: assessment
             )
             : .blocked
-        if status == .blocked,
-           !qualification.satisfies(request.policy.minimumQualification),
-           !diagnostics.contains(where: { $0.code == "RTL_QUALIFICATION_INSUFFICIENT" }) {
-            diagnostics.append(RTLDiagnostic(
-                severity: .error,
-                code: "RTL_QUALIFICATION_INSUFFICIENT",
-                message: "The correlated RTL result does not satisfy the requested qualification policy.",
-                suggestedActions: ["attach_qualification_evidence", "select_qualified_backend", "lower_policy_for_exploration"]
-            ))
-        }
         return RTLVerificationResult(
             schemaVersion: native.schemaVersion,
             runID: native.runID,
@@ -674,60 +616,38 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         _ envelope: RTLVerificationResult,
         request: RTLVerificationRequest,
         context: FlowExecutionContext
-    ) throws -> [ArtifactReference] {
-        let outputDirectory = rawDirectory(context: context)
-        let auditDirectory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "audit")
-        let reviewDirectory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "review")
-        try context.storage.ensureDirectory(at: outputDirectory)
-        try context.storage.ensureDirectory(at: auditDirectory)
-        try context.storage.ensureDirectory(at: reviewDirectory)
-        let outputURL = outputDirectory.appending(path: "rtl-verification-result.json")
-        try context.storage.writeJSON(envelope, to: outputURL, forProjectAt: context.projectRoot)
-        let resultReference = try artifactBuilder.reference(
-            for: outputURL,
-            projectRoot: context.projectRoot,
+    ) async throws -> [ArtifactReference] {
+        let resultReference = try await context.persistJSONArtifact(
+            envelope,
             artifactID: "rtl-verification-result",
+            stageID: stageID,
+            fileName: "rtl-verification-result.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            mode: .replaceable
         )
-        let qualificationURL = outputDirectory.appending(path: "qualification.json")
-        try context.storage.writeJSON(
-            envelope.payload.qualification,
-            to: qualificationURL,
-            forProjectAt: context.projectRoot
-        )
-        let qualificationReference = try artifactBuilder.reference(
-            for: qualificationURL,
-            projectRoot: context.projectRoot,
-            artifactID: "rtl-verification-qualification",
+        let assessmentReference = try await context.persistJSONArtifact(
+            envelope.payload.record,
+            artifactID: "rtl-verification-evidence-assessment",
+            stageID: stageID,
+            fileName: "evidence-assessment.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            mode: .replaceable
         )
         let reviewArtifact = makeReviewArtifact(envelope)
-        let reviewURL = reviewDirectory.appending(path: "rtl-verification-review.json")
-        try context.storage.writeJSON(
+        let reviewReference = try await context.persistJSONArtifact(
             reviewArtifact,
-            to: reviewURL,
-            forProjectAt: context.projectRoot
-        )
-        let reviewReference = try artifactBuilder.reference(
-            for: reviewURL,
-            projectRoot: context.projectRoot,
             artifactID: "rtl-verification-review",
+            stageID: stageID,
+            directory: "review",
+            fileName: "rtl-verification-review.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            mode: .replaceable
         )
         let requestDigest = try digest(for: request)
-        let auditArtifactIDs = envelope.artifacts.compactMap(\.artifactID)
+        let auditArtifactIDs = envelope.artifacts.map(\.artifactID)
             + [
                 "rtl-verification-result",
-                "rtl-verification-qualification",
+                "rtl-verification-evidence-assessment",
                 "rtl-verification-review",
                 "rtl-verification-audit"
             ]
@@ -736,41 +656,37 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             runID: context.runID,
             requestDigest: requestDigest,
             status: envelope.status,
-            qualificationState: envelope.payload.qualification.state,
+            evidenceMaturity: envelope.payload.record.maturity,
             artifactIDs: auditArtifactIDs,
             resumable: envelope.status == .completed || envelope.status == .blocked,
             nextActions: reviewArtifact.suggestedActions
         )
-        let auditURL = auditDirectory.appending(path: "rtl-verification-audit.json")
-        try context.storage.writeJSON(
+        let auditReference = try await context.persistJSONArtifact(
             auditRecord,
-            to: auditURL,
-            forProjectAt: context.projectRoot
-        )
-        let auditReference = try artifactBuilder.reference(
-            for: auditURL,
-            projectRoot: context.projectRoot,
             artifactID: "rtl-verification-audit",
+            stageID: stageID,
+            directory: "audit",
+            fileName: "rtl-verification-audit.json",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            mode: .replaceable
         )
-        return [resultReference, qualificationReference, reviewReference, auditReference]
+        return [resultReference, assessmentReference, reviewReference, auditReference]
     }
 
-    private func loadQualificationInput(from url: URL) throws -> RTLVerificationQualificationInput {
+    private func loadEvidenceInput(from url: URL) throws -> RTLVerificationEvidenceInput {
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
             throw RTLVerificationExecutionError.invalidArtifact(
-                "Could not read qualification input \(url.path(percentEncoded: false)): \(error.localizedDescription)"
+                "Could not read RTL evidence input \(url.path(percentEncoded: false)): \(error.localizedDescription)"
             )
         }
         do {
-            return try JSONDecoder().decode(RTLVerificationQualificationInput.self, from: data)
+            return try JSONDecoder().decode(RTLVerificationEvidenceInput.self, from: data)
         } catch {
             throw RTLVerificationExecutionError.invalidArtifact(
-                "Could not decode qualification input \(url.path(percentEncoded: false)): \(error.localizedDescription)"
+                "Could not decode RTL evidence input \(url.path(percentEncoded: false)): \(error.localizedDescription)"
             )
         }
     }
@@ -778,40 +694,34 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     private func loadResumableResult(
         request: RTLVerificationRequest,
         context: FlowExecutionContext
-    ) throws -> (envelope: RTLVerificationResult, artifacts: [ArtifactReference])? {
-        let resultURL = rawDirectory(context: context)
-            .appending(path: "rtl-verification-result.json")
-        let auditURL = auditDirectory(context: context)
-            .appending(path: "rtl-verification-audit.json")
-        let qualificationURL = rawDirectory(context: context)
-            .appending(path: "qualification.json")
-        let reviewURL = reviewDirectory(context: context)
-            .appending(path: "rtl-verification-review.json")
-        guard FileManager.default.fileExists(atPath: resultURL.path),
-              FileManager.default.fileExists(atPath: auditURL.path),
-              FileManager.default.fileExists(atPath: qualificationURL.path),
-              FileManager.default.fileExists(atPath: reviewURL.path) else {
+    ) async throws -> (envelope: RTLVerificationResult, artifacts: [ArtifactReference])? {
+        let definitions = try persistedArtifactDefinitions(context: context)
+        var contents: [String: Data] = [:]
+        for definition in definitions {
+            guard let data = try await context.infrastructure.loadArtifactContent(at: definition.locator) else {
+                return nil
+            }
+            contents[definition.artifactID] = data
+        }
+        guard let auditData = contents["rtl-verification-audit"],
+              let resultData = contents["rtl-verification-result"],
+              let assessmentData = contents["rtl-verification-evidence-assessment"],
+              let reviewData = contents["rtl-verification-review"] else {
             return nil
         }
-        let audit = try context.storage.readJSON(
-            RTLVerificationStageAuditRecord.self,
-            from: auditURL
-        )
+        let audit = try JSONDecoder().decode(RTLVerificationStageAuditRecord.self, from: auditData)
         guard audit.stageID == stageID,
               audit.runID == context.runID,
               audit.resumable,
               audit.status == .completed || audit.status == .blocked,
               audit.artifactIDs.contains("rtl-verification-result"),
-              audit.artifactIDs.contains("rtl-verification-qualification"),
+              audit.artifactIDs.contains("rtl-verification-evidence-assessment"),
               audit.artifactIDs.contains("rtl-verification-review"),
               audit.artifactIDs.contains("rtl-verification-audit"),
               audit.requestDigest == (try digest(for: request)) else {
             return nil
         }
-        let envelope = try context.storage.readJSON(
-            RTLVerificationResult.self,
-            from: resultURL
-        )
+        let envelope = try JSONDecoder().decode(RTLVerificationResult.self, from: resultData)
         guard envelope.runID == context.runID, envelope.status == audit.status else {
             return nil
         }
@@ -822,20 +732,14 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
            }) {
             return nil
         }
-        let qualification = try context.storage.readJSON(
-            RTLVerificationQualificationReport.self,
-            from: qualificationURL
-        )
-        guard qualification == envelope.payload.qualification,
-              audit.qualificationState == envelope.payload.qualification.state else {
+        let assessment = try JSONDecoder().decode(RTLVerificationEvidenceAssessment.self, from: assessmentData)
+        guard assessment == envelope.payload.record,
+              audit.evidenceMaturity == envelope.payload.record.maturity else {
             throw RTLVerificationExecutionError.invalidArtifact(
-                "The persisted RTL qualification artifact does not match the result envelope."
+                "The persisted RTL evidence assessment does not match the result envelope."
             )
         }
-        let review = try context.storage.readJSON(
-            RTLVerificationReviewArtifact.self,
-            from: reviewURL
-        )
+        let review = try JSONDecoder().decode(RTLVerificationReviewArtifact.self, from: reviewData)
         guard review.stageID == stageID,
               review.runID == context.runID,
               review.analysis == envelope.payload.analysis,
@@ -843,38 +747,59 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
               review.findings == envelope.payload.findings,
               review.diagnostics == envelope.diagnostics,
               review.appliedWaivers == envelope.payload.appliedWaivers,
-              review.qualification == envelope.payload.qualification else {
+              review.record == envelope.payload.record else {
             throw RTLVerificationExecutionError.invalidArtifact(
                 "The persisted RTL review artifact does not match the result envelope."
             )
         }
         return (
             envelope: envelope,
-            artifacts: try persistedStageReferences(context: context)
+            artifacts: try definitions.compactMap { definition in
+                guard let data = contents[definition.artifactID] else { return nil }
+                return try artifactReference(definition: definition, content: data)
+            }
         )
     }
 
-    private func persistedStageReferences(
+    private struct PersistedArtifactDefinition {
+        var artifactID: String
+        var locator: ArtifactLocator
+    }
+
+    private func persistedArtifactDefinitions(
         context: FlowExecutionContext
-    ) throws -> [ArtifactReference] {
-        let definitions: [(URL, String)] = [
-            (rawDirectory(context: context).appending(path: "rtl-verification-result.json"), "rtl-verification-result"),
-            (rawDirectory(context: context).appending(path: "qualification.json"), "rtl-verification-qualification"),
-            (reviewDirectory(context: context).appending(path: "rtl-verification-review.json"), "rtl-verification-review"),
-            (auditDirectory(context: context).appending(path: "rtl-verification-audit.json"), "rtl-verification-audit")
+    ) throws -> [PersistedArtifactDefinition] {
+        let definitions: [(String, String, String)] = [
+            ("raw", "rtl-verification-result.json", "rtl-verification-result"),
+            ("raw", "evidence-assessment.json", "rtl-verification-evidence-assessment"),
+            ("review", "rtl-verification-review.json", "rtl-verification-review"),
+            ("audit", "rtl-verification-audit.json", "rtl-verification-audit")
         ]
-        var references: [ArtifactReference] = []
-        for (url, artifactID) in definitions {
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            references.append(try artifactBuilder.reference(
-                for: url,
-                projectRoot: context.projectRoot,
+        return try definitions.map { directory, fileName, artifactID in
+            PersistedArtifactDefinition(
                 artifactID: artifactID,
-                kind: ArtifactKind.report,
-                format: ArtifactFormat.json
-            ))
+                locator: ArtifactLocator(
+                    location: try ArtifactLocation(
+                        workspaceRelativePath: ".xcircuite/runs/\(context.runID)/stages/\(stageID)/\(directory)/\(fileName)"
+                    ),
+                    role: .output,
+                    kind: ArtifactKind.report,
+                    format: ArtifactFormat.json
+                )
+            )
         }
-        return references
+    }
+
+    private func artifactReference(
+        definition: PersistedArtifactDefinition,
+        content: Data
+    ) throws -> ArtifactReference {
+        ArtifactReference(
+            id: try ArtifactID(rawValue: definition.artifactID),
+            locator: definition.locator,
+            digest: try SHA256ContentDigester().digest(data: content),
+            byteCount: UInt64(content.count)
+        )
     }
 
     private func makeReviewArtifact(
@@ -885,7 +810,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         let suggestedActions = Array(Set(findingActions + diagnosticActions)).sorted()
         let approvalRequired = envelope.status != .completed
             || !envelope.payload.findings.isEmpty
-            || !envelope.payload.qualification.blockers.isEmpty
+            || !envelope.payload.record.limitations.isEmpty
         return RTLVerificationReviewArtifact(
             stageID: stageID,
             runID: envelope.runID,
@@ -894,7 +819,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             findings: envelope.payload.findings,
             diagnostics: envelope.diagnostics,
             appliedWaivers: envelope.payload.appliedWaivers,
-            qualification: envelope.payload.qualification,
+            record: envelope.payload.record,
             approvalRequired: approvalRequired,
             suggestedActions: suggestedActions
         )
@@ -906,27 +831,6 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         return try SHA256ContentDigester()
             .digest(data: try encoder.encode(request))
             .hexadecimalValue
-    }
-
-    private func rawDirectory(context: FlowExecutionContext) -> URL {
-        context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-    }
-
-    private func auditDirectory(context: FlowExecutionContext) -> URL {
-        context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "audit")
-    }
-
-    private func reviewDirectory(context: FlowExecutionContext) -> URL {
-        context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "review")
     }
 
     private func stageResult(

@@ -1,10 +1,9 @@
-import DesignFlowKernel
 import Foundation
 import Xcircuite
 import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
-    static func synthesizeParameterCandidatePlan(arguments: [String]) throws -> String {
+    static func synthesizeParameterCandidatePlan(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -62,7 +61,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteParameterCandidatePlanSynthesizer().synthesizeCandidatePlan(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteParameterCandidatePlanSynthesizer(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).synthesizeCandidatePlan(
             request: XcircuiteParameterCandidatePlanSynthesisRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -81,7 +84,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func generateParameterCandidates(arguments: [String]) throws -> String {
+    static func generateParameterCandidates(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -151,7 +154,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteParameterCandidateGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -174,7 +181,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func generateCandidatePlan(arguments: [String]) throws -> String {
+    static func generateCandidatePlan(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -238,7 +245,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -259,7 +270,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func runSymbolicPlannerFamily(arguments: [String]) throws -> String {
+    static func runSymbolicPlannerFamily(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -331,7 +342,11 @@ extension XcircuiteFlowCLICommand {
         let requestedStrategies = strategies.isEmpty
             ? XcircuiteSymbolicPlannerFamilyRunRequest(runID: runID).strategies
             : strategies
-        let result = try XcircuiteCandidatePlanGenerator().runSymbolicPlannerFamily(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).runSymbolicPlannerFamily(
             request: XcircuiteSymbolicPlannerFamilyRunRequest(
                 runID: runID,
                 familyRunID: familyRunID,
@@ -391,7 +406,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: runID,
                 candidatePlanArtifactID: candidatePlanArtifactID,
@@ -403,14 +422,14 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func approveCandidatePlanRisk(arguments: [String]) throws -> String {
+    static func approveCandidatePlanRisk(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
         var approvalID: String?
         var reviewer: String?
-        var reviewerKind = XcircuiteRunActionActor.Kind.human
-        var verdict = XcircuiteApprovalRecord.Verdict.approved
+        var reviewerKind = FlowRunActor.Kind.human
+        var verdict = FlowApprovalRecord.Verdict.approved
         var note = ""
         var pretty = false
 
@@ -426,13 +445,13 @@ extension XcircuiteFlowCLICommand {
                 reviewer = try parser.requiredValue(after: argument)
             case "--reviewer-kind":
                 let value = try parser.requiredValue(after: argument)
-                guard let parsed = XcircuiteRunActionActor.Kind(rawValue: value) else {
+                guard let parsed = FlowRunActor.Kind(rawValue: value) else {
                     throw XcircuiteFlowCLIError.invalidValue(option: argument, value: value)
                 }
                 reviewerKind = parsed
             case "--decision":
                 let value = try parser.requiredValue(after: argument)
-                guard let parsed = XcircuiteApprovalRecord.Verdict(rawValue: value) else {
+                guard let parsed = FlowApprovalRecord.Verdict(rawValue: value) else {
                     throw XcircuiteFlowCLIError.invalidValue(option: argument, value: value)
                 }
                 verdict = parsed
@@ -460,7 +479,10 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--reviewer")
         }
 
-        let result = try XcircuiteCandidatePlanRiskApprovalRecorder().recordApproval(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteCandidatePlanRiskApprovalRecorder(
+            workspaceStore: workspaceStore
+        ).recordApproval(
             request: XcircuiteCandidatePlanRiskApprovalRequest(
                 runID: runID,
                 approvalID: approvalID,
@@ -511,7 +533,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(
                 runID: runID,
                 candidatePlanArtifactID: candidatePlanArtifactID,
@@ -581,7 +607,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try await XcircuiteNumericRepairLoopRunner().runNumericRepairLoop(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteNumericRepairLoopRunner(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).runNumericRepairLoop(
             request: XcircuiteNumericRepairLoopRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -600,7 +630,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func generateImprovementArtifacts(arguments: [String]) throws -> String {
+    static func generateImprovementArtifacts(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -643,7 +673,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteImprovementPlanningArtifactGenerator().generateImprovementPlanningArtifacts(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteImprovementPlanningArtifactGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).generateImprovementPlanningArtifacts(
             request: XcircuiteImprovementPlanningArtifactGenerationRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -657,7 +691,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func generatePlanningProblem(arguments: [String]) throws -> String {
+    static func generatePlanningProblem(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -733,7 +767,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--source")
         }
 
-        let result = try XcircuitePlanningProblemGenerator().generateRepairProblem(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuitePlanningProblemGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).generateRepairProblem(
             request: XcircuitePlanningProblemGenerationRequest(
                 runID: runID,
                 source: source,
@@ -770,7 +808,7 @@ extension XcircuiteFlowCLICommand {
         }
     }
 
-    static func formulateRepairPlanningProblem(arguments: [String]) throws -> String {
+    static func formulateRepairPlanningProblem(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -807,7 +845,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--formulation-path")
         }
 
-        let result = try XcircuiteRepairPlanFormulationCompiler().compile(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteRepairPlanFormulationCompiler(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).compile(
             request: XcircuiteRepairPlanFormulationCompilationRequest(
                 runID: runID,
                 formulationPath: formulationPath,
@@ -818,7 +860,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func formulateSignoffRepairPlanningProblem(arguments: [String]) throws -> String {
+    static func formulateSignoffRepairPlanningProblem(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -864,7 +906,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteSignoffRepairFormulationBuilder().compile(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSignoffRepairFormulationBuilder(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).compile(
             request: XcircuiteSignoffRepairFormulationRequest(
                 runID: runID,
                 drcRepairHintPath: drcRepairHintPath,

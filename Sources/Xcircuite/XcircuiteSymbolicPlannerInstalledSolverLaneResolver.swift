@@ -6,7 +6,7 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneResolver: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
+        artifactStore: XcircuitePlanningArtifactStore
     ) {
         self.artifactStore = artifactStore
     }
@@ -14,9 +14,9 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneResolver: Sendable {
     public func discover(
         request: XcircuiteSymbolicPlannerInstalledSolverLaneRequest,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerInstalledSolverLaneDiscoveryResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(request.laneID, kind: .artifactID)
+    ) async throws -> XcircuiteSymbolicPlannerInstalledSolverLaneDiscoveryResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.laneID, kind: .artifactID)
         let searchPaths = normalizedSearchPaths(request.searchPaths)
         let specs = request.candidates.isEmpty ? Self.defaultCandidateSpecs() : request.candidates
         let candidates = specs.map { candidate in
@@ -45,7 +45,7 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneResolver: Sendable {
             batchRequest: batchRequest,
             diagnostics: diagnostics
         )
-        let artifact = try artifactStore.persistSymbolicPlannerInstalledSolverLane(
+        let artifact = try await artifactStore.persistSymbolicPlannerInstalledSolverLane(
             lane,
             runID: request.runID,
             projectRoot: projectRoot

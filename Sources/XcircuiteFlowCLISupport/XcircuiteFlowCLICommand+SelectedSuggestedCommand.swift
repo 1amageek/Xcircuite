@@ -34,7 +34,10 @@ extension XcircuiteFlowCLICommand {
 
         let resolved: XcircuiteResolvedSuggestedCommand
         do {
-            resolved = try XcircuiteSelectedSuggestedCommandResolver().resolve(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            resolved = try await XcircuiteSelectedSuggestedCommandResolver(
+                workspaceStore: workspaceStore
+            ).resolve(
                 request: XcircuiteSelectedSuggestedCommandResolutionRequest(
                     runID: runID,
                     commandID: commandID
@@ -55,15 +58,15 @@ extension XcircuiteFlowCLICommand {
         let arguments = Array(resolved.dispatchArguments.dropFirst())
         switch resolved.commandName {
         case "validate-planning-problem":
-            return try validatePlanningProblem(arguments: arguments)
+            return try await validatePlanningProblem(arguments: arguments)
         case "audit-problem-translation":
-            return try auditProblemTranslation(arguments: arguments)
+            return try await auditProblemTranslation(arguments: arguments)
         case "generate-candidate-plan":
-            return try generateCandidatePlan(arguments: arguments)
+            return try await generateCandidatePlan(arguments: arguments)
         case "run-symbolic-planner-family":
-            return try runSymbolicPlannerFamily(arguments: arguments)
+            return try await runSymbolicPlannerFamily(arguments: arguments)
         case "compare-symbolic-planner-solver-family":
-            return try compareSymbolicPlannerSolverFamily(arguments: arguments)
+            return try await compareSymbolicPlannerSolverFamily(arguments: arguments)
         case "promote-symbolic-planner-solver-family-selection":
             return try await promoteSymbolicPlannerSolverFamilySelection(arguments: arguments)
         case "execute-candidate-plan":
@@ -71,13 +74,13 @@ extension XcircuiteFlowCLICommand {
         case "verify-candidate-plan":
             return try await verifyCandidatePlan(arguments: arguments)
         case "generate-parameter-candidates":
-            return try generateParameterCandidates(arguments: arguments)
+            return try await generateParameterCandidates(arguments: arguments)
         case "synthesize-parameter-candidate-plan":
-            return try synthesizeParameterCandidatePlan(arguments: arguments)
+            return try await synthesizeParameterCandidatePlan(arguments: arguments)
         case "run-numeric-repair-loop":
             return try await runNumericRepairLoop(arguments: arguments)
         case "generate-improvement-artifacts":
-            return try generateImprovementArtifacts(arguments: arguments)
+            return try await generateImprovementArtifacts(arguments: arguments)
         default:
             throw XcircuiteFlowCLIError.selectedSuggestedCommandNotRunnable(
                 "Unsupported command \(resolved.commandName)"

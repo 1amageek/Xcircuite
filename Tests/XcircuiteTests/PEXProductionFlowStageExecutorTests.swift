@@ -31,7 +31,7 @@ struct PEXProductionFlowStageExecutorTests {
             )
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "production-pex-readiness",
@@ -72,6 +72,15 @@ struct PEXProductionFlowStageExecutorTests {
             vias: [],
             defaultExtractionRules: .default,
             backendHints: [:]
+        )
+    }
+
+    private func makeOrchestrator(root: URL) throws -> DefaultFlowOrchestrator {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return DefaultFlowOrchestrator(
+            infrastructure: store,
+            ledgerPersistence: store,
+            progressStore: FlowRunProgressStore(persistence: store)
         )
     }
 

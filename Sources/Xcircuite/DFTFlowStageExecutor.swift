@@ -1,5 +1,4 @@
 import DFTCore
-import DesignFlowKernel
 import DFTEngine
 import CircuiteFoundation
 import Foundation
@@ -28,7 +27,7 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let requestURL = try requestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -52,11 +51,11 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                     cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: context.projectRoot)
                 )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let diagnostics = result.diagnostics.map(flowDiagnostic)
             let gateStatus = gateStatus(for: result.status)
             let support = ReleaseStageExecutionSupport()
-            let resultArtifact = try support.persistResult(
+            let resultArtifact = try await support.persistResult(
                 result,
                 stageID: stage.stageID,
                 artifactID: "dft-result-envelope",
@@ -66,7 +65,7 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                 result: result,
                 provenance: try foundationProvenance(for: result, request: request)
             )
-            let foundationArtifact = try support.persistFoundationEvidence(
+            let foundationArtifact = try await support.persistFoundationEvidence(
                 foundationEvidence,
                 stageID: stage.stageID,
                 artifactID: "dft-foundation-evidence",
@@ -136,8 +135,8 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stage.stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stage.stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private func flowDiagnostic(_ diagnostic: DFTDiagnostic) -> FlowDiagnostic {

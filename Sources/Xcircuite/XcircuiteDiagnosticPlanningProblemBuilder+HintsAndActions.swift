@@ -9,38 +9,34 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         _ bucket: DRCViolationBucketSummary,
         includesLVSRefs: Bool = false,
         topCell: String
-    ) -> [String: XcircuiteJSONValue] {
-        var hints: [String: XcircuiteJSONValue] = [
-            "relatedShapeIDs": .array(bucket.relatedShapeIDs.map { .string($0) }),
-            "relatedNetIDs": .array(bucket.relatedNetIDs.map { .string($0) }),
-            "activeCount": .number(Double(bucket.activeCount)),
+    ) -> [String: PlanningParameterValue] {
+        var hints: [String: PlanningParameterValue] = [
+            "relatedShapeIDs": .textList(bucket.relatedShapeIDs),
+            "relatedNetIDs": .textList(bucket.relatedNetIDs),
+            "activeCount": .scalar(Double(bucket.activeCount)),
         ]
         if includesLVSRefs {
-            hints["lvsInputs"] = .object([
-                "layoutNetlistRef": .string("layout-netlist-ref"),
-                "schematicNetlistRef": .string("schematic-netlist-ref"),
-                "topCell": .string(topCell),
-            ])
+            hints["lvsInputs"] = lvsInputs(topCell: topCell)
         }
         let operationID = layoutOperationID(for: bucket)
         if operationTargetsExistingShape(operationID), let shapeID = bucket.relatedShapeIDs.first {
-            hints["shapeID"] = .string(shapeID)
+            hints["shapeID"] = .text(shapeID)
         }
         if operationID == "layout.add-rect", let region = bucket.representativeRegion {
-            hints["originX"] = .number(region.x)
-            hints["originY"] = .number(region.y)
-            hints["width"] = .number(region.width)
-            hints["height"] = .number(region.height)
+            hints["originX"] = .scalar(region.x)
+            hints["originY"] = .scalar(region.y)
+            hints["width"] = .scalar(region.width)
+            hints["height"] = .scalar(region.height)
         }
         if operationID == "layout.resize-shape" {
             let growth = resizeGrowth(for: bucket)
-            hints["deltaMinX"] = .number(0)
-            hints["deltaMinY"] = .number(0)
-            hints["deltaMaxX"] = .number(growth.width)
-            hints["deltaMaxY"] = .number(growth.height)
+            hints["deltaMinX"] = .scalar(0)
+            hints["deltaMinY"] = .scalar(0)
+            hints["deltaMaxX"] = .scalar(growth.width)
+            hints["deltaMaxY"] = .scalar(growth.height)
         }
         if operationID == "layout.split-shape" {
-            hints["axis"] = .string(splitAxis(for: bucket))
+            hints["axis"] = .text(splitAxis(for: bucket))
         }
         insertOptional(bucket.ruleID, key: "ruleID", into: &hints)
         insertOptional(bucket.kind, key: "kind", into: &hints)
@@ -48,7 +44,7 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         insertOptional(bucket.maxMeasured, key: "maxMeasured", into: &hints)
         insertOptional(bucket.required, key: "required", into: &hints)
         if let ruleHint = nativeDRCRuleHint(for: bucket) {
-            hints["drcRules"] = .array([ruleHint])
+            hints["drcRules"] = .drcRules([ruleHint])
         }
         return hints
     }
@@ -57,39 +53,32 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         _ hint: DRCRepairHint,
         includesLVSRefs: Bool = false,
         topCell: String
-    ) -> [String: XcircuiteJSONValue] {
-        var hints: [String: XcircuiteJSONValue] = [
-            "sourceRepairHintID": .string(hint.hintID),
-            "sourceDiagnosticIndex": .number(Double(hint.sourceDiagnosticIndex)),
-            "repairHintConfidence": .string(hint.confidence),
-            "relatedShapeIDs": .array(hint.targetShapeIDs.map { .string($0) }),
-            "relatedViaIDs": .array(hint.relatedViaIDs.map { .string($0) }),
-            "relatedNetIDs": .array(hint.relatedNetIDs.map { .string($0) }),
-            "activeCount": .number(1),
+    ) -> [String: PlanningParameterValue] {
+        var hints: [String: PlanningParameterValue] = [
+            "sourceRepairHintID": .text(hint.hintID),
+            "sourceDiagnosticIndex": .scalar(Double(hint.sourceDiagnosticIndex)),
+            "repairHintConfidence": .text(hint.confidence),
+            "relatedShapeIDs": .textList(hint.targetShapeIDs),
+            "relatedViaIDs": .textList(hint.relatedViaIDs),
+            "relatedNetIDs": .textList(hint.relatedNetIDs),
+            "activeCount": .scalar(1),
         ]
         if includesLVSRefs {
-            hints["lvsInputs"] = .object([
-                "layoutNetlistRef": .string("layout-netlist-ref"),
-                "schematicNetlistRef": .string("schematic-netlist-ref"),
-                "topCell": .string(topCell),
-            ])
+            hints["lvsInputs"] = lvsInputs(topCell: topCell)
         }
         if operationTargetsExistingShape(hint.operationID), let shapeID = hint.targetShapeIDs.first {
-            hints["shapeID"] = .string(shapeID)
+            hints["shapeID"] = .text(shapeID)
         }
         for (key, value) in hint.numericParameters {
-            hints[key] = .number(value)
+            hints[key] = .scalar(value)
         }
         for (key, value) in hint.stringParameters {
-            hints[key] = .string(value)
+            hints[key] = .text(value)
         }
         if let region = hint.region {
-            hints["region"] = .object([
-                "x": .number(region.x),
-                "y": .number(region.y),
-                "width": .number(region.width),
-                "height": .number(region.height),
-            ])
+            hints["region"] = .region(
+                PlanningRegion(x: region.x, y: region.y, width: region.width, height: region.height)
+            )
         }
         insertOptional(hint.ruleID, key: "ruleID", into: &hints)
         insertOptional(hint.kind, key: "kind", into: &hints)
@@ -97,57 +86,43 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         insertOptional(hint.measured, key: "measured", into: &hints)
         insertOptional(hint.required, key: "required", into: &hints)
         if let ruleHint = nativeDRCRuleHint(for: hint) {
-            hints["drcRules"] = .array([ruleHint])
+            hints["drcRules"] = .drcRules([ruleHint])
         }
         return hints
     }
 
-    func nativeDRCRuleHint(for bucket: DRCViolationBucketSummary) -> XcircuiteJSONValue? {
+    func nativeDRCRuleHint(for bucket: DRCViolationBucketSummary) -> PlanningDRCRule? {
         guard let kind = bucket.kind,
               let layer = bucket.layer,
               let required = bucket.required else {
             return nil
         }
         let ruleID = bucket.ruleID ?? "\(layer).\(kind)"
-        return .object([
-            "id": .string(ruleID),
-            "kind": .string(kind),
-            "layer": .string(layer),
-            "value": .number(required),
-        ])
+        return PlanningDRCRule(ruleID: ruleID, kind: kind, layer: layer, requiredValue: required)
     }
 
-    func nativeDRCRuleHint(for hint: DRCRepairHint) -> XcircuiteJSONValue? {
+    func nativeDRCRuleHint(for hint: DRCRepairHint) -> PlanningDRCRule? {
         guard let kind = hint.kind,
               let layer = hint.layer,
               let required = hint.required else {
             return nil
         }
         let ruleID = hint.ruleID ?? "\(layer).\(kind)"
-        return .object([
-            "id": .string(ruleID),
-            "kind": .string(kind),
-            "layer": .string(layer),
-            "value": .number(required),
-        ])
+        return PlanningDRCRule(ruleID: ruleID, kind: kind, layer: layer, requiredValue: required)
     }
 
     func lvsHints(
         _ bucket: LVSMismatchBucketSummary,
         includesLVSRefs: Bool = false,
         topCell: String = "top"
-    ) -> [String: XcircuiteJSONValue] {
-        var hints: [String: XcircuiteJSONValue] = [
-            "layoutPorts": .array(bucket.layoutPorts.map { .string($0) }),
-            "schematicPorts": .array(bucket.schematicPorts.map { .string($0) }),
-            "activeCount": .number(Double(bucket.activeCount)),
+    ) -> [String: PlanningParameterValue] {
+        var hints: [String: PlanningParameterValue] = [
+            "layoutPorts": .textList(bucket.layoutPorts),
+            "schematicPorts": .textList(bucket.schematicPorts),
+            "activeCount": .scalar(Double(bucket.activeCount)),
         ]
         if includesLVSRefs {
-            hints["lvsInputs"] = .object([
-                "layoutNetlistRef": .string("layout-netlist-ref"),
-                "schematicNetlistRef": .string("schematic-netlist-ref"),
-                "topCell": .string(topCell),
-            ])
+            hints["lvsInputs"] = lvsInputs(topCell: topCell)
         }
         insertOptional(bucket.ruleID, key: "ruleID", into: &hints)
         insertOptional(bucket.category, key: "category", into: &hints)
@@ -164,40 +139,33 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         _ hint: LVSRepairHint,
         includesLVSRefs: Bool = false,
         topCell: String = "top"
-    ) -> [String: XcircuiteJSONValue] {
-        var hints: [String: XcircuiteJSONValue] = [
-            "sourceRepairHintID": .string(hint.hintID),
-            "sourceDiagnosticIndex": .number(Double(hint.sourceDiagnosticIndex)),
-            "repairHintConfidence": .string(hint.confidence),
-            "repairHintOperationID": .string(hint.operationID),
-            "layoutPorts": .array(hint.layoutPorts.map { .string($0) }),
-            "schematicPorts": .array(hint.schematicPorts.map { .string($0) }),
-            "activeCount": .number(1),
+    ) -> [String: PlanningParameterValue] {
+        var hints: [String: PlanningParameterValue] = [
+            "sourceRepairHintID": .text(hint.hintID),
+            "sourceDiagnosticIndex": .scalar(Double(hint.sourceDiagnosticIndex)),
+            "repairHintConfidence": .text(hint.confidence),
+            "repairHintOperationID": .text(hint.operationID),
+            "layoutPorts": .textList(hint.layoutPorts),
+            "schematicPorts": .textList(hint.schematicPorts),
+            "activeCount": .scalar(1),
         ]
         if includesLVSRefs {
-            hints["lvsInputs"] = .object([
-                "layoutNetlistRef": .string("layout-netlist-ref"),
-                "schematicNetlistRef": .string("schematic-netlist-ref"),
-                "topCell": .string(topCell),
-            ])
+            hints["lvsInputs"] = lvsInputs(topCell: topCell)
         }
         for (key, value) in hint.stringParameters {
-            hints[key] = .string(value)
+            hints[key] = .text(value)
         }
         for (key, value) in hint.numericParameters ?? [:] {
-            hints[key] = .number(value)
+            hints[key] = .scalar(value)
         }
         if hint.operationID == "simulation.set-netlist-parameters",
            let assignmentName = hint.stringParameters["assignmentName"],
            let assignmentValue = hint.numericParameters?["assignmentValue"] {
-            hints["assignments"] = .array([
-                .object([
-                    "name": .string(assignmentName),
-                    "value": .number(assignmentValue),
-                ]),
+            hints["assignments"] = .parameterAssignments([
+                XcircuiteParameterAssignment(name: assignmentName, value: assignmentValue),
             ])
             if hints["lvsEditedNetlistRole"] == nil {
-                hints["lvsEditedNetlistRole"] = .string("layout")
+                hints["lvsEditedNetlistRole"] = .text("layout")
             }
         }
         insertOptional(hint.ruleID, key: "ruleID", into: &hints)
@@ -211,6 +179,16 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         insertOptional(hint.layoutCount, key: "layoutCount", into: &hints)
         insertOptional(hint.schematicCount, key: "schematicCount", into: &hints)
         return hints
+    }
+
+    private func lvsInputs(topCell: String) -> PlanningParameterValue {
+        .lvsInputs(
+            PlanningLVSInputs(
+                layoutNetlistReferenceID: "layout-netlist-ref",
+                schematicNetlistReferenceID: "schematic-netlist-ref",
+                topCell: topCell
+            )
+        )
     }
 
     func layoutOperationID(for bucket: DRCViolationBucketSummary) -> String {

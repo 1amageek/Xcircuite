@@ -18,7 +18,7 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
         repairHintArtifactPath: String? = nil,
         actionDomainArtifactPath: String? = nil
     ) throws -> XcircuiteCircuitPlanningProblem {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
         let problemID = try identifier("\(runID)-drc-repair-problem")
         let summaryRef = XcircuitePlanningReference(
             refID: "drc-summary",
@@ -26,9 +26,9 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
             path: summaryArtifactPath,
             artifactID: "drc-summary",
             metadata: [
-                "activeViolationCount": .number(Double(summary.summary.activeViolationCount)),
-                "waivedViolationCount": .number(Double(summary.summary.waivedViolationCount)),
-                "topCell": .string(summary.summary.topCell),
+                "activeViolationCount": .scalar(Double(summary.summary.activeViolationCount)),
+                "waivedViolationCount": .scalar(Double(summary.summary.waivedViolationCount)),
+                "topCell": .text(summary.summary.topCell),
             ]
         )
         let repairHintRef = repairHints.map { report in
@@ -38,13 +38,13 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
                 path: repairHintArtifactPath,
                 artifactID: "drc-repair-hints",
                 metadata: [
-                    "status": .string(report.status),
-                    "backendID": .string(report.backendID),
-                    "topCell": .string(report.topCell),
-                    "activeDiagnosticCount": .number(Double(report.activeDiagnosticCount)),
-                    "hintCount": .number(Double(report.hintCount)),
-                    "unsupportedDiagnosticIndexes": .array(
-                        report.unsupportedDiagnosticIndexes.map { .number(Double($0)) }
+                    "status": .text(report.status),
+                    "backendID": .text(report.backendID),
+                    "topCell": .text(report.topCell),
+                    "activeDiagnosticCount": .scalar(Double(report.activeDiagnosticCount)),
+                    "hintCount": .scalar(Double(report.hintCount)),
+                    "unsupportedDiagnosticIndexes": .scalarList(
+                        report.unsupportedDiagnosticIndexes.map(Double.init)
                     ),
                 ]
             )
@@ -160,7 +160,7 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
         repairHintArtifactPath: String? = nil,
         actionDomainArtifactPath: String? = nil
     ) throws -> XcircuiteCircuitPlanningProblem {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
         let problemID = try identifier("\(runID)-lvs-repair-problem")
         let summaryRef = XcircuitePlanningReference(
             refID: "lvs-summary",
@@ -168,10 +168,10 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
             path: summaryArtifactPath,
             artifactID: "lvs-summary",
             metadata: [
-                "activeMismatchCount": .number(Double(summary.summary.activeMismatchCount)),
-                "waivedMismatchCount": .number(Double(summary.summary.waivedMismatchCount)),
-                "topCell": .string(summary.summary.topCell),
-                "layoutInputKind": .string(summary.summary.layoutInputKind),
+                "activeMismatchCount": .scalar(Double(summary.summary.activeMismatchCount)),
+                "waivedMismatchCount": .scalar(Double(summary.summary.waivedMismatchCount)),
+                "topCell": .text(summary.summary.topCell),
+                "layoutInputKind": .text(summary.summary.layoutInputKind),
             ]
         )
         let repairHintRef = repairHints.map { report in
@@ -181,13 +181,13 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
                 path: repairHintArtifactPath,
                 artifactID: "lvs-repair-hints",
                 metadata: [
-                    "status": .string(report.status),
-                    "backendID": .string(report.backendID),
-                    "topCell": .string(report.topCell),
-                    "activeDiagnosticCount": .number(Double(report.activeDiagnosticCount)),
-                    "hintCount": .number(Double(report.hintCount)),
-                    "unsupportedDiagnosticIndexes": .array(
-                        report.unsupportedDiagnosticIndexes.map { .number(Double($0)) }
+                    "status": .text(report.status),
+                    "backendID": .text(report.backendID),
+                    "topCell": .text(report.topCell),
+                    "activeDiagnosticCount": .scalar(Double(report.activeDiagnosticCount)),
+                    "hintCount": .scalar(Double(report.hintCount)),
+                    "unsupportedDiagnosticIndexes": .scalarList(
+                        report.unsupportedDiagnosticIndexes.map(Double.init)
                     ),
                 ]
             )
@@ -287,7 +287,7 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
         metricReport: PostLayoutComparisonReport? = nil,
         actionDomainArtifactPath: String? = nil
     ) throws -> XcircuiteCircuitPlanningProblem {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
         let problemID = try identifier("\(runID)-pex-recovery-problem")
         let summaryRef = XcircuitePlanningReference(
             refID: "pex-summary",
@@ -295,12 +295,12 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
             path: summaryArtifactPath,
             artifactID: "pex-summary",
             metadata: [
-                "pexRunID": .string(summary.summary.runID),
-                "status": .string(summary.summary.status),
-                "backendID": .string(summary.summary.backendID),
-                "cornerCount": .number(Double(summary.summary.corners.count)),
-                "completenessStatus": .string(summary.completeness.status.rawValue),
-                "completenessIssueCount": .number(Double(summary.completeness.issues.count)),
+                "pexRunID": .text(summary.summary.runID),
+                "status": .text(summary.summary.status),
+                "backendID": .text(summary.summary.backendID),
+                "cornerCount": .scalar(Double(summary.summary.corners.count)),
+                "completenessStatus": .text(summary.completeness.status.rawValue),
+                "completenessIssueCount": .scalar(Double(summary.completeness.issues.count)),
             ]
         )
         let layoutRef = resolvableReference(
@@ -408,7 +408,7 @@ public struct XcircuiteDiagnosticPlanningProblemBuilder: Sendable {
         kind: String,
         path: String?,
         artifactID: String? = nil,
-        metadata: [String: XcircuiteJSONValue] = [:]
+        metadata: [String: PlanningParameterValue] = [:]
     ) -> XcircuitePlanningReference? {
         guard path != nil || artifactID != nil else {
             return nil

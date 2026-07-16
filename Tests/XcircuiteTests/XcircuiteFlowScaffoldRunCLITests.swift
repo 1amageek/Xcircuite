@@ -1,14 +1,13 @@
 import Foundation
 import Testing
 import ToolQualification
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
 
 /// `scaffold-run` is the authoring entry point for flow specs: it
 /// writes a run-spec + runtime-config pair that decodes through the real
 /// spec types, passes `validate` unchanged, keeps the mock PEX stage at
-/// the runtime's mock contract (`unknown`, no qualified evidence), and
-/// stamps corpus evidence `checkedAt` with the scaffold-time clock.
+/// the runtime's mock contract and never fabricates qualification evidence.
 @Suite("xcircuite-flow scaffold-run", .timeLimit(.minutes(3)))
 struct XcircuiteFlowScaffoldRunCLITests {
 
@@ -54,6 +53,7 @@ struct XcircuiteFlowScaffoldRunCLITests {
 
         let output = try await XcircuiteFlowCLICommand.run(arguments: [
             "scaffold-run",
+            "--project-root", root.path(percentEncoded: false),
             "--run-id", "scaffold-run-001",
             "--out-run-spec", runSpecURL.path(percentEncoded: false),
             "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),
@@ -80,17 +80,18 @@ struct XcircuiteFlowScaffoldRunCLITests {
         #expect(runtimeSpec.executors.count == 3)
         #expect(runSpec.stages.allSatisfy { $0.requiresApproval == false })
 
-        // Simulation and comparison stages demand corpus-checked tools.
+        // A scaffold cannot claim qualification that has not been performed.
         let simulationStage = try #require(
             runSpec.stages.first { $0.stageID == "001-core-spice-simulation" }
         )
         let simulationRequirement = try #require(simulationStage.requiredTool)
-        #expect(simulationRequirement.minimumLevel == .corpusChecked)
-        #expect(simulationRequirement.requiredQualifiedEvidenceKinds == [.corpus])
+        #expect(simulationRequirement.minimumLevel == .unknown)
+        #expect(simulationRequirement.requiredQualifiedEvidenceKinds.isEmpty)
 
         // The `validate` subcommand accepts the pair unchanged.
         let validateOutput = try await XcircuiteFlowCLICommand.run(arguments: [
             "validate",
+            "--project-root", root.path(percentEncoded: false),
             "--run-spec", runSpecURL.path(percentEncoded: false),
             "--runtime-config", runtimeConfigURL.path(percentEncoded: false),
         ])
@@ -111,6 +112,7 @@ struct XcircuiteFlowScaffoldRunCLITests {
 
         _ = try await XcircuiteFlowCLICommand.run(arguments: [
             "scaffold-run",
+            "--project-root", root.path(percentEncoded: false),
             "--run-id", "scaffold-run-mock",
             "--out-run-spec", runSpecURL.path(percentEncoded: false),
             "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),
@@ -140,45 +142,26 @@ struct XcircuiteFlowScaffoldRunCLITests {
     }
 
     @Test
-    func scaffoldedEvidenceCheckedAtIsISO8601AndNotInTheFuture() async throws {
-        let root = try makeTemporaryRoot("checked-at")
+    func scaffoldDoesNotFabricateQualificationEvidence() async throws {
+        let root = try makeTemporaryRoot("qualification-evidence")
         defer { removeTemporaryRoot(root) }
         let runSpecURL = root.appending(path: "run.json")
         let runtimeConfigURL = root.appending(path: "runtime.json")
 
         _ = try await XcircuiteFlowCLICommand.run(arguments: [
             "scaffold-run",
+            "--project-root", root.path(percentEncoded: false),
             "--run-id", "scaffold-run-clock",
             "--out-run-spec", runSpecURL.path(percentEncoded: false),
             "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),
         ])
 
-        // Inspect the raw JSON so the assertion covers the on-disk string,
-        // not just the decoded Date.
-        let rawData = try Data(contentsOf: runtimeConfigURL)
-        let rawObject = try #require(
-            try JSONSerialization.jsonObject(with: rawData) as? [String: Any]
-        )
-        let executors = try #require(rawObject["executors"] as? [[String: Any]])
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var checkedAtCount = 0
-        for executor in executors {
-            guard let value = executor["value"] as? [String: Any],
-                  let tool = value["tool"] as? [String: Any],
-                  let evidence = tool["evidence"] as? [[String: Any]] else {
-                continue
-            }
-            for entry in evidence {
-                let checkedAtString = try #require(entry["checkedAt"] as? String)
-                let checkedAt = try #require(formatter.date(from: checkedAtString))
-                #expect(checkedAt.timeIntervalSinceNow <= 1)
-                checkedAtCount += 1
-            }
+        let runtimeSpec = try XcircuiteFlowRuntimeSpec.load(from: runtimeConfigURL)
+        for executor in runtimeSpec.executors {
+            let descriptor = executor.makeDescriptor()
+            #expect(descriptor.trustProfile.level == .unknown)
+            #expect(executor.makeHealthResult().evidence.isEmpty)
         }
-        // Both corpus-checked executors (simulation + comparison) carry
-        // stamped evidence; the mock PEX executor carries none.
-        #expect(checkedAtCount == 2)
     }
 
     @Test
@@ -190,6 +173,7 @@ struct XcircuiteFlowScaffoldRunCLITests {
 
         let output = try await XcircuiteFlowCLICommand.run(arguments: [
             "scaffold-run",
+            "--project-root", root.path(percentEncoded: false),
             "--run-id", "scaffold-run-subset",
             "--out-run-spec", runSpecURL.path(percentEncoded: false),
             "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),
@@ -233,6 +217,7 @@ struct XcircuiteFlowScaffoldRunCLITests {
 
         _ = try await XcircuiteFlowCLICommand.run(arguments: [
             "scaffold-run",
+            "--project-root", root.path(percentEncoded: false),
             "--run-id", "scaffold-run-invalid",
             "--out-run-spec", runSpecURL.path(percentEncoded: false),
             "--out-runtime-config", runtimeConfigURL.path(percentEncoded: false),

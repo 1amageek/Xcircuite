@@ -128,13 +128,13 @@ extension XcircuiteCandidatePlanExecutor {
         stepResults: [XcircuiteCandidatePlanExecutionStepResult],
         actor: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) async throws -> ArtifactReference? {
         let executed = stepResults.filter { $0.status == "executed" }
         guard !executed.isEmpty else {
             return nil
         }
         let changes = executed.map { result in
-            XcircuiteDesignDiffChange(
+            DesignDiffChange(
                 changeID: "candidate-step-\(result.order)",
                 domain: designDiffDomain(for: result.operationID),
                 operation: designDiffOperation(for: result.operationID),
@@ -143,22 +143,21 @@ extension XcircuiteCandidatePlanExecutor {
                     "operationID": .string(result.operationID),
                     "artifactIDs": .array(result.artifactReferences.map { .string($0.id.rawValue) }),
                 ]),
-                artifacts: legacyArtifactReferences(result.artifactReferences),
+                artifacts: result.artifactReferences,
                 summary: "Executed candidate plan step \(result.stepID) with operation \(result.operationID)."
             )
         }
-        return try workspaceStore.writeDesignDiff(
-            XcircuiteDesignDiff(
+        return try await workspaceStore.persistDesignDiff(
+            DesignDiff(
                 runID: plan.runID,
                 title: "Candidate plan \(plan.planID) execution",
                 actor: actor,
                 changes: changes
-            ),
-            inProjectAt: projectRoot
+            )
         )
     }
 
-    func designDiffDomain(for operationID: String) -> XcircuiteDesignDiffDomain {
+    func designDiffDomain(for operationID: String) -> DesignDiffDomain {
         if operationID == "simulation.set-netlist-parameters" {
             return .netlist
         }
@@ -237,7 +236,7 @@ extension XcircuiteCandidatePlanExecutor {
         return []
     }
 
-    func designDiffOperation(for operationID: String) -> XcircuiteDesignDiffOperation {
+    func designDiffOperation(for operationID: String) -> DesignDiffOperation {
         switch operationID {
         case "layout.translate-shape":
             return .move
@@ -254,12 +253,12 @@ extension XcircuiteCandidatePlanExecutor {
 
     func appendActionRecord(
         execution: XcircuiteCandidatePlanExecution,
-        candidatePlanRef: XcircuiteFileReference,
-        executionRef: XcircuiteFileReference,
-        designDiffRef: XcircuiteFileReference?,
+        candidatePlanRef: ArtifactReference,
+        executionRef: ArtifactReference,
+        designDiffRef: ArtifactReference?,
         projectRoot: URL
-    ) throws {
-        let status: XcircuiteRunActionStatus
+    ) async throws {
+        let status: FlowRunActionStatus
         switch execution.status {
         case "executed":
             status = .succeeded
@@ -271,26 +270,25 @@ extension XcircuiteCandidatePlanExecutor {
             status = .blocked
         }
         let outputs = [executionRef]
-            + legacyArtifactReferences(execution.artifactReferences)
+            + execution.artifactReferences
             + [designDiffRef].compactMap { $0 }
-        try workspaceStore.appendRunAction(
-            XcircuiteRunActionRecord(
+        try await workspaceStore.appendRunAction(
+            FlowRunActionRecord(
                 actionID: "\(execution.planID)-execution",
                 runID: execution.runID,
-                actor: XcircuiteRunActionActor(kind: .cli, identifier: "xcircuite-flow"),
+                actor: FlowRunActor(kind: .cli, identifier: "xcircuite-flow"),
                 actionKind: "planning.execute-candidate-plan",
                 status: status,
                 inputs: [candidatePlanRef],
                 outputs: outputs,
                 diagnostics: execution.diagnostics.map {
-                    XcircuiteRunActionDiagnostic(
+                    FlowRunDiagnostic(
                         severity: runActionSeverity($0.severity),
                         code: $0.code,
                         message: $0.message
                     )
                 }
-            ),
-            inProjectAt: projectRoot
+            )
         )
     }
 

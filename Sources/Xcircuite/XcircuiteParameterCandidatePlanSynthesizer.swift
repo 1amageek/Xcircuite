@@ -5,28 +5,28 @@ import DesignFlowKernel
 public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func synthesizeCandidatePlan(
         request: XcircuiteParameterCandidatePlanSynthesisRequest,
         projectRoot: URL
-    ) throws -> XcircuiteParameterCandidatePlanSynthesisResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+    ) async throws -> XcircuiteParameterCandidatePlanSynthesisResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         if let rank = request.rank, rank <= 0 {
             throw XcircuiteParameterCandidatePlanSynthesisError.invalidRank(rank)
         }
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let problemPath = try requiredPath(
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let problemPath = try await requiredPath(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
             manifest: manifest,
@@ -35,7 +35,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
             expectedFormat: .json,
             missingError: .missingProblemReference
         )
-        let candidatesPath = try requiredPath(
+        let candidatesPath = try await requiredPath(
             explicitPath: request.parameterCandidatesPath,
             artifactID: request.parameterCandidatesArtifactID ?? XcircuitePlanningArtifactStore.parameterCandidatesArtifactID,
             manifest: manifest,
@@ -44,18 +44,15 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
             expectedFormat: .text,
             missingError: .missingParameterCandidatesReference
         )
-        let problem = try workspaceStore.readJSON(
-            XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
-        )
+        let problem = try await workspaceStore.readJSON(XcircuiteCircuitPlanningProblem.self, from: problemPath)
         guard problem.runID == request.runID else {
             throw XcircuiteParameterCandidatePlanSynthesisError.runMismatch(
                 expected: request.runID,
                 actual: problem.runID
             )
         }
-        let candidates = try readParameterCandidates(path: candidatesPath, projectRoot: projectRoot)
-        let feedbackSummary = try loadRejectedPlanFeedback(
+        let candidates = try await readParameterCandidates(path: candidatesPath)
+        let feedbackSummary = try await loadRejectedPlanFeedback(
             request: request,
             manifest: manifest,
             projectRoot: projectRoot
@@ -100,12 +97,16 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
             sourceAction: sourceAction,
             strategy: request.strategy
         )
-        let selectionTraceReference = try artifactStore.persistParameterCandidateSelectionTrace(
+        let selectionTraceReference = try await artifactStore.persistParameterCandidateSelectionTrace(
             selection.trace,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let reference = try artifactStore.persistCandidatePlan(plan, runID: request.runID, projectRoot: projectRoot)
+        let reference = try await artifactStore.persistCandidatePlan(
+            plan,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
         return XcircuiteParameterCandidatePlanSynthesisResult(
             status: "generated",
             runID: request.runID,
@@ -121,14 +122,8 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
                 ? nil
                 : selection.skippedRejectedCandidateIDs,
             selectionTrace: selection.trace,
-            selectionTraceArtifact: try requireFoundationArtifactReference(
-                selectionTraceReference,
-                field: "parameter-candidate-selection-trace"
-            ),
-            candidatePlanArtifact: try requireFoundationArtifactReference(
-                reference,
-                field: "candidate-plan"
-            )
+            selectionTraceArtifact: selectionTraceReference,
+            candidatePlanArtifact: reference
         )
     }
 
@@ -199,28 +194,19 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         candidate: XcircuiteParameterCandidate,
         candidatesPath: String,
         netlistRef: XcircuitePlanningReference?
-    ) -> [String: XcircuiteJSONValue] {
+    ) -> [String: PlanningParameterValue] {
         var hints = sourceAction.parameterHints
-        hints["sourceParameterCandidateID"] = .string(candidate.candidateID)
-        hints["sourceParameterCandidateRank"] = .number(Double(candidate.rank))
-        hints["sourceParameterCandidatesPath"] = .string(candidatesPath)
-        hints["assignments"] = .array(candidate.assignments.map { assignment in
-            var object: [String: XcircuiteJSONValue] = [
-                "name": .string(assignment.name),
-                "value": .number(assignment.value),
-            ]
-            if let unit = assignment.unit {
-                object["unit"] = .string(unit)
-            }
-            return .object(object)
-        })
+        hints["sourceParameterCandidateID"] = .text(candidate.candidateID)
+        hints["sourceParameterCandidateRank"] = .scalar(Double(candidate.rank))
+        hints["sourceParameterCandidatesPath"] = .text(candidatesPath)
+        hints["assignments"] = .parameterAssignments(candidate.assignments)
         if let netlistRef {
-            hints["netlistRef"] = .string(netlistRef.refID)
+            hints["netlistRef"] = .text(netlistRef.refID)
             if let path = netlistRef.path {
-                hints["netlistPath"] = .string(path)
+                hints["netlistPath"] = .text(path)
             }
             if let artifactID = netlistRef.artifactID {
-                hints["netlistArtifactID"] = .string(artifactID)
+                hints["netlistArtifactID"] = .text(artifactID)
             }
         }
         return hints
@@ -255,7 +241,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         _ key: String,
         sourceAction: XcircuitePlanningCandidateAction
     ) -> String? {
-        guard case .string(let value) = sourceAction.parameterHints[key] else {
+        guard case .text(let value) = sourceAction.parameterHints[key] else {
             return nil
         }
         return value
@@ -713,10 +699,10 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
 
     private func loadRejectedPlanFeedback(
         request: XcircuiteParameterCandidatePlanSynthesisRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> XcircuiteRejectedPlanFeedbackSummary {
-        let path = try optionalRejectedPlansPath(
+    ) async throws -> XcircuiteRejectedPlanFeedbackSummary {
+        let path = try await optionalRejectedPlansPath(
             request: request,
             manifest: manifest,
             projectRoot: projectRoot
@@ -730,7 +716,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
                 excludedCandidateIDs: []
             )
         }
-        let records = try readRejectedPlanRecords(path: path, projectRoot: projectRoot)
+        let records = try await readRejectedPlanRecords(path: path)
         if let mismatched = records.first(where: { $0.runID != request.runID }) {
             throw XcircuiteParameterCandidatePlanSynthesisError.runMismatch(
                 expected: request.runID,
@@ -746,11 +732,11 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
 
     private func optionalRejectedPlansPath(
         request: XcircuiteParameterCandidatePlanSynthesisRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> String? {
+    ) async throws -> String? {
         if let path = request.rejectedPlansPath {
-            return try verifiedExplicitPath(
+            return try await verifiedExplicitPath(
                 path,
                 artifactID: request.rejectedPlansArtifactID,
                 manifest: manifest,
@@ -760,7 +746,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
             ).path
         }
         let artifactID = request.rejectedPlansArtifactID ?? XcircuitePlanningArtifactStore.rejectedPlansArtifactID
-        return try verifiedManifestArtifactReference(
+        return try await verifiedManifestArtifactReference(
             artifactID: artifactID,
             expectedFormat: .text,
             manifest: manifest,
@@ -769,12 +755,11 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         )?.path
     }
 
-    private func readParameterCandidates(
-        path: String,
-        projectRoot: URL
-    ) throws -> [XcircuiteParameterCandidate] {
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        let text = try String(contentsOf: url, encoding: .utf8)
+    private func readParameterCandidates(path: String) async throws -> [XcircuiteParameterCandidate] {
+        let data = try await workspaceStore.read(from: path)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw XcircuiteParameterCandidatePlanSynthesisError.invalidJSONLine(path: path, line: 1)
+        }
         var candidates: [XcircuiteParameterCandidate] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
             do {
@@ -787,12 +772,11 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         return candidates
     }
 
-    private func readRejectedPlanRecords(
-        path: String,
-        projectRoot: URL
-    ) throws -> [XcircuiteRejectedPlanRecord] {
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-        let text = try String(contentsOf: url, encoding: .utf8)
+    private func readRejectedPlanRecords(path: String) async throws -> [XcircuiteRejectedPlanRecord] {
+        let data = try await workspaceStore.read(from: path)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw XcircuiteParameterCandidatePlanSynthesisError.invalidRejectedPlanJSONLine(path: path, line: 1)
+        }
         var records: [XcircuiteRejectedPlanRecord] = []
         for (index, line) in text.split(separator: "\n").enumerated() {
             do {
@@ -808,21 +792,21 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         return records
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func requiredPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         missingError: XcircuiteParameterCandidatePlanSynthesisError
-    ) throws -> String {
+    ) async throws -> String {
         if let explicitPath {
-            return try verifiedExplicitPath(
+            return try await verifiedExplicitPath(
                 explicitPath,
                 artifactID: artifactID,
                 manifest: manifest,
@@ -834,7 +818,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
         guard let artifactID else {
             throw missingError
         }
-        guard let reference = try verifiedManifestArtifactReference(
+        guard let reference = try await verifiedManifestArtifactReference(
             artifactID: artifactID,
             expectedFormat: expectedFormat,
             manifest: manifest,
@@ -852,11 +836,11 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
     private func verifiedExplicitPath(
         _ explicitPath: String,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL,
-        expectedFormat: XcircuiteFileFormat
-    ) throws -> XcircuiteFileReference {
+        expectedFormat: ArtifactFormat
+    ) async throws -> ArtifactReference {
         let matches = manifest.artifacts.filter { $0.path == explicitPath }
         guard matches.count <= 1 else {
             throw XcircuiteParameterCandidatePlanSynthesisError.invalidArtifactReference(
@@ -864,14 +848,17 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? workspaceStore.fileReference(
-            forProjectRelativePath: explicitPath,
-            artifactID: artifactID,
-            kind: .other,
-            format: expectedFormat,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
+        let reference: ArtifactReference
+        if let match = matches.first {
+            reference = match
+        } else {
+            reference = try await workspaceStore.makeArtifactReference(
+                forProjectRelativePath: explicitPath,
+                artifactID: artifactID,
+                kind: .other,
+                format: expectedFormat
+            )
+        }
         try validateArtifactReference(
             reference,
             expectedArtifactID: artifactID,
@@ -884,11 +871,11 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
 
     private func verifiedManifestArtifactReference(
         artifactID: String,
-        expectedFormat: XcircuiteFileFormat,
-        manifest: XcircuiteRunManifest,
+        expectedFormat: ArtifactFormat,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) async throws -> ArtifactReference? {
         let matches = manifest.artifacts.filter { $0.artifactID == artifactID }
         guard !matches.isEmpty else {
             return nil
@@ -911,9 +898,9 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
     }
 
     private func validateArtifactReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         expectedArtifactID: String?,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String,
         projectRoot: URL
     ) throws {
@@ -929,18 +916,12 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
                 reason: "expected \(expectedFormat.rawValue) artifact, got \(reference.kind.rawValue)/\(reference.format.rawValue)."
             )
         }
-        guard reference.producedByRunID == runID else {
-            throw XcircuiteParameterCandidatePlanSynthesisError.artifactProducerRunMismatch(
-                expected: runID,
-                actual: reference.producedByRunID
-            )
-        }
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteParameterCandidatePlanSynthesisError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }
@@ -959,7 +940,7 @@ public struct XcircuiteParameterCandidatePlanSynthesizer: Sendable {
             .joined(separator: "-")
         let trimmed = String(collapsed.prefix(120)).trimmingCharacters(in: CharacterSet(charactersIn: ".-_"))
         let value = trimmed.isEmpty ? "parameter-candidate-edit-plan" : trimmed
-        try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+        try FlowIdentifierValidator().validate(value, kind: .artifactID)
         return value
     }
 

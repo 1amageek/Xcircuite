@@ -177,14 +177,14 @@ public struct XcircuiteSymbolicPlannerContract: Sendable {
         return diagnostics
     }
 
-    private func symbolicStateAtoms(from hints: [String: XcircuiteJSONValue]) -> [String] {
+    private func symbolicStateAtoms(from hints: [String: PlanningParameterValue]) -> [String] {
         var atoms: [String] = []
         atoms.append(contentsOf: stringArrayValue(for: "symbolicStateAtoms", in: hints))
         atoms.append(contentsOf: stringArrayValue(for: "satisfiedPreconditions", in: hints))
         return unique(atoms)
     }
 
-    private func symbolicEffectAtoms(from hints: [String: XcircuiteJSONValue]) -> [String] {
+    private func symbolicEffectAtoms(from hints: [String: PlanningParameterValue]) -> [String] {
         unique(
             stringArrayValue(for: "symbolicEffects", in: hints)
                 + stringArrayValue(for: "satisfiesGoalAtoms", in: hints)
@@ -194,17 +194,12 @@ public struct XcircuiteSymbolicPlannerContract: Sendable {
 
     private func stringArrayValue(
         for key: String,
-        in hints: [String: XcircuiteJSONValue]
+        in hints: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let values)? = hints[key] else {
+        guard case .textList(let values)? = hints[key] else {
             return []
         }
-        return values.compactMap { value in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return string
-        }
+        return values
     }
 
     private func isOptionalOperationInputRef(_ inputRef: String) -> Bool {

@@ -17,20 +17,14 @@ struct LogicEngineStageExecutionSupport: Sendable {
         artifactID: String,
         stageID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let outputDirectory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: outputDirectory)
-        let outputURL = outputDirectory.appending(path: fileName)
-        try context.storage.writeJSON(result, to: outputURL, forProjectAt: context.projectRoot)
-        return try artifactBuilder.reference(
-            for: outputURL,
-            projectRoot: context.projectRoot,
+    ) async throws -> ArtifactReference {
+        try await context.persistJSONArtifact(
+            result,
             artifactID: artifactID,
+            stageID: stageID,
+            fileName: fileName,
             kind: .report,
-            format: .json
+            mode: .replaceable
         )
     }
 
@@ -163,8 +157,8 @@ struct LogicEngineStageExecutionSupport: Sendable {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private static func flowDiagnostic(_ diagnostic: DesignDiagnostic) -> FlowDiagnostic {

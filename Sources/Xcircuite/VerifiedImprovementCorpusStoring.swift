@@ -1,49 +1,26 @@
-import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
+import Foundation
 
-/// Persistence capability required by verified-improvement corpus qualification.
+/// Persistence capabilities required to qualify a verified-improvement corpus.
 ///
-/// The qualifier depends on this narrow storage contract instead of a concrete
-/// project store. Concrete `.xcircuite` persistence remains at the storage
-/// boundary and can be replaced by a workspace-backed implementation.
+/// The contract uses canonical Foundation artifacts and the DesignFlowKernel
+/// ledger directly. It intentionally does not expose filesystem compatibility
+/// operations or a second run-manifest representation.
 public protocol VerifiedImprovementCorpusStoring: Sendable {
-    func ensureDirectory(at url: URL) throws
+    var projectRoot: URL { get }
 
-    func url(
-        forProjectRelativePath rawPath: String,
-        inProjectAt projectRoot: URL
-    ) throws -> URL
+    func persistProjectJSON<Value: Encodable & Sendable>(
+        _ value: Value,
+        id: String,
+        path: String,
+        kind: ArtifactKind,
+        mode: FlowArtifactPersistenceMode
+    ) async throws -> ArtifactReference
 
-    func writeJSON<T: Encodable>(
-        _ value: T,
-        to url: URL,
-        forProjectAt projectRoot: URL
-    ) throws
+    func loadRunManifest(runID: String) async throws -> FlowRunManifest
 
-    func readJSON<T: Decodable>(
-        _ type: T.Type,
-        from url: URL
-    ) throws -> T
-
-    func fileReference(
-        forProjectRelativePath path: String,
-        artifactID: String?,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        inProjectAt projectRoot: URL,
-        producedByRunID: String?,
-        verifiedByRunID: String?
-    ) throws -> XcircuiteFileReference
-
-    func upsertFileReference(
-        _ reference: XcircuiteFileReference,
-        forProjectAt projectRoot: URL
-    ) throws
-
-    func loadRunManifest(
-        runID: String,
-        inProjectAt projectRoot: URL
-    ) throws -> XcircuiteRunManifest
+    func verifiedData(for reference: ArtifactReference) async throws -> Data
 }
 
 extension XcircuiteWorkspaceStore: VerifiedImprovementCorpusStoring {}

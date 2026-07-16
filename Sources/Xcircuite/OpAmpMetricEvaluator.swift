@@ -6,7 +6,7 @@ public struct OpAmpMetricEvaluator: Sendable {
 
     public func evaluate(
         spec: OpAmpSpec,
-        crossArtifactEvaluation: XcircuiteCrossArtifactEvaluation
+        crossArtifactEvaluation: FlowCrossArtifactEvaluation
     ) -> OpAmpEvaluationReport {
         let observations = observationsByMetric(from: crossArtifactEvaluation.channelResults)
         return evaluate(
@@ -111,7 +111,7 @@ public struct OpAmpMetricEvaluator: Sendable {
     }
 
     private func observationsByMetric(
-        from channelResults: [XcircuiteEvaluationChannelResult]
+        from channelResults: [FlowEvaluationChannelResult]
     ) -> [OpAmpMetricID: OpAmpEstimatedMetric] {
         var observations: [OpAmpMetricID: OpAmpEstimatedMetric] = [:]
         for channel in channelResults {
@@ -146,19 +146,19 @@ public struct OpAmpMetricEvaluator: Sendable {
         return nil
     }
 
-    private func numericValue(_ value: XcircuiteJSONValue?) -> Double? {
+    private func numericValue(_ value: FlowMetricValue?) -> Double? {
         guard let value else {
             return nil
         }
         switch value {
-        case .number(let number):
+        case .scalar(let number), .quantity(let number, _):
             return number.isFinite ? number : nil
-        case .string(let text):
+        case .text(let text):
             guard let number = Double(text), number.isFinite else {
                 return nil
             }
             return number
-        case .bool, .null, .array, .object:
+        case .boolean, .vector:
             return nil
         }
     }

@@ -86,7 +86,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(OpAmpTopologyListCLIResult(specID: spec.specID, candidates: candidates), pretty: pretty)
     }
 
-    static func sizeOpAmp(arguments: [String]) throws -> String {
+    static func sizeOpAmp(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return sizeOpAmpHelpText
         }
@@ -132,7 +132,7 @@ extension XcircuiteFlowCLICommand {
             topologyKind: topologyKind,
             technology: technology
         )
-        var artifacts: [XcircuiteFileReference] = []
+        var artifacts: [ArtifactReference] = []
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -140,14 +140,15 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            let store = OpAmpDesignArtifactStore()
-            artifacts.append(try store.persistSpec(spec, runID: runID, projectRoot: projectRoot))
-            artifacts.append(try store.persistTopologyCandidates(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            let store = OpAmpDesignArtifactStore(workspaceStore: workspaceStore)
+            artifacts.append(try await store.persistSpec(spec, runID: runID, projectRoot: projectRoot))
+            artifacts.append(try await store.persistTopologyCandidates(
                 OpAmpTopologyLibrary().candidates(for: spec),
                 runID: runID,
                 projectRoot: projectRoot
             ))
-            artifacts.append(contentsOf: try store.persistSizingResult(result, runID: runID, projectRoot: projectRoot))
+            artifacts.append(contentsOf: try await store.persistSizingResult(result, runID: runID, projectRoot: projectRoot))
         }
         return try encode(OpAmpSizingCLIResult(result: result, artifactReferences: artifacts), pretty: pretty)
     }
@@ -203,7 +204,7 @@ extension XcircuiteFlowCLICommand {
         if let outURL {
             try write(report, to: outURL, pretty: pretty)
         }
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -211,7 +212,10 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            artifact = try OpAmpDesignArtifactStore().persistSimulationDeckValidationReport(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            artifact = try await OpAmpDesignArtifactStore(
+                workspaceStore: workspaceStore
+            ).persistSimulationDeckValidationReport(
                 report,
                 runID: runID,
                 projectRoot: projectRoot
@@ -272,7 +276,7 @@ extension XcircuiteFlowCLICommand {
         if let outURL {
             try write(runResult.report, to: outURL, pretty: pretty)
         }
-        var artifacts: [XcircuiteFileReference] = []
+        var artifacts: [ArtifactReference] = []
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -280,9 +284,10 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            let store = OpAmpDesignArtifactStore()
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            let store = OpAmpDesignArtifactStore(workspaceStore: workspaceStore)
             for waveform in runResult.waveforms {
-                artifacts.append(try store.persistSimulationDeckWaveform(
+                artifacts.append(try await store.persistSimulationDeckWaveform(
                     waveform.waveformCSV,
                     deckID: waveform.deckID,
                     runID: runID,
@@ -290,13 +295,13 @@ extension XcircuiteFlowCLICommand {
                 ))
             }
             if let merged = runResult.report.mergedMetricExtraction {
-                artifacts.append(try store.persistMergedMetricExtraction(
+                artifacts.append(try await store.persistMergedMetricExtraction(
                     merged,
                     runID: runID,
                     projectRoot: projectRoot
                 ))
             }
-            artifacts.append(try store.persistSimulationDeckExecutionReport(
+            artifacts.append(try await store.persistSimulationDeckExecutionReport(
                 runResult.report,
                 runID: runID,
                 projectRoot: projectRoot
@@ -311,7 +316,7 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    static func extractOpAmpWaveformMetrics(arguments: [String]) throws -> String {
+    static func extractOpAmpWaveformMetrics(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return extractOpAmpWaveformMetricsHelpText
         }
@@ -367,7 +372,7 @@ extension XcircuiteFlowCLICommand {
         if let outURL {
             try write(extraction, to: outURL, pretty: pretty)
         }
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -375,7 +380,10 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            artifact = try OpAmpDesignArtifactStore().persistWaveformMetricExtraction(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            artifact = try await OpAmpDesignArtifactStore(
+                workspaceStore: workspaceStore
+            ).persistWaveformMetricExtraction(
                 extraction,
                 analysisKind: analysisKind,
                 runID: runID,
@@ -391,7 +399,7 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    static func mergeOpAmpMetricExtractions(arguments: [String]) throws -> String {
+    static func mergeOpAmpMetricExtractions(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return mergeOpAmpMetricExtractionsHelpText
         }
@@ -436,7 +444,7 @@ extension XcircuiteFlowCLICommand {
         if let outURL {
             try write(merged, to: outURL, pretty: pretty)
         }
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -444,7 +452,10 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            artifact = try OpAmpDesignArtifactStore().persistMergedMetricExtraction(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            artifact = try await OpAmpDesignArtifactStore(
+                workspaceStore: workspaceStore
+            ).persistMergedMetricExtraction(
                 merged,
                 runID: runID,
                 projectRoot: projectRoot
@@ -459,7 +470,7 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    static func evaluateOpAmp(arguments: [String]) throws -> String {
+    static func evaluateOpAmp(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return evaluateOpAmpHelpText
         }
@@ -533,7 +544,7 @@ extension XcircuiteFlowCLICommand {
         let metricExtraction: OpAmpSimulationMetricExtraction?
         if let crossArtifactURL {
             let evaluation = try decodeJSONFile(
-                XcircuiteCrossArtifactEvaluation.self,
+                FlowCrossArtifactEvaluation.self,
                 from: crossArtifactURL,
                 option: "--cross-artifact-evaluation"
             )
@@ -603,7 +614,7 @@ extension XcircuiteFlowCLICommand {
         if let outURL {
             try write(report, to: outURL, pretty: pretty)
         }
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -611,7 +622,10 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            artifact = try OpAmpDesignArtifactStore().persistEvaluationReport(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            artifact = try await OpAmpDesignArtifactStore(
+                workspaceStore: workspaceStore
+            ).persistEvaluationReport(
                 report,
                 runID: runID,
                 projectRoot: projectRoot
@@ -627,7 +641,7 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    static func compareOpAmpPostLayout(arguments: [String]) throws -> String {
+    static func compareOpAmpPostLayout(arguments: [String]) async throws -> String {
         if arguments.contains("--help") || arguments.contains("-h") {
             return compareOpAmpPostLayoutHelpText
         }
@@ -680,7 +694,7 @@ extension XcircuiteFlowCLICommand {
         if let outURL {
             try write(report, to: outURL, pretty: pretty)
         }
-        var artifact: XcircuiteFileReference?
+        var artifact: ArtifactReference?
         if persist {
             guard let projectRoot else {
                 throw XcircuiteFlowCLIError.missingOption("--project-root")
@@ -688,7 +702,10 @@ extension XcircuiteFlowCLICommand {
             guard let runID else {
                 throw XcircuiteFlowCLIError.missingOption("--run-id")
             }
-            artifact = try OpAmpDesignArtifactStore().persistPostLayoutComparison(
+            let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+            artifact = try await OpAmpDesignArtifactStore(
+                workspaceStore: workspaceStore
+            ).persistPostLayoutComparison(
                 report,
                 runID: runID,
                 projectRoot: projectRoot
@@ -749,36 +766,36 @@ private struct OpAmpTopologyListCLIResult: Sendable, Hashable, Codable {
 
 private struct OpAmpSizingCLIResult: Sendable, Hashable, Codable {
     var result: OpAmpSizingResult
-    var artifactReferences: [XcircuiteFileReference]
+    var artifactReferences: [ArtifactReference]
 }
 
 private struct OpAmpEvaluationCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpEvaluationReport
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
     var metricExtraction: OpAmpSimulationMetricExtraction?
 }
 
 private struct OpAmpSimulationDeckValidationCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpSimulationDeckValidationReport
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }
 
 private struct OpAmpSimulationDeckRunCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpSimulationDeckExecutionReport
-    var artifactReferences: [XcircuiteFileReference]
+    var artifactReferences: [ArtifactReference]
 }
 
 private struct OpAmpWaveformMetricExtractionCLIResult: Sendable, Hashable, Codable {
     var extraction: OpAmpSimulationMetricExtraction
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }
 
 private struct OpAmpMetricExtractionMergeCLIResult: Sendable, Hashable, Codable {
     var extraction: OpAmpSimulationMetricExtraction
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }
 
 private struct OpAmpPostLayoutCLIResult: Sendable, Hashable, Codable {
     var report: OpAmpPostLayoutComparisonReport
-    var artifactReference: XcircuiteFileReference?
+    var artifactReference: ArtifactReference?
 }

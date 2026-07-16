@@ -15,10 +15,10 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeToolchainProfileFeedsDefaultSignoffTechnologyInputs() async throws {
         let root = try makeTemporaryRoot("runtime-toolchain-profile-signoff")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
-        try writePEXTechnology(root: root)
-        try writeTechnologyCatalog(
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
+        try await writePEXTechnology(root: root)
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -64,7 +64,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -80,7 +80,7 @@ extension XcircuiteFlowRuntimeTests {
                         ),
                         layoutFormat: .gds,
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
                 .nativeLVS(
@@ -97,7 +97,7 @@ extension XcircuiteFlowRuntimeTests {
                         layoutFormat: .gds,
                         schematicNetlistPath: "circuits/top.spice",
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
                 .mockPEX(
@@ -120,7 +120,7 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -166,7 +166,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(lvsStage.artifacts.contains { $0.artifactID == "lvs-summary" })
         #expect(pexStage.artifacts.contains { $0.artifactID == "pex-summary" })
 
-        let toolchain = try readToolchainManifest(in: root, runID: "run-1")
+        let toolchain = try await readToolchainManifest(in: root, runID: "run-1")
         #expect(toolchain.profile?.profileID == "local-signoff")
         #expect(toolchain.profile?.pdkID == "test-pdk")
         #expect(toolchain.profile?.technologyCatalogID == "test-catalog")
@@ -176,9 +176,10 @@ extension XcircuiteFlowRuntimeTests {
         #expect(toolchain.profile?.lvsTechnologyInput == .path("tech/process.json"))
         #expect(toolchain.profile?.pexTechnology == .jsonFile(path: "tech/pex.json"))
 
-        let persistedProfile = try XcircuiteWorkspaceStore().readJSON(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let persistedProfile = try await store.readJSON(
             XcircuiteFlowToolchainProfile.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/toolchain-profile.json")
+            from: ".xcircuite/runs/run-1/toolchain-profile.json"
         )
         #expect(persistedProfile.profileID == "local-signoff")
         #expect(persistedProfile.pdkID == "test-pdk")
@@ -186,7 +187,8 @@ extension XcircuiteFlowRuntimeTests {
         #expect(persistedProfile.technologyCatalogPath == "tech/catalog.json")
         #expect(persistedProfile.metadata?["source"] == "runtime-test")
 
-        let summary = try DefaultFlowRunLedgerInspector().inspectRun(
+        let reviewBundler = DefaultFlowRunReviewBundler(loader: store, persistence: store)
+        let summary = try await DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler).inspectRun(
             runID: "run-1",
             projectRoot: root
         )
@@ -194,7 +196,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(summary.toolchain?.technologyCatalogPath == "tech/catalog.json")
         #expect(summary.toolchain?.profileArtifactPath == ".xcircuite/runs/run-1/toolchain-profile.json")
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundle = try await reviewBundler.makeReviewBundle(
             runID: "run-1",
             projectRoot: root
         )
@@ -205,7 +207,7 @@ extension XcircuiteFlowRuntimeTests {
         })
     }
 
-    @Test func runtimeSpecRoundTripsToolchainProfile() throws {
+    @Test func runtimeSpecRoundTripsToolchainProfile() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             toolchainProfile: XcircuiteFlowToolchainProfile(
                 profileID: "local-signoff",
@@ -263,7 +265,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(pexPath == "tech/pex.json")
     }
 
-    @Test func runtimeSpecRejectsToolchainProfileMissingPDKID() throws {
+    @Test func runtimeSpecRejectsToolchainProfileMissingPDKID() async throws {
         let spec = runtimeSpecWithProfile(
             XcircuiteFlowToolchainProfile(
                 profileID: "local-signoff",
@@ -279,7 +281,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecRejectsToolchainProfileUnsafeTechnologyPath() throws {
+    @Test func runtimeSpecRejectsToolchainProfileUnsafeTechnologyPath() async throws {
         let spec = runtimeSpecWithProfile(
             XcircuiteFlowToolchainProfile(
                 profileID: "local-signoff",
@@ -297,7 +299,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecRejectsToolchainProfileInvalidStageArtifactSelector() throws {
+    @Test func runtimeSpecRejectsToolchainProfileInvalidStageArtifactSelector() async throws {
         let spec = runtimeSpecWithProfile(
             XcircuiteFlowToolchainProfile(
                 profileID: "local-signoff",
@@ -320,7 +322,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func toolchainProfileReadinessReportCapturesBlockingIssues() throws {
+    @Test func toolchainProfileReadinessReportCapturesBlockingIssues() async throws {
         let report = XcircuiteFlowToolchainProfileReadinessValidator().report(
             for: XcircuiteFlowToolchainProfile(
                 profileID: "local-signoff",
@@ -335,7 +337,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(report.issues.map(\.field) == ["pdkID", "pexTechnology.path"])
     }
 
-    @Test func toolchainProfileReadinessReportValidatesTechnologyCatalogFiles() throws {
+    @Test func toolchainProfileReadinessReportValidatesTechnologyCatalogFiles() async throws {
         let root = try makeTemporaryRoot("runtime-toolchain-profile-catalog")
         defer { removeTemporaryRoot(root) }
         let drcURL = root.appending(path: "tech/drc.json")
@@ -346,7 +348,7 @@ extension XcircuiteFlowRuntimeTests {
         )
         try Data("{}".utf8).write(to: drcURL)
         try Data("{}".utf8).write(to: pexURL)
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -375,10 +377,10 @@ extension XcircuiteFlowRuntimeTests {
         #expect(report.issues.isEmpty)
     }
 
-    @Test func runtimeSpecRejectsToolchainProfileCatalogPDKMismatch() throws {
+    @Test func runtimeSpecRejectsToolchainProfileCatalogPDKMismatch() async throws {
         let root = try makeTemporaryRoot("runtime-toolchain-profile-catalog-pdk")
         defer { removeTemporaryRoot(root) }
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             pdkID: "other-pdk",
             requiredFiles: []
@@ -402,10 +404,10 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecRejectsToolchainProfileMissingCatalogRequiredFile() throws {
+    @Test func runtimeSpecRejectsToolchainProfileMissingCatalogRequiredFile() async throws {
         let root = try makeTemporaryRoot("runtime-toolchain-profile-catalog-required")
         defer { removeTemporaryRoot(root) }
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -436,7 +438,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func validateCLIRejectsMissingCatalogRequiredFileWithProjectRoot() async throws {
         let root = try makeTemporaryRoot("runtime-cli-validate-catalog-required")
         defer { removeTemporaryRoot(root) }
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -484,7 +486,7 @@ extension XcircuiteFlowRuntimeTests {
             withIntermediateDirectories: true
         )
         try Data("{}".utf8).write(to: drcURL)
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -532,7 +534,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func inspectToolchainProfileCLIReportsFailedCatalogReadinessWithoutThrowing() async throws {
         let root = try makeTemporaryRoot("runtime-cli-inspect-profile-failed-catalog")
         defer { removeTemporaryRoot(root) }
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -622,7 +624,7 @@ extension XcircuiteFlowRuntimeTests {
             withIntermediateDirectories: true
         )
         try Data("{}".utf8).write(to: drcURL)
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -666,7 +668,7 @@ extension XcircuiteFlowRuntimeTests {
     @Test func inspectTechnologyCatalogCLIReportsMissingRequiredFileWithoutThrowing() async throws {
         let root = try makeTemporaryRoot("runtime-cli-inspect-catalog-missing-file")
         defer { removeTemporaryRoot(root) }
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -709,7 +711,7 @@ extension XcircuiteFlowRuntimeTests {
             withIntermediateDirectories: true
         )
         try Data("{}".utf8).write(to: drcURL)
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
                 XcircuiteFlowTechnologyCatalogRequiredFile(
@@ -762,7 +764,7 @@ extension XcircuiteFlowRuntimeTests {
             withIntermediateDirectories: true
         )
         try Data("{}".utf8).write(to: drcURL)
-        try writeTechnologyCatalog(
+        try await writeTechnologyCatalog(
             root: root,
             catalogPath: "pdks/test-pdk/tech/catalog.json",
             requiredFiles: [

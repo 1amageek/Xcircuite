@@ -3,11 +3,11 @@ import ToolQualification
 import DesignFlowKernel
 
 public enum ReleaseToolDescriptors {
-    public static func qualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func authorization(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         descriptor(
-            toolID: "native-release-qualification",
-            displayName: "Release qualification",
-            operationID: "release-qualify",
+            toolID: "native-release-authorization",
+            displayName: "Release authorization",
+            operationID: "release-authorize",
             level: level
         )
     }
@@ -26,15 +26,6 @@ public enum ReleaseToolDescriptors {
             toolID: "native-release-tapeout",
             displayName: "Release tapeout",
             operationID: "release-tapeout",
-            level: level
-        )
-    }
-
-    public static func profile(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
-        descriptor(
-            toolID: "native-release-profile-eligibility",
-            displayName: "Release profile eligibility",
-            operationID: "release-profile-eligibility",
             level: level
         )
     }

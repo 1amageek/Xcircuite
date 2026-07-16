@@ -4,7 +4,7 @@ import Foundation
 import LogicEngineCore
 import LogicIR
 import LogicLowering
-import LogicQualification
+import LogicEvidence
 import LogicSimulation
 import LogicSynthesis
 import PDKCore
@@ -20,26 +20,23 @@ struct LogicEngineFlowStageExecutorTests {
     func qualificationAdapterRequiresProcessEvidence() async throws {
         let root = try makeRoot(name: "logic-qualification-adapter")
         defer { removeRoot(root) }
-        let report = LogicQualificationReport(
+        let report = LogicEvidenceReport(
             suiteID: "qualification-suite",
             implementationID: "native-logic-engine",
             implementationVersion: "1",
             state: .oracleCorrelated,
-            evaluations: [LogicQualificationCaseEvaluation(
+            evaluations: [LogicEvidenceCaseEvaluation(
                 caseID: "case",
-                matched: true,
                 observedStatus: .completed,
                 observedDiagnosticCodes: [],
                 observedArtifactIDs: ["logic-report"],
                 mismatches: []
             )],
             blockers: ["process_qualification_required"],
-            oracleCorrelation: LogicQualificationOracleCorrelationReport(
+            oracleCorrelation: LogicEvidenceOracleCorrelationReport(
                 suiteID: "qualification-suite",
                 nativeImplementationID: "native-logic-engine",
                 oracleImplementationID: "reference-oracle",
-                matched: true,
-                independenceVerified: true,
                 matchedCaseIDs: ["case"]
             )
         )
@@ -49,7 +46,7 @@ struct LogicEngineFlowStageExecutorTests {
             root: root,
             kind: .report
         )
-        let context = try makeContext(root: root, runID: "logic-qualification-adapter")
+        let context = try await makeContext(root: root, runID: "logic-qualification-adapter")
         let result = try await LogicQualificationFlowStageExecutor(
             reportInput: .path(reportReference.locator.location.value)
         ).execute(
@@ -58,7 +55,10 @@ struct LogicEngineFlowStageExecutorTests {
         )
 
         #expect(result.status == .blocked)
-        #expect(result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_PROCESS_REQUIRED" })
+        #expect(
+            result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_PROCESS_REQUIRED" },
+            "Diagnostics: \(result.diagnostics)"
+        )
         #expect(result.artifacts.contains { $0.artifactID == "logic-qualification-result" })
     }
 
@@ -66,14 +66,13 @@ struct LogicEngineFlowStageExecutorTests {
     func qualificationAdapterRejectsForgedReleaseReport() async throws {
         let root = try makeRoot(name: "logic-qualification-forged-report")
         defer { removeRoot(root) }
-        let report = LogicQualificationReport(
+        let report = LogicEvidenceReport(
             suiteID: "qualification-suite",
             implementationID: "native-logic-engine",
             implementationVersion: "1",
-            state: .releaseEligible,
-            evaluations: [LogicQualificationCaseEvaluation(
+            state: .oracleCorrelated,
+            evaluations: [LogicEvidenceCaseEvaluation(
                 caseID: "case",
-                matched: true,
                 observedStatus: .completed,
                 observedDiagnosticCodes: [],
                 observedArtifactIDs: ["logic-report"],
@@ -86,7 +85,7 @@ struct LogicEngineFlowStageExecutorTests {
             root: root,
             kind: .report
         )
-        let context = try makeContext(root: root, runID: "logic-qualification-forged-report")
+        let context = try await makeContext(root: root, runID: "logic-qualification-forged-report")
         let result = try await LogicQualificationFlowStageExecutor(
             reportInput: .path(reportReference.locator.location.value)
         ).execute(
@@ -137,7 +136,7 @@ struct LogicEngineFlowStageExecutorTests {
             )
         )
         let requestPath = try writeRequest(request, name: "lowering-request.json", root: root)
-        let context = try makeContext(root: root, runID: request.runID)
+        let context = try await makeContext(root: root, runID: request.runID)
         let result = try await LogicLoweringFlowStageExecutor(
             requestInput: .path(requestPath)
         ).execute(
@@ -145,7 +144,7 @@ struct LogicEngineFlowStageExecutorTests {
             context: context
         )
 
-        #expect(result.status == .succeeded)
+        #expect(result.status == .succeeded, "Diagnostics: \(result.diagnostics)")
         #expect(result.artifacts.contains { $0.artifactID == "logic-execution-design" })
         #expect(result.artifacts.contains { $0.artifactID == "logic-lowering-result" })
     }
@@ -163,7 +162,7 @@ struct LogicEngineFlowStageExecutorTests {
             stimulus: stimulusReference
         )
         let requestPath = try writeRequest(request, name: "simulation-request.json", root: root)
-        let context = try makeContext(root: root, runID: request.runID)
+        let context = try await makeContext(root: root, runID: request.runID)
         let result = try await LogicSimulationFlowStageExecutor(
             requestInput: .path(requestPath)
         ).execute(
@@ -202,7 +201,6 @@ struct LogicEngineFlowStageExecutorTests {
             )]
         )
         let designReference = try writeJSON(document, name: "signed-design.json", root: root, kind: .netlist)
-        let designDigest = designReference.digest.hexadecimalValue
         let design = LogicFoundationDesignReference(
             artifact: designReference,
             topDesignName: document.topDesignName,
@@ -228,7 +226,7 @@ struct LogicEngineFlowStageExecutorTests {
             stimulus: stimulusReference
         )
         let requestPath = try writeRequest(request, name: "signed-simulation-request.json", root: root)
-        let context = try makeContext(root: root, runID: request.runID)
+        let context = try await makeContext(root: root, runID: request.runID)
         let result = try await LogicSimulationFlowStageExecutor(
             requestInput: .path(requestPath)
         ).execute(
@@ -274,7 +272,7 @@ struct LogicEngineFlowStageExecutorTests {
             pdk: PDKReference(manifest: pdk, processID: "adapter", version: "1", digest: pdkDigest)
         )
         let requestPath = try writeRequest(request, name: "synthesis-request.json", root: root)
-        let context = try makeContext(root: root, runID: request.runID)
+        let context = try await makeContext(root: root, runID: request.runID)
         let result = try await LogicSynthesisFlowStageExecutor(
             requestInput: .path(requestPath)
         ).execute(
@@ -326,7 +324,7 @@ struct LogicEngineFlowStageExecutorTests {
             name: "equivalence-synthesis-request.json",
             root: root
         )
-        let context = try makeContext(root: root, runID: synthesisRequest.runID)
+        let context = try await makeContext(root: root, runID: synthesisRequest.runID)
         let synthesisResult = try await LogicSynthesisFlowStageExecutor(
             requestInput: .path(synthesisRequestPath)
         ).execute(
@@ -457,16 +455,14 @@ struct LogicEngineFlowStageExecutorTests {
         )
     }
 
-    private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: root)
-        let runDirectory = root.appending(path: ".xcircuite/runs/(runID)")
-        try workspaceStore.ensureDirectory(at: runDirectory)
+    private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
         return FlowExecutionContext(
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            storage: workspaceStore,
+            infrastructure: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )

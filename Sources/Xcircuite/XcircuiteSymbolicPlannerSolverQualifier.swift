@@ -11,17 +11,21 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        solverRunner: XcircuiteSymbolicPlannerSolving = XcircuiteSymbolicPlannerSolverRunner(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        solverRunner: (any XcircuiteSymbolicPlannerSolving)? = nil,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.solverRunner = solverRunner
+        self.solverRunner = solverRunner ?? XcircuiteSymbolicPlannerSolverRunner(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore,
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+        )
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
             workspaceStore: workspaceStore,
-            fileReferenceVerifier: fileReferenceVerifier
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
         )
     }
 
@@ -29,8 +33,8 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         request: XcircuiteSymbolicPlannerSolverQualificationRequest,
         projectRoot: URL
     ) async throws -> XcircuiteSymbolicPlannerSolverQualificationResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        try validateQualificationRequest(request, projectRoot: projectRoot)
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        try await validateQualificationRequest(request)
         if let maximumSolverCost = request.maximumSolverCost,
            (!maximumSolverCost.isFinite || maximumSolverCost < 0) {
             throw XcircuiteSymbolicPlannerSolverError.invalidMaximumSolverCost(maximumSolverCost)
@@ -60,25 +64,27 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
 
         var diagnostics = solverResult.diagnostics
         let observedActionIDs = solverResult.importResult?.candidatePlan.steps.map(\.actionID) ?? []
-        let planCostEvaluation = try planCostEvaluation(
+        let planCostEvaluation = try await planCostEvaluation(
             solverResult: solverResult,
             projectRoot: projectRoot
         )
-        let planReplayValidation = try planReplayValidation(
+        let planReplayValidation = try await planReplayValidation(
             solverResult: solverResult,
             projectRoot: projectRoot
         )
-        let planReplayValidationArtifact = try solverResult.planReplayValidationArtifact ?? planReplayValidation.map {
-            try requireFoundationArtifactReference(
-                artifactStore.persistSymbolicPlannerPlanReplayValidation(
-                $0,
+        let planReplayValidationArtifact: ArtifactReference?
+        if let retainedArtifact = solverResult.planReplayValidationArtifact {
+            planReplayValidationArtifact = retainedArtifact
+        } else if let planReplayValidation {
+            planReplayValidationArtifact = try await artifactStore.persistSymbolicPlannerPlanReplayValidation(
+                planReplayValidation,
                 runID: request.runID,
                 projectRoot: projectRoot
-                ),
-                field: "qualification.planReplayValidationArtifact"
             )
+        } else {
+            planReplayValidationArtifact = nil
         }
-        let nativeCertificateResult = try nativeCertificate(
+        let nativeCertificateResult = try await nativeCertificate(
             request: request,
             solverResult: solverResult,
             projectRoot: projectRoot
@@ -115,18 +121,18 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         var goalCoverageStatus: String?
         var missingGoalAtoms: [String] = []
         if solverResult.importResult != nil {
-            let verifierResult = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+            let verifierResult = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
                 request: XcircuiteCandidatePlanVerificationRequest(runID: request.runID),
                 projectRoot: projectRoot
             )
             planVerificationArtifact = verifierResult.planVerificationArtifact
-            let verification = try workspaceStore.readJSON(
+            let verification = try await workspaceStore.readJSON(
                 XcircuitePlanVerification.self,
-                from: workspaceStore.url(
-                    forProjectRelativePath: planVerificationArtifact?.path
-                        ?? verifierResult.planVerificationArtifact.path,
-                    inProjectAt: projectRoot
-                )
+                from: planVerificationArtifact?.path
+                    ?? verifierResult.planVerificationArtifact.path
             )
             goalCoverageStatus = verification.goalCoverageStatus
             missingGoalAtoms = verification.missingGoalAtoms
@@ -186,24 +192,20 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             qualificationArtifact: nil,
             diagnostics: diagnostics
         )
-        let qualificationArtifact = try artifactStore.persistSymbolicPlannerSolverQualification(
+        let qualificationArtifact = try await artifactStore.persistSymbolicPlannerSolverQualification(
             result,
             runID: request.runID,
             projectRoot: projectRoot
         )
         return result.attachingQualificationArtifact(
-            try requireFoundationArtifactReference(
-                qualificationArtifact,
-                field: "qualification.qualificationArtifact"
-            )
+            qualificationArtifact
         )
     }
 
     private func validateQualificationRequest(
-        _ request: XcircuiteSymbolicPlannerSolverQualificationRequest,
-        projectRoot: URL
-    ) throws {
-        let validator = XcircuiteIdentifierValidator()
+        _ request: XcircuiteSymbolicPlannerSolverQualificationRequest
+    ) async throws {
+        let validator = FlowIdentifierValidator()
         try validateIdentifier(request.toolID, field: "toolID", kind: .toolID, validator: validator)
         try validateIdentifier(request.policyID, field: "policyID", kind: .artifactID, validator: validator)
         for expectedActionID in request.expectedActionIDs {
@@ -220,17 +222,16 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         try validateIdentifier(request.certificateArtifactID, field: "certificateArtifactID", validator: validator)
         try validateIdentifier(request.proofArtifactID, field: "proofArtifactID", validator: validator)
 
-        try validateProjectPath(request.domainPath, field: "domainPath", projectRoot: projectRoot)
-        try validateProjectPath(request.problemPath, field: "problemPath", projectRoot: projectRoot)
-        try validateProjectPath(request.pddlExportPath, field: "pddlExportPath", projectRoot: projectRoot)
-        try validateProjectPath(request.workingDirectoryPath, field: "workingDirectoryPath", projectRoot: projectRoot)
-        try validateProjectPath(request.solverPlanOutputPath, field: "solverPlanOutputPath", projectRoot: projectRoot)
-        try validateProjectPath(request.certificatePath, field: "certificatePath", projectRoot: projectRoot)
-        try validateProjectPath(request.proofPath, field: "proofPath", projectRoot: projectRoot)
-        try validateProjectPath(
+        try await validateProjectPath(request.domainPath, field: "domainPath")
+        try await validateProjectPath(request.problemPath, field: "problemPath")
+        try await validateProjectPath(request.pddlExportPath, field: "pddlExportPath")
+        try await validateProjectPath(request.workingDirectoryPath, field: "workingDirectoryPath")
+        try await validateProjectPath(request.solverPlanOutputPath, field: "solverPlanOutputPath")
+        try await validateProjectPath(request.certificatePath, field: "certificatePath")
+        try await validateProjectPath(request.proofPath, field: "proofPath")
+        try await validateProjectPath(
             request.proofCheckerWorkingDirectoryPath,
-            field: "proofCheckerWorkingDirectoryPath",
-            projectRoot: projectRoot
+            field: "proofCheckerWorkingDirectoryPath"
         )
 
         try validateExecutablePath(request.executablePath, field: "executablePath")
@@ -242,8 +243,8 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     private func validateIdentifier(
         _ value: String?,
         field: String,
-        kind: XcircuiteIdentifierKind = .artifactID,
-        validator: XcircuiteIdentifierValidator
+        kind: FlowIdentifierKind = .artifactID,
+        validator: FlowIdentifierValidator
     ) throws {
         guard let value else { return }
         do {
@@ -258,12 +259,11 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
 
     private func validateProjectPath(
         _ value: String?,
-        field: String,
-        projectRoot: URL
-    ) throws {
+        field: String
+    ) async throws {
         guard let value else { return }
         do {
-            _ = try workspaceStore.url(forProjectRelativePath: value, inProjectAt: projectRoot)
+            _ = try await workspaceStore.url(for: value)
         } catch {
             throw XcircuiteSymbolicPlannerSolverError.invalidSolverQualificationPath(
                 field: field,
@@ -303,26 +303,20 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     private func planCostEvaluation(
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerPlanCostEvaluation? {
+    ) async throws -> XcircuiteSymbolicPlannerPlanCostEvaluation? {
         guard let importResult = solverResult.importResult else {
             return nil
         }
-        let pddlExportArtifact = try artifactReferenceResolver.verifiedArtifactReference(
-            legacyArtifactReferenceWithProvenance(
-                importResult.pddlExportArtifact,
-                producedByRunID: solverResult.runID
-            ),
+        let pddlExportArtifact = try await artifactReferenceResolver.verifiedArtifactReference(
+            importResult.pddlExportArtifact,
             field: "pddlExportArtifact",
             expectedFormat: .json,
             runID: solverResult.runID,
             projectRoot: projectRoot
         )
-        let pddlExport = try workspaceStore.readJSON(
+        let pddlExport = try await workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: workspaceStore.url(
-                forProjectRelativePath: pddlExportArtifact.path,
-                inProjectAt: projectRoot
-            )
+            from: pddlExportArtifact.path
         )
         return XcircuiteSymbolicPlannerPlanCostEvaluator()
             .evaluate(candidatePlan: importResult.candidatePlan, pddlExport: pddlExport)
@@ -331,29 +325,23 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     private func planReplayValidation(
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerPlanReplayValidation? {
+    ) async throws -> XcircuiteSymbolicPlannerPlanReplayValidation? {
         if let planReplayValidation = solverResult.planReplayValidation {
             return planReplayValidation
         }
         guard let importResult = solverResult.importResult else {
             return nil
         }
-        let pddlExportArtifact = try artifactReferenceResolver.verifiedArtifactReference(
-            legacyArtifactReferenceWithProvenance(
-                importResult.pddlExportArtifact,
-                producedByRunID: solverResult.runID
-            ),
+        let pddlExportArtifact = try await artifactReferenceResolver.verifiedArtifactReference(
+            importResult.pddlExportArtifact,
             field: "pddlExportArtifact",
             expectedFormat: .json,
             runID: solverResult.runID,
             projectRoot: projectRoot
         )
-        let pddlExport = try workspaceStore.readJSON(
+        let pddlExport = try await workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: workspaceStore.url(
-                forProjectRelativePath: pddlExportArtifact.path,
-                inProjectAt: projectRoot
-            )
+            from: pddlExportArtifact.path
         )
         return XcircuiteSymbolicPlannerPlanReplayValidator().validate(
             candidatePlan: importResult.candidatePlan,
@@ -465,15 +453,15 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         request: XcircuiteSymbolicPlannerSolverQualificationRequest,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
         projectRoot: URL
-    ) throws -> NativeCertificateRunResult {
+    ) async throws -> NativeCertificateRunResult {
         let shouldParse = request.requireNativeCertificate
             || request.certificateArtifactID != nil
             || request.certificatePath != nil
         guard shouldParse else {
             return NativeCertificateRunResult(certificate: nil, artifact: nil, diagnostics: [])
         }
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        guard let sourceArtifact = try certificateArtifact(
+        let manifest = try await loadRunManifest(runID: request.runID)
+        guard let sourceArtifact = try await certificateArtifact(
             request: request,
             solverResult: solverResult,
             manifest: manifest,
@@ -491,10 +479,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 ]
             )
         }
-        let certificateURL = try workspaceStore.url(
-            forProjectRelativePath: sourceArtifact.path,
-            inProjectAt: projectRoot
-        )
+        let certificateURL = try await workspaceStore.url(for: sourceArtifact.path)
         let certificateText = try String(contentsOf: certificateURL, encoding: .utf8)
         let parsed = XcircuiteSymbolicPlannerSolverCertificateParser().parse(
             text: certificateText,
@@ -510,13 +495,10 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             certificate: parsed.certificate,
             diagnostics: parsed.diagnostics
         )
-        let artifact = try requireFoundationArtifactReference(
-            artifactStore.persistSymbolicPlannerSolverCertificate(
+        let artifact = try await artifactStore.persistSymbolicPlannerSolverCertificate(
             parseResult,
             runID: request.runID,
             projectRoot: projectRoot
-            ),
-            field: "nativeCertificate.artifact"
         )
         var diagnostics = parsed.diagnostics
         if request.requireNativeCertificate, parsed.status != "parsed" {
@@ -547,29 +529,23 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     private func certificateArtifact(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest,
         solverResult: XcircuiteSymbolicPlannerSolverResult,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> ArtifactReference? {
+    ) async throws -> ArtifactReference? {
         let artifactID = request.certificateArtifactID
             ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverCertificateArtifactID
         if let certificatePath = request.certificatePath {
-            let certificateURL = try workspaceStore.url(
-                forProjectRelativePath: certificatePath,
-                inProjectAt: projectRoot
-            )
+            let certificateURL = try await workspaceStore.url(for: certificatePath)
             guard FileManager.default.fileExists(atPath: certificateURL.path(percentEncoded: false)) else {
                 return nil
             }
-            return try requireFoundationArtifactReference(
-                artifactReferenceResolver.projectFileReference(
-                    path: certificatePath,
-                    artifactID: artifactID,
-                    field: "nativeCertificateArtifact",
-                    expectedFormat: .text,
-                    runID: request.runID,
-                    projectRoot: projectRoot
-                ),
-                field: "nativeCertificateArtifact"
+            return try await artifactReferenceResolver.projectFileReference(
+                path: certificatePath,
+                artifactID: artifactID,
+                field: "nativeCertificateArtifact",
+                expectedFormat: .text,
+                runID: request.runID,
+                projectRoot: projectRoot
             )
         }
         if request.certificateArtifactID == nil {
@@ -580,16 +556,13 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 projectRoot: projectRoot
             )
         }
-        return try requireFoundationArtifactReference(
-            artifactReferenceResolver.uniqueManifestArtifact(
-                artifactID: artifactID,
-                field: "nativeCertificateArtifact",
-                expectedFormat: .text,
-                manifest: manifest,
-                runID: request.runID,
-                projectRoot: projectRoot
-            ),
-            field: "nativeCertificateArtifact"
+        return try await artifactReferenceResolver.uniqueManifestArtifact(
+            artifactID: artifactID,
+            field: "nativeCertificateArtifact",
+            expectedFormat: .text,
+            manifest: manifest,
+            runID: request.runID,
+            projectRoot: projectRoot
         )
     }
 
@@ -749,8 +722,8 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             throw XcircuiteSymbolicPlannerSolverError.invalidProofCheckerTimeout(request.proofCheckerTimeoutSeconds)
         }
 
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        guard let proofArtifact = try proofArtifact(
+        let manifest = try await loadRunManifest(runID: request.runID)
+        guard let proofArtifact = try await proofArtifact(
             request: request,
             manifest: manifest,
             projectRoot: projectRoot
@@ -780,38 +753,47 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             expectedFormat: .text,
             projectRoot: projectRoot
         )
-        let pddlExportArtifact = try solverResult.pddlExportArtifact.map {
-            try verifiedFoundationArtifactReference(
-                $0,
+        let pddlExportArtifact: ArtifactReference?
+        if let reference = solverResult.pddlExportArtifact {
+            pddlExportArtifact = try verifiedFoundationArtifactReference(
+                reference,
                 field: "proofValidationPDDLExportArtifact",
                 expectedFormat: .json,
                 projectRoot: projectRoot
             )
+        } else {
+            pddlExportArtifact = nil
         }
-        let solverPlanArtifact = try solverResult.solverPlanArtifact.map {
-            try verifiedFoundationArtifactReference(
-                $0,
+        let solverPlanArtifact: ArtifactReference?
+        if let reference = solverResult.solverPlanArtifact {
+            solverPlanArtifact = try verifiedFoundationArtifactReference(
+                reference,
                 field: "proofValidationSolverPlanArtifact",
                 expectedFormat: .text,
                 projectRoot: projectRoot
             )
+        } else {
+            solverPlanArtifact = nil
         }
-        let proofURL = try workspaceStore.url(forProjectRelativePath: proofArtifact.path, inProjectAt: projectRoot)
-        let domainURL = try workspaceStore.url(forProjectRelativePath: domainArtifact.path, inProjectAt: projectRoot)
-        let problemURL = try workspaceStore.url(forProjectRelativePath: problemArtifact.path, inProjectAt: projectRoot)
-        let pddlExportURL = try pddlExportArtifact.map {
-            try workspaceStore.url(forProjectRelativePath: $0.path, inProjectAt: projectRoot)
+        let proofURL = try await workspaceStore.url(for: proofArtifact.path)
+        let domainURL = try await workspaceStore.url(for: domainArtifact.path)
+        let problemURL = try await workspaceStore.url(for: problemArtifact.path)
+        let pddlExportURL: URL?
+        if let pddlExportArtifact {
+            pddlExportURL = try await workspaceStore.url(for: pddlExportArtifact.path)
+        } else {
+            pddlExportURL = nil
         }
-        let solverPlanURL = try solverPlanArtifact.map {
-            try workspaceStore.url(forProjectRelativePath: $0.path, inProjectAt: projectRoot)
+        let solverPlanURL: URL?
+        if let solverPlanArtifact {
+            solverPlanURL = try await workspaceStore.url(for: solverPlanArtifact.path)
+        } else {
+            solverPlanURL = nil
         }
         let workingDirectoryPath = request.proofCheckerWorkingDirectoryPath
             ?? defaultProofCheckerWorkingDirectoryPath(runID: request.runID)
-        let workingDirectoryURL = try workspaceStore.url(
-            forProjectRelativePath: workingDirectoryPath,
-            inProjectAt: projectRoot
-        )
-        try workspaceStore.ensureDirectory(at: workingDirectoryURL)
+        let workingDirectoryURL = try await workspaceStore.url(for: workingDirectoryPath)
+        try await workspaceStore.ensureWorkspaceDirectory(at: workingDirectoryPath)
 
         let proofCheckerArguments = resolvedProofCheckerArguments(
             request.proofCheckerArguments.isEmpty ? ["{proof}"] : request.proofCheckerArguments,
@@ -850,7 +832,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             finishedAt: finishedAt,
             diagnostics: outcome.diagnostics
         )
-        let artifactSet = try artifactStore.persistSymbolicPlannerProofValidation(
+        let artifactSet = try await artifactStore.persistSymbolicPlannerProofValidation(
             validation,
             standardOutput: outcome.standardOutput,
             standardError: outcome.standardError,
@@ -869,12 +851,12 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
 
     private func proofArtifact(
         request: XcircuiteSymbolicPlannerSolverQualificationRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> ArtifactReference? {
+    ) async throws -> ArtifactReference? {
         let artifactID = request.proofArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerSolverProofArtifactID
         if let proofPath = request.proofPath {
-            let proofURL = try workspaceStore.url(forProjectRelativePath: proofPath, inProjectAt: projectRoot)
+            let proofURL = try await workspaceStore.url(for: proofPath)
             guard FileManager.default.fileExists(atPath: proofURL.path(percentEncoded: false)) else {
                 return nil
             }
@@ -895,19 +877,16 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                         manifestPath: manifestReference.path
                     )
                 }
-                return try requireFoundationArtifactReference(
-                    artifactReferenceResolver.uniqueManifestArtifact(
-                        artifactID: artifactID,
-                        field: "proofArtifact",
-                        expectedFormat: .text,
-                        manifest: manifest,
-                        runID: request.runID,
-                        projectRoot: projectRoot
-                    ),
-                    field: "proofArtifact"
+                return try await artifactReferenceResolver.uniqueManifestArtifact(
+                    artifactID: artifactID,
+                    field: "proofArtifact",
+                    expectedFormat: .text,
+                    manifest: manifest,
+                    runID: request.runID,
+                    projectRoot: projectRoot
                 )
             }
-            let legacyReference = try artifactReferenceResolver.projectFileReference(
+            let reference = try await artifactReferenceResolver.projectFileReference(
                 path: proofPath,
                 artifactID: artifactID,
                 field: "proofArtifact",
@@ -915,19 +894,22 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
                 runID: request.runID,
                 projectRoot: projectRoot
             )
-            try workspaceStore.upsertRunArtifact(legacyReference, runID: request.runID, inProjectAt: projectRoot)
-            return try requireFoundationArtifactReference(legacyReference, field: "proofArtifact")
-        }
-        return try requireFoundationArtifactReference(
-            artifactReferenceResolver.uniqueManifestArtifact(
-                artifactID: artifactID,
-                field: "proofArtifact",
-                expectedFormat: .text,
-                manifest: manifest,
+            let retained = try await workspaceStore.persistArtifact(
+                content: Data(contentsOf: proofURL, options: [.mappedIfSafe]),
+                id: reference.id,
+                locator: reference.locator,
                 runID: request.runID,
-                projectRoot: projectRoot
-            ),
-            field: "proofArtifact"
+                mode: .immutable
+            )
+            return retained
+        }
+        return try await artifactReferenceResolver.uniqueManifestArtifact(
+            artifactID: artifactID,
+            field: "proofArtifact",
+            expectedFormat: .text,
+            manifest: manifest,
+            runID: request.runID,
+            projectRoot: projectRoot
         )
     }
 
@@ -1118,7 +1100,7 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
     }
 
     private func defaultProofCheckerWorkingDirectoryPath(runID: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/proof-checker-work"
+        "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/planning/symbolic-planner/proof-checker-work"
     }
 
     private func approximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {
@@ -1143,9 +1125,6 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         qualificationArtifact: ArtifactReference?,
         diagnostics: [XcircuiteSymbolicPlannerSolverDiagnostic]
     ) -> XcircuiteSymbolicPlannerSolverQualificationResult {
-        let failureCodes = diagnostics
-            .filter { $0.severity == "error" }
-            .map(\.code)
         let healthStatus: ToolHealthStatus = status == "qualified" ? .passed : .failed
         let solverMetadata = solverResult.solverMetadata
         var observedMetrics: [String: Double] = [:]
@@ -1206,13 +1185,6 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
             evidenceID: "\(request.toolID)-symbolic-planner-qualification",
             kind: .corpus,
             artifact: qualificationArtifact,
-            qualification: ToolEvidenceQualificationSummary(
-                qualified: status == "qualified",
-                policyID: request.policyID,
-                observedMetrics: observedMetrics,
-                observedCounts: observedCounts,
-                failureCodes: failureCodes
-            ),
             checkedAt: Date()
         )
         let toolHealth = ToolHealthCheckResult(
@@ -1257,8 +1229,8 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         )
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try artifactReferenceResolver.runManifest(runID: runID, projectRoot: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await artifactReferenceResolver.runManifest(runID: runID)
     }
 
     private func verifiedFoundationArtifactReference(

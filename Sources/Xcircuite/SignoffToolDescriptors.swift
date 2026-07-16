@@ -213,57 +213,15 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func nativeElectricalQualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeElectricalCorpus(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
         ToolDescriptor(
-            toolID: "native-electrical-signoff-qualification",
-            displayName: "Native Electrical Signoff Qualification",
+            toolID: "native-electrical-signoff-corpus",
+            displayName: "Native Electrical Signoff Corpus",
             kind: .reporting,
             version: "1.0.0",
             capabilities: [
                 ToolCapability(
-                    operationID: "qualify-electrical-signoff",
-                    inputFormats: [.json],
-                    outputFormats: [.json]
-                ),
-            ],
-            trustProfile: ToolTrustProfile(level: level),
-            environment: ToolEnvironment(
-                executablePath: "in-process",
-                platform: "macOS"
-            )
-        )
-    }
-
-    public static func nativeElectricalProcessQualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
-        ToolDescriptor(
-            toolID: "native-electrical-signoff-process-qualification",
-            displayName: "Native Electrical Signoff Process Qualification",
-            kind: .reporting,
-            version: "1.0.0",
-            capabilities: [
-                ToolCapability(
-                    operationID: "qualify-electrical-signoff-process",
-                    inputFormats: [.json],
-                    outputFormats: [.json]
-                ),
-            ],
-            trustProfile: ToolTrustProfile(level: level),
-            environment: ToolEnvironment(
-                executablePath: "in-process",
-                platform: "macOS"
-            )
-        )
-    }
-
-    public static func nativeElectricalReleaseGate(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
-        ToolDescriptor(
-            toolID: "native-electrical-signoff-release-gate",
-            displayName: "Native Electrical Signoff Release Gate",
-            kind: .reporting,
-            version: "1.0.0",
-            capabilities: [
-                ToolCapability(
-                    operationID: "evaluate-electrical-release-gate",
+                    operationID: "observe-electrical-signoff-corpus",
                     inputFormats: [.json],
                     outputFormats: [.json]
                 ),

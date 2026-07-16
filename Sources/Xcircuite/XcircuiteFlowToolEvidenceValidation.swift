@@ -25,46 +25,21 @@ extension ToolEvidence {
             try validateArtifactSHA256(artifact.sha256, stageID: stageID)
         }
 
-        if qualification?.qualified == true, !hasPassingQualificationSupport {
-            throw XcircuiteFlowRuntimeSpecError.invalidToolEvidence(
-                stageID: stageID,
-                evidenceID: evidenceID,
-                reason: "qualified evidence must include artifact, policyID, observedMetrics, or observedCounts"
-            )
-        }
-
-        guard requiresPassingQualification else {
+        guard requiresVerifiableArtifact else {
             return
         }
-
-        guard let qualification else {
+        guard hasVerifiableArtifactBinding else {
             throw XcircuiteFlowRuntimeSpecError.invalidToolEvidence(
                 stageID: stageID,
                 evidenceID: evidenceID,
-                reason: "\(kind.rawValue) evidence requires a qualification summary"
-            )
-        }
-
-        guard qualification.qualified else {
-            throw XcircuiteFlowRuntimeSpecError.invalidToolEvidence(
-                stageID: stageID,
-                evidenceID: evidenceID,
-                reason: "\(kind.rawValue) evidence must be qualified before runtime attachment"
-            )
-        }
-
-        guard qualification.failureCodes.isEmpty else {
-            throw XcircuiteFlowRuntimeSpecError.invalidToolEvidence(
-                stageID: stageID,
-                evidenceID: evidenceID,
-                reason: "qualified evidence must not include failureCodes"
+                reason: "\(kind.rawValue) evidence requires a verifiable artifact binding"
             )
         }
     }
 
-    private var requiresPassingQualification: Bool {
+    private var requiresVerifiableArtifact: Bool {
         switch kind {
-        case .corpus, .oracle, .productionApproval:
+        case .corpus, .oracle:
             true
         case .smoke, .healthCheck:
             false

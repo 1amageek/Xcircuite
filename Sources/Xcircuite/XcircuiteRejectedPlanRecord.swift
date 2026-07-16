@@ -14,9 +14,9 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
     public var sourceParameterCandidateIDs: [String]
     public var failedStepIDs: [String]
     public var failedGateIDs: [String]
-    public var candidatePlanRef: XcircuiteFileReference
-    public var planVerificationRef: XcircuiteFileReference
-    public var artifactRefs: [XcircuiteFileReference]
+    public var candidatePlanRef: ArtifactReference
+    public var planVerificationRef: ArtifactReference
+    public var artifactRefs: [ArtifactReference]
     public var diagnostics: [XcircuitePlanVerificationDiagnostic]
     public var diagnosticClassifications: [XcircuiteRejectedPlanDiagnosticClassification]
     public var nextActions: [String]
@@ -31,9 +31,9 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
         sourceParameterCandidateIDs: [String],
         failedStepIDs: [String],
         failedGateIDs: [String],
-        candidatePlanRef: XcircuiteFileReference,
-        planVerificationRef: XcircuiteFileReference,
-        artifactRefs: [XcircuiteFileReference],
+        candidatePlanRef: ArtifactReference,
+        planVerificationRef: ArtifactReference,
+        artifactRefs: [ArtifactReference],
         diagnostics: [XcircuitePlanVerificationDiagnostic],
         diagnosticClassifications: [XcircuiteRejectedPlanDiagnosticClassification] = [],
         nextActions: [String]
@@ -94,9 +94,9 @@ public struct XcircuiteRejectedPlanRecord: Codable, Sendable, Hashable {
         sourceParameterCandidateIDs = try container.decode([String].self, forKey: .sourceParameterCandidateIDs)
         failedStepIDs = try container.decode([String].self, forKey: .failedStepIDs)
         failedGateIDs = try container.decode([String].self, forKey: .failedGateIDs)
-        candidatePlanRef = try container.decode(XcircuiteFileReference.self, forKey: .candidatePlanRef)
-        planVerificationRef = try container.decode(XcircuiteFileReference.self, forKey: .planVerificationRef)
-        artifactRefs = try container.decode([XcircuiteFileReference].self, forKey: .artifactRefs)
+        candidatePlanRef = try container.decode(ArtifactReference.self, forKey: .candidatePlanRef)
+        planVerificationRef = try container.decode(ArtifactReference.self, forKey: .planVerificationRef)
+        artifactRefs = try container.decode([ArtifactReference].self, forKey: .artifactRefs)
         diagnostics = try container.decode([XcircuitePlanVerificationDiagnostic].self, forKey: .diagnostics)
         diagnosticClassifications = try container.decode(
             [XcircuiteRejectedPlanDiagnosticClassification].self,

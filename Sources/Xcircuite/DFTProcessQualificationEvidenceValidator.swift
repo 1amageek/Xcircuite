@@ -22,7 +22,7 @@ public struct DFTProcessQualificationEvidenceValidator: DFTProcessQualificationE
         if !evidence.scope.isCompleteForPDK {
             reasons.append("pdk-scope-incomplete")
         }
-        if !evidence.independenceVerified {
+        if !evidence.hasIndependentOracleEvidence {
             reasons.append("independence-unverified")
         }
         if !evidence.blockers.isEmpty {

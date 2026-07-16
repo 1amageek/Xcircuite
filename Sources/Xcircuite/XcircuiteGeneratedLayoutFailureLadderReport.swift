@@ -11,7 +11,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Ha
     public var stageNodes: [StageNode]
     public var suggestedActions: [SuggestedAction]
     /// Manifest reference for the persisted report file. Persisted report JSON omits this self-reference to keep the file digest acyclic.
-    public var reportArtifact: XcircuiteFileReference?
+    public var reportArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -21,7 +21,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Ha
         summary: Summary,
         stageNodes: [StageNode],
         suggestedActions: [SuggestedAction],
-        reportArtifact: XcircuiteFileReference? = nil
+        reportArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.ladderID = ladderID
@@ -87,7 +87,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Ha
         public var isFirstFailure: Bool
         public var isAffectedDownstream: Bool
         public var gates: [GateNode]
-        public var artifactRefs: [ArtifactReference]
+        public var artifactRefs: [ArtifactSnapshot]
         public var artifactIssues: [ArtifactIssue]
         public var diagnostics: [Diagnostic]
         public var attempts: [Attempt]
@@ -100,7 +100,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Ha
             isFirstFailure: Bool,
             isAffectedDownstream: Bool,
             gates: [GateNode],
-            artifactRefs: [ArtifactReference],
+            artifactRefs: [ArtifactSnapshot],
             artifactIssues: [ArtifactIssue],
             diagnostics: [Diagnostic],
             attempts: [Attempt]
@@ -131,7 +131,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderReport: Codable, Sendable, Ha
         }
     }
 
-    public struct ArtifactReference: Codable, Sendable, Hashable {
+    public struct ArtifactSnapshot: Codable, Sendable, Hashable {
         public var role: String
         public var artifactID: String?
         public var stageID: String?

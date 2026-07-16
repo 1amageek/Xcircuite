@@ -112,12 +112,7 @@ extension XcircuiteCandidatePlanExecutor {
     }
 
     func terminalEquivalentPinGroups(from step: XcircuiteCandidatePlanStep) throws -> [[Int]] {
-        if case .string? = step.parameterHints["equivalentPinGroups"] {
-            if let encoded = nonEmptyStringHintIfPresent("equivalentPinGroups", step: step),
-               let data = encoded.data(using: .utf8) {
-                return try JSONDecoder().decode([[Int]].self, from: data)
-            }
-        } else if let groups: [[Int]] = try decodedHint("equivalentPinGroups", from: step) {
+        if case .equivalentPinGroups(let groups)? = step.parameterHints["equivalentPinGroups"] {
             return groups
         }
         let layoutPorts = stringArrayHint("layoutPorts", step: step)
@@ -154,9 +149,9 @@ extension XcircuiteCandidatePlanExecutor {
             return nil
         }
         switch value {
-        case .number(let number) where number.isFinite && number.rounded() == number:
+        case .scalar(let number) where number.isFinite && number.rounded() == number:
             return Int(number)
-        case .string(let string):
+        case .text(let string):
             guard let int = Int(string.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                 throw XcircuiteCandidatePlanExecutionError.invalidHint(
                     stepID: step.stepID,
@@ -202,15 +197,10 @@ extension XcircuiteCandidatePlanExecutor {
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> [String] {
-        guard case .array(let values) = step.parameterHints[key] else {
+        guard case .textList(let values) = step.parameterHints[key] else {
             return []
         }
-        return values.compactMap { value in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return nonEmpty(string)
-        }
+        return values.compactMap(nonEmpty)
     }
 
     func nonEmpty(_ value: String) -> String? {

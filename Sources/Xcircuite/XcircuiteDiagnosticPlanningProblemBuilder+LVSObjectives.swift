@@ -13,8 +13,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "info",
             sourceRefIDs: [summaryRefID],
             target: "layout-and-schematic-equivalent",
-            currentValue: .number(0),
-            requiredValue: .number(0),
+            currentValue: .scalar(0),
+            requiredValue: .scalar(0),
             description: "No active LVS mismatches were present in the source summary."
         )
     }
@@ -31,14 +31,14 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             bucket.parameterName,
         ].compactMap { $0 }.joined(separator: "-")
         let objectiveID = try identifier("lvs-\(label.isEmpty ? "mismatch" : label)-\(index + 1)")
-        var evidence: [String: XcircuiteJSONValue] = [
-            "activeCount": .number(Double(bucket.activeCount)),
-            "waivedCount": .number(Double(bucket.waivedCount)),
-            "problemSourceOperation": .string("xcircuite.generate-planning-problem"),
-            "sourceEngineOperation": .string("lvs.run-native"),
-            "symbolicGoalAtoms": .array(lvsGoalAtoms(for: bucket).map { .string($0) }),
-            "layoutPorts": .array(bucket.layoutPorts.map { .string($0) }),
-            "schematicPorts": .array(bucket.schematicPorts.map { .string($0) }),
+        var evidence: [String: PlanningParameterValue] = [
+            "activeCount": .scalar(Double(bucket.activeCount)),
+            "waivedCount": .scalar(Double(bucket.waivedCount)),
+            "problemSourceOperation": .text("xcircuite.generate-planning-problem"),
+            "sourceEngineOperation": .text("lvs.run-native"),
+            "symbolicGoalAtoms": .textList(lvsGoalAtoms(for: bucket)),
+            "layoutPorts": .textList(bucket.layoutPorts),
+            "schematicPorts": .textList(bucket.schematicPorts),
         ]
         insertOptional(bucket.ruleID, key: "ruleID", into: &evidence)
         insertOptional(bucket.category, key: "category", into: &evidence)
@@ -56,8 +56,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: [summaryRefID],
             target: "layout-and-schematic-equivalent-for-bucket",
-            currentValue: .number(Double(bucket.activeCount)),
-            requiredValue: .number(0),
+            currentValue: .scalar(Double(bucket.activeCount)),
+            requiredValue: .scalar(0),
             description: "Repair LVS bucket \(label.isEmpty ? "unknown" : label) with \(bucket.activeCount) active mismatch(es).",
             evidence: evidence,
             suggestedActions: bucket.suggestedFixes
@@ -81,17 +81,17 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         if let repairHintRefID {
             sourceRefIDs.append(repairHintRefID)
         }
-        var evidence: [String: XcircuiteJSONValue] = [
-            "activeCount": .number(1),
-            "problemSourceOperation": .string("xcircuite.generate-planning-problem"),
-            "sourceEngineOperation": .string("lvs.export-repair-hints"),
-            "sourceRepairHintID": .string(hint.hintID),
-            "sourceDiagnosticIndex": .number(Double(hint.sourceDiagnosticIndex)),
-            "repairHintConfidence": .string(hint.confidence),
-            "repairHintOperationID": .string(hint.operationID),
-            "symbolicGoalAtoms": .array(lvsGoalAtoms(forOperationID: hint.operationID).map { .string($0) }),
-            "layoutPorts": .array(hint.layoutPorts.map { .string($0) }),
-            "schematicPorts": .array(hint.schematicPorts.map { .string($0) }),
+        var evidence: [String: PlanningParameterValue] = [
+            "activeCount": .scalar(1),
+            "problemSourceOperation": .text("xcircuite.generate-planning-problem"),
+            "sourceEngineOperation": .text("lvs.export-repair-hints"),
+            "sourceRepairHintID": .text(hint.hintID),
+            "sourceDiagnosticIndex": .scalar(Double(hint.sourceDiagnosticIndex)),
+            "repairHintConfidence": .text(hint.confidence),
+            "repairHintOperationID": .text(hint.operationID),
+            "symbolicGoalAtoms": .textList(lvsGoalAtoms(forOperationID: hint.operationID)),
+            "layoutPorts": .textList(hint.layoutPorts),
+            "schematicPorts": .textList(hint.schematicPorts),
         ]
         insertOptional(hint.ruleID, key: "ruleID", into: &evidence)
         insertOptional(hint.category, key: "category", into: &evidence)
@@ -111,8 +111,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
             priority: "error",
             sourceRefIDs: sourceRefIDs,
             target: "layout-and-schematic-equivalent-for-repair-hint",
-            currentValue: .number(1),
-            requiredValue: .number(0),
+            currentValue: .scalar(1),
+            requiredValue: .scalar(0),
             description: "Repair LVS diagnostic \(hint.sourceDiagnosticIndex) using engine-owned repair hint \(hint.hintID).",
             evidence: evidence,
             suggestedActions: [hint.rationale]

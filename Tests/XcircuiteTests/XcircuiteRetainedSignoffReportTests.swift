@@ -29,7 +29,7 @@ struct XcircuiteRetainedSignoffReportTests {
         #expect(report.passingExternalOracleResults == [passingLane])
     }
 
-    @Test func promotionAssessmentBlocksRetainedExternalOracleLaneWithoutExplicitQualification() throws {
+    @Test func promotionAssessmentBlocksRetainedExternalOracleLaneWithoutExplicitQualification() async throws {
         let root = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(root) }
         let retainedReportURL = root.appending(path: "retained-signoff-report.json")
@@ -38,7 +38,10 @@ struct XcircuiteRetainedSignoffReportTests {
         var unqualifiedLane = makeExternalOracleLane()
         unqualifiedLane.qualified = nil
         let retainedReport = makeRetainedReport(lanes: [unqualifiedLane])
-        let assessment = try XcircuiteGeneratedLayoutSignoffPromotionAssessor().assess(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let assessment = try await XcircuiteGeneratedLayoutSignoffPromotionAssessor(
+            workspaceStore: workspaceStore
+        ).assess(
             request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                 promotionID: "generated-layout-signoff-promotion-assessment",
                 requiredExternalOracleDomains: [.drc],

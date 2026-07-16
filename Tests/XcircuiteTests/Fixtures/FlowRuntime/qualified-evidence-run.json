@@ -11,17 +11,18 @@
         "operationID": "run-drc",
         "minimumLevel": "corpusChecked",
         "requiredInputFormats": [
-          "JSON"
+          "json"
         ],
         "requiredOutputFormats": [
-          "JSON"
+          "json"
         ],
         "requiredEvidenceKinds": [],
         "requiredQualifiedEvidenceKinds": [
           "corpus"
         ],
         "maximumEvidenceAgeSeconds": 4102444800,
-        "requirePassingHealthCheck": true
+        "requirePassingHealthCheck": true,
+        "requireIndependentQualificationEvidence": false
       },
       "requiresApproval": false,
       "retryPolicy": {

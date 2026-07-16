@@ -13,27 +13,27 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
     let artifactStore: XcircuitePlanningArtifactStore
     let layoutRunner: any LayoutCommandRunning
     let artifactBuilder: StageArtifactReferenceBuilder
-    let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
         layoutRunner: any LayoutCommandRunning = LayoutCommandRunner(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.layoutRunner = layoutRunner
         self.artifactBuilder = StageArtifactReferenceBuilder()
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func executeCandidatePlan(
         request: XcircuiteCandidatePlanExecutionRequest,
         projectRoot: URL
     ) async throws -> XcircuiteCandidatePlanExecutionResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
         let candidatePlanRef = try requiredCandidatePlanReference(
             explicitPath: request.candidatePlanPath,
             artifactID: request.candidatePlanArtifactID ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID,
@@ -41,18 +41,18 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             runID: request.runID,
             projectRoot: projectRoot
         )
-        guard let candidatePlanURL = fileReferenceVerifier.resolvedURL(
-            for: candidatePlanRef,
-            projectRoot: projectRoot
-        ) else {
+        let candidatePlanURL: URL
+        do {
+            candidatePlanURL = try candidatePlanRef.locator.location.resolvedFileURL(relativeTo: projectRoot)
+        } catch {
             throw XcircuiteCandidatePlanExecutionError.invalidArtifactReference(
                 path: candidatePlanRef.path,
-                reason: "candidate plan path cannot be resolved inside the project root."
+                reason: error.localizedDescription
             )
         }
-        let plan = try workspaceStore.readJSON(
+        let plan = try JSONDecoder().decode(
             XcircuiteCandidatePlan.self,
-            from: candidatePlanURL
+            from: Data(contentsOf: candidatePlanURL)
         )
         guard plan.runID == request.runID else {
             throw XcircuiteCandidatePlanExecutionError.runMismatch(
@@ -61,10 +61,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             )
         }
         let riskReviewer = XcircuiteCandidatePlanRiskReviewer()
-        let approvals = try workspaceStore.loadApprovals(
-            runID: request.runID,
-            inProjectAt: projectRoot
-        )
+        let approvals = try await workspaceStore.loadRunApprovals(runID: request.runID)
         let riskReviews = riskReviewer.riskReviews(for: plan, approvals: approvals)
         if riskReviewer.blocksExecution(riskReviews) {
             let diagnostics = riskReviewer.blockingDiagnostics(from: riskReviews)
@@ -85,12 +82,12 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 diagnostics: diagnostics,
                 nextActions: riskReviewer.nextActions(from: riskReviews)
             )
-            let executionRef = try artifactStore.persistPlanExecution(
+            let executionRef = try await artifactStore.persistPlanExecution(
                 execution,
                 runID: plan.runID,
                 projectRoot: projectRoot
             )
-            try appendActionRecord(
+            try await appendActionRecord(
                 execution: execution,
                 candidatePlanRef: candidatePlanRef,
                 executionRef: executionRef,
@@ -103,17 +100,14 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
                 problemID: plan.problemID,
                 planID: plan.planID,
                 candidatePlanPath: candidatePlanRef.path,
-                planExecutionArtifact: try requireFoundationArtifactReference(
-                    executionRef,
-                    field: "plan-execution"
-                ),
+                planExecutionArtifact: executionRef,
                 producedArtifacts: [],
                 nextActions: execution.nextActions
             )
         }
 
         var context = CandidatePlanExecutionContext(
-            latestLayoutDocumentPath: try initialLayoutDocumentPathIfNeeded(
+            latestLayoutDocumentPath: try await initialLayoutDocumentPathIfNeeded(
                 for: plan,
                 projectRoot: projectRoot
             ),
@@ -137,7 +131,7 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
         let nextActions = unique(stepResults.flatMap(\.nextActions) + signoffNextActions(for: plan))
         let status = executionStatus(stepResults)
 
-        let designDiffRef = try writeDesignDiff(
+        let designDiffRef = try await writeDesignDiff(
             plan: plan,
             stepResults: stepResults,
             actor: request.actor,
@@ -156,12 +150,12 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             diagnostics: diagnostics,
             nextActions: nextActions
         )
-        let executionRef = try artifactStore.persistPlanExecution(
+        let executionRef = try await artifactStore.persistPlanExecution(
             execution,
             runID: plan.runID,
             projectRoot: projectRoot
         )
-        try appendActionRecord(
+        try await appendActionRecord(
             execution: execution,
             candidatePlanRef: candidatePlanRef,
             executionRef: executionRef,
@@ -174,13 +168,8 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
             problemID: plan.problemID,
             planID: plan.planID,
             candidatePlanPath: candidatePlanRef.path,
-            planExecutionArtifact: try requireFoundationArtifactReference(
-                executionRef,
-                field: "plan-execution"
-            ),
-            designDiffArtifact: try designDiffRef.map {
-                try requireFoundationArtifactReference($0, field: "design-diff")
-            },
+            planExecutionArtifact: executionRef,
+            designDiffArtifact: designDiffRef,
             producedArtifacts: producedArtifactReferences,
             nextActions: nextActions
         )
@@ -195,7 +184,7 @@ struct CandidatePlanExecutionContext {
 struct CandidatePlanStandardLayoutArtifact: Sendable, Hashable {
     var url: URL
     var artifactID: String
-    var format: XcircuiteFileFormat
+    var format: ArtifactFormat
 }
 
 struct CandidatePlanLayoutCommandArtifacts: Sendable, Hashable {

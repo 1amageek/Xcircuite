@@ -9,7 +9,6 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 extension XcircuiteFlowRuntimeTests {
     @Test func generatedLayoutCLIRejectsMalformedJSONAsTypedReadError() async throws {
@@ -39,20 +38,20 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func generatedLayoutSignoffCorpusArtifactReferenceRejectsUnbackedVerifiedIntegrity() throws {
+    @Test func generatedLayoutSignoffCorpusArtifactReferenceRejectsUnbackedVerifiedIntegrity() async throws {
         let artifactPath = ".xcircuite/runs/run-1/stages/001-drc/raw/drc-summary.json"
         #expect(
             throws: XcircuiteGeneratedLayoutSignoffCorpusReportValidationError.missingVerifiedSHA256(
                 path: artifactPath
             )
         ) {
-            _ = try XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference(
+            _ = try XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactSnapshot(
                 role: "stage-summary",
                 artifactID: "drc-summary",
                 stageID: "001-drc",
                 path: artifactPath,
-                kind: XcircuiteFileKind.report.rawValue,
-                format: XcircuiteFileFormat.json.rawValue,
+                kind: ArtifactKind.report.rawValue,
+                format: ArtifactFormat.json.rawValue,
                 sha256: nil,
                 byteCount: 128,
                 integrityStatus: FlowRunReviewArtifactIntegrityStatus.verified.rawValue,
@@ -79,7 +78,7 @@ extension XcircuiteFlowRuntimeTests {
             )
         ) {
             _ = try JSONDecoder().decode(
-                XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactReference.self,
+                XcircuiteGeneratedLayoutSignoffCorpusReport.ArtifactSnapshot.self,
                 from: payload
             )
         }
@@ -90,8 +89,8 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let gdsRunID = "generated-layout-corpus-gds-run"
         let oasisRunID = "generated-layout-corpus-oasis-run"
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -104,7 +103,7 @@ extension XcircuiteFlowRuntimeTests {
             runID: String,
             exportedLayoutArtifactID: String,
             exportFormat: LayoutFileFormat,
-            artifactFormat: XcircuiteFileFormat,
+            artifactFormat: ArtifactFormat,
             lvsFormat: LVSLayoutFormat,
             pexFormat: LayoutFormat
         ) async throws {
@@ -131,7 +130,7 @@ extension XcircuiteFlowRuntimeTests {
                                     technologyInput: .path("tech/process.json")
                                 ),
                             ],
-                            tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                            tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                         )
                     ),
                     .nativeDRC(
@@ -146,7 +145,7 @@ extension XcircuiteFlowRuntimeTests {
                                 )
                             ),
                             topCell: "top",
-                            tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                            tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                         )
                     ),
                     .nativeLVS(
@@ -161,10 +160,10 @@ extension XcircuiteFlowRuntimeTests {
                                 )
                             ),
                             layoutFormat: lvsFormat,
-                            schematicNetlistPath: "circuits/top.spice",
+                            schematicNetlistInput: .path("circuits/top.spice"),
                             topCell: "top",
-                            technologyPath: "tech/process.json",
-                            tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                            technologyInput: .path("tech/process.json"),
+                            tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                         )
                     ),
                     .mockPEX(
@@ -179,7 +178,7 @@ extension XcircuiteFlowRuntimeTests {
                                 )
                             ),
                             layoutFormat: pexFormat,
-                            sourceNetlistPath: "circuits/top.spice",
+                            sourceNetlistInput: .path("circuits/top.spice"),
                             topCell: "top",
                             corners: [PEXCorner(id: "tt")],
                             technology: .inline(makePEXTechnology()),
@@ -188,7 +187,7 @@ extension XcircuiteFlowRuntimeTests {
                     ),
                 ]
             )
-            let runtime = try spec.makeRuntime(projectRoot: root)
+            let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
             let result = try await runtime.run(
                 request: FlowOperationRequest(
                     projectRoot: root,
@@ -315,15 +314,24 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let collector = XcircuiteGeneratedLayoutSignoffCorpusCollector()
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        let collector = XcircuiteGeneratedLayoutSignoffCorpusCollector(
+            ledgerLoader: workspaceStore,
+            reviewBundler: reviewBundler,
+            workspaceStore: workspaceStore
+        )
         let firstCase = try #require(request.cases.first)
 
         func expectCollectFailure(
             _ invalidRequest: XcircuiteGeneratedLayoutSignoffCorpusRequest,
             expectedError: XcircuiteGeneratedLayoutSignoffCorpusError
-        ) {
+        ) async {
             do {
-                _ = try collector.collect(request: invalidRequest, projectRoot: root)
+                _ = try await collector.collect(request: invalidRequest, projectRoot: root)
                 Issue.record("Expected generated layout signoff corpus validation to fail.")
             } catch let error as XcircuiteGeneratedLayoutSignoffCorpusError {
                 #expect(error == expectedError)
@@ -334,7 +342,7 @@ extension XcircuiteFlowRuntimeTests {
 
         var duplicateCaseRequest = request
         duplicateCaseRequest.cases.append(firstCase)
-        expectCollectFailure(
+        await expectCollectFailure(
             duplicateCaseRequest,
             expectedError: .duplicateCaseID("standard-gds-drc-lvs-pex-pass")
         )
@@ -349,7 +357,7 @@ extension XcircuiteFlowRuntimeTests {
         )
         var duplicateExpectedStageRequest = request
         duplicateExpectedStageRequest.cases = [duplicateExpectedStageCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             duplicateExpectedStageRequest,
             expectedError: .duplicateExpectedStageID(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -368,7 +376,7 @@ extension XcircuiteFlowRuntimeTests {
         )
         var duplicateOracleReadinessRequest = request
         duplicateOracleReadinessRequest.cases = [duplicateOracleReadinessCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             duplicateOracleReadinessRequest,
             expectedError: .duplicateOracleReadinessDomain(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -380,7 +388,7 @@ extension XcircuiteFlowRuntimeTests {
         emptyExpectedStagesCase.expectedStages = []
         var emptyExpectedStagesRequest = request
         emptyExpectedStagesRequest.cases = [emptyExpectedStagesCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             emptyExpectedStagesRequest,
             expectedError: .emptyExpectedStages(caseID: "standard-gds-drc-lvs-pex-pass")
         )
@@ -389,7 +397,7 @@ extension XcircuiteFlowRuntimeTests {
         emptyCoverageTagsCase.coverageTags = []
         var emptyCoverageTagsRequest = request
         emptyCoverageTagsRequest.cases = [emptyCoverageTagsCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             emptyCoverageTagsRequest,
             expectedError: .emptyCoverageTags(caseID: "standard-gds-drc-lvs-pex-pass")
         )
@@ -398,7 +406,7 @@ extension XcircuiteFlowRuntimeTests {
         emptyOracleReasonCase.oracleReadiness[0].reason = " "
         var emptyOracleReasonRequest = request
         emptyOracleReasonRequest.cases = [emptyOracleReasonCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             emptyOracleReasonRequest,
             expectedError: .invalidOracleReadiness(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -422,7 +430,7 @@ extension XcircuiteFlowRuntimeTests {
         ]
         var invalidEvidencePathRequest = request
         invalidEvidencePathRequest.cases = [invalidEvidencePathCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             invalidEvidencePathRequest,
             expectedError: .invalidOracleEvidenceReference(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -447,7 +455,7 @@ extension XcircuiteFlowRuntimeTests {
         ]
         var invalidEvidenceHashRequest = request
         invalidEvidenceHashRequest.cases = [invalidEvidenceHashCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             invalidEvidenceHashRequest,
             expectedError: .invalidOracleEvidenceReference(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -472,7 +480,7 @@ extension XcircuiteFlowRuntimeTests {
         ]
         var invalidEvidenceByteCountRequest = request
         invalidEvidenceByteCountRequest.cases = [invalidEvidenceByteCountCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             invalidEvidenceByteCountRequest,
             expectedError: .invalidOracleEvidenceReference(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -499,7 +507,7 @@ extension XcircuiteFlowRuntimeTests {
         ]
         var duplicateEvidenceRequest = request
         duplicateEvidenceRequest.cases = [duplicateEvidenceCase]
-        expectCollectFailure(
+        await expectCollectFailure(
             duplicateEvidenceRequest,
             expectedError: .duplicateOracleEvidenceReference(
                 caseID: "standard-gds-drc-lvs-pex-pass",
@@ -509,7 +517,7 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
 
-        let report = try collector.collectAndPersist(request: request, projectRoot: root)
+        let report = try await collector.collectAndPersist(request: request, projectRoot: root)
 
         #expect(report.status == .passed)
         #expect(report.summary.caseCount == 2)
@@ -534,26 +542,26 @@ extension XcircuiteFlowRuntimeTests {
         #expect(report.caseResults.allSatisfy { caseResult in
             caseResult.stageResults.allSatisfy { $0.statusMatches }
         })
-        #expect(gdsCaseResult.sourceArtifactRefs.contains {
+        let gdsArtifact = try #require(gdsCaseResult.sourceArtifactRefs.first {
             $0.artifactID == "layout-gds"
-                && $0.format == "GDSII"
-                && $0.sha256 != nil
-                && ($0.byteCount ?? 0) > 0
         })
-        #expect(oasisCaseResult.sourceArtifactRefs.contains {
+        #expect(gdsArtifact.format == .gdsii)
+        #expect(!gdsArtifact.sha256.isEmpty)
+        #expect(gdsArtifact.byteCount > 0)
+        let oasisArtifact = try #require(oasisCaseResult.sourceArtifactRefs.first {
             $0.artifactID == "layout-oasis"
-                && $0.format == "OASIS"
-                && $0.sha256 != nil
-                && ($0.byteCount ?? 0) > 0
         })
-        #expect(report.caseResults.allSatisfy { caseResult in
-            caseResult.sourceArtifactRefs.contains {
+        #expect(oasisArtifact.format == .oasis)
+        #expect(!oasisArtifact.sha256.isEmpty)
+        #expect(oasisArtifact.byteCount > 0)
+        for caseResult in report.caseResults {
+            let drcLayoutArtifact = try #require(caseResult.sourceArtifactRefs.first {
                 $0.artifactID == "drc-layout"
-                    && $0.format == "JSON"
-                    && $0.sha256 != nil
-                    && ($0.byteCount ?? 0) > 0
-            }
-        })
+            })
+            #expect(drcLayoutArtifact.format == .json)
+            #expect(!drcLayoutArtifact.sha256.isEmpty)
+            #expect(drcLayoutArtifact.byteCount > 0)
+        }
         #expect(report.caseResults.allSatisfy { caseResult in
             caseResult.signoffArtifactRefs.contains { $0.artifactID == "drc-summary" }
         })
@@ -563,19 +571,19 @@ extension XcircuiteFlowRuntimeTests {
         #expect(report.caseResults.allSatisfy { caseResult in
             caseResult.signoffArtifactRefs.contains { $0.artifactID == "pex-summary" }
         })
-        #expect(gdsCaseResult.sourceArtifactRefs.contains {
+        let gdsDRCLayoutArtifact = try #require(gdsCaseResult.sourceArtifactRefs.first {
             $0.artifactID == "drc-layout"
-                && $0.format == "JSON"
-                && $0.sha256 != nil
-                && ($0.byteCount ?? 0) > 0
         })
+        #expect(gdsDRCLayoutArtifact.format == .json)
+        #expect(!gdsDRCLayoutArtifact.sha256.isEmpty)
+        #expect(gdsDRCLayoutArtifact.byteCount > 0)
 
         let requestURL = root.appending(path: "generated-layout-signoff-corpus-request.json")
-        try writeJSON(request, to: requestURL)
+        try await writeJSON(request, to: requestURL)
         let duplicateExpectedStageRequestURL = root.appending(
             path: "generated-layout-signoff-corpus-duplicate-stage-request.json"
         )
-        try writeJSON(duplicateExpectedStageRequest, to: duplicateExpectedStageRequestURL)
+        try await writeJSON(duplicateExpectedStageRequest, to: duplicateExpectedStageRequestURL)
         await #expect(throws: XcircuiteGeneratedLayoutSignoffCorpusError.self) {
             try await XcircuiteFlowCLICommand.run(arguments: [
                 "collect-generated-layout-signoff-corpus",
@@ -603,8 +611,10 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliReport.status == .passed)
         #expect(cliReport.reportArtifact?.artifactID == "generated-layout-signoff-corpus-report")
 
-        let qualifier = XcircuiteGeneratedLayoutSignoffCorpusQualifier()
-        let strictQualification = try qualifier.qualify(
+        let qualifier = XcircuiteGeneratedLayoutSignoffCorpusQualifier(
+            workspaceStore: workspaceStore
+        )
+        let strictQualification = try await qualifier.qualify(
             report: report,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
@@ -620,7 +630,7 @@ extension XcircuiteFlowRuntimeTests {
             requiredCoverageTags: request.requiredCoverageTags,
             acceptedOracleReadinessStatuses: [.ready, .blocked]
         )
-        let qualification = try qualifier.qualifyAndPersist(
+        let qualification = try await qualifier.qualifyAndPersist(
             report: report,
             policy: localQualificationPolicy,
             projectRoot: root
@@ -635,7 +645,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(qualification.qualificationArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-qualification.json")
 
         let policyURL = root.appending(path: "generated-layout-signoff-corpus-policy.json")
-        try writeJSON(localQualificationPolicy, to: policyURL)
+        try await writeJSON(localQualificationPolicy, to: policyURL)
         let reportPath = try #require(report.reportArtifact?.path)
         let reportURL = root.appending(path: reportPath)
         let cliQualificationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
@@ -677,7 +687,7 @@ extension XcircuiteFlowRuntimeTests {
             }
             return updatedCaseResult
         }
-        let readyWithoutEvidenceQualification = try qualifier.qualify(
+        let readyWithoutEvidenceQualification = try await qualifier.qualify(
             report: readyWithoutEvidenceReport,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
@@ -688,7 +698,9 @@ extension XcircuiteFlowRuntimeTests {
                 && $0.caseID == "standard-gds-drc-lvs-pex-pass"
         })
 
-        let readyAttachment = try XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher()
+        let readyAttachment = try await XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher(
+            workspaceStore: workspaceStore
+        )
             .attach(
                 report: readyWithoutEvidenceReport,
                 retainedSignoffReport: retainedSignoffReport,
@@ -699,7 +711,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(readyAttachment.summary.evidenceRefCount == 12)
         #expect(readyAttachment.summary.missingDomains.isEmpty)
         let readyWithEvidenceReport = readyAttachment.updatedReport
-        let readyWithEvidenceQualification = try qualifier.qualify(
+        let readyWithEvidenceQualification = try await qualifier.qualify(
             report: readyWithEvidenceReport,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
@@ -732,7 +744,7 @@ extension XcircuiteFlowRuntimeTests {
         staleQualificationReport.summary.missingCoverageTags = []
         staleQualificationReport.summary.standardLayoutArtifactCount = 999
         staleQualificationReport.summary.signoffArtifactCount = 999
-        let staleQualification = try qualifier.qualify(
+        let staleQualification = try await qualifier.qualify(
             report: staleQualificationReport,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
@@ -763,7 +775,7 @@ extension XcircuiteFlowRuntimeTests {
             minimumCaseCount: 3,
             requiredCoverageTags: request.requiredCoverageTags
         )
-        let duplicateQualification = try qualifier.qualify(
+        let duplicateQualification = try await qualifier.qualify(
             report: duplicateQualificationReport,
             policy: duplicateQualificationPolicy
         )
@@ -778,7 +790,10 @@ extension XcircuiteFlowRuntimeTests {
         #expect(duplicateQualification.failures.contains {
             $0.code == "minimum-case-count-not-met"
         })
-        let productionReadyAssessment = try XcircuiteGeneratedLayoutSignoffPromotionAssessor()
+        let promotionAssessor = XcircuiteGeneratedLayoutSignoffPromotionAssessor(
+            workspaceStore: workspaceStore
+        )
+        let productionReadyAssessment = try await promotionAssessor
             .assess(
                 request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                     promotionID: "generated-layout-signoff-promotion-assessment"
@@ -795,9 +810,9 @@ extension XcircuiteFlowRuntimeTests {
             retainedReport: XcircuiteRetainedSignoffReport? = nil,
             retainedReportURL: URL? = nil,
             expectedError: XcircuiteGeneratedLayoutSignoffPromotionAssessmentError
-        ) {
+        ) async {
             do {
-                _ = try XcircuiteGeneratedLayoutSignoffPromotionAssessor()
+                _ = try await promotionAssessor
                     .assess(
                         request: invalidRequest,
                         qualification: qualification,
@@ -812,28 +827,28 @@ extension XcircuiteFlowRuntimeTests {
             }
         }
 
-        expectPromotionAssessmentFailure(
+        await expectPromotionAssessmentFailure(
             XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                 promotionID: "generated-layout-signoff-promotion-assessment",
                 requiredExternalOracleDomains: []
             ),
             expectedError: .emptyRequiredExternalOracleDomains
         )
-        expectPromotionAssessmentFailure(
+        await expectPromotionAssessmentFailure(
             XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                 promotionID: "generated-layout-signoff-promotion-assessment",
                 requiredExternalOracleDomains: [.drc, .drc]
             ),
             expectedError: .duplicateRequiredExternalOracleDomain(.drc)
         )
-        expectPromotionAssessmentFailure(
+        await expectPromotionAssessmentFailure(
             XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                 promotionID: "generated-layout-signoff-promotion-assessment",
                 requiredExternalOracleDomains: [.layout]
             ),
             expectedError: .unsupportedRequiredExternalOracleDomain(.layout)
         )
-        expectPromotionAssessmentFailure(
+        await expectPromotionAssessmentFailure(
             XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                 promotionID: "generated-layout-signoff-promotion-assessment"
             ),
@@ -841,7 +856,7 @@ extension XcircuiteFlowRuntimeTests {
             retainedReportURL: nil,
             expectedError: .retainedSignoffReportArtifactMissing
         )
-        expectPromotionAssessmentFailure(
+        await expectPromotionAssessmentFailure(
             XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                 promotionID: "generated-layout-signoff-promotion-assessment"
             ),
@@ -858,7 +873,7 @@ extension XcircuiteFlowRuntimeTests {
             expectedError: XcircuiteGeneratedLayoutSignoffPromotionAssessmentError
         ) {
             do {
-                _ = try XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactReference(
+                _ = try XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint(
                     path: path,
                     sha256: sha256,
                     byteCount: byteCount
@@ -900,7 +915,7 @@ extension XcircuiteFlowRuntimeTests {
         )
         do {
             _ = try JSONDecoder().decode(
-                XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactReference.self,
+                XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint.self,
                 from: invalidPromotionArtifactJSON
             )
             Issue.record("Expected generated layout signoff promotion artifact decode to fail.")
@@ -914,9 +929,9 @@ extension XcircuiteFlowRuntimeTests {
         }
 
         let readyWithoutEvidenceReportURL = root.appending(path: "ready-without-evidence-report.json")
-        try writeJSON(readyWithoutEvidenceReport, to: readyWithoutEvidenceReportURL)
+        try await writeJSON(readyWithoutEvidenceReport, to: readyWithoutEvidenceReportURL)
         let staleQualificationReportURL = root.appending(path: "stale-qualification-report.json")
-        try writeJSON(staleQualificationReport, to: staleQualificationReportURL)
+        try await writeJSON(staleQualificationReport, to: staleQualificationReportURL)
         let cliStaleQualificationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
             "qualify-generated-layout-signoff-corpus",
             "--project-root",
@@ -994,8 +1009,10 @@ extension XcircuiteFlowRuntimeTests {
             ],
             requireReadyOracleEvidence: true
         )
-        let coverageAuditor = XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor()
-        let blockedExpansionAudit = try coverageAuditor.audit(report: report, policy: expansionAuditPolicy)
+        let coverageAuditor = XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor(
+            workspaceStore: workspaceStore
+        )
+        let blockedExpansionAudit = try await coverageAuditor.audit(report: report, policy: expansionAuditPolicy)
         #expect(blockedExpansionAudit.status == .incomplete)
         #expect(blockedExpansionAudit.missingRequirements.contains {
             $0.kind == "ready-oracle-evidence"
@@ -1015,7 +1032,7 @@ extension XcircuiteFlowRuntimeTests {
         var duplicateCaseReport = readyWithEvidenceReport
         duplicateCaseReport.caseResults.append(try #require(readyWithEvidenceReport.caseResults.first))
         duplicateCaseReport.summary.caseCount = duplicateCaseReport.caseResults.count
-        let duplicateCaseAudit = try coverageAuditor.audit(
+        let duplicateCaseAudit = try await coverageAuditor.audit(
             report: duplicateCaseReport,
             policy: duplicateCasePolicy
         )
@@ -1037,7 +1054,7 @@ extension XcircuiteFlowRuntimeTests {
 
         var staleSummaryReport = readyWithEvidenceReport
         staleSummaryReport.summary.caseCount = 99
-        let staleSummaryAudit = try coverageAuditor.audit(
+        let staleSummaryAudit = try await coverageAuditor.audit(
             report: staleSummaryReport,
             policy: expansionAuditPolicy
         )
@@ -1055,9 +1072,9 @@ extension XcircuiteFlowRuntimeTests {
         })
 
         let expansionPolicyURL = root.appending(path: "generated-layout-coverage-audit-policy.json")
-        try writeJSON(expansionAuditPolicy, to: expansionPolicyURL)
+        try await writeJSON(expansionAuditPolicy, to: expansionPolicyURL)
         let staleSummaryReportURL = root.appending(path: "generated-layout-stale-summary-report.json")
-        try writeJSON(staleSummaryReport, to: staleSummaryReportURL)
+        try await writeJSON(staleSummaryReport, to: staleSummaryReportURL)
         let cliStaleSummaryAuditJSON = try await XcircuiteFlowCLICommand.run(arguments: [
             "audit-generated-layout-signoff-corpus-coverage",
             "--project-root",
@@ -1110,7 +1127,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliCoverageAudit.suggestedActions.isEmpty)
         #expect(cliCoverageAudit.auditArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit.json")
 
-        let promotionAssessment = try XcircuiteGeneratedLayoutSignoffPromotionAssessor()
+        let promotionAssessment = try await promotionAssessor
             .assessAndPersist(
                 request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                     promotionID: "generated-layout-signoff-promotion-assessment"
@@ -1153,9 +1170,12 @@ extension XcircuiteFlowRuntimeTests {
             from: cliAssessmentData
         )
         #expect(cliAssessment.status == .readyForExternalCaseExpansion)
-        #expect(cliAssessment.assessmentArtifact?.artifactID == "generated-layout-signoff-promotion-assessment")
+        #expect(
+            cliAssessment.assessmentArtifact?.path ==
+                ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json"
+        )
 
-        let manifest = try XcircuiteWorkspaceStore().loadManifest(forProjectAt: root)
+        let manifest = try await workspaceStore.loadManifest()
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-corpus-suite"
                 && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-suite.json"
@@ -1193,8 +1213,9 @@ extension XcircuiteFlowRuntimeTests {
     @Test func generatedLayoutFailureLadderRetainsFirstFailingGateAndActions() async throws {
         let root = try makeTemporaryRoot("generated-layout-failure-ladder")
         defer { removeTemporaryRoot(root) }
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         let runID = "generated-layout-drc-failure-run"
-        try writeLayoutCommandRequest(root: root)
+        try await writeLayoutCommandRequest(root: root)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -1208,7 +1229,7 @@ extension XcircuiteFlowRuntimeTests {
                                 NativeDRCRule(id: "M1.width", kind: .minimumWidth, layer: "M1", value: 20.0),
                             ]
                         ),
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -1223,12 +1244,12 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
         let result = try await runtime.run(
             request: FlowOperationRequest(
                 projectRoot: root,
@@ -1259,8 +1280,10 @@ extension XcircuiteFlowRuntimeTests {
                 "007-drc": .drc,
             ]
         )
-        let collector = XcircuiteGeneratedLayoutFailureLadderCollector()
-        let report = try collector.collectAndPersist(request: request, projectRoot: root)
+        let collector = makeGeneratedLayoutFailureLadderCollector(
+            workspaceStore: workspaceStore
+        )
+        let report = try await collector.collectAndPersist(request: request, projectRoot: root)
 
         #expect(report.runStatus == .failed)
         #expect(report.summary.stageCount == 2)
@@ -1283,7 +1306,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(drcNode.gates.contains { $0.gateID == "drc" && $0.status == .failed })
         #expect(drcNode.artifactRefs.contains {
             $0.artifactID == "drc-summary"
-                && $0.format == "JSON"
+                && $0.format == ArtifactFormat.json.rawValue
                 && $0.sha256 != nil
                 && ($0.byteCount ?? 0) > 0
         })
@@ -1296,7 +1319,7 @@ extension XcircuiteFlowRuntimeTests {
             $0.stageID == "007-drc" && $0.actionKind == "repair-layout-geometry"
         })
 
-        let alternateReport = try collector.collectAndPersist(
+        let alternateReport = try await collector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-drc-failure-alternate",
                 runID: runID,
@@ -1352,7 +1375,7 @@ extension XcircuiteFlowRuntimeTests {
                 ".xcircuite/runs/\(runID)/reports/generated-layout-failure-ladder-generated-layout-drc-failure-cli.json"
         )
 
-        let manifest = try XcircuiteWorkspaceStore().loadManifest(forProjectAt: root)
+        let manifest = try await workspaceStore.loadManifest()
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-drc-failure"
                 && $0.path == ".xcircuite/runs/\(runID)/reports/generated-layout-failure-ladder-generated-layout-drc-failure.json"
@@ -1372,7 +1395,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(retryRoot) }
         let retryRunID = "generated-layout-retry-exhausted-run"
         let layoutURL = try writeLayout(cleanLayout(), root: retryRoot)
-        let runtime = QualifiedToolFixtures.runtime(
+        let runtime = try QualifiedToolFixtures.runtime(
             executors: [
                 DRCFlowStageExecutor(
                     stageID: "007-drc",
@@ -1385,7 +1408,8 @@ extension XcircuiteFlowRuntimeTests {
                     engine: AlwaysFailingDRCEngine()
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .productionEligible)]
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
+            projectRoot: retryRoot
         )
 
         let retryResult = try await runtime.run(
@@ -1408,7 +1432,8 @@ extension XcircuiteFlowRuntimeTests {
         )
         #expect(retryResult.status == .failed)
 
-        let retryReport = try XcircuiteGeneratedLayoutFailureLadderCollector().collectAndPersist(
+        let retryCollector = try makeGeneratedLayoutFailureLadderCollector(projectRoot: retryRoot)
+        let retryReport = try await retryCollector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-retry-exhausted",
                 runID: retryRunID,
@@ -1430,7 +1455,7 @@ extension XcircuiteFlowRuntimeTests {
         let staleRoot = try makeTemporaryRoot("generated-layout-stale-artifact-ladder")
         defer { removeTemporaryRoot(staleRoot) }
         let staleRunID = "generated-layout-stale-artifact-run"
-        try writeLayoutCommandRequest(root: staleRoot)
+        try await writeLayoutCommandRequest(root: staleRoot)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -1444,7 +1469,7 @@ extension XcircuiteFlowRuntimeTests {
                                 NativeDRCRule(id: "M1.width", kind: .minimumWidth, layer: "M1", value: 20.0),
                             ]
                         ),
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -1459,12 +1484,15 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
             ]
         )
-        let staleResult = try await spec.makeRuntime(projectRoot: staleRoot).run(
+        let staleResult = try await QualifiedToolFixtures.runtime(
+            spec: spec,
+            projectRoot: staleRoot
+        ).run(
             request: FlowOperationRequest(
                 projectRoot: staleRoot,
                 runID: staleRunID,
@@ -1490,7 +1518,8 @@ extension XcircuiteFlowRuntimeTests {
         )
         try Data(#"{"tampered":true}"#.utf8).write(to: staleSummaryURL, options: [.atomic])
 
-        let staleReport = try XcircuiteGeneratedLayoutFailureLadderCollector().collectAndPersist(
+        let staleCollector = try makeGeneratedLayoutFailureLadderCollector(projectRoot: staleRoot)
+        let staleReport = try await staleCollector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-stale-artifact",
                 runID: staleRunID,
@@ -1537,7 +1566,7 @@ extension XcircuiteFlowRuntimeTests {
 
         let drcRoot = try makeTemporaryRoot("generated-layout-drc-coverage-failure-ladder")
         defer { removeTemporaryRoot(drcRoot) }
-        try writeLayoutCommandRequest(root: drcRoot)
+        try await writeLayoutCommandRequest(root: drcRoot)
         let drcSpec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -1551,7 +1580,7 @@ extension XcircuiteFlowRuntimeTests {
                                 NativeDRCRule(id: "M1.width", kind: .minimumWidth, layer: "M1", value: 20.0),
                             ]
                         ),
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -1566,13 +1595,16 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
             ]
         )
         let drcRunID = "generated-layout-drc-coverage-failure-run"
-        let drcResult = try await drcSpec.makeRuntime(projectRoot: drcRoot).run(
+        let drcResult = try await QualifiedToolFixtures.runtime(
+            spec: drcSpec,
+            projectRoot: drcRoot
+        ).run(
             request: FlowOperationRequest(
                 projectRoot: drcRoot,
                 runID: drcRunID,
@@ -1592,7 +1624,8 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
         #expect(drcResult.status == .failed)
-        let drcReport = try XcircuiteGeneratedLayoutFailureLadderCollector().collectAndPersist(
+        let drcCollector = try makeGeneratedLayoutFailureLadderCollector(projectRoot: drcRoot)
+        let drcReport = try await drcCollector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-drc-coverage-failure",
                 runID: drcRunID,
@@ -1612,8 +1645,8 @@ extension XcircuiteFlowRuntimeTests {
 
         let lvsRoot = try makeTemporaryRoot("generated-layout-lvs-failure-ladder")
         defer { removeTemporaryRoot(lvsRoot) }
-        try writeLayoutCommandRequest(root: lvsRoot)
-        try writeStandardLayoutTechnology(root: lvsRoot)
+        try await writeLayoutCommandRequest(root: lvsRoot)
+        try await writeStandardLayoutTechnology(root: lvsRoot)
         let lvsSpec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -1627,7 +1660,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeLVS(
@@ -1642,16 +1675,19 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         layoutFormat: .gds,
-                        schematicNetlistPath: "circuits/missing.spice",
+                        schematicNetlistInput: .path("circuits/missing.spice"),
                         topCell: "top",
-                        technologyPath: "tech/process.json",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        technologyInput: .path("tech/process.json"),
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
             ]
         )
         let lvsRunID = "generated-layout-lvs-failure-run"
-        let lvsResult = try await lvsSpec.makeRuntime(projectRoot: lvsRoot).run(
+        let lvsResult = try await QualifiedToolFixtures.runtime(
+            spec: lvsSpec,
+            projectRoot: lvsRoot
+        ).run(
             request: FlowOperationRequest(
                 projectRoot: lvsRoot,
                 runID: lvsRunID,
@@ -1671,7 +1707,8 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
         #expect(lvsResult.status == .failed)
-        let lvsReport = try XcircuiteGeneratedLayoutFailureLadderCollector().collectAndPersist(
+        let lvsCollector = try makeGeneratedLayoutFailureLadderCollector(projectRoot: lvsRoot)
+        let lvsReport = try await lvsCollector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-lvs-failure",
                 runID: lvsRunID,
@@ -1691,8 +1728,8 @@ extension XcircuiteFlowRuntimeTests {
 
         let pexRoot = try makeTemporaryRoot("generated-layout-pex-failure-ladder")
         defer { removeTemporaryRoot(pexRoot) }
-        try writeLayoutCommandRequest(root: pexRoot)
-        try writeStandardLayoutTechnology(root: pexRoot)
+        try await writeLayoutCommandRequest(root: pexRoot)
+        try await writeStandardLayoutTechnology(root: pexRoot)
         let pexSpec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -1706,7 +1743,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .mockPEX(
@@ -1721,7 +1758,7 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         layoutFormat: .gds,
-                        sourceNetlistPath: "circuits/missing.spice",
+                        sourceNetlistInput: .path("circuits/missing.spice"),
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
@@ -1731,7 +1768,10 @@ extension XcircuiteFlowRuntimeTests {
             ]
         )
         let pexRunID = "generated-layout-pex-failure-run"
-        let pexResult = try await pexSpec.makeRuntime(projectRoot: pexRoot).run(
+        let pexResult = try await QualifiedToolFixtures.runtime(
+            spec: pexSpec,
+            projectRoot: pexRoot
+        ).run(
             request: FlowOperationRequest(
                 projectRoot: pexRoot,
                 runID: pexRunID,
@@ -1751,7 +1791,8 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
         #expect(pexResult.status == .failed)
-        let pexReport = try XcircuiteGeneratedLayoutFailureLadderCollector().collectAndPersist(
+        let pexCollector = try makeGeneratedLayoutFailureLadderCollector(projectRoot: pexRoot)
+        let pexReport = try await pexCollector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-pex-failure",
                 runID: pexRunID,
@@ -1790,7 +1831,13 @@ extension XcircuiteFlowRuntimeTests {
             root: postLayoutRoot
         )
         let postLayoutRunID = "generated-layout-post-layout-failure-run"
-        let postLayoutResult = try await DefaultFlowOrchestrator().run(
+        let postLayoutStore = try XcircuiteWorkspaceStore(projectRoot: postLayoutRoot)
+        let postLayoutOrchestrator = DefaultFlowOrchestrator(
+            infrastructure: postLayoutStore,
+            ledgerPersistence: postLayoutStore,
+            progressStore: FlowRunProgressStore(persistence: postLayoutStore)
+        )
+        let postLayoutResult = try await postLayoutOrchestrator.run(
             request: FlowOperationRequest(
                 projectRoot: postLayoutRoot,
                 runID: postLayoutRunID,
@@ -1811,7 +1858,10 @@ extension XcircuiteFlowRuntimeTests {
             ]
         )
         #expect(postLayoutResult.status == .failed)
-        let postLayoutReport = try XcircuiteGeneratedLayoutFailureLadderCollector().collectAndPersist(
+        let postLayoutCollector = makeGeneratedLayoutFailureLadderCollector(
+            workspaceStore: postLayoutStore
+        )
+        let postLayoutReport = try await postLayoutCollector.collectAndPersist(
             request: XcircuiteGeneratedLayoutFailureLadderRequest(
                 ladderID: "generated-layout-post-layout-failure",
                 runID: postLayoutRunID
@@ -1827,7 +1877,7 @@ extension XcircuiteFlowRuntimeTests {
         let postLayoutNode = try #require(postLayoutReport.stageNodes.first { $0.stageID == "030-compare" })
         #expect(postLayoutNode.artifactRefs.contains {
             $0.artifactID == "post-layout-comparison"
-                && $0.format == "JSON"
+                && $0.format == ArtifactFormat.json.rawValue
                 && $0.sha256 != nil
                 && ($0.byteCount ?? 0) > 0
         })
@@ -1857,7 +1907,10 @@ extension XcircuiteFlowRuntimeTests {
             ],
             requireDiagnosticCodes: true
         )
-        let coverageAudit = try XcircuiteGeneratedLayoutFailureLadderCoverageAuditor().audit(
+        let failureCoverageAuditor = XcircuiteGeneratedLayoutFailureLadderCoverageAuditor(
+            workspaceStore: postLayoutStore
+        )
+        let coverageAudit = try failureCoverageAuditor.audit(
             reports: [
                 drcReport,
                 lvsReport,
@@ -1879,7 +1932,7 @@ extension XcircuiteFlowRuntimeTests {
             requiredFirstFailingFamilies: [.drc],
             requireDiagnosticCodes: true
         )
-        let duplicateCoverageAudit = try XcircuiteGeneratedLayoutFailureLadderCoverageAuditor().audit(
+        let duplicateCoverageAudit = try failureCoverageAuditor.audit(
             reports: [
                 drcReport,
                 drcReport,
@@ -1920,7 +1973,7 @@ extension XcircuiteFlowRuntimeTests {
             ],
             requireDiagnosticCodes: true
         )
-        let blockedCoverageAudit = try XcircuiteGeneratedLayoutFailureLadderCoverageAuditor().audit(
+        let blockedCoverageAudit = try failureCoverageAuditor.audit(
             reports: [
                 drcReport,
                 lvsReport,
@@ -1942,9 +1995,9 @@ extension XcircuiteFlowRuntimeTests {
         })
 
         let coveragePolicyURL = postLayoutRoot.appending(path: "failure-ladder-coverage-policy.json")
-        try writeJSON(coveragePolicy, to: coveragePolicyURL)
+        try await writeJSON(coveragePolicy, to: coveragePolicyURL)
         let duplicateCoveragePolicyURL = postLayoutRoot.appending(path: "failure-ladder-duplicate-coverage-policy.json")
-        try writeJSON(duplicateCoveragePolicy, to: duplicateCoveragePolicyURL)
+        try await writeJSON(duplicateCoveragePolicy, to: duplicateCoveragePolicyURL)
         let drcReportURL = drcRoot.appending(
             path: ".xcircuite/runs/\(drcRunID)/reports/generated-layout-failure-ladder-generated-layout-drc-coverage-failure.json"
         )
@@ -2006,7 +2059,7 @@ extension XcircuiteFlowRuntimeTests {
                 && $0.identifier == "\(drcRunID):generated-layout-drc-coverage-failure"
         })
 
-        let coverageManifest = try XcircuiteWorkspaceStore().loadManifest(forProjectAt: postLayoutRoot)
+        let coverageManifest = try await postLayoutStore.loadManifest()
         #expect(coverageManifest.files.contains {
             $0.artifactID == "generated-layout-failure-ladder-coverage-audit-policy"
                 && $0.path == ".xcircuite/qualification/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit-policy.json"
@@ -2017,4 +2070,25 @@ extension XcircuiteFlowRuntimeTests {
         })
     }
 
+    private func makeGeneratedLayoutFailureLadderCollector(
+        projectRoot: URL
+    ) throws -> XcircuiteGeneratedLayoutFailureLadderCollector {
+        makeGeneratedLayoutFailureLadderCollector(
+            workspaceStore: try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        )
+    }
+
+    private func makeGeneratedLayoutFailureLadderCollector(
+        workspaceStore: XcircuiteWorkspaceStore
+    ) -> XcircuiteGeneratedLayoutFailureLadderCollector {
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        return XcircuiteGeneratedLayoutFailureLadderCollector(
+            ledgerLoader: workspaceStore,
+            reviewBundler: reviewBundler,
+            workspaceStore: workspaceStore
+        )
+    }
 }

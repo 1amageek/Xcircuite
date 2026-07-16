@@ -1,17 +1,17 @@
-import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
+import Foundation
 import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 import Darwin
 #endif
 
 extension XcircuiteSymbolicPlannerSolverRunnerTests {
-@Test func planCostEvaluatorUsesWeightedPDDLActionCosts() throws {
+@Test func planCostEvaluatorUsesWeightedPDDLActionCosts() async throws {
     let candidatePlan = XcircuiteCandidatePlan(
         planID: "weighted-plan",
         problemID: "weighted-problem",
@@ -111,7 +111,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(evaluation.stepCosts.map(\.cost) == [3.0, 1.0])
 }
 
-@Test func planReplayValidatorFailsWhenPreconditionsAndGoalsAreUnsatisfied() throws {
+@Test func planReplayValidatorFailsWhenPreconditionsAndGoalsAreUnsatisfied() async throws {
     let candidatePlan = XcircuiteCandidatePlan(
         planID: "invalid-replay-plan",
         problemID: "invalid-replay-problem",
@@ -204,15 +204,20 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 }
 
 @Test func runSymbolicPlannerSolverCLIWritesArtifactsAndImportsCandidatePlan() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-runner")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-runner")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
     let solverURL = root.appending(path: "mock-symbolic-planner.sh")
-    try XcircuiteWorkspaceStore().writeText(
+    try writeCoreScript(
         """
         #!/bin/sh
         printf 'Solution Found\\n'
@@ -259,9 +264,9 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(importResult.status == "imported")
     #expect(importResult.candidatePlan.steps.map(\.actionID) == ["fix-m1-width"])
 
-    let solverRun = try XcircuiteWorkspaceStore().readJSON(
+    let solverRun = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
-        from: root.appending(path: result.runArtifact.path)
+        from: result.runArtifact.path
     )
     #expect(solverRun.status == "solved")
     #expect(solverRun.solverPlanSource == "stdout")
@@ -273,29 +278,29 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(FileManager.default.fileExists(atPath: root.appending(path: result.standardOutputArtifact.path).path(percentEncoded: false)))
     #expect(FileManager.default.fileExists(atPath: root.appending(path: result.standardErrorArtifact.path).path(percentEncoded: false)))
 
-    let replayValidation = try XcircuiteWorkspaceStore().readJSON(
+    let replayValidation = try await store.readJSON(
         XcircuiteSymbolicPlannerPlanReplayValidation.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/planning/symbolic-planner/plan-replay-validation.json")
+        from: ".xcircuite/runs/run-pddl/planning/symbolic-planner/plan-replay-validation.json"
     )
     #expect(replayValidation.status == "validated")
     #expect(replayValidation.missingGoalAtoms == [])
     #expect(replayValidation.steps.first?.status == "applied")
 
-    let verifierResult = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+    let verifierResult = try await XcircuiteCandidatePlanVerifier(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).verifyCandidatePlan(
         request: XcircuiteCandidatePlanVerificationRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let verification = try XcircuiteWorkspaceStore().readJSON(
+    let verification = try await store.readJSON(
         XcircuitePlanVerification.self,
-        from: root.appending(path: verifierResult.planVerificationArtifact.path)
+        from: verifierResult.planVerificationArtifact.path
     )
     #expect(verification.goalCoverageStatus == "covered")
     #expect(verification.missingGoalAtoms == [])
 
-    let manifest = try XcircuiteWorkspaceStore().readJSON(
-        XcircuiteRunManifest.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    )
+    let manifest = try await store.loadRunLedger(runID: "run-pddl").runManifest
     let artifactIDs = Set(manifest.artifacts.map(\.artifactID))
     #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerSolverRunArtifactID))
     #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerSolverStdoutArtifactID))
@@ -306,15 +311,20 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 }
 
 @Test func runSymbolicPlannerSolverRecordsMissingPlanWithoutImportingCandidatePlan() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-empty-plan")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-empty-plan")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
     let solverURL = root.appending(path: "empty-symbolic-planner.sh")
-    try XcircuiteWorkspaceStore().writeText(
+    try writeCoreScript(
         """
         #!/bin/sh
         exit 0
@@ -326,7 +336,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         ofItemAtPath: solverURL.path(percentEncoded: false)
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverRunner().solve(
+    let result = try await XcircuiteSymbolicPlannerSolverRunner(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).solve(
         request: XcircuiteSymbolicPlannerSolverRequest(
             runID: "run-pddl",
             executablePath: solverURL.path(percentEncoded: false)
@@ -343,10 +356,7 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.diagnostics.contains { $0.code == "missing-solver-plan-output" })
     #expect(FileManager.default.fileExists(atPath: root.appending(path: result.runArtifact.path).path(percentEncoded: false)))
 
-    let manifest = try XcircuiteWorkspaceStore().readJSON(
-        XcircuiteRunManifest.self,
-        from: root.appending(path: ".xcircuite/runs/run-pddl/manifest.json")
-    )
+    let manifest = try await store.loadRunLedger(runID: "run-pddl").runManifest
     let artifactIDs = Set(manifest.artifacts.map(\.artifactID))
     #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerSolverRunArtifactID))
     #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerSolverStdoutArtifactID))
@@ -357,25 +367,26 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 }
 
 @Test func runSymbolicPlannerSolverReportsUnreadableCancellationRequest() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-unreadable-cancel")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-unreadable-cancel")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let runDirectory = root
-        .appending(path: XcircuiteWorkspace.directoryName)
-        .appending(path: "runs")
-        .appending(path: "run-pddl")
-    try Data("{".utf8).write(
-        to: runDirectory.appending(path: FlowRunProgressStore.cancellationRelativePath),
-        options: [.atomic]
+    try await store.write(
+        Data("{".utf8),
+        to: ".xcircuite/runs/run-pddl/\(FlowRunProgressStore.cancellationRelativePath)"
     )
 
     let markerURL = root.appending(path: "unreadable-cancel-planner-launched.txt")
     let solverURL = root.appending(path: "unreadable-cancel-symbolic-planner.sh")
-    try XcircuiteWorkspaceStore().writeText(
+    try writeCoreScript(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -389,7 +400,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
         ofItemAtPath: solverURL.path(percentEncoded: false)
     )
 
-    let result = try await XcircuiteSymbolicPlannerSolverRunner().solve(
+    let result = try await XcircuiteSymbolicPlannerSolverRunner(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).solve(
         request: XcircuiteSymbolicPlannerSolverRequest(
             runID: "run-pddl",
             executablePath: solverURL.path(percentEncoded: false)
@@ -404,9 +418,9 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     #expect(result.diagnostics.contains { $0.code == "cancellation-check-failed" })
     #expect(!FileManager.default.fileExists(atPath: markerURL.path(percentEncoded: false)))
 
-    let solverRun = try XcircuiteWorkspaceStore().readJSON(
+    let solverRun = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
-        from: root.appending(path: result.runArtifact.path)
+        from: result.runArtifact.path
     )
     #expect(solverRun.status == "solver-failed")
     #expect(solverRun.exitCode == nil)
@@ -414,16 +428,21 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 }
 
 @Test func runSymbolicPlannerSolverRejectsSolverPlanOutputConflictingWithDomainArtifact() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-output-conflict")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    let pddlArtifacts = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-output-conflict")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    let pddlArtifacts = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
     let markerURL = root.appending(path: "conflicting-output-planner-launched.txt")
     let solverURL = root.appending(path: "conflicting-output-symbolic-planner.sh")
-    try XcircuiteWorkspaceStore().writeText(
+    try writeCoreScript(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -437,7 +456,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverRunner().solve(
+        _ = try await XcircuiteSymbolicPlannerSolverRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).solve(
             request: XcircuiteSymbolicPlannerSolverRequest(
                 runID: "run-pddl",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -464,17 +486,22 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 }
 
 @Test func runSymbolicPlannerSolverRejectsSolverPlanOutputOutsideWorkingDirectory() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-output-outside-work")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-output-outside-work")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
     let markerURL = root.appending(path: "outside-output-planner-launched.txt")
     let solverURL = root.appending(path: "outside-output-symbolic-planner.sh")
-    let outputPath = "\(XcircuiteWorkspace.directoryName)/runs/run-pddl/planning/symbolic-planner/external-solver-plan.out"
-    try XcircuiteWorkspaceStore().writeText(
+    let outputPath = "\(XcircuiteWorkspaceLayout.directoryName)/runs/run-pddl/planning/symbolic-planner/external-solver-plan.out"
+    try writeCoreScript(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -488,7 +515,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverRunner().solve(
+        _ = try await XcircuiteSymbolicPlannerSolverRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).solve(
             request: XcircuiteSymbolicPlannerSolverRequest(
                 runID: "run-pddl",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -504,26 +534,31 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
             return
         }
         #expect(path == outputPath)
-        #expect(workingDirectoryPath == "\(XcircuiteWorkspace.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work")
+        #expect(workingDirectoryPath == "\(XcircuiteWorkspaceLayout.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work")
     }
     #expect(!FileManager.default.fileExists(atPath: markerURL.path(percentEncoded: false)))
 }
 
 @Test func runSymbolicPlannerSolverRejectsExistingSolverPlanOutputBeforeLaunch() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-stale-output")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-stale-output")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
-    let outputPath = "\(XcircuiteWorkspace.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work/solver-plan.out"
+    let outputPath = "\(XcircuiteWorkspaceLayout.directoryName)/runs/run-pddl/planning/symbolic-planner/solver-work/solver-plan.out"
     let outputURL = root.appending(path: outputPath)
     try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try XcircuiteWorkspaceStore().writeText("0.000: (a-stale-action) [1.000]\n", to: outputURL)
+    try Data("0.000: (a-stale-action) [1.000]\n".utf8).write(to: outputURL, options: .atomic)
     let markerURL = root.appending(path: "stale-output-planner-launched.txt")
     let solverURL = root.appending(path: "stale-output-symbolic-planner.sh")
-    try XcircuiteWorkspaceStore().writeText(
+    try writeCoreScript(
         """
         #!/bin/sh
         printf 'launched\\n' > '\(markerURL.path(percentEncoded: false))'
@@ -537,7 +572,10 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
     )
 
     do {
-        _ = try await XcircuiteSymbolicPlannerSolverRunner().solve(
+        _ = try await XcircuiteSymbolicPlannerSolverRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).solve(
             request: XcircuiteSymbolicPlannerSolverRequest(
                 runID: "run-pddl",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -558,16 +596,21 @@ extension XcircuiteSymbolicPlannerSolverRunnerTests {
 
 @Test(.timeLimit(.minutes(1)))
 func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded() async throws {
-    let root = try makeTemporaryRoot("symbolic-planner-solver-cancelled")
-    defer { removeTemporaryRoot(root) }
-    try prepareRun(root: root, runID: "run-pddl")
-    _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+    let root = try makeCoreTemporaryRoot("symbolic-planner-solver-cancelled")
+    defer { removeCoreTemporaryRoot(root) }
+    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+    let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+    try await prepareCoreRun(root: root, runID: "run-pddl", store: store, artifactStore: artifactStore)
+    _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+        workspaceStore: store,
+        artifactStore: artifactStore
+    ).exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: "run-pddl"),
         projectRoot: root
     )
     let solverURL = root.appending(path: "cancelled-symbolic-planner.sh")
     let childPIDURL = root.appending(path: "cancelled-symbolic-planner-child.pid")
-    try XcircuiteWorkspaceStore().writeText(
+    try writeCoreScript(
         """
         #!/bin/sh
         trap '' TERM
@@ -585,7 +628,10 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
     )
 
     let task = Task {
-        try await XcircuiteSymbolicPlannerSolverRunner().solve(
+        try await XcircuiteSymbolicPlannerSolverRunner(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).solve(
             request: XcircuiteSymbolicPlannerSolverRequest(
                 runID: "run-pddl",
                 executablePath: solverURL.path(percentEncoded: false),
@@ -595,8 +641,10 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
         )
     }
 
-    let observedChildPID = try #require(try await waitForChildPID(at: childPIDURL))
-    _ = try DefaultFlowRunCancellationRecorder().requestCancellation(
+    let observedChildPID = try #require(try await waitForCoreChildPID(at: childPIDURL))
+    _ = try await DefaultFlowRunCancellationRecorder(
+        progressStore: FlowRunProgressStore(persistence: store)
+    ).requestCancellation(
         projectRoot: root,
         runID: "run-pddl",
         requestedBy: "solver-cancellation-test",
@@ -613,17 +661,189 @@ func runSymbolicPlannerSolverCancelsExternalProcessWhenRunCancellationIsRecorded
         contentsOf: root.appending(path: result.standardOutputArtifact.path),
         encoding: .utf8
     )
-    let childPID = try #require(parseChildPID(from: standardOutput))
+    let childPID = try #require(parseCoreChildPID(from: standardOutput))
     #expect(childPID == observedChildPID)
-    #expect(await waitForProcessExit(childPID, timeoutSeconds: 2.0))
+    #expect(await waitForCoreProcessExit(childPID, timeoutSeconds: 2.0))
 
-    let solverRun = try XcircuiteWorkspaceStore().readJSON(
+    let solverRun = try await store.readJSON(
         XcircuiteSymbolicPlannerSolverExecutionReport.self,
-        from: root.appending(path: result.runArtifact.path)
+        from: result.runArtifact.path
     )
     #expect(solverRun.status == "cancelled")
     #expect(solverRun.didCancel)
     #expect(solverRun.didTimeout == false)
+}
+
+private func prepareCoreRun(
+    root: URL,
+    runID: String,
+    store: XcircuiteWorkspaceStore,
+    artifactStore: XcircuitePlanningArtifactStore
+) async throws {
+    try await prepareTestRun(runID: runID, store: store)
+    let problem = XcircuiteCircuitPlanningProblem(
+        problemID: "\(runID)-problem",
+        runID: runID,
+        sourceRefs: [
+            XcircuitePlanningReference(
+                refID: "layout-drc-input",
+                kind: "layout",
+                artifactID: "layout-json",
+                metadata: ["symbolicStateAtoms": .textList(["drc-width-violation"])]
+            ),
+        ],
+        initialStateRefs: [],
+        objectives: [
+            XcircuitePlanningObjective(
+                objectiveID: "objective-1",
+                kind: "satisfy",
+                domain: "drc",
+                priority: "error",
+                sourceRefIDs: ["layout-drc-input"],
+                target: "no-width-violation",
+                currentValue: .scalar(1),
+                requiredValue: .scalar(0),
+                description: "Repair width violation.",
+                evidence: ["symbolicGoalAtoms": .textList(["drc-width-fixed"])]
+            ),
+        ],
+        constraints: [],
+        actionDomainRefs: ["drc-signoff"],
+        candidateActions: [
+            XcircuitePlanningCandidateAction(
+                actionID: "fix-m1-width",
+                domainID: "drc-signoff",
+                operationID: "drc.repair-width",
+                maturity: "implemented",
+                reason: "Repair M1 width.",
+                sourceObjectiveIDs: ["objective-1"],
+                requiredInputRefs: ["layout-drc-input"],
+                verificationGates: ["native-drc"]
+            ),
+        ],
+        costModel: XcircuitePlanningCostModel(strategy: "symbolic-planner-solver", terms: []),
+        verificationGates: [
+            XcircuitePlanningVerificationGate(
+                gateID: "native-drc",
+                required: true,
+                description: "Candidate must pass DRC."
+            ),
+        ],
+        resumeContract: XcircuitePlanningResumeContract(
+            mode: "run-ledger",
+            requiredArtifacts: ["planning/problem.json"],
+            blockedStates: ["candidate-rejected"]
+        )
+    )
+    _ = try await artifactStore.persistPlanningProblem(
+        problem,
+        runID: runID,
+        projectRoot: root
+    )
+
+    let snapshot = XcircuitePlanningActionDomainSnapshot(
+        runID: runID,
+        generatedAt: "2026-06-20T00:00:00Z",
+        domains: [
+            XcircuiteActionDomain(
+                domainID: "drc-signoff",
+                ownerPackages: ["DRCEngine", "Xcircuite"],
+                operations: [
+                    XcircuiteActionDomainOperation(
+                        operationID: "drc.repair-width",
+                        maturity: "implemented",
+                        inputRefs: ["layout-drc-input"],
+                        preconditions: ["drc-width-violation"],
+                        effects: ["drc-width-fixed"],
+                        producedArtifacts: ["drc-summary"],
+                        verificationGates: ["native-drc"],
+                        reversible: true
+                    ),
+                ]
+            ),
+        ]
+    )
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    _ = try await store.persistArtifact(
+        content: encoder.encode(snapshot),
+        id: ArtifactID(rawValue: XcircuitePlanningArtifactStore.actionDomainArtifactID),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(
+                workspaceRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json"
+            ),
+            role: .output,
+            kind: .other,
+            format: .json
+        ),
+        runID: runID,
+        mode: .replaceable
+    )
+}
+
+private func writeCoreScript(_ script: String, to url: URL) throws {
+    try Data(script.utf8).write(to: url, options: .atomic)
+}
+
+private func makeCoreTemporaryRoot(_ name: String) throws -> URL {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: "xcircuite-\(name)-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    return root
+}
+
+private func removeCoreTemporaryRoot(_ root: URL) {
+    do {
+        try FileManager.default.removeItem(at: root)
+    } catch {
+        Issue.record("Failed to remove temporary root: \(error)")
+    }
+}
+
+private func parseCoreChildPID(from standardOutput: String) -> pid_t? {
+    for line in standardOutput.split(whereSeparator: \.isNewline) where line.hasPrefix("child=") {
+        return pid_t(String(line.dropFirst("child=".count)))
+    }
+    return nil
+}
+
+private func waitForCoreChildPID(at url: URL) async throws -> pid_t? {
+    for _ in 0..<200 {
+        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            if let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return pid
+            }
+        }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+    return nil
+}
+
+private func waitForCoreProcessExit(_ pid: pid_t, timeoutSeconds: Double) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeoutSeconds)
+    while Date() < deadline {
+        if !isCoreProcessAlive(pid) {
+            return true
+        }
+        do {
+            try await Task.sleep(for: .milliseconds(20))
+        } catch {
+            return !isCoreProcessAlive(pid)
+        }
+    }
+    return !isCoreProcessAlive(pid)
+}
+
+private func isCoreProcessAlive(_ pid: pid_t) -> Bool {
+    #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
+    if Darwin.kill(pid, 0) == 0 {
+        return true
+    }
+    return errno == EPERM
+    #else
+    return false
+    #endif
 }
 
 }

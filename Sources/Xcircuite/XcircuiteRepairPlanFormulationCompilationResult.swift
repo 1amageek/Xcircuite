@@ -7,8 +7,8 @@ public struct XcircuiteRepairPlanFormulationCompilationResult: Codable, Sendable
     public var runID: String
     public var formulationID: String
     public var problemID: String
-    public var formulationArtifact: XcircuiteFileReference
-    public var problemArtifact: XcircuiteFileReference
+    public var formulationArtifact: ArtifactReference
+    public var problemArtifact: ArtifactReference
     public var diagnosticCodes: [String]
 
     public init(
@@ -17,8 +17,8 @@ public struct XcircuiteRepairPlanFormulationCompilationResult: Codable, Sendable
         runID: String,
         formulationID: String,
         problemID: String,
-        formulationArtifact: XcircuiteFileReference,
-        problemArtifact: XcircuiteFileReference,
+        formulationArtifact: ArtifactReference,
+        problemArtifact: ArtifactReference,
         diagnosticCodes: [String] = []
     ) {
         self.schemaVersion = schemaVersion

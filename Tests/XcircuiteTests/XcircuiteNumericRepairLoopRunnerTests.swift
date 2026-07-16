@@ -9,10 +9,10 @@ struct XcircuiteNumericRepairLoopRunnerTests {
     @Test func numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses() async throws {
         let root = try makeTemporaryRoot("simulation-metric-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-1", inProjectAt: root)
-        try writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-1", store: store)
+        try await writeText(
             """
             * resistor divider repair
             V1 1 0 dc 2
@@ -25,7 +25,7 @@ struct XcircuiteNumericRepairLoopRunnerTests {
             path: "circuits/rc.cir",
             root: root
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             makeNumericRepairProblem(runID: "run-1"),
             runID: "run-1",
             projectRoot: root
@@ -55,9 +55,9 @@ struct XcircuiteNumericRepairLoopRunnerTests {
         #expect(result.iterations.map(\.status) == ["rejected", "accepted"])
         #expect(result.iterations[1].skippedRejectedCandidateIDs.contains(result.iterations[0].selectedCandidateID ?? ""))
 
-        let loopArtifact = try store.readJSON(
+        let loopArtifact = try await store.readJSON(
             XcircuiteNumericRepairLoopResult.self,
-            from: root.appending(path: result.loopArtifactPath)
+            from: result.loopArtifactPath
         )
         #expect(loopArtifact.status == "accepted")
         #expect(loopArtifact.iterations[1].accepted)
@@ -66,27 +66,25 @@ struct XcircuiteNumericRepairLoopRunnerTests {
         let finalReportRef = try #require(result.iterations[1].producedArtifacts.first {
             $0.artifactID == "candidate-step-1-netlist-parameter-edit-report"
         })
-        let finalReport = try store.readJSON(
+        let finalReport = try await store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: root.appending(path: finalReportRef.path)
+            from: finalReportRef.path
         )
         let finalEdit = try #require(finalReport.edits.first { $0.assignmentName == "R1" })
         #expect(finalEdit.value == 1250)
 
         let rejectedPlansRef = try #require(result.iterations[0].rejectedPlansArtifact)
-        let rejectedRecords = try readJSONLines(
+        let rejectedRecords = try await readJSONLines(
             XcircuiteRejectedPlanRecord.self,
-            from: root.appending(path: rejectedPlansRef.path)
+            from: rejectedPlansRef.path,
+            store: store
         )
         #expect(rejectedRecords.count == 1)
         #expect(rejectedRecords.map(\.sourceParameterCandidateIDs).contains([
             try #require(result.iterations[0].selectedCandidateID),
         ]))
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-1").runManifest
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.numericRepairLoopArtifactID
                 && $0.path == result.loopArtifactPath
@@ -102,10 +100,10 @@ struct XcircuiteNumericRepairLoopRunnerTests {
     @Test func cp7FeedbackPolicyGeneratesCalibrationArtifactsBeforeRetry() async throws {
         let root = try makeTemporaryRoot("cp7-feedback-policy")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-cp7", inProjectAt: root)
-        try writeText(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-cp7", store: store)
+        try await writeText(
             """
             * resistor divider repair
             V1 1 0 dc 2
@@ -118,7 +116,7 @@ struct XcircuiteNumericRepairLoopRunnerTests {
             path: "circuits/rc.cir",
             root: root
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             makeNumericRepairProblem(runID: "run-cp7"),
             runID: "run-cp7",
             projectRoot: root
@@ -166,9 +164,9 @@ struct XcircuiteNumericRepairLoopRunnerTests {
         #expect(retryTrace.paretoCandidatesArtifact?.path == traces[1].paretoCandidatesArtifact?.path)
 
         let searchTraceRef = try #require(result.iterations[1].searchTraceArtifact)
-        let searchTrace = try store.readJSON(
+        let searchTrace = try await store.readJSON(
             XcircuiteParameterCandidateSearchTrace.self,
-            from: root.appending(path: searchTraceRef.path)
+            from: searchTraceRef.path
         )
         #expect(searchTrace.strategy == "calibrated-feedback-aware-bounded-refinement")
         let calibrationTrace = try #require(searchTrace.calibrationTrace)
@@ -176,10 +174,7 @@ struct XcircuiteNumericRepairLoopRunnerTests {
         #expect(calibrationTrace.paretoCandidatesPath != nil)
         #expect(calibrationTrace.paretoCandidateCount >= 1)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-cp7/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-cp7").runManifest
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.metricThresholdProfileArtifactID
         })
@@ -197,11 +192,11 @@ struct XcircuiteNumericRepairLoopRunnerTests {
     @Test func numericRepairLoopDoesNotOverwriteExistingIterationArchives() async throws {
         let root = try makeTemporaryRoot("archive-overwrite-guard")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let runID = "run-archive-guard"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try writeText(
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText(
             """
             * resistor divider repair
             V1 1 0 dc 2
@@ -214,7 +209,7 @@ struct XcircuiteNumericRepairLoopRunnerTests {
             path: "circuits/rc.cir",
             root: root
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             makeNumericRepairProblem(runID: runID),
             runID: runID,
             projectRoot: root
@@ -239,8 +234,7 @@ struct XcircuiteNumericRepairLoopRunnerTests {
         let archivedCandidates = try #require(firstResult.iterations[0].archivedArtifactRefs.first {
             $0.artifactID == "planning-numeric-repair-loop-iteration-1-parameter-candidates"
         })
-        let archivedURL = root.appending(path: archivedCandidates.path)
-        let archivedBytesBefore = try Data(contentsOf: archivedURL)
+        let archivedBytesBefore = try await store.read(from: archivedCandidates.path)
 
         do {
             _ = try await XcircuiteFlowCLICommand.run(arguments: [
@@ -262,7 +256,7 @@ struct XcircuiteNumericRepairLoopRunnerTests {
             Issue.record("Unexpected error: \(error)")
         }
 
-        let archivedBytesAfter = try Data(contentsOf: archivedURL)
+        let archivedBytesAfter = try await store.read(from: archivedCandidates.path)
         #expect(archivedBytesAfter == archivedBytesBefore)
     }
 
@@ -293,8 +287,8 @@ struct XcircuiteNumericRepairLoopRunnerTests {
                     priority: "error",
                     sourceRefIDs: ["simulation-summary"],
                     target: "measurement-within-tolerance",
-                    currentValue: .number(1.0),
-                    requiredValue: .number(0.889),
+                    currentValue: .scalar(1.0),
+                    requiredValue: .scalar(0.889),
                     description: "Recover simulation metric by bounded parameter search."
                 ),
             ],
@@ -319,23 +313,28 @@ struct XcircuiteNumericRepairLoopRunnerTests {
                     requiredInputRefs: ["source-netlist-ref"],
                     verificationGates: ["simulation-metric-gate"],
                     parameterHints: [
-                        "parameterBounds": .array([
-                            .object([
-                                "name": .string("R1"),
-                                "lowerBound": .number(500),
-                                "upperBound": .number(1500),
-                                "nominalValue": .number(1000),
-                                "step": .number(250),
-                                "unit": .string("ohm"),
-                            ]),
+                        "parameterBounds": .parameterBounds([
+                            XcircuiteParameterBound(
+                                name: "R1",
+                                lowerBound: 500,
+                                upperBound: 1500,
+                                nominalValue: 1000,
+                                step: 250,
+                                unit: "ohm"
+                            ),
                         ]),
-                        "measurementExpectations": .array([
-                            .object([
-                                "name": .string("vfinal"),
-                                "target": .number(0.889),
-                                "tolerance": .number(0.02),
-                            ]),
-                        ]),
+                        "simulationInputs": .simulationInputs(
+                            PlanningSimulationInputs(
+                                netlistReferenceID: "source-netlist-ref",
+                                measurementExpectations: [
+                                    SimulationMeasurementExpectation(
+                                        name: "vfinal",
+                                        target: 0.889,
+                                        tolerance: 0.02
+                                    ),
+                                ]
+                            )
+                        ),
                     ]
                 ),
             ],
@@ -367,14 +366,19 @@ struct XcircuiteNumericRepairLoopRunnerTests {
         )
     }
 
-    private func writeText(_ text: String, path: String, root: URL) throws {
+    private func writeText(_ text: String, path: String, root: URL) async throws {
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private func readJSONLines<T: Decodable>(_ type: T.Type, from url: URL) throws -> [T] {
-        let text = try String(contentsOf: url, encoding: .utf8)
+    private func readJSONLines<T: Decodable>(
+        _ type: T.Type,
+        from relativePath: String,
+        store: XcircuiteWorkspaceStore
+    ) async throws -> [T] {
+        let data = try await store.read(from: relativePath)
+        let text = try #require(String(data: data, encoding: .utf8))
         return try text.split(separator: "\n").map { line in
             try JSONDecoder().decode(T.self, from: Data(String(line).utf8))
         }

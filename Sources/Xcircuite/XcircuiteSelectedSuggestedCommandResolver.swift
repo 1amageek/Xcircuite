@@ -4,18 +4,17 @@ import DesignFlowKernel
 public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
 
-    public init(workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore()) {
+    public init(workspaceStore: XcircuiteWorkspaceStore) {
         self.workspaceStore = workspaceStore
     }
 
     public func resolve(
         request: XcircuiteSelectedSuggestedCommandResolutionRequest,
         projectRoot: URL
-    ) throws -> XcircuiteResolvedSuggestedCommand {
-        let selection = try selectedCommand(
+    ) async throws -> XcircuiteResolvedSuggestedCommand {
+        let selection = try await selectedCommand(
             runID: request.runID,
-            commandID: request.commandID,
-            projectRoot: projectRoot
+            commandID: request.commandID
         )
         try validate(selection: selection, request: request, projectRoot: projectRoot)
         guard let commandName = selection.arguments.first else {
@@ -39,13 +38,9 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
 
     private func selectedCommand(
         runID: String,
-        commandID: String?,
-        projectRoot: URL
-    ) throws -> XcircuiteSuggestedCommandSelection {
-        let selections = try workspaceStore.loadSuggestedCommandSelections(
-            runID: runID,
-            inProjectAt: projectRoot
-        )
+        commandID: String?
+    ) async throws -> FlowSuggestedCommandSelection {
+        let selections = try await workspaceStore.loadSuggestedCommandSelections(runID: runID)
         let matching = selections.filter { selection in
             guard selection.status == .succeeded else {
                 return false
@@ -65,7 +60,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
     }
 
     private func validate(
-        selection: XcircuiteSuggestedCommandSelection,
+        selection: FlowSuggestedCommandSelection,
         request: XcircuiteSelectedSuggestedCommandResolutionRequest,
         projectRoot: URL
     ) throws {
@@ -104,7 +99,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
 
     private func requiredOption(
         _ option: String,
-        in selection: XcircuiteSuggestedCommandSelection
+        in selection: FlowSuggestedCommandSelection
     ) throws -> String {
         guard let index = selection.arguments.firstIndex(of: option),
               selection.arguments.indices.contains(index + 1) else {
@@ -291,7 +286,7 @@ public struct XcircuiteSelectedSuggestedCommandResolver: Sendable {
             arguments: arguments
         )
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+            try FlowIdentifierValidator().validate(value, kind: .artifactID)
         } catch {
             throw XcircuiteSelectedSuggestedCommandResolutionError.unsupportedArguments(
                 commandName: commandName,

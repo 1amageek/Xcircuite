@@ -11,17 +11,13 @@ extension XcircuiteCandidatePlanVerifier {
     func persistRejectedPlanIfNeeded(
         status: String,
         verification: XcircuitePlanVerification,
-        candidatePlanRef: XcircuiteFileReference,
-        verificationRef: XcircuiteFileReference,
+        candidatePlanRef: ArtifactReference,
+        verificationRef: ArtifactReference,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) async throws -> ArtifactReference? {
         guard status == "rejected" || status == "blocked" else {
             return nil
         }
-        _ = try foundationArtifactReferences(
-            verification.artifactRefs,
-            field: "rejected-plan.verification-artifacts"
-        )
         let record = XcircuiteRejectedPlanRecord(
             rejectionID: rejectedPlanIdentifier(verification: verification, status: status),
             runID: verification.runID,
@@ -41,8 +37,6 @@ extension XcircuiteCandidatePlanVerifier {
                 .map(\.gateID),
             candidatePlanRef: candidatePlanRef,
             planVerificationRef: verificationRef,
-            // Keep the persisted legacy record lossless while Foundation validates
-            // the artifact identity and integrity before this storage boundary.
             artifactRefs: verification.artifactRefs,
             diagnostics: verification.diagnostics,
             diagnosticClassifications: XcircuiteRejectedPlanDiagnosticClassifier().classify(
@@ -51,7 +45,7 @@ extension XcircuiteCandidatePlanVerifier {
             ),
             nextActions: verification.nextActions
         )
-        return try artifactStore.appendRejectedPlan(
+        return try await artifactStore.appendRejectedPlan(
             record,
             runID: verification.runID,
             projectRoot: projectRoot
@@ -69,19 +63,16 @@ extension XcircuiteCandidatePlanVerifier {
         from verification: XcircuitePlanVerification,
         projectRoot: URL
     ) throws -> [String] {
-        let artifactReferences = try foundationArtifactReferences(
-            verification.artifactRefs,
-            field: "rejected-plan.source-parameter-artifacts"
-        )
+        let artifactReferences = verification.artifactRefs
         var ids: [String] = []
         for reference in artifactReferences {
             guard reference.id.rawValue.hasSuffix("-netlist-parameter-edit-report") else {
                 continue
             }
-            let storageReference = legacyArtifactReference(reference)
-            let report = try workspaceStore.readJSON(
+            let storageReference = reference
+            let report = try JSONDecoder().decode(
                 XcircuiteNetlistParameterEditReport.self,
-                from: workspaceStore.url(forProjectRelativePath: storageReference.path, inProjectAt: projectRoot)
+                from: Data(contentsOf: projectURL(for: storageReference.path, projectRoot: projectRoot))
             )
             if let sourceParameterCandidateID = report.sourceParameterCandidateID {
                 ids.append(sourceParameterCandidateID)
@@ -103,12 +94,12 @@ extension XcircuiteCandidatePlanVerifier {
 
     func appendActionRecord(
         verification: XcircuitePlanVerification,
-        candidatePlanRef: XcircuiteFileReference,
-        verificationRef: XcircuiteFileReference,
-        rejectedPlansRef: XcircuiteFileReference?,
+        candidatePlanRef: ArtifactReference,
+        verificationRef: ArtifactReference,
+        rejectedPlansRef: ArtifactReference?,
         projectRoot: URL
-    ) throws {
-        let actionStatus: XcircuiteRunActionStatus
+    ) async throws {
+        let actionStatus: FlowRunActionStatus
         switch verificationStatus(for: verification) {
         case "accepted":
             actionStatus = .succeeded
@@ -120,28 +111,27 @@ extension XcircuiteCandidatePlanVerifier {
             actionStatus = .partial
         }
         let diagnostics = verification.diagnostics.map {
-            XcircuiteRunActionDiagnostic(
+            FlowRunDiagnostic(
                 severity: runActionSeverity($0.severity),
                 code: $0.code,
                 message: $0.message
             )
         }
-        try workspaceStore.appendRunAction(
-            XcircuiteRunActionRecord(
+        try await workspaceStore.appendRunAction(
+            FlowRunActionRecord(
                 actionID: "\(verification.planID)-verification",
                 runID: verification.runID,
-                actor: XcircuiteRunActionActor(kind: .cli, identifier: "xcircuite-flow"),
+                actor: FlowRunActor(kind: .cli, identifier: "xcircuite-flow"),
                 actionKind: "planning.verify-candidate-plan",
                 status: actionStatus,
                 inputs: [candidatePlanRef],
                 outputs: [verificationRef] + [rejectedPlansRef].compactMap { $0 },
                 diagnostics: diagnostics
-            ),
-            inProjectAt: projectRoot
+            )
         )
     }
 
-    func runActionSeverity(_ severity: String) -> XcircuiteRunActionDiagnosticSeverity {
+    func runActionSeverity(_ severity: String) -> FlowRunDiagnosticSeverity {
         switch severity {
         case "info":
             return .info
@@ -152,8 +142,8 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     func loadPlanningProblem(
@@ -163,13 +153,13 @@ extension XcircuiteCandidatePlanVerifier {
         guard let path = plan.sourceProblemRef.path else {
             return nil
         }
-        let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        let url = try projectURL(for: path, projectRoot: projectRoot)
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             return nil
         }
-        let problem = try workspaceStore.readJSON(
+        let problem = try JSONDecoder().decode(
             XcircuiteCircuitPlanningProblem.self,
-            from: url
+            from: Data(contentsOf: url)
         )
         guard problem.runID == plan.runID else {
             throw XcircuiteCandidatePlanVerificationError.runMismatch(
@@ -181,11 +171,11 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     func loadOrPersistActionDomainSnapshot(
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ActionDomainSnapshotContext {
-        let resolved = try XcircuiteActionDomainSnapshotResolver(
+    ) async throws -> ActionDomainSnapshotContext {
+        let resolved = try await XcircuiteActionDomainSnapshotResolver(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         ).loadDefaultOrPersist(
@@ -199,10 +189,10 @@ extension XcircuiteCandidatePlanVerifier {
     func requiredCandidatePlanReference(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         if let explicitPath {
             let matches = manifest.artifacts.filter { $0.path == explicitPath }
             guard matches.count <= 1 else {
@@ -211,13 +201,12 @@ extension XcircuiteCandidatePlanVerifier {
                     reason: "multiple manifest artifacts reference the same explicit path."
                 )
             }
-            let reference = try matches.first ?? workspaceStore.fileReference(
-                forProjectRelativePath: explicitPath,
-                artifactID: artifactID,
+            let reference = try matches.first ?? artifactBuilder.reference(
+                for: projectURL(for: explicitPath, projectRoot: projectRoot),
+                projectRoot: projectRoot,
+                artifactID: artifactID ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                 kind: .other,
-                format: .json,
-                inProjectAt: projectRoot,
-                producedByRunID: runID
+                format: .json
             )
             try validateCandidatePlanReference(
                 reference,
@@ -251,7 +240,7 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     private func validateCandidatePlanReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         expectedArtifactID: String?,
         runID: String,
         projectRoot: URL
@@ -268,18 +257,12 @@ extension XcircuiteCandidatePlanVerifier {
                 reason: "candidate plans must be JSON artifacts."
             )
         }
-        guard reference.producedByRunID == runID else {
-            throw XcircuiteCandidatePlanVerificationError.artifactProducerRunMismatch(
-                expected: runID,
-                actual: reference.producedByRunID
-            )
-        }
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteCandidatePlanVerificationError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }

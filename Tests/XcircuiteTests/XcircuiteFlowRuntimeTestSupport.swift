@@ -12,44 +12,23 @@ import ToolQualification
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
-/// Converts a legacy fixture reference at test boundaries while the workspace
-/// stores are migrated. Production APIs consume `ArtifactReference` directly.
+/// Applies the requested role while preserving canonical artifact identity.
 func foundationReference(
-    _ reference: XcircuiteFileReference,
+    _ reference: ArtifactReference,
     role: ArtifactRole = .input
 ) throws -> ArtifactReference {
-    let kindRawValue: String = switch reference.kind {
-    case .powerIntent: "power-intent"
-    case .timingLibrary: "timing-library"
-    case .testPattern: "test-pattern"
-    case .ruleDeck: "rule-deck"
-    case .designDiff: "design-diff"
-    case .parasitic: "parasitics"
-    default: reference.kind.rawValue
-    }
-    let formatRawValue: String = switch reference.format {
-    case .systemVerilog: "system-verilog"
-    default: reference.format.rawValue.lowercased()
-    }
-    let location: ArtifactLocation
-    if reference.path.hasPrefix("/") {
-        location = try ArtifactLocation(fileURL: URL(filePath: reference.path))
-    } else {
-        location = try ArtifactLocation(workspaceRelativePath: reference.path)
-    }
+    guard reference.locator.role != role else { return reference }
     return ArtifactReference(
-        id: try reference.artifactID.map { try ArtifactID(rawValue: $0) },
+        id: reference.id,
         locator: ArtifactLocator(
-            location: location,
+            location: reference.locator.location,
             role: role,
-            kind: try ArtifactKind(rawValue: kindRawValue),
-            format: try ArtifactFormat(rawValue: formatRawValue)
+            kind: reference.locator.kind,
+            format: reference.locator.format
         ),
-        digest: try ContentDigest(
-            algorithm: .sha256,
-            hexadecimalValue: reference.sha256 ?? String(repeating: "0", count: 64)
-        ),
-        byteCount: UInt64(max(reference.byteCount ?? 0, 0))
+        digest: reference.digest,
+        byteCount: reference.byteCount,
+        producer: reference.producer
     )
 }
 
@@ -121,7 +100,7 @@ extension XcircuiteFlowRuntimeTests {
         var displayName: String
         var artifactID: String
         var exportFormat: LayoutFileFormat
-        var artifactFormat: XcircuiteFileFormat
+        var artifactFormat: ArtifactFormat
         var lvsFormat: LVSLayoutFormat
         var fileSuffix: String
     }
@@ -140,20 +119,14 @@ extension XcircuiteFlowRuntimeTests {
             guard stage.stageID == stageID else {
                 throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
             }
-            let rawDirectory = context.runDirectory
-                .appending(path: "stages")
-                .appending(path: stage.stageID)
-                .appending(path: "raw")
-            try context.storage.ensureDirectory(at: rawDirectory)
-            let waveformURL = rawDirectory.appending(path: fileName)
-            try context.storage.writeText(csv, to: waveformURL)
-            let reference = try context.storage.fileReference(
-                forProjectRelativePath: ".xcircuite/runs/\(context.runID)/stages/\(stage.stageID)/raw/\(fileName)",
+            let reference = try await context.persistArtifact(
+                Data(csv.utf8),
                 artifactID: artifactID,
+                stageID: stage.stageID,
+                fileName: fileName,
+                role: .output,
                 kind: .waveform,
-                format: .csv,
-                inProjectAt: context.projectRoot,
-                producedByRunID: context.runID
+                format: .csv
             )
             return FlowStageResult(
                 stageID: stage.stageID,
@@ -349,7 +322,7 @@ extension XcircuiteFlowRuntimeTests {
         return url
     }
 
-    func writeStandardLayoutTechnology(root: URL) throws {
+    func writeStandardLayoutTechnology(root: URL) async throws {
         let url = root.appending(path: "tech/process.json")
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -361,7 +334,7 @@ extension XcircuiteFlowRuntimeTests {
         try data.write(to: url, options: [.atomic])
     }
 
-    func writePEXTechnology(root: URL) throws {
+    func writePEXTechnology(root: URL) async throws {
         let url = root.appending(path: "tech/pex.json")
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -380,7 +353,7 @@ extension XcircuiteFlowRuntimeTests {
         pdkID: String = "test-pdk",
         profileIDs: [String]? = ["local-signoff"],
         requiredFiles: [XcircuiteFlowTechnologyCatalogRequiredFile]
-    ) throws {
+    ) async throws {
         let url = root.appending(path: catalogPath)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -396,10 +369,10 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        try writeJSON(catalog, to: url)
+        try await writeJSON(catalog, to: url)
     }
 
-    func writeLayoutCommandRequest(root: URL) throws {
+    func writeLayoutCommandRequest(root: URL) async throws {
         let request = """
         {
           "artifactManifestPath" : "ignored/manifest.json",
@@ -455,7 +428,7 @@ extension XcircuiteFlowRuntimeTests {
         try request.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    func writeLayoutCommandRequestWithVia(root: URL) throws {
+    func writeLayoutCommandRequestWithVia(root: URL) async throws {
         let request = """
         {
           "artifactManifestPath" : "ignored/manifest.json",
@@ -572,6 +545,10 @@ extension XcircuiteFlowRuntimeTests {
 
     func writeRuntimeSpec(_ spec: XcircuiteFlowRuntimeSpec, root: URL) throws -> URL {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try QualifiedToolFixtures.materializeEvidence(
+            for: spec.makeToolBindings().descriptors,
+            in: root
+        )
         let url = root.appending(path: "runtime.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -580,24 +557,25 @@ extension XcircuiteFlowRuntimeTests {
         return url
     }
 
-    func writeRunSpec(_ spec: XcircuiteFlowRunSpec, root: URL) throws -> URL {
+    func writeRunSpec(_ spec: XcircuiteFlowRunSpec, root: URL) async throws -> URL {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let url = root.appending(path: "run.json")
-        try writeJSON(spec, to: url)
+        try await writeJSON(spec, to: url)
         return url
     }
 
-    func writeJSON<T: Encodable>(_ value: T, to url: URL) throws {
+    func writeJSON<T: Encodable>(_ value: T, to url: URL) async throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
         try data.write(to: url)
     }
 
-    func readToolchainManifest(in root: URL, runID: String) throws -> FlowToolchainManifest {
-        try XcircuiteWorkspaceStore().readJSON(
+    func readToolchainManifest(in root: URL, runID: String) async throws -> FlowToolchainManifest {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return try await store.readJSON(
             FlowToolchainManifest.self,
-            from: root.appending(path: ".xcircuite/runs/\(runID)/toolchain.json")
+            from: ".xcircuite/runs/\(runID)/toolchain.json"
         )
     }
 
@@ -605,6 +583,24 @@ extension XcircuiteFlowRuntimeTests {
         URL(filePath: #filePath)
             .deletingLastPathComponent()
             .appending(path: "Fixtures/FlowRuntime/\(name)")
+    }
+
+    func installQualificationEvidenceFixtures(in root: URL) throws {
+        let destination = root.appending(path: "qualification", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(
+            at: destination,
+            withIntermediateDirectories: true
+        )
+        for name in [
+            "drc-corpus-report.json",
+            "lvs-corpus-report.json",
+            "pex-spef-corpus-report.json",
+        ] {
+            try FileManager.default.copyItem(
+                at: fixtureURL(name),
+                to: destination.appending(path: name)
+            )
+        }
     }
 
     func workspaceRoot() -> URL {
@@ -622,7 +618,7 @@ extension XcircuiteFlowRuntimeTests {
         return root
     }
 
-    func copyProgressStressArtifactIfRequested(root: URL, runID: String) throws {
+    func copyProgressStressArtifactIfRequested(root: URL, runID: String) async throws {
         guard let outputPath = ProcessInfo.processInfo.environment["LSI_PROGRESS_STRESS_ARTIFACT_OUT"],
               !outputPath.isEmpty else {
             return

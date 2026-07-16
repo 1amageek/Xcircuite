@@ -9,9 +9,9 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
     public var summary: Summary
     public var blockers: [Blocker]
     public var suggestedActions: [SuggestedAction]
-    public var qualificationArtifact: XcircuiteFileReference?
-    public var retainedSignoffReportArtifact: ArtifactReference?
-    public var assessmentArtifact: XcircuiteFileReference?
+    public var qualificationArtifact: ArtifactFingerprint?
+    public var retainedSignoffReportArtifact: ArtifactFingerprint?
+    public var assessmentArtifact: ArtifactFingerprint?
 
     public init(
         schemaVersion: Int = 1,
@@ -21,9 +21,9 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
         summary: Summary,
         blockers: [Blocker],
         suggestedActions: [SuggestedAction],
-        qualificationArtifact: XcircuiteFileReference? = nil,
-        retainedSignoffReportArtifact: ArtifactReference? = nil,
-        assessmentArtifact: XcircuiteFileReference? = nil
+        qualificationArtifact: ArtifactFingerprint? = nil,
+        retainedSignoffReportArtifact: ArtifactFingerprint? = nil,
+        assessmentArtifact: ArtifactFingerprint? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.promotionID = promotionID
@@ -139,7 +139,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
         }
     }
 
-    public struct ArtifactReference: Codable, Sendable, Hashable {
+    public struct ArtifactFingerprint: Codable, Sendable, Hashable {
         public var path: String
         public var sha256: String
         public var byteCount: Int64

@@ -36,7 +36,7 @@ struct PDKStageExecutionSupport: Sendable {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        try context.storage.ensureDirectory(at: stageDirectory)
+        try FileManager.default.createDirectory(at: stageDirectory, withIntermediateDirectories: true)
         let outputURL = stageDirectory.appending(path: "pdk-result.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -122,8 +122,8 @@ struct PDKStageExecutionSupport: Sendable {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private func flowDiagnostic(_ diagnostic: DesignDiagnostic) -> FlowDiagnostic {

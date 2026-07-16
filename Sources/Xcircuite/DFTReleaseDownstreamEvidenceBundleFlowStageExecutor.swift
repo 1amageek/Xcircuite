@@ -25,7 +25,7 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let evidence = try sources.map { source in
                 guard !source.role.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -48,20 +48,13 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                     artifact: artifact
                 )
             }
-            let evidenceData = try encode(evidence)
-            let directory = context.runDirectory
-                .appending(path: "stages")
-                .appending(path: stageID)
-                .appending(path: "raw")
-            try context.storage.ensureDirectory(at: directory)
-            let evidenceURL = directory.appending(path: "dft-downstream-evidence.json")
-            try evidenceData.write(to: evidenceURL, options: .atomic)
-            let bundleArtifact = try artifactBuilder.reference(
-                for: evidenceURL,
-                projectRoot: context.projectRoot,
+            let bundleArtifact = try await context.persistJSONArtifact(
+                evidence,
                 artifactID: "dft-downstream-evidence-bundle",
+                stageID: stageID,
+                fileName: "dft-downstream-evidence.json",
                 kind: .release,
-                format: .json
+                mode: .immutable
             )
             let sourceArtifacts = evidence.map(\.artifact)
             return FlowStageResult(
@@ -93,8 +86,8 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
                 actual: stage.stageID
             )
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
         guard !sources.isEmpty else {
             throw DFTReleaseDownstreamEvidenceBundleError.invalidInput("at least one downstream evidence source is required")
         }
@@ -112,12 +105,6 @@ public struct DFTReleaseDownstreamEvidenceBundleFlowStageExecutor: FlowStageExec
         ] where !domains.contains(domain) {
             throw DFTReleaseDownstreamEvidenceBundleError.missingDomain(domain.rawValue)
         }
-    }
-
-    private func encode(_ evidence: [DFTReleaseDownstreamEvidence]) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(evidence)
     }
 
     private func format(for url: URL) -> ArtifactFormat {

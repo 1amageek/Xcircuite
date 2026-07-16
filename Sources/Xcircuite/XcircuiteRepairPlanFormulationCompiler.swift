@@ -6,8 +6,8 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
@@ -16,11 +16,11 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
     public func compile(
         request: XcircuiteRepairPlanFormulationCompilationRequest,
         projectRoot: URL
-    ) throws -> XcircuiteRepairPlanFormulationCompilationResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+    ) async throws -> XcircuiteRepairPlanFormulationCompilationResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         let formulation = try loadFormulation(request: request, projectRoot: projectRoot)
         try validate(formulation: formulation, expectedRunID: request.runID)
-        let formulationArtifact = try artifactStore.persistRepairPlanFormulation(
+        let formulationArtifact = try await artifactStore.persistRepairPlanFormulation(
             formulation,
             runID: request.runID,
             projectRoot: projectRoot
@@ -35,7 +35,7 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
             problemID: problemID,
             formulationArtifact: formulationArtifact
         )
-        let problemArtifact = try artifactStore.persistPlanningProblem(
+        let problemArtifact = try await artifactStore.persistPlanningProblem(
             problem,
             runID: request.runID,
             projectRoot: projectRoot
@@ -61,11 +61,17 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         guard let formulationPath = request.formulationPath else {
             throw XcircuiteRepairPlanFormulationCompilationError.missingFormulation
         }
-        let formulationURL = try workspaceStore.url(
-            forProjectRelativePath: formulationPath,
-            inProjectAt: projectRoot
+        let formulationURL = projectRoot.appending(path: formulationPath).standardizedFileURL
+        guard ProjectPathBoundary().contains(formulationURL, projectRoot: projectRoot) else {
+            throw XcircuiteRuntimeError.artifactOutsideProject(
+                path: formulationURL.path(percentEncoded: false),
+                projectRoot: projectRoot.path(percentEncoded: false)
+            )
+        }
+        return try JSONDecoder().decode(
+            XcircuiteRepairPlanFormulation.self,
+            from: Data(contentsOf: formulationURL)
         )
-        return try workspaceStore.readJSON(XcircuiteRepairPlanFormulation.self, from: formulationURL)
     }
 
     private func validate(
@@ -77,7 +83,7 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
                 formulation.schemaVersion
             )
         }
-        let validator = XcircuiteIdentifierValidator()
+        let validator = FlowIdentifierValidator()
         try validator.validate(formulation.formulationID, kind: .artifactID)
         try validator.validate(formulation.intentID, kind: .artifactID)
         try validator.validate(formulation.runID, kind: .runID)
@@ -217,14 +223,14 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         runID: String
     ) throws -> String {
         let problemID = requestProblemID ?? "\(runID)-\(formulationID)-problem"
-        try XcircuiteIdentifierValidator().validate(problemID, kind: .artifactID)
+        try FlowIdentifierValidator().validate(problemID, kind: .artifactID)
         return problemID
     }
 
     private func makePlanningProblem(
         formulation: XcircuiteRepairPlanFormulation,
         problemID: String,
-        formulationArtifact: XcircuiteFileReference
+        formulationArtifact: ArtifactReference
     ) -> XcircuiteCircuitPlanningProblem {
         let goalsByID = goalsKeyedByID(formulation.goals)
         let formulationRef = XcircuitePlanningReference(
@@ -233,17 +239,17 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
             path: formulationArtifact.path,
             artifactID: formulationArtifact.artifactID,
             metadata: [
-                "formulationID": .string(formulation.formulationID),
-                "intentID": .string(formulation.intentID),
-                "intent": .string(formulation.intent),
+                "formulationID": .text(formulation.formulationID),
+                "intentID": .text(formulation.intentID),
+                "intent": .text(formulation.intent),
             ]
         )
         let objectives = formulation.goals.map { goal in
             var evidence = goal.evidence
-            evidence["formulationID"] = .string(formulation.formulationID)
-            evidence["formulationGoalID"] = .string(goal.goalID)
+            evidence["formulationID"] = .text(formulation.formulationID)
+            evidence["formulationGoalID"] = .text(goal.goalID)
             if !goal.symbolicGoalAtoms.isEmpty {
-                evidence["symbolicGoalAtoms"] = .array(goal.symbolicGoalAtoms.map { .string($0) })
+                evidence["symbolicGoalAtoms"] = .textList(goal.symbolicGoalAtoms)
             }
             return XcircuitePlanningObjective(
                 objectiveID: goal.goalID,
@@ -262,7 +268,7 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         }
         let candidateActions = formulation.actions.map { action in
             var parameterHints = action.parameterHints
-            parameterHints["formulationID"] = .string(formulation.formulationID)
+            parameterHints["formulationID"] = .text(formulation.formulationID)
             mergeStringArray(
                 key: "satisfiesGoalAtoms",
                 values: action.sourceGoalIDs.flatMap { goalsByID[$0]?.symbolicGoalAtoms ?? [] },
@@ -310,8 +316,8 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
                 sourceRefIDs: ["repair-formulation"],
                 requiredBeforeExecution: false,
                 evidence: [
-                    "formulationID": .string(formulation.formulationID),
-                    "intentID": .string(formulation.intentID),
+                    "formulationID": .text(formulation.formulationID),
+                    "intentID": .text(formulation.intentID),
                 ]
             ),
         ] + formulation.assumptions
@@ -366,8 +372,8 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
                 description: "Compiled repair plans must verify every diagnostic source that drove a formulation goal.",
                 sourceRefIDs: sourceRefIDs,
                 evidence: [
-                    "formulationID": .string(formulation.formulationID),
-                    "verificationGates": .array(gateIDs.map { .string($0) }),
+                    "formulationID": .text(formulation.formulationID),
+                    "verificationGates": .textList(gateIDs),
                 ]
             ),
         ]
@@ -435,7 +441,7 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
 
     private func validateUniqueArtifactIDs(
         _ values: [String],
-        validator: XcircuiteIdentifierValidator,
+        validator: FlowIdentifierValidator,
         duplicateError: (String) -> XcircuiteRepairPlanFormulationCompilationError
     ) throws {
         for value in values {
@@ -459,26 +465,21 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
     private func mergeStringArray(
         key: String,
         values: [String],
-        into dictionary: inout [String: XcircuiteJSONValue]
+        into dictionary: inout [String: PlanningParameterValue]
     ) {
         let merged = unique(stringArrayValue(for: key, in: dictionary) + values)
         if !merged.isEmpty {
-            dictionary[key] = .array(merged.map { .string($0) })
+            dictionary[key] = .textList(merged)
         }
     }
 
     private func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let array)? = values[key] else {
+        guard case .textList(let array)? = values[key] else {
             return []
         }
-        return array.compactMap { value in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return string
-        }
+        return array
     }
 }

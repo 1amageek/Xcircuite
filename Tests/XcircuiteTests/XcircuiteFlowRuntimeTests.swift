@@ -9,7 +9,6 @@ import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 @Suite("Xcircuite flow runtime")
 struct XcircuiteFlowRuntimeTests {}
@@ -19,7 +18,8 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("runtime-run")
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
-        let runtime = QualifiedToolFixtures.runtime(
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
                     stageID: "007-drc",
@@ -27,7 +27,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .productionEligible)]
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
         )
 
         let result = try await runtime.run(
@@ -54,7 +54,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeFeedsSimulationWaveformArtifactsIntoPostLayoutComparisonStage() async throws {
         let root = try makeTemporaryRoot("runtime-post-layout-artifact-input")
         defer { removeTemporaryRoot(root) }
-        let runtime = QualifiedToolFixtures.runtime(
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
             executors: [
                 WaveformArtifactExecutor(
                     stageID: "010-pre-sim",
@@ -135,9 +136,10 @@ extension XcircuiteFlowRuntimeTests {
         })
         #expect(reportArtifact.sha256.isEmpty == false)
         #expect(reportArtifact.byteCount > 0)
-        let report = try XcircuiteWorkspaceStore().readJSON(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let report = try await store.readJSON(
             PostLayoutComparisonReport.self,
-            from: root.appending(path: reportArtifact.path)
+            from: reportArtifact.path
         )
         #expect(report.gateStatus == "passed")
         #expect(report.requiredPostVariables.contains { $0.variableName == "V(out_pex)" && $0.present })
@@ -148,7 +150,8 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
         let engineState = FlakyDRCEngineState()
-        let runtime = QualifiedToolFixtures.runtime(
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
             executors: [
                 DRCFlowStageExecutor(
                     stageID: "007-drc",
@@ -161,7 +164,7 @@ extension XcircuiteFlowRuntimeTests {
                     engine: FlakyDRCEngine(state: engineState)
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .productionEligible)]
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
         )
 
         let result = try await runtime.run(
@@ -195,34 +198,31 @@ extension XcircuiteFlowRuntimeTests {
         #expect(stage.attempts[1].retryDecision.reason == .stageDidNotFail)
         #expect(stage.artifacts.contains { $0.artifactID == "007-drc-attempts" })
 
-        let store = XcircuiteWorkspaceStore()
-        let attempts = try store.readJSON(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let attempts = try await store.readJSON(
             [FlowStageAttemptRecord].self,
-            from: root.appending(path: ".xcircuite/runs/run-drc-retry/stages/007-drc/attempts.json")
+            from: ".xcircuite/runs/run-drc-retry/stages/007-drc/attempts.json"
         )
         #expect(attempts.map(\.attemptIndex) == [1, 2])
         #expect(attempts[0].retryDecision.matchedDiagnosticCodes == ["DRC_EXECUTION_ERROR"])
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(
-            runID: "run-drc-retry",
-            projectRoot: root
-        )
+        let ledger = try await store.loadRunLedger(runID: "run-drc-retry")
         #expect(ledger.progressEvents.map(\.kind).contains(.stageRetryScheduled))
         let summary = DefaultFlowRunLedgerSummarizer().summarize(ledger)
         #expect(summary.stages.first?.attemptCount == 2)
         #expect(summary.stages.first?.retryCount == 1)
         #expect(summary.nextActions.contains { $0.kind == "reviewRetryAttempts" })
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-drc-retry/manifest.json")
-        )
+        let manifest = ledger.runManifest
         #expect(manifest.artifacts.contains {
             $0.artifactID == "007-drc-attempts"
                 && $0.path == ".xcircuite/runs/run-drc-retry/stages/007-drc/attempts.json"
         })
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundle = try await DefaultFlowRunReviewBundler(
+            loader: store,
+            persistence: store
+        ).makeReviewBundle(
             runID: "run-drc-retry",
             projectRoot: root
         )
@@ -233,7 +233,8 @@ extension XcircuiteFlowRuntimeTests {
         let root = try makeTemporaryRoot("runtime-action-domain")
         defer { removeTemporaryRoot(root) }
         let layoutURL = try writeLayout(cleanLayout(), root: root)
-        let runtime = QualifiedToolFixtures.runtime(
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
                     stageID: "007-drc",
@@ -241,7 +242,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .productionEligible)]
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)]
         )
 
         _ = try await runtime.run(
@@ -259,11 +260,11 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
 
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let snapshotPath = ".xcircuite/runs/run-1/planning/action-domain-snapshot.json"
-        let snapshot = try store.readJSON(
+        let snapshot = try await store.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
-            from: root.appending(path: snapshotPath)
+            from: snapshotPath
         )
         #expect(snapshot.schemaVersion == 1)
         #expect(snapshot.runID == "run-1")
@@ -310,13 +311,14 @@ extension XcircuiteFlowRuntimeTests {
         #expect(operationsByDomain["drc-signoff"]?.isSuperset(of: [
             "drc.run-native",
             "drc.export-repair-hints",
-            "drc.export-tool-evidence",
         ]) == true)
         #expect(operationsByDomain["lvs-signoff"]?.isSuperset(of: [
             "lvs.run-native",
             "lvs.export-repair-hints",
-            "lvs.export-tool-evidence",
         ]) == true)
+        #expect(snapshot.domains.flatMap(\.operations).contains {
+            $0.operationID.contains("export-tool-evidence")
+        } == false)
         #expect(operationsByDomain["pex-extraction"]?.isSuperset(of: [
             "pex.extract",
             "pex.summarize-run",
@@ -349,20 +351,20 @@ extension XcircuiteFlowRuntimeTests {
         #expect(metricImprovement.producedArtifacts.contains("parameter-candidates"))
         #expect(metricImprovement.producedArtifacts.contains("numeric-repair-loop"))
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-1").runManifest
         let planningArtifact = try #require(manifest.artifacts.first {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
         })
         #expect(planningArtifact.path == snapshotPath)
         #expect(planningArtifact.kind == .other)
         #expect(planningArtifact.format == .json)
-        #expect(planningArtifact.sha256?.isEmpty == false)
-        #expect(planningArtifact.byteCount != nil)
+        #expect(planningArtifact.sha256.isEmpty == false)
+        #expect(planningArtifact.byteCount > 0)
 
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundle = try await DefaultFlowRunReviewBundler(
+            loader: store,
+            persistence: store
+        ).makeReviewBundle(
             runID: "run-1",
             projectRoot: root
         )
@@ -385,7 +387,9 @@ extension XcircuiteFlowRuntimeTests {
                 "source": "resume-test",
             ]
         )
-        let runtime = QualifiedToolFixtures.runtime(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runtime = try makeQualifiedRuntime(
+            projectRoot: root,
             executors: [
                 DRCFlowStageExecutor.native(
                     stageID: "007-drc",
@@ -393,7 +397,7 @@ extension XcircuiteFlowRuntimeTests {
                     topCell: "TOP"
                 ),
             ],
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .productionEligible)],
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
             toolchainProfile: toolchainProfile
         )
 
@@ -414,7 +418,13 @@ extension XcircuiteFlowRuntimeTests {
         )
         #expect(initial.status == .blocked)
 
-        _ = try DefaultFlowGateApprovalRecorder().recordApproval(
+        let reviewBundler = DefaultFlowRunReviewBundler(loader: store, persistence: store)
+        let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
+        _ = try await DefaultFlowGateApprovalRecorder(
+            loader: store,
+            inspector: inspector,
+            ledgerPersistence: store
+        ).recordApproval(
             FlowGateApprovalRequest(
                 projectRoot: root,
                 runID: "run-1",
@@ -437,9 +447,9 @@ extension XcircuiteFlowRuntimeTests {
         #expect(resumed.summary.toolchain?.profileArtifactPath == ".xcircuite/runs/run-1/toolchain-profile.json")
         #expect(resumed.summary.nextActions.map(\.kind) == ["archiveOrContinue"])
 
-        let persistedProfile = try XcircuiteWorkspaceStore().readJSON(
+        let persistedProfile = try await store.readJSON(
             XcircuiteFlowToolchainProfile.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/toolchain-profile.json")
+            from: ".xcircuite/runs/run-1/toolchain-profile.json"
         )
         #expect(persistedProfile.profileID == "resume-profile")
     }
@@ -455,12 +465,12 @@ extension XcircuiteFlowRuntimeTests {
                         stageID: "007-drc",
                         layoutPath: "layout.json",
                         topCell: "TOP",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -483,19 +493,22 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeSpecBuildsRuntimeForLayoutCommandExecutor() async throws {
         let root = try makeTemporaryRoot("runtime-layout-command")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
+        try await writeLayoutCommandRequest(root: root)
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
                     XcircuiteFlowStageExecutorSpec.LayoutCommand(
                         stageID: "006-layout",
                         requestPath: "layout-command-request.json",
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(
+                            level: .smokeChecked,
+                            toolID: "layout-command"
+                        )
                     )
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
 
         let result = try await runtime.run(
             request: FlowOperationRequest(
@@ -520,7 +533,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(stage.artifacts.contains { $0.kind == .other && $0.format == .json })
 
         let layoutArtifact = try #require(stage.artifacts.first { $0.kind == .layout })
-        let layoutDigest = try #require(layoutArtifact.sha256)
+        let layoutDigest = layoutArtifact.sha256
         #expect(!layoutDigest.isEmpty)
         let layoutURL = root.appending(path: layoutArtifact.path)
         let layoutData = try Data(contentsOf: layoutURL)
@@ -530,10 +543,26 @@ extension XcircuiteFlowRuntimeTests {
         let shapes = try #require(cells.first?["shapes"] as? [[String: Any]])
         #expect(shapes.count == 1)
 
-        let toolchain = try readToolchainManifest(in: root, runID: "run-1")
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        let toolchain = try #require(ledger.toolchain)
         let record = try #require(toolchain.stages.first)
         #expect(record.selectedToolID == "layout-command")
         #expect(record.selectedDecision?.status == .eligible)
+    }
+
+    private func makeQualifiedRuntime(
+        projectRoot: URL,
+        executors: [any FlowStageExecutor],
+        descriptors: [ToolDescriptor],
+        toolchainProfile: XcircuiteFlowToolchainProfile? = nil
+    ) throws -> XcircuiteFlowRuntime {
+        try QualifiedToolFixtures.runtime(
+            executors: executors,
+            descriptors: descriptors,
+            projectRoot: projectRoot,
+            toolchainProfile: toolchainProfile
+        )
     }
 
 }

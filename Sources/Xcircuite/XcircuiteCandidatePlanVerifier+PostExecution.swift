@@ -10,21 +10,18 @@ import DesignFlowKernel
 extension XcircuiteCandidatePlanVerifier {
     func makePostExecutionPlanVerification(
         plan: XcircuiteCandidatePlan,
-        candidatePlanRef: XcircuiteFileReference,
-        actionDomainSnapshotRef: XcircuiteFileReference?,
+        candidatePlanRef: ArtifactReference,
+        actionDomainSnapshotRef: ArtifactReference?,
         actionDomainSnapshot: XcircuitePlanningActionDomainSnapshot?,
-        planningProblemValidationRef: XcircuiteFileReference?,
+        planningProblemValidationRef: ArtifactReference?,
         planningProblem: XcircuiteCircuitPlanningProblem?,
-        approvals: [XcircuiteApprovalRecord],
-        manifest: XcircuiteRunManifest,
+        approvals: [FlowApprovalRecord],
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> XcircuitePlanVerification {
-        let baseArtifactRefs = uniqueArtifactReferences(try foundationArtifactReferences(
-            [candidatePlanRef] + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 },
-            field: "post-execution.base-artifacts"
-        ))
-        let planningProblemValidationArtifact = planningProblemValidationRef.flatMap(foundationArtifactReference)
-        let actionDomainSnapshotArtifact = actionDomainSnapshotRef.flatMap(foundationArtifactReference)
+        let baseArtifactRefs = uniqueArtifactReferences([candidatePlanRef] + [actionDomainSnapshotRef, planningProblemValidationRef].compactMap { $0 })
+        let planningProblemValidationArtifact = planningProblemValidationRef
+        let actionDomainSnapshotArtifact = actionDomainSnapshotRef
         let symbolicSummary = symbolicVerificationSummary(
             for: plan,
             actionDomainSnapshot: actionDomainSnapshot,
@@ -80,7 +77,7 @@ extension XcircuiteCandidatePlanVerifier {
                 gateResults: gateResults,
                 correctnessGateResults: correctnessGateResults,
                 riskReviews: riskReviews,
-                artifactRefs: legacyArtifactReferences(baseArtifactRefs),
+                artifactRefs: baseArtifactRefs,
                 initialSymbolicState: symbolicSummary.initialSymbolicState,
                 finalSymbolicState: symbolicSummary.finalSymbolicState,
                 goalCoverageStatus: goalCoverageStatus(from: preExecutionGoalCoverage),
@@ -91,9 +88,9 @@ extension XcircuiteCandidatePlanVerifier {
                 nextActions: nextActions
             )
         }
-        let execution = try workspaceStore.readJSON(
+        let execution = try JSONDecoder().decode(
             XcircuiteCandidatePlanExecution.self,
-            from: workspaceStore.url(forProjectRelativePath: executionRef.path, inProjectAt: projectRoot)
+            from: Data(contentsOf: projectURL(for: executionRef.path, projectRoot: projectRoot))
         )
         let postExecutionSymbolicSummary = postExecutionSymbolicVerificationSummary(
             for: plan,
@@ -107,17 +104,11 @@ extension XcircuiteCandidatePlanVerifier {
             finalSymbolicState: postExecutionSymbolicSummary.finalSymbolicState
         )
         let missingGoalAtoms = missingGoalAtomRefs(from: goalCoverage)
-        let executionArtifactReference = try foundationArtifactReferences(
-            [executionRef],
-            field: "post-execution.execution-artifact"
-        )
-        let designDiffArtifactReferences = try foundationArtifactReferences(
-            [execution.designDiffRef].compactMap { $0 },
-            field: "post-execution.design-diff-artifact"
-        )
+        let executionArtifactReferences = [executionRef]
+        let designDiffArtifactReferences = [execution.designDiffRef].compactMap { $0 }
         var artifactReferences = uniqueArtifactReferences(
             baseArtifactRefs
-                + executionArtifactReference
+                + executionArtifactReferences
                 + execution.artifactReferences
                 + designDiffArtifactReferences
         )
@@ -184,7 +175,7 @@ extension XcircuiteCandidatePlanVerifier {
             gateResults: gateEvaluation.gateResults,
             correctnessGateResults: correctnessGateResults,
             riskReviews: riskReviews,
-            artifactRefs: legacyArtifactReferences(artifactReferences),
+            artifactRefs: artifactReferences,
             initialSymbolicState: postExecutionSymbolicSummary.initialSymbolicState,
             finalSymbolicState: postExecutionSymbolicSummary.finalSymbolicState,
             goalCoverageStatus: goalCoverageStatus(from: goalCoverage),
@@ -235,7 +226,7 @@ extension XcircuiteCandidatePlanVerifier {
             gateIDs: step.verificationGates,
             symbolicEvaluation: symbolicEvaluation,
             diagnostics: executed.diagnostics,
-            producedArtifactRefs: legacyArtifactReferences(executed.artifactReferences)
+            producedArtifactRefs: executed.artifactReferences
         )
     }
 
@@ -263,7 +254,7 @@ extension XcircuiteCandidatePlanVerifier {
         stepResults: [XcircuitePlanVerificationStepResult],
         riskReviews: [XcircuitePlanRiskReview],
         artifactReferences: [ArtifactReference],
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> PostExecutionGateEvaluation {
         var gateResults: [XcircuitePlanVerificationGateResult] = []
@@ -293,7 +284,7 @@ extension XcircuiteCandidatePlanVerifier {
                     gateID: gate.gateID,
                     required: gate.required,
                     sourceStepIDs: sourceStepIDs,
-                    artifactRefs: legacyArtifactReferences(artifactReferences),
+                    artifactRefs: artifactReferences,
                     projectRoot: projectRoot
                 ))
             case "native-drc":

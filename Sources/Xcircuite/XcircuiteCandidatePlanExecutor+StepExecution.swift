@@ -42,7 +42,7 @@ extension XcircuiteCandidatePlanExecutor {
              "layout.add-label",
              "layout.add-via":
             do {
-                return try executeLayoutCommand(step: step, plan: plan, projectRoot: projectRoot, context: &context)
+                return try await executeLayoutCommand(step: step, plan: plan, projectRoot: projectRoot, context: &context)
             } catch {
                 return failedStepResult(step: step, error: error)
             }
@@ -59,7 +59,7 @@ extension XcircuiteCandidatePlanExecutor {
             }
         case "lvs.policy-repair":
             do {
-                return try executeLVSPolicyRepair(step: step, plan: plan, projectRoot: projectRoot)
+                return try await executeLVSPolicyRepair(step: step, plan: plan, projectRoot: projectRoot)
             } catch {
                 return failedStepResult(step: step, error: error)
             }

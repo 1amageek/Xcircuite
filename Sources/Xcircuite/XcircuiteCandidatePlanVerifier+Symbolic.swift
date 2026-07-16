@@ -97,7 +97,7 @@ extension XcircuiteCandidatePlanVerifier {
             if result.status == "executed" {
                 var stateAfter = result.symbolicEvaluation?.stateAfter
                     ?? uniqueStrings(symbolicState + symbolicEffectAtoms(from: step.parameterHints))
-                stateAfter.append(contentsOf: result.producedArtifactRefs.compactMap(\.artifactID).map {
+                stateAfter.append(contentsOf: result.producedArtifactRefs.map(\.artifactID).map {
                     "artifact:\($0)"
                 })
                 symbolicState = uniqueStrings(stateAfter)
@@ -219,7 +219,7 @@ extension XcircuiteCandidatePlanVerifier {
         )
     }
 
-    func symbolicEffectAtoms(from values: [String: XcircuiteJSONValue]) -> [String] {
+    func symbolicEffectAtoms(from values: [String: PlanningParameterValue]) -> [String] {
         uniqueStrings(
             stringArrayValue(for: "symbolicEffects", in: values)
                 + stringArrayValue(for: "satisfiesGoalAtoms", in: values)
@@ -229,17 +229,12 @@ extension XcircuiteCandidatePlanVerifier {
 
     func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let items)? = values[key] else {
+        guard case .textList(let items)? = values[key] else {
             return []
         }
-        return items.compactMap { item in
-            guard case .string(let value) = item else {
-                return nil
-            }
-            return value
-        }
+        return items
     }
 
     func uniqueStrings(_ values: [String]) -> [String] {

@@ -6,14 +6,22 @@ import DesignFlowKernel
 
 @Suite("Xcircuite problem translation auditor")
 struct XcircuiteProblemTranslationAuditorTests {
+    private func makeAuditor(root: URL = FileManager.default.temporaryDirectory) throws -> XcircuiteProblemTranslationAuditor {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return XcircuiteProblemTranslationAuditor(
+            workspaceStore: store,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+        )
+    }
+
     @Test func auditProblemTranslationCLIPersistsAuditArtifact() async throws {
         let root = try makeTemporaryRoot("problem-translation-audit-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-audit", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-audit", store: store)
         let problem = makePlanningProblem()
-        let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let problemRef = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             problem,
             runID: "run-audit",
             projectRoot: root
@@ -71,20 +79,17 @@ struct XcircuiteProblemTranslationAuditorTests {
         #expect(result.audit.nextActions == ["validate-planning-problem"])
         #expect(result.auditArtifact.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID)
         #expect(result.auditArtifact.path == ".xcircuite/runs/run-audit/planning/problem-translation-audit.json")
-        #expect(result.auditArtifact.sha256?.isEmpty == false)
-        #expect(result.auditArtifact.byteCount != nil)
+        #expect(!result.auditArtifact.sha256.isEmpty)
+        #expect(result.auditArtifact.byteCount > 0)
 
-        let persisted = try store.readJSON(
+        let persisted = try await store.readJSON(
             XcircuiteProblemTranslationAudit.self,
-            from: root.appending(path: result.auditArtifact.path)
+            from: result.auditArtifact.path
         )
         #expect(persisted == result.audit)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-audit/manifest.json")
-        )
-        #expect(manifest.artifacts.contains {
+        let ledger = try await store.loadRunLedger(runID: "run-audit")
+        #expect(ledger.runManifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID
                 && $0.path == result.auditArtifact.path
         })
@@ -93,44 +98,37 @@ struct XcircuiteProblemTranslationAuditorTests {
     @Test func runSelectedSuggestedCommandDispatchesProblemTranslationAudit() async throws {
         let root = try makeTemporaryRoot("selected-problem-translation-audit")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-audit", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-audit", store: store)
         let problem = makePlanningProblem()
-        let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let problemRef = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             problem,
             runID: "run-audit",
             projectRoot: root
         )
-        try store.appendRunAction(
-            XcircuiteRunActionRecord(
+        try await store.appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-audit-problem-translation",
                 runID: "run-audit",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("audit-problem-translation"),
-                    "nextActionKind": .string("auditProblemTranslation"),
-                    "commandID": .string("xcircuite-flow.audit-problem-translation"),
-                    "readiness": .string("ready"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("audit-problem-translation"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-audit"),
-                        .string("--problem-artifact-id"),
-                        .string(XcircuitePlanningArtifactStore.problemArtifactID),
-                        .string("--problem-path"),
-                        .string(problemRef.path),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Audit source-to-problem translation coverage."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "audit-problem-translation",
+                    nextActionKind: "auditProblemTranslation",
+                    commandID: "xcircuite-flow.audit-problem-translation",
+                    readiness: "ready",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "audit-problem-translation", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-audit", "--problem-artifact-id",
+                        XcircuitePlanningArtifactStore.problemArtifactID,
+                        "--problem-path", problemRef.path, "--pretty",
+                    ],
+                    reason: "Audit source-to-problem translation coverage."
+                ))
             ),
-            inProjectAt: root
         )
 
         let json = try await XcircuiteFlowCLICommand.run(
@@ -148,17 +146,17 @@ struct XcircuiteProblemTranslationAuditorTests {
         #expect(result.status == "passed")
         #expect(result.problemPath == problemRef.path)
         #expect(result.auditArtifact.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID)
-        let actions = try store.loadRunActions(runID: "run-audit", inProjectAt: root)
+        let actions = try await store.loadRunActions(runID: "run-audit")
         #expect(actions.contains { $0.actionID == "selection-audit-problem-translation" })
     }
 
-    @Test func auditProblemTranslationRejectsStaleProblemArtifact() throws {
+    @Test func auditProblemTranslationRejectsStaleProblemArtifact() async throws {
         let root = try makeTemporaryRoot("problem-translation-audit-stale-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-audit", inProjectAt: root)
-        let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-audit", store: store)
+        let problemRef = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-audit",
             projectRoot: root
@@ -168,7 +166,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         try "\(original)\n".write(to: problemURL, atomically: true, encoding: .utf8)
 
         do {
-            _ = try XcircuiteProblemTranslationAuditor().auditProblemTranslation(
+            _ = try await makeAuditor(root: root).auditProblemTranslation(
                 request: XcircuiteProblemTranslationAuditRequest(runID: "run-audit"),
                 projectRoot: root
             )
@@ -183,35 +181,32 @@ struct XcircuiteProblemTranslationAuditorTests {
         }
     }
 
-    @Test func auditProblemTranslationRejectsExplicitPathForDifferentManifestArtifact() throws {
+    @Test func auditProblemTranslationRejectsExplicitPathForDifferentManifestArtifact() async throws {
         let root = try makeTemporaryRoot("problem-translation-audit-explicit-artifact-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-audit", inProjectAt: root)
-        _ = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-audit", store: store)
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-audit",
             projectRoot: root
         )
         let alternatePath = ".xcircuite/runs/run-audit/planning/alternate-problem.json"
-        try store.writeJSON(
+        try await store.writeJSON(
             makePlanningProblem(),
-            to: root.appending(path: alternatePath),
-            forProjectAt: root
+            to: alternatePath
         )
-        let alternateRef = try store.fileReference(
+        let alternateRef = try await store.makeArtifactReference(
             forProjectRelativePath: alternatePath,
             artifactID: "alternate-planning-problem",
             kind: .other,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: "run-audit"
         )
-        try store.upsertRunArtifact(alternateRef, runID: "run-audit", inProjectAt: root)
+        _ = try await retainTestArtifact(alternateRef, runID: "run-audit", store: store, projectRoot: root)
 
         do {
-            _ = try XcircuiteProblemTranslationAuditor().auditProblemTranslation(
+            _ = try await makeAuditor(root: root).auditProblemTranslation(
                 request: XcircuiteProblemTranslationAuditRequest(
                     runID: "run-audit",
                     problemArtifactID: XcircuitePlanningArtifactStore.problemArtifactID,
@@ -230,7 +225,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         }
     }
 
-    @Test func auditorBlocksUncoveredSourcesAndOrphanProblemElements() throws {
+    @Test func auditorBlocksUncoveredSourcesAndOrphanProblemElements() async throws {
         var problem = makePlanningProblem()
         problem.sourceRefs.append(
             XcircuitePlanningReference(
@@ -241,7 +236,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         )
         problem.objectives[0].sourceRefIDs = []
 
-        let audit = XcircuiteProblemTranslationAuditor().makeAudit(
+        let audit = try makeAuditor().makeAudit(
             problem: problem,
             problemPath: ".xcircuite/runs/run-audit/planning/problem.json"
         )
@@ -272,13 +267,13 @@ struct XcircuiteProblemTranslationAuditorTests {
         #expect(audit.nextActions.contains("regenerate-planning-problem"))
     }
 
-    @Test func auditorRequiresDiagnosticSourcesToReachObjectiveConstraintActionAndGate() throws {
+    @Test func auditorRequiresDiagnosticSourcesToReachObjectiveConstraintActionAndGate() async throws {
         var problem = makePlanningProblem()
         problem.constraints.removeAll()
         problem.verificationGates.removeAll()
         problem.candidateActions[0].verificationGates.removeAll()
 
-        let audit = XcircuiteProblemTranslationAuditor().makeAudit(
+        let audit = try makeAuditor().makeAudit(
             problem: problem,
             problemPath: ".xcircuite/runs/run-audit/planning/problem.json"
         )
@@ -315,7 +310,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         #expect(audit.nextActions.contains("map-source-diagnostic-to-objective-constraint-action-and-gate"))
     }
 
-    @Test func auditorCountsActionDomainVerificationGatesAsDiagnosticCoverage() throws {
+    @Test func auditorCountsActionDomainVerificationGatesAsDiagnosticCoverage() async throws {
         var problem = makePlanningProblem()
         problem.verificationGates = [
             XcircuitePlanningVerificationGate(
@@ -350,7 +345,7 @@ struct XcircuiteProblemTranslationAuditorTests {
             ]
         )
 
-        let audit = XcircuiteProblemTranslationAuditor().makeAudit(
+        let audit = try makeAuditor().makeAudit(
             problem: problem,
             problemPath: ".xcircuite/runs/run-audit/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -376,7 +371,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         })
     }
 
-    @Test func problemTranslationAuditRejectsMissingCoverageFields() throws {
+    @Test func problemTranslationAuditRejectsMissingCoverageFields() async throws {
         let payload = Data("""
         {
           "schemaVersion": 1,
@@ -416,15 +411,13 @@ struct XcircuiteProblemTranslationAuditorTests {
         }
     }
 
-    @Test func auditorBlocksUnsupportedGoalAtomsWithoutCandidateEffects() throws {
+    @Test func auditorBlocksUnsupportedGoalAtomsWithoutCandidateEffects() async throws {
         var problem = makePlanningProblem()
         problem.objectives[0].evidence = [
-            "symbolicGoalAtoms": .array([
-                .string("unsupported-analog-improvement-goal"),
-            ]),
+            "symbolicGoalAtoms": .textList(["unsupported-analog-improvement-goal"]),
         ]
 
-        let audit = XcircuiteProblemTranslationAuditor().makeAudit(
+        let audit = try makeAuditor().makeAudit(
             problem: problem,
             problemPath: ".xcircuite/runs/run-audit/planning/problem.json"
         )
@@ -447,7 +440,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         #expect(audit.nextActions.contains("add-candidate-action-effect-for-goal-atom"))
     }
 
-    @Test func auditorBlocksUncoveredIntentClausesWithinCoveredSourceRef() throws {
+    @Test func auditorBlocksUncoveredIntentClausesWithinCoveredSourceRef() async throws {
         var problem = makePlanningProblem()
         problem.sourceRefs[0] = XcircuitePlanningReference(
             refID: "drc-summary",
@@ -455,25 +448,22 @@ struct XcircuiteProblemTranslationAuditorTests {
             path: ".xcircuite/runs/run-audit/stages/drc/raw/drc-summary.json",
             artifactID: "drc-summary",
             metadata: [
-                "intentClauseIDs": .array([
-                    .string("fix-width"),
-                    .string("preserve-lvs"),
-                ]),
+                "intentClauseIDs": .textList(["fix-width", "preserve-lvs"]),
             ]
         )
         var objective = problem.objectives[0]
-        objective.evidence["intentClauseIDs"] = .array([.string("fix-width")])
+        objective.evidence["intentClauseIDs"] = .textList(["fix-width"])
         problem.objectives[0] = objective
         var constraint = problem.constraints[0]
         constraint.evidence = [
-            "intentClauseIDs": .array([.string("fix-width")]),
+            "intentClauseIDs": .textList(["fix-width"]),
         ]
         problem.constraints[0] = constraint
         var action = problem.candidateActions[0]
-        action.parameterHints["intentClauseIDs"] = .array([.string("fix-width")])
+        action.parameterHints["intentClauseIDs"] = .textList(["fix-width"])
         problem.candidateActions[0] = action
 
-        let audit = XcircuiteProblemTranslationAuditor().makeAudit(
+        let audit = try makeAuditor().makeAudit(
             problem: problem,
             problemPath: ".xcircuite/runs/run-audit/planning/problem.json"
         )
@@ -557,13 +547,13 @@ struct XcircuiteProblemTranslationAuditorTests {
                     priority: "error",
                     sourceRefIDs: ["drc-summary"],
                     target: "no-active-violations-for-bucket",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair DRC width violation.",
                     evidence: [
-                        "symbolicGoalAtoms": .array([
-                            .string("rect-shape-created"),
-                            .string("artifact:layout-document"),
+                        "symbolicGoalAtoms": .textList([
+                            "rect-shape-created",
+                            "artifact:layout-document",
                         ]),
                     ]
                 ),
@@ -589,9 +579,9 @@ struct XcircuiteProblemTranslationAuditorTests {
                     requiredInputRefs: ["layout-ref"],
                     verificationGates: ["artifact-integrity", "native-drc"],
                     parameterHints: [
-                        "symbolicEffects": .array([
-                            .string("rect-shape-created"),
-                            .string("artifact:layout-document"),
+                        "symbolicEffects": .textList([
+                            "rect-shape-created",
+                            "artifact:layout-document",
                         ]),
                     ]
                 ),

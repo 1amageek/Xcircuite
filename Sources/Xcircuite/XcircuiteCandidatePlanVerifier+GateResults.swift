@@ -5,13 +5,14 @@ import LayoutIO
 import LVSEngine
 import PEXEngine
 import DesignFlowKernel
+import CircuiteFoundation
 
 extension XcircuiteCandidatePlanVerifier {
     func makeGateResults(
         plan: XcircuiteCandidatePlan,
         stepResults: [XcircuitePlanVerificationStepResult],
         riskReviews: [XcircuitePlanRiskReview],
-        artifactRefs: [XcircuiteFileReference],
+        artifactRefs: [ArtifactReference],
         projectRoot: URL?
     ) -> [XcircuitePlanVerificationGateResult] {
         let gateSpecs = gateSpecifications(plan: plan, stepResults: stepResults, riskReviews: riskReviews)
@@ -60,7 +61,7 @@ extension XcircuiteCandidatePlanVerifier {
         sourceStepIDs: [String],
         stepResults: [XcircuitePlanVerificationStepResult],
         riskReviews: [XcircuitePlanRiskReview],
-        artifactRefs: [XcircuiteFileReference],
+        artifactRefs: [ArtifactReference],
         projectRoot: URL?
     ) -> XcircuitePlanVerificationGateResult {
         if stepResults.contains(where: { $0.status == "blocked" && $0.gateIDs.contains(gateID) }) {
@@ -177,7 +178,7 @@ extension XcircuiteCandidatePlanVerifier {
         gateID: String,
         required: Bool,
         sourceStepIDs: [String],
-        artifactRefs: [XcircuiteFileReference],
+        artifactRefs: [ArtifactReference],
         projectRoot: URL?
     ) -> XcircuitePlanVerificationGateResult {
         guard let projectRoot else {
@@ -214,8 +215,8 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         let diagnostics = artifactRefs.compactMap { artifact -> XcircuitePlanVerificationDiagnostic? in
-            let integrity = fileReferenceVerifier.verify(artifact, projectRoot: projectRoot)
-            guard integrity.status != .verified else {
+            let integrity = makeArtifactReferenceVerifier.verify(artifact, relativeTo: projectRoot)
+            guard !integrity.isVerified else {
                 return nil
             }
             return artifactIntegrityDiagnostic(
@@ -243,37 +244,40 @@ extension XcircuiteCandidatePlanVerifier {
 
     func artifactIntegrityDiagnostic(
         gateID: String,
-        artifact: XcircuiteFileReference,
-        integrity: XcircuiteFileReferenceIntegrity
+        artifact: ArtifactReference,
+        integrity: ArtifactIntegrity
     ) -> XcircuitePlanVerificationDiagnostic {
+        let status = integrity.flowVerificationStatus
         var messageParts = [
             "Artifact integrity verification failed.",
-            "artifactID=\(artifact.artifactID ?? artifact.path)",
+            "artifactID=\(artifact.artifactID)",
             "path=\(artifact.path)",
-            "status=\(integrity.status.rawValue)",
-            integrity.message,
+            "status=\(status.rawValue)",
+            integrity.diagnosticMessage,
         ]
-        if let expectedByteCount = integrity.expectedByteCount {
-            messageParts.append("expectedByteCount=\(expectedByteCount)")
-        }
-        if let actualByteCount = integrity.actualByteCount {
-            messageParts.append("actualByteCount=\(actualByteCount)")
-        }
-        if let expectedSHA256 = integrity.expectedSHA256 {
-            messageParts.append("expectedSHA256=\(expectedSHA256)")
-        }
-        if let actualSHA256 = integrity.actualSHA256 {
-            messageParts.append("actualSHA256=\(actualSHA256)")
+        for issue in integrity.issues {
+            if let expectedByteCount = issue.expectedByteCount {
+                messageParts.append("expectedByteCount=\(expectedByteCount)")
+            }
+            if let actualByteCount = issue.actualByteCount {
+                messageParts.append("actualByteCount=\(actualByteCount)")
+            }
+            if let expectedDigest = issue.expectedDigest {
+                messageParts.append("expectedDigest=\(expectedDigest.hexadecimalValue)")
+            }
+            if let actualDigest = issue.actualDigest {
+                messageParts.append("actualDigest=\(actualDigest.hexadecimalValue)")
+            }
         }
         return XcircuitePlanVerificationDiagnostic(
             severity: "error",
-            code: artifactIntegrityDiagnosticCode(for: integrity.status),
+            code: artifactIntegrityDiagnosticCode(for: status),
             message: messageParts.joined(separator: " "),
             gateID: gateID
         )
     }
 
-    func artifactIntegrityDiagnosticCode(for status: XcircuiteFileReferenceIntegrityStatus) -> String {
+    func artifactIntegrityDiagnosticCode(for status: FlowArtifactVerificationStatus) -> String {
         switch status {
         case .verified:
             "artifact-integrity-verified"
@@ -343,18 +347,18 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "native-drc")
-            try workspaceStore.ensureDirectory(at: verificationDirectory)
-            let layoutURL = try workspaceStore.url(forProjectRelativePath: layoutRef.path, inProjectAt: projectRoot)
+            try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
+            let layoutURL = try projectURL(for: layoutRef.path, projectRoot: projectRoot)
             let documentData = try Data(contentsOf: layoutURL)
             let document = try layoutDocumentSerializer.decodeDocument(documentData)
             let drcLayout = try nativeDRCLayout(from: document, spec: spec)
             let drcLayoutURL = verificationDirectory.appending(path: "drc-layout.json")
-            try workspaceStore.writeJSON(drcLayout, to: drcLayoutURL, forProjectAt: projectRoot)
+            try await writeWorkspaceJSON(drcLayout, to: drcLayoutURL, projectRoot: projectRoot)
 
             let executionResult = try await DefaultDRCEngine(backend: nil).run(DRCRequest(
                 layoutURL: drcLayoutURL,
@@ -363,24 +367,17 @@ extension XcircuiteCandidatePlanVerifier {
                 backendSelection: DRCBackendSelection(backendID: "native")
             ))
             let summaryURL = verificationDirectory.appending(path: "drc-summary.json")
-            try workspaceStore.writeJSON(
+            try await writeWorkspaceJSON(
                 DRCRunSummaryBuilder().build(result: executionResult),
                 to: summaryURL,
-                forProjectAt: projectRoot
+                projectRoot: projectRoot
             )
-            let artifacts = try nativeDRCArtifactReferences(
+            let artifacts = try await retainRunArtifacts(nativeDRCArtifactReferences(
                 drcLayoutURL: drcLayoutURL,
                 summaryURL: summaryURL,
                 executionResult: executionResult,
                 projectRoot: projectRoot
-            )
-            for artifact in artifacts {
-                try workspaceStore.upsertRunArtifact(
-                    legacyArtifactReferenceWithProvenance(artifact, producedByRunID: plan.runID),
-                    runID: plan.runID,
-                    inProjectAt: projectRoot
-                )
-            }
+            ), runID: plan.runID, projectRoot: projectRoot)
             let diagnostics = executionResult.result.diagnostics.map { diagnostic in
                 XcircuitePlanVerificationDiagnostic(
                     severity: diagnostic.severity.rawValue,
@@ -445,7 +442,7 @@ extension XcircuiteCandidatePlanVerifier {
         sourceStepIDs: [String],
         plan: XcircuiteCandidatePlan,
         execution: XcircuiteCandidatePlanExecution,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
         guard let problem = try sourcePlanningProblem(
@@ -498,12 +495,12 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "native-lvs")
-            try workspaceStore.ensureDirectory(at: verificationDirectory)
+            try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
             let executionResult = try await DefaultLVSEngine(
                 backend: nil,
                 layoutNetlistExtractor: nil
@@ -541,23 +538,16 @@ extension XcircuiteCandidatePlanVerifier {
                 backendSelection: LVSBackendSelection(backendID: executionSpec.backendID)
             ))
             let summaryURL = verificationDirectory.appending(path: "lvs-summary.json")
-            try workspaceStore.writeJSON(
+            try await writeWorkspaceJSON(
                 LVSRunSummaryBuilder().build(result: executionResult),
                 to: summaryURL,
-                forProjectAt: projectRoot
+                projectRoot: projectRoot
             )
-            let artifacts = try nativeLVSArtifactReferences(
+            let artifacts = try await retainRunArtifacts(nativeLVSArtifactReferences(
                 summaryURL: summaryURL,
                 executionResult: executionResult,
                 projectRoot: projectRoot
-            )
-            for artifact in artifacts {
-                try workspaceStore.upsertRunArtifact(
-                    legacyArtifactReferenceWithProvenance(artifact, producedByRunID: plan.runID),
-                    runID: plan.runID,
-                    inProjectAt: projectRoot
-                )
-            }
+            ), runID: plan.runID, projectRoot: projectRoot)
             let diagnostics = executionResult.result.diagnostics.map { diagnostic in
                 XcircuitePlanVerificationDiagnostic(
                     severity: diagnostic.severity.rawValue,
@@ -680,14 +670,11 @@ extension XcircuiteCandidatePlanVerifier {
         for stepResult in stepResults where sourceStepIDSet.isEmpty || sourceStepIDSet.contains(stepResult.stepID) {
             guard let step = stepsByID[stepResult.stepID],
                   stringHint("lvsEditedNetlistRole", step: step)?.lowercased() == role,
-                  let reference = legacyArtifactReferences(stepResult.artifactReferences)
+                  let reference = stepResult.artifactReferences
                       .first(where: isEditedNetlistArtifact) else {
                 continue
             }
-            return planningReference(
-                from: reference,
-                fallbackRefID: "\(stepResult.stepID)-edited-\(role)-netlist"
-            )
+            return planningReference(from: reference)
         }
         return nil
     }
@@ -718,7 +705,7 @@ extension XcircuiteCandidatePlanVerifier {
         sourceStepIDs: [String],
         plan: XcircuiteCandidatePlan,
         execution: XcircuiteCandidatePlanExecution,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
         guard let problem = try sourcePlanningProblem(
@@ -746,12 +733,12 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "simulation-metric")
-            try workspaceStore.ensureDirectory(at: verificationDirectory)
+            try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
 
             if !spec.expectations.isEmpty, let netlistRef = spec.netlistRef {
                 let executionNetlistRef = editedNetlistReference(
@@ -771,7 +758,7 @@ extension XcircuiteCandidatePlanVerifier {
             }
 
             if let metricReportRef = spec.metricReportRef {
-                return try evaluatePostLayoutMetricReportGate(
+                return try await evaluatePostLayoutMetricReportGate(
                     required: required,
                     sourceStepIDs: sourceStepIDs,
                     metricReportRef: metricReportRef,
@@ -816,23 +803,23 @@ extension XcircuiteCandidatePlanVerifier {
         let sourceStepIDSet = Set(sourceStepIDs)
         let stepResults = execution.stepResults.sorted { $0.order < $1.order }
         for stepResult in stepResults where sourceStepIDSet.isEmpty || sourceStepIDSet.contains(stepResult.stepID) {
-            if let reference = legacyArtifactReferences(stepResult.artifactReferences)
+            if let reference = stepResult.artifactReferences
                 .first(where: isEditedNetlistArtifact) {
-                return planningReference(from: reference, fallbackRefID: "\(stepResult.stepID)-edited-netlist")
+                return planningReference(from: reference)
             }
         }
-        if let reference = legacyArtifactReferences(execution.artifactReferences)
+        if let reference = execution.artifactReferences
             .first(where: isEditedNetlistArtifact) {
-            return planningReference(from: reference, fallbackRefID: "execution-edited-netlist")
+            return planningReference(from: reference)
         }
         return nil
     }
 
-    func isEditedNetlistArtifact(_ reference: XcircuiteFileReference) -> Bool {
+    func isEditedNetlistArtifact(_ reference: ArtifactReference) -> Bool {
         guard reference.kind == .netlist else {
             return false
         }
-        return reference.artifactID?.contains("edited-netlist") == true
+        return reference.artifactID.contains("edited-netlist")
     }
 
     func postExecutionStandardLayoutReference(
@@ -845,8 +832,8 @@ extension XcircuiteCandidatePlanVerifier {
         let stepArtifactRefs = execution.stepResults
             .sorted { $0.order > $1.order }
             .filter { sourceStepIDSet.isEmpty || sourceStepIDSet.contains($0.stepID) }
-            .flatMap { legacyArtifactReferences($0.artifactReferences) }
-        let executionArtifactRefs = Array(legacyArtifactReferences(execution.artifactReferences).reversed())
+            .flatMap { $0.artifactReferences }
+        let executionArtifactRefs = Array(execution.artifactReferences.reversed())
         let artifactRefs = stepArtifactRefs + executionArtifactRefs
         if let explicitArtifactID,
            let reference = artifactRefs.first(where: {
@@ -855,7 +842,6 @@ extension XcircuiteCandidatePlanVerifier {
            }) {
             return planningReference(
                 from: reference,
-                fallbackRefID: explicitArtifactID,
                 kind: standardLayoutPlanningKind(for: reference)
             )
         }
@@ -866,7 +852,6 @@ extension XcircuiteCandidatePlanVerifier {
         }
         return planningReference(
             from: reference,
-            fallbackRefID: "execution-standard-layout",
             kind: standardLayoutPlanningKind(for: reference)
         )
     }
@@ -884,7 +869,6 @@ extension XcircuiteCandidatePlanVerifier {
         }
         return planningReference(
             from: reference,
-            fallbackRefID: "execution-model-equivalence-policy",
             kind: "model-equivalence"
         )
     }
@@ -902,7 +886,6 @@ extension XcircuiteCandidatePlanVerifier {
         }
         return planningReference(
             from: reference,
-            fallbackRefID: "execution-terminal-equivalence-policy",
             kind: "terminal-equivalence"
         )
     }
@@ -910,19 +893,19 @@ extension XcircuiteCandidatePlanVerifier {
     func postExecutionArtifactReference(
         from execution: XcircuiteCandidatePlanExecution,
         sourceStepIDs: [String],
-        matching predicate: (XcircuiteFileReference) -> Bool
-    ) -> XcircuiteFileReference? {
+        matching predicate: (ArtifactReference) -> Bool
+    ) -> ArtifactReference? {
         let sourceStepIDSet = Set(sourceStepIDs)
         let stepArtifactRefs = execution.stepResults
             .sorted { $0.order > $1.order }
             .filter { sourceStepIDSet.isEmpty || sourceStepIDSet.contains($0.stepID) }
-            .flatMap { legacyArtifactReferences($0.artifactReferences) }
-        let executionArtifactRefs = Array(legacyArtifactReferences(execution.artifactReferences).reversed())
+            .flatMap { $0.artifactReferences }
+        let executionArtifactRefs = Array(execution.artifactReferences.reversed())
         return (stepArtifactRefs + executionArtifactRefs).first(where: predicate)
     }
 
     func isStandardLayoutArtifact(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         supportedFormats: StandardLayoutSupport
     ) -> Bool {
         guard reference.kind == .layout else {
@@ -936,27 +919,27 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func isModelEquivalencePolicyArtifact(_ reference: XcircuiteFileReference) -> Bool {
+    func isModelEquivalencePolicyArtifact(_ reference: ArtifactReference) -> Bool {
         guard reference.format == .json else {
             return false
         }
-        let artifactID = reference.artifactID?.lowercased() ?? ""
+        let artifactID = reference.artifactID.lowercased()
         let path = reference.path.lowercased()
         return artifactID.contains("model-equivalence-policy")
             || path.hasSuffix("model-equivalence-policy.json")
     }
 
-    func isTerminalEquivalencePolicyArtifact(_ reference: XcircuiteFileReference) -> Bool {
+    func isTerminalEquivalencePolicyArtifact(_ reference: ArtifactReference) -> Bool {
         guard reference.format == .json else {
             return false
         }
-        let artifactID = reference.artifactID?.lowercased() ?? ""
+        let artifactID = reference.artifactID.lowercased()
         let path = reference.path.lowercased()
         return artifactID.contains("terminal-equivalence-policy")
             || path.hasSuffix("terminal-equivalence-policy.json")
     }
 
-    func standardLayoutPlanningKind(for reference: XcircuiteFileReference) -> String {
+    func standardLayoutPlanningKind(for reference: ArtifactReference) -> String {
         switch reference.format {
         case .gdsii:
             return "layout-gds"
@@ -967,11 +950,11 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func standardLayoutPathExtension(for reference: XcircuiteFileReference) -> String? {
+    func standardLayoutPathExtension(for reference: ArtifactReference) -> String? {
         reference.path.split(separator: ".").last.map { String($0).lowercased() }
     }
 
-    func lvsLayoutFormatForArtifact(_ reference: XcircuiteFileReference) -> LVSLayoutFormat? {
+    func lvsLayoutFormatForArtifact(_ reference: ArtifactReference) -> LVSLayoutFormat? {
         switch reference.format {
         case .gdsii:
             return .gds
@@ -994,7 +977,7 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func pexLayoutFormatForArtifact(_ reference: XcircuiteFileReference) -> LayoutFormat? {
+    func pexLayoutFormatForArtifact(_ reference: ArtifactReference) -> LayoutFormat? {
         switch reference.format {
         case .gdsii:
             return .gds
@@ -1014,12 +997,11 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     func planningReference(
-        from reference: XcircuiteFileReference,
-        fallbackRefID: String,
+        from reference: ArtifactReference,
         kind: String = "edited-netlist"
     ) -> XcircuitePlanningReference {
         XcircuitePlanningReference(
-            refID: reference.artifactID ?? fallbackRefID,
+            refID: reference.artifactID,
             kind: kind,
             path: reference.path,
             artifactID: reference.artifactID

@@ -10,15 +10,15 @@ struct XcircuiteDRCRepairLoopTests {
     @Test func repairHintArtifactDrivesCLIPlanningAndVerifiedNotchRepair() async throws {
         let root = try makeTemporaryRoot("repair-hint-artifact-cli-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let runID = "run-hint-notch"
         let layoutPath = "layout/notch-layout.json"
         let layoutNetlistPath = "circuits/layout.spice"
         let schematicNetlistPath = "circuits/schematic.spice"
         let summaryPath = ".xcircuite/runs/\(runID)/stages/native-drc/drc-summary.json"
         let repairHintPath = ".xcircuite/runs/\(runID)/stages/native-drc/drc-repair-hints.json"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         try writeNotchLayoutDocument(path: layoutPath, root: root)
         try writeMatchingLVSNetlists(
             layoutPath: layoutNetlistPath,
@@ -33,7 +33,7 @@ struct XcircuiteDRCRepairLoopTests {
         )
         let summary = DRCRunSummaryBuilder().build(result: executionResult)
         let repairHints = DRCRepairHintBuilder().build(result: executionResult)
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             summary,
             artifactID: "drc-summary",
             path: summaryPath,
@@ -42,7 +42,7 @@ struct XcircuiteDRCRepairLoopTests {
             root: root,
             runID: runID
         )
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             repairHints,
             artifactID: "drc-repair-hints",
             path: repairHintPath,
@@ -51,7 +51,7 @@ struct XcircuiteDRCRepairLoopTests {
             root: root,
             runID: runID
         )
-        try registerExistingArtifact(
+        try await registerExistingArtifact(
             artifactID: "layout-document",
             path: layoutPath,
             kind: .layout,
@@ -88,16 +88,16 @@ struct XcircuiteDRCRepairLoopTests {
         #expect(generation.summaryPath == summaryPath)
         #expect(generation.repairHintPath == repairHintPath)
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: generation.problemArtifact.path)
+            from: generation.problemArtifact.path
         )
         #expect(problem.sourceRefs.contains {
             $0.refID == "drc-repair-hints" && $0.path == repairHintPath
         })
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("drc.export-repair-hints"))
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("drc.export-repair-hints"))
         #expect(problem.candidateActions.map(\.operationID) == ["layout.add-rect"])
-        #expect(problem.candidateActions.first?.parameterHints["sourceRepairHintID"] == .string("drc-repair-0-M1-notch"))
+        #expect(problem.candidateActions.first?.parameterHints["sourceRepairHintID"] == .text("drc-repair-0-M1-notch"))
 
         let candidateJSON = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -150,9 +150,9 @@ struct XcircuiteDRCRepairLoopTests {
         #expect(verification.status == "accepted")
         #expect(verification.accepted)
 
-        let verificationDocument = try store.readJSON(
+        let verificationDocument = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verification.planVerificationArtifact.path)
+            from: verification.planVerificationArtifact.path
         )
         #expect(verificationDocument.gateResults.contains { $0.gateID == "native-drc" && $0.status == "passed" })
         #expect(verificationDocument.gateResults.contains { $0.gateID == "native-lvs" && $0.status == "passed" })
@@ -167,13 +167,14 @@ struct XcircuiteDRCRepairLoopTests {
     @Test func notchRepairPlanFromDiagnosticFillsRegionAndPassesNativeDRC() async throws {
         let root = try makeTemporaryRoot("notch-diagnostic-repair-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         let runID = "run-notch"
         let layoutPath = "layout/notch-layout.json"
         let layoutNetlistPath = "circuits/layout.spice"
         let schematicNetlistPath = "circuits/schematic.spice"
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
         try writeNotchLayoutDocument(path: layoutPath, root: root)
         try writeMatchingLVSNetlists(
             layoutPath: layoutNetlistPath,
@@ -189,34 +190,40 @@ struct XcircuiteDRCRepairLoopTests {
             layoutNetlistPath: layoutNetlistPath,
             schematicNetlistPath: schematicNetlistPath
         )
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await artifactStore.persistPlanningProblem(
             problem,
             runID: runID,
             projectRoot: root
         )
 
-        let generation = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        let generation = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: runID),
             projectRoot: root
         )
         #expect(generation.executionReadiness == "ready")
-        let generatedPlan = try store.readJSON(
+        let generatedPlan = try await store.readJSON(
             XcircuiteCandidatePlan.self,
-            from: root.appending(path: generation.candidatePlanArtifact.path)
+            from: generation.candidatePlanArtifact.path
         )
         let step = try #require(generatedPlan.steps.first)
         #expect(step.operationID == "layout.add-rect")
         #expect(step.requiredInputRefs == ["layout-ref"])
         #expect(step.parameterHints["inputDocumentPath"] == nil)
-        #expect(step.parameterHints["originX"] == .number(1.0))
-        #expect(step.parameterHints["originY"] == .number(0.0))
-        #expect(step.parameterHints["width"] == .number(0.2))
-        #expect(step.parameterHints["height"] == .number(2.0))
+        #expect(step.parameterHints["originX"] == .scalar(1.0))
+        #expect(step.parameterHints["originY"] == .scalar(0.0))
+        #expect(step.parameterHints["width"] == .scalar(0.2))
+        #expect(step.parameterHints["height"] == .scalar(2.0))
         #expect(step.parameterHints["shapeID"] == nil)
         #expect(step.parameterHints["drcRules"] != nil)
         #expect(step.parameterHints["lvsInputs"] != nil)
 
-        let execution = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let execution = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
             projectRoot: root
         )
@@ -230,16 +237,19 @@ struct XcircuiteDRCRepairLoopTests {
         )
         #expect(finalLayoutText.contains("10000000-0000-0000-0000-00000000000D"))
 
-        let verification = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let verification = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: runID,
                 verificationMode: "post-execution"
             ),
             projectRoot: root
         )
-        let verificationDocument = try store.readJSON(
+        let verificationDocument = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: verification.planVerificationArtifact.path)
+            from: verification.planVerificationArtifact.path
         )
         #expect(verificationDocument.gateResults.contains { $0.gateID == "native-drc" && $0.status == "passed" })
         #expect(verificationDocument.artifactRefs.contains { $0.artifactID == "planning-native-drc-summary" })
@@ -257,16 +267,23 @@ struct XcircuiteDRCRepairLoopTests {
     @Test func closedDRCRepairLoopRejectsFailingCandidateAndAcceptsRepairedLayout() async throws {
         let root = try makeTemporaryRoot("closed-drc-repair-loop")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try prepareRun(root: root, runID: "run-1")
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareRun(root: root, runID: "run-1")
 
-        try persistCandidatePlan(makeDRCPlan(runID: "run-1", planID: "run-1-drc-width-failing-plan", width: 0.5), root: root)
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        try await persistCandidatePlan(makeDRCPlan(runID: "run-1", planID: "run-1-drc-width-failing-plan", width: 0.5), root: root)
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-1"),
             projectRoot: root
         )
 
-        let rejected = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let rejected = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-1",
                 verificationMode: "post-execution"
@@ -277,9 +294,9 @@ struct XcircuiteDRCRepairLoopTests {
         #expect(rejected.status == "rejected")
         #expect(rejected.accepted == false)
         #expect(rejected.nextActions.contains("repair-verification-gate:native-drc"))
-        let rejectedVerification = try store.readJSON(
+        let rejectedVerification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: rejected.planVerificationArtifact.path)
+            from: rejected.planVerificationArtifact.path
         )
         #expect(rejectedVerification.gateResults.contains { $0.gateID == "native-drc" && $0.status == "failed" })
         #expect(rejectedVerification.diagnostics.contains { $0.code == "M1.width" })
@@ -294,13 +311,19 @@ struct XcircuiteDRCRepairLoopTests {
         #expect(rejectedRecord.failedGateIDs.contains("native-drc"))
         #expect(rejectedRecord.diagnostics.contains { $0.code == "M1.width" })
 
-        try persistCandidatePlan(makeDRCPlan(runID: "run-1", planID: "run-1-drc-width-repaired-plan", width: 2.0), root: root)
-        _ = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        try await persistCandidatePlan(makeDRCPlan(runID: "run-1", planID: "run-1-drc-width-repaired-plan", width: 2.0), root: root)
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-1"),
             projectRoot: root
         )
 
-        let accepted = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let accepted = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(
                 runID: "run-1",
                 verificationMode: "post-execution"
@@ -311,9 +334,9 @@ struct XcircuiteDRCRepairLoopTests {
         #expect(accepted.status == "accepted")
         #expect(accepted.accepted)
         #expect(accepted.nextActions.isEmpty)
-        let acceptedVerification = try store.readJSON(
+        let acceptedVerification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: accepted.planVerificationArtifact.path)
+            from: accepted.planVerificationArtifact.path
         )
         #expect(acceptedVerification.gateResults.contains { $0.gateID == "native-drc" && $0.status == "passed" })
         #expect(acceptedVerification.artifactRefs.contains { $0.artifactID == "planning-native-drc-summary" })
@@ -326,24 +349,21 @@ struct XcircuiteDRCRepairLoopTests {
         #expect(rejectedRecordsAfterRepair.count == 1)
         #expect(rejectedRecordsAfterRepair.first?.planID == "run-1-drc-width-failing-plan")
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
-        #expect(manifest.artifacts.contains { $0.artifactID == "planning-native-drc-summary" })
-        #expect(manifest.artifacts.contains { $0.artifactID == "planning-native-drc-layout" })
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "planning-native-drc-summary" })
+        #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "planning-native-drc-layout" })
         #expect(FileManager.default.fileExists(
             atPath: root.appending(path: ".xcircuite/runs/run-1/design-diff.json").path(percentEncoded: false)
         ))
-        let action = try #require(store.loadRunActions(runID: "run-1", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-1")).last)
         #expect(action.status == .succeeded)
     }
 
-    private func prepareRun(root: URL, runID: String) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+    private func prepareRun(root: URL, runID: String) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             makeDRCProblem(runID: runID),
             runID: runID,
             projectRoot: root
@@ -364,8 +384,8 @@ struct XcircuiteDRCRepairLoopTests {
                     priority: "error",
                     sourceRefIDs: [],
                     target: "no-active-width-violations",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair the M1 minimum-width violation."
                 ),
             ],
@@ -435,21 +455,21 @@ struct XcircuiteDRCRepairLoopTests {
                     verificationGates: ["artifact-integrity", "native-drc"],
                     reason: "Materialize the candidate M1 rectangle and verify the width rule.",
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000010001"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000010003"),
-                        "cellName": .string("top"),
-                        "layer": .string("M1"),
-                        "originX": .number(0),
-                        "originY": .number(0),
-                        "width": .number(width),
-                        "height": .number(1),
-                        "drcRules": .array([
-                            .object([
-                                "id": .string("M1.width"),
-                                "kind": .string("minimumWidth"),
-                                "layer": .string("M1"),
-                                "value": .number(1.0),
-                            ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000010001"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000010003"),
+                        "cellName": .text("top"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(0),
+                        "originY": .scalar(0),
+                        "width": .scalar(width),
+                        "height": .scalar(1),
+                        "drcRules": .drcRules([
+                            PlanningDRCRule(
+                                ruleID: "M1.width",
+                                kind: "minimumWidth",
+                                layer: "M1",
+                                requiredValue: 1
+                            ),
                         ]),
                     ],
                     blockers: []
@@ -569,7 +589,7 @@ struct XcircuiteDRCRepairLoopTests {
           "id" : "10000000-0000-0000-0000-000000000200",
           "name" : "notch-layout",
           "topCellID" : "10000000-0000-0000-0000-000000000201",
-          "units" : { "dbuPerMicron" : 1000 }
+          "units" : { "scale" : 1000 }
         }
         """
         try text.write(to: url, atomically: true, encoding: .utf8)
@@ -599,8 +619,9 @@ struct XcircuiteDRCRepairLoopTests {
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private func persistCandidatePlan(_ plan: XcircuiteCandidatePlan, root: URL) throws {
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+    private func persistCandidatePlan(_ plan: XcircuiteCandidatePlan, root: URL) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistCandidatePlan(
             plan,
             runID: plan.runID,
             projectRoot: root
@@ -612,10 +633,7 @@ struct XcircuiteDRCRepairLoopTests {
         layoutPath: String,
         root: URL
     ) throws -> DRCExecutionResult {
-        let layoutURL = try XcircuiteWorkspaceStore().url(
-            forProjectRelativePath: layoutPath,
-            inProjectAt: root
-        )
+        let layoutURL = root.appending(path: layoutPath)
         return DRCExecutionResult(
             request: DRCRequest(
                 layoutURL: layoutURL,
@@ -657,19 +675,21 @@ struct XcircuiteDRCRepairLoopTests {
         _ value: T,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
         root: URL,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
+    ) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try store.writeJSON(value, to: url, forProjectAt: root)
-        try registerExistingArtifact(
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(value).write(to: url, options: .atomic)
+        try await registerExistingArtifact(
             artifactID: artifactID,
             path: path,
             kind: kind,
@@ -682,21 +702,19 @@ struct XcircuiteDRCRepairLoopTests {
     private func registerExistingArtifact(
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
         root: URL,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let reference = try store.fileReference(
+    ) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let reference = try await store.makeArtifactReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: kind,
             format: format,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(reference, runID: runID, store: store, projectRoot: root)
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

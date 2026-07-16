@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import PEXEngine
 import Testing
 import Xcircuite
@@ -10,11 +11,11 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemCLIPersistsValidationArtifact() async throws {
         let root = try makeTemporaryRoot("planning-problem-validation-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-validate", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-validate", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         let problem = makePlanningProblem(includeSymbolicGoals: true)
-        let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let problemRef = try await artifactStore.persistPlanningProblem(
             problem,
             runID: "run-validate",
             projectRoot: root
@@ -58,16 +59,13 @@ struct XcircuitePlanningProblemValidatorTests {
         #expect(actionDomainArtifact.id.rawValue == XcircuitePlanningArtifactStore.actionDomainArtifactID)
         #expect(result.validation.actionDomainSnapshotPath == actionDomainArtifact.locator.location.value)
 
-        let persisted = try store.readJSON(
+        let persisted = try await store.readJSON(
             XcircuitePlanningProblemValidation.self,
-            from: root.appending(path: result.validationArtifact.locator.location.value)
+            from: result.validationArtifact.locator.location.value
         )
         #expect(persisted == result.validation)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-validate/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-validate").runManifest
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID
                 && $0.path == result.validationArtifact.locator.location.value
@@ -82,13 +80,17 @@ struct XcircuitePlanningProblemValidatorTests {
         })
     }
 
-    @Test func validatePlanningProblemRejectsStaleProblemArtifact() throws {
+    @Test func validatePlanningProblemRejectsStaleProblemArtifact() async throws {
         let root = try makeTemporaryRoot("planning-problem-validation-stale-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-validate", inProjectAt: root)
-        let problemRef = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-validate", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        let validator = XcircuitePlanningProblemValidator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        )
+        let problemRef = try await artifactStore.persistPlanningProblem(
             makePlanningProblem(includeSymbolicGoals: true),
             runID: "run-validate",
             projectRoot: root
@@ -98,7 +100,7 @@ struct XcircuitePlanningProblemValidatorTests {
         try "\(original)\n".write(to: problemURL, atomically: true, encoding: .utf8)
 
         do {
-            _ = try XcircuitePlanningProblemValidator().validatePlanningProblem(
+            _ = try await validator.validatePlanningProblem(
                 request: XcircuitePlanningProblemValidationRequest(runID: "run-validate"),
                 projectRoot: root
             )
@@ -116,12 +118,12 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemRecordsBlockingTranslationAuditGate() async throws {
         let root = try makeTemporaryRoot("planning-problem-validation-audit-block")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-validate", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-validate", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         var problem = makePlanningProblem(includeSymbolicGoals: true)
         problem.objectives[0].sourceRefIDs = []
-        _ = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        _ = try await artifactStore.persistPlanningProblem(
             problem,
             runID: "run-validate",
             projectRoot: root
@@ -145,9 +147,9 @@ struct XcircuitePlanningProblemValidatorTests {
             $0.severity == "error" && $0.code == "problem-translation-audit-blocking"
         })
         let auditArtifact = try #require(result.problemTranslationAuditArtifact)
-        let audit = try store.readJSON(
+        let audit = try await store.readJSON(
             XcircuiteProblemTranslationAudit.self,
-            from: root.appending(path: auditArtifact.path)
+            from: auditArtifact.path
         )
         #expect(audit.blocking == true)
         #expect(audit.diagnostics.contains { $0.code == "orphan-objective" })
@@ -156,48 +158,49 @@ struct XcircuitePlanningProblemValidatorTests {
     @Test func validatePlanningProblemCLIAcceptsGeneratedPEXMetricRecoveryProblem() async throws {
         let root = try makeTemporaryRoot("pex-metric-recovery-validation-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-pex", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-pex", store: store)
         let summaryPath = ".xcircuite/runs/run-pex/stages/009-pex/raw/pex-summary.json"
         let layoutPath = ".xcircuite/runs/run-pex/stages/006-layout/raw/layout.gds"
         let technologyPath = "tech/pex-technology.json"
         let metricReportPath = "reports/post-layout-metrics.json"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makePEXSummary(),
             artifactID: "pex-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            workspaceStore: store,
             runID: "run-pex"
         )
-        try registerDataArtifact(
+        try await registerDataArtifact(
             Data("GDS payload\n".utf8),
             artifactID: "layout-gds",
             path: layoutPath,
             kind: .layout,
             format: .gdsii,
-            root: root,
+            workspaceStore: store,
             runID: "run-pex"
         )
-        try registerDataArtifact(
+        try await registerDataArtifact(
             Data(#"{"processName":"test_process","stack":[],"logicalToPhysicalLayerMap":{},"vias":[],"defaultExtractionRules":{"reductionPolicy":"none"},"backendHints":{}}"#.utf8),
             artifactID: "pex-technology",
             path: technologyPath,
             kind: .technology,
             format: .json,
-            root: root,
+            workspaceStore: store,
             runID: "run-pex"
         )
+        let metricReportURL = root.appending(path: metricReportPath)
         try FileManager.default.createDirectory(
-            at: root.appending(path: "reports"),
+            at: metricReportURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try store.writeJSON(
-            makePostLayoutMetricReport(),
-            to: root.appending(path: metricReportPath),
-            forProjectAt: root
+        let metricEncoder = JSONEncoder()
+        metricEncoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try metricEncoder.encode(makePostLayoutMetricReport()).write(
+            to: metricReportURL,
+            options: .atomic
         )
 
         let generationJSON = try await XcircuiteFlowCLICommand.run(
@@ -224,9 +227,9 @@ struct XcircuitePlanningProblemValidatorTests {
             XcircuitePlanningProblemGenerationResult.self,
             from: generationData
         )
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: generation.problemArtifact.path)
+            from: generation.problemArtifact.path
         )
         let actionDomainRef = try #require(problem.initialStateRefs.first {
             $0.refID == "action-domain-snapshot"
@@ -271,9 +274,9 @@ struct XcircuitePlanningProblemValidatorTests {
 
         let actionDomainArtifact = try #require(result.actionDomainSnapshotArtifact)
         #expect(actionDomainArtifact.locator.location.value == actionDomainRef.path)
-        let snapshot = try store.readJSON(
+        let snapshot = try await store.readJSON(
             XcircuitePlanningActionDomainSnapshot.self,
-            from: root.appending(path: actionDomainArtifact.locator.location.value)
+            from: actionDomainArtifact.locator.location.value
         )
         let pexDomain = try #require(snapshot.domains.first { $0.domainID == "pex-extraction" })
         #expect(pexDomain.ownerPackages.contains("PEXEngine"))
@@ -287,29 +290,26 @@ struct XcircuitePlanningProblemValidatorTests {
         #expect(pexRecoveryOperation.verificationGates.contains("simulation-metric-gate"))
 
         let auditArtifact = try #require(result.problemTranslationAuditArtifact)
-        let audit = try store.readJSON(
+        let audit = try await store.readJSON(
             XcircuiteProblemTranslationAudit.self,
-            from: root.appending(path: auditArtifact.path)
+            from: auditArtifact.path
         )
         #expect(audit.blocking == false)
         #expect(audit.nextActions == ["validate-planning-problem"])
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-pex/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-pex").runManifest
         #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.problemArtifactID })
         #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID })
         #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID })
         #expect(manifest.artifacts.contains { $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID })
     }
 
-    @Test func validatorRejectsObjectiveWithoutSymbolicGoalAtoms() throws {
+    @Test func validatorRejectsObjectiveWithoutSymbolicGoalAtoms() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-validate",
             generatedAt: "2026-06-21T00:00:00Z"
         )
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: makePlanningProblem(includeSymbolicGoals: false),
             problemPath: ".xcircuite/runs/run-validate/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -323,7 +323,7 @@ struct XcircuitePlanningProblemValidatorTests {
         })
     }
 
-    @Test func validatorReportsMissingActionDomainAndInputRefs() throws {
+    @Test func validatorReportsMissingActionDomainAndInputRefs() async throws {
         let snapshot = XcircuitePlanningActionDomainSnapshot(
             runID: "run-validate",
             generatedAt: "2026-06-21T00:00:00Z",
@@ -332,7 +332,7 @@ struct XcircuitePlanningProblemValidatorTests {
         var problem = makePlanningProblem(includeSymbolicGoals: true)
         problem.candidateActions[0].requiredInputRefs = ["missing-layout-ref"]
 
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: problem,
             problemPath: ".xcircuite/runs/run-validate/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -352,7 +352,7 @@ struct XcircuitePlanningProblemValidatorTests {
         })
     }
 
-    @Test func validatorRejectsCandidateActionWithUndeclaredVerificationGate() throws {
+    @Test func validatorRejectsCandidateActionWithUndeclaredVerificationGate() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-validate",
             generatedAt: "2026-06-21T00:00:00Z"
@@ -360,7 +360,7 @@ struct XcircuitePlanningProblemValidatorTests {
         var problem = makePlanningProblem(includeSymbolicGoals: true)
         problem.candidateActions[0].verificationGates = ["native-drc", "missing-signoff-gate"]
 
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: problem,
             problemPath: ".xcircuite/runs/run-validate/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -375,7 +375,7 @@ struct XcircuitePlanningProblemValidatorTests {
         })
     }
 
-    @Test func validatorRejectsUnresolvedRequiredAssumptionAndHighRiskWithoutApproval() throws {
+    @Test func validatorRejectsUnresolvedRequiredAssumptionAndHighRiskWithoutApproval() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-validate",
             generatedAt: "2026-06-21T00:00:00Z"
@@ -392,7 +392,7 @@ struct XcircuitePlanningProblemValidatorTests {
             affectedActionIDs: ["layout-fix-width"]
         )
 
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: problem,
             problemPath: ".xcircuite/runs/run-validate/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -413,7 +413,7 @@ struct XcircuitePlanningProblemValidatorTests {
         })
     }
 
-    @Test func validatorRejectsPEXRecoveryMaturityMismatchWhenActionDomainIsStale() throws {
+    @Test func validatorRejectsPEXRecoveryMaturityMismatchWhenActionDomainIsStale() async throws {
         let problem = try XcircuiteDiagnosticPlanningProblemBuilder().makePEXRecoveryProblem(
             runID: "run-pex",
             summary: makePEXSummary(),
@@ -436,7 +436,7 @@ struct XcircuitePlanningProblemValidatorTests {
         })
         snapshot.domains[pexDomainIndex].operations[recoveryOperationIndex].maturity = "planned"
 
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: problem,
             problemPath: ".xcircuite/runs/run-pex/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -451,12 +451,12 @@ struct XcircuitePlanningProblemValidatorTests {
     }
 
     private func makePlanningProblem(includeSymbolicGoals: Bool) -> XcircuiteCircuitPlanningProblem {
-        let evidence: [String: XcircuiteJSONValue]
+        let evidence: [String: PlanningParameterValue]
         if includeSymbolicGoals {
             evidence = [
-                "symbolicGoalAtoms": .array([
-                    .string("rect-shape-created"),
-                    .string("artifact:layout-document"),
+                "symbolicGoalAtoms": .textList([
+                    "rect-shape-created",
+                    "artifact:layout-document",
                 ]),
             ]
         } else {
@@ -512,8 +512,8 @@ struct XcircuitePlanningProblemValidatorTests {
                     priority: "error",
                     sourceRefIDs: ["drc-summary"],
                     target: "no-active-violations-for-bucket",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair DRC width violation.",
                     evidence: evidence
                 ),
@@ -539,9 +539,9 @@ struct XcircuitePlanningProblemValidatorTests {
                     requiredInputRefs: ["layout-ref"],
                     verificationGates: ["artifact-integrity", "native-drc"],
                     parameterHints: [
-                        "symbolicEffects": .array([
-                            .string("rect-shape-created"),
-                            .string("artifact:layout-document"),
+                        "symbolicEffects": .textList([
+                            "rect-shape-created",
+                            "artifact:layout-document",
                         ]),
                     ]
                 ),
@@ -668,57 +668,61 @@ struct XcircuitePlanningProblemValidatorTests {
         }
     }
 
-    private func registerJSONArtifact<T: Encodable>(
+    private func registerJSONArtifact<T: Encodable & Sendable>(
         _ value: T,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        root: URL,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        workspaceStore: XcircuiteWorkspaceStore,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let url = root.appending(path: path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    ) async throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        _ = try await workspaceStore.persistArtifact(
+            content: encoder.encode(value),
+            id: try ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try store.writeJSON(value, to: url, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: path,
-            artifactID: artifactID,
-            kind: kind,
-            format: format,
-            inProjectAt: root,
-            producedByRunID: runID
-        )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 
     private func registerDataArtifact(
         _ data: Data,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        root: URL,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        workspaceStore: XcircuiteWorkspaceStore,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let url = root.appending(path: path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    ) async throws {
+        _ = try await workspaceStore.persistArtifact(
+            content: data,
+            id: try ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try data.write(to: url, options: .atomic)
-        let reference = try store.fileReference(
-            forProjectRelativePath: path,
-            artifactID: artifactID,
-            kind: kind,
-            format: format,
-            inProjectAt: root,
-            producedByRunID: runID
+    }
+
+    private func makeValidator() throws -> XcircuitePlanningProblemValidator {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "xcircuite-validator-\(UUID().uuidString)")
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        return XcircuitePlanningProblemValidator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 }

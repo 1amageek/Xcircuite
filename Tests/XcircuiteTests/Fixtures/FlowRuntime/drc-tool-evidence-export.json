@@ -2,90 +2,32 @@
   "schemaVersion": 1,
   "status": "passed",
   "reportPath": "qualification/drc-corpus-report.json",
-  "reportSHA256": "1111111111111111111111111111111111111111111111111111111111111111",
-  "summary": {
-    "coverageTagCounts": {
-      "diagnostic.rule-id": 21,
-      "drc.antenna": 4,
-      "drc.antenna.multi-layer": 1,
-      "drc.antenna.process-step": 1,
-      "drc.antenna.via-aware": 2,
-      "drc.antenna.via-topology": 1,
-      "drc.area": 1,
-      "drc.clean": 1,
-      "drc.cut": 1,
-      "drc.cut.minimum": 1,
-      "drc.density": 2,
-      "drc.density.maximum": 1,
-      "drc.density.minimum": 1,
-      "drc.enclosed-area": 1,
-      "drc.enclosure": 1,
-      "drc.extension": 1,
-      "drc.extension.minimum": 1,
-      "drc.grid": 1,
-      "drc.grid.manufacturing": 1,
-      "drc.notch": 1,
-      "drc.overlap": 2,
-      "drc.overlap.different-net": 1,
-      "drc.overlap.forbidden": 1,
-      "drc.short": 1,
-      "drc.spacing": 6,
-      "drc.spacing.different-net": 1,
-      "drc.spacing.directional": 1,
-      "drc.spacing.end-of-line": 1,
-      "drc.spacing.layer-pair": 1,
-      "drc.spacing.net-scope": 2,
-      "drc.spacing.parallel-run-length": 1,
-      "drc.spacing.same-net": 1,
-      "drc.waiver": 1,
-      "drc.width": 2,
-      "failure.expected": 21,
-      "layout.json": 2
-    },
-    "durationBudgetPassedCaseCount": 24,
-    "expectationMatchedCaseCount": 24,
-    "failureCategoryCounts": {},
-    "oracleAgreementPassedCaseCount": 24,
-    "oracleAgreementRate": 1,
-    "oracleCaseCount": 24,
-    "oracleExecutionFailedCaseCount": 0,
-    "oracleReadinessBlockedCaseCount": 0,
-    "passRate": 1,
-    "primaryExecutionFailedCaseCount": 0
-  },
+  "reportSHA256": "ef3329acd2818d5731b8ad53ae2ba839d2c36430d43c316ed791bb28bf51f51d",
   "toolEvidence": {
     "evidenceID": "drc-corpus-2026-06-18",
     "kind": "corpus",
     "artifact": {
-      "path": "qualification/drc-corpus-report.json",
-      "kind": "report",
-      "format": "JSON",
-      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      "id": "drc-corpus-report",
+      "locator": {
+        "location": {
+          "storage": "workspaceRelative",
+          "value": "qualification/drc-corpus-report.json"
+        },
+        "role": "output",
+        "kind": "evidence",
+        "format": "json"
+      },
+      "digest": {
+        "algorithm": "sha256",
+        "hexadecimalValue": "ef3329acd2818d5731b8ad53ae2ba839d2c36430d43c316ed791bb28bf51f51d"
+      },
+      "byteCount": 1805,
+      "producer": {
+        "kind": "engine",
+        "identifier": "native-drc-qualification-fixture",
+        "version": "1"
+      }
     },
-    "checkedAt": "2026-06-18T00:00:00Z",
-    "qualification": {
-      "qualified": true,
-      "policyID": "strict",
-      "observedMetrics": {
-        "durationBudgetPassRate": 1,
-        "oracleAgreementRate": 1,
-        "passRate": 1
-      },
-      "observedCounts": {
-        "budgetExceededCaseCount": 0,
-        "caseCount": 24,
-        "coverageTagCount": 36,
-        "coveredRequiredCoverageTagCount": 32,
-        "durationBudgetPassedCaseCount": 24,
-        "matchedCaseCount": 24,
-        "oracleAgreementPassedCaseCount": 24,
-        "oracleCaseCount": 24,
-        "oracleExecutionFailedCaseCount": 0,
-        "oracleReadinessBlockedCaseCount": 0,
-        "primaryExecutionFailedCaseCount": 0,
-        "requiredCoverageTagCount": 32
-      },
-      "failureCodes": []
-    }
+    "checkedAt": "2026-07-14T03:33:20.000Z"
   }
 }

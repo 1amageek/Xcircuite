@@ -33,7 +33,14 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparisonRequest: Codable, Se
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported solver family comparison request schema version: \(schemaVersion)."
+            )
+        }
         runID = try container.decode(String.self, forKey: .runID)
         comparisonID = try container.decodeIfPresent(String.self, forKey: .comparisonID) ?? "solver-family-1"
         qualificationArtifactIDs = try container.decodeIfPresent([String].self, forKey: .qualificationArtifactIDs) ?? []

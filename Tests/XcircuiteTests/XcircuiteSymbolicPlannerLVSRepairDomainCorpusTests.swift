@@ -1,13 +1,16 @@
+import CircuiteFoundation
+import DesignFlowKernel
 import Foundation
 import Testing
 import Xcircuite
-import DesignFlowKernel
 
 @Suite("Xcircuite symbolic planner LVS repair-domain corpus")
 struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
     @Test func qualifySymbolicPlannerSolverCorpusCoversLVSRepairDomain() async throws {
         let root = try makeTemporaryRoot("symbolic-planner-lvs-repair-domain-corpus")
         defer { removeTemporaryRoot(root) }
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
         let fixtures: [LVSRepairFixture] = [
             .portMismatch,
             .modelMismatch,
@@ -22,8 +25,17 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
             .parasiticDevice,
         ]
         for fixture in fixtures {
-            try prepareRun(root: root, runID: fixture.runID, repair: fixture)
-            _ = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+            try await prepareRun(
+                root: root,
+                runID: fixture.runID,
+                repair: fixture,
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
+            _ = try await XcircuiteSymbolicPlannerPDDLExporter(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            ).exportSymbolicPlannerProblem(
                 request: XcircuiteSymbolicPlannerPDDLExportRequest(runID: fixture.runID),
                 projectRoot: root
             )
@@ -31,7 +43,9 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
         let solverURL = root.appending(path: "lvs-repair-domain-symbolic-planner.sh")
         try writeLVSRepairMockPlanner(to: solverURL)
 
-        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier().qualify(
+        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+            artifactStore: artifactStore
+        ).qualify(
             request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest(
                 suiteID: "lvs-repair-domain-corpus",
                 toolID: "mock-lvs-repair-planner",
@@ -172,8 +186,8 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
         #expect(result.caseResults.map(\.observedActionIDs) == fixtures.map { [$0.actionID] })
         #expect(result.caseResults.allSatisfy { $0.goalCoverageStatus == "covered" })
         #expect(result.toolHealth.status == .passed)
-        #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["coverageRate"] == 1)
-        #expect(result.toolHealth.evidence.first?.qualification?.observedMetrics["passRate"] == 1)
+        #expect(result.toolHealth.evidence.first?.kind == .corpus)
+        #expect(result.toolHealth.evidence.first?.hasVerifiableArtifactBinding == true)
         #expect(result.suiteSpecArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID)
         #expect(result.corpusArtifact?.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerSolverQualificationCorpusArtifactID)
     }
@@ -181,27 +195,32 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
     private func prepareRun(
         root: URL,
         runID: String,
-        repair: LVSRepairFixture
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        repair: LVSRepairFixture,
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await prepareTestRun(runID: runID, store: workspaceStore)
+        _ = try await artifactStore.persistPlanningProblem(
             makePlanningProblem(runID: runID, repair: repair),
             runID: runID,
             projectRoot: root
         )
-        let snapshotURL = root.appending(path: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json")
-        try store.writeJSON(makeActionDomainSnapshot(runID: runID, repair: repair), to: snapshotURL, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json",
-            artifactID: XcircuitePlanningArtifactStore.actionDomainArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        _ = try await workspaceStore.persistArtifact(
+            content: encoder.encode(makeActionDomainSnapshot(runID: runID, repair: repair)),
+            id: ArtifactID(rawValue: XcircuitePlanningArtifactStore.actionDomainArtifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json"
+                ),
+                role: .output,
+                kind: .other,
+                format: .json
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 
     private func makePlanningProblem(
@@ -217,7 +236,7 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
                     kind: "layout-netlist",
                     artifactID: "layout-netlist",
                     metadata: [
-                        "symbolicStateAtoms": .array([.string(repair.mismatchAtom)]),
+                        "symbolicStateAtoms": .textList([repair.mismatchAtom]),
                     ]
                 ),
                 XcircuitePlanningReference(
@@ -239,11 +258,11 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
                         "schematic-netlist-input",
                     ],
                     target: repair.target,
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: repair.objectiveDescription,
                     evidence: [
-                        "symbolicGoalAtoms": .array([.string(repair.goalAtom)]),
+                        "symbolicGoalAtoms": .textList([repair.goalAtom]),
                     ]
                 ),
             ],
@@ -459,8 +478,7 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
     }
 
     private func writeLVSRepairMockPlanner(to solverURL: URL) throws {
-        try XcircuiteWorkspaceStore().writeText(
-            """
+        let script = """
             #!/bin/sh
             case "$1" in
               *run-lvs-port*) printf '0.000: (a-fix-lvs-port-map) [1.000]\\n' ;;
@@ -476,9 +494,8 @@ struct XcircuiteSymbolicPlannerLVSRepairDomainCorpusTests {
               *run-lvs-parasitic-device*) printf '0.000: (a-fix-lvs-parasitic-device) [1.000]\\n' ;;
               *) exit 2 ;;
             esac
-            """,
-            to: solverURL
-        )
+            """
+        try Data(script.utf8).write(to: solverURL, options: .atomic)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
             ofItemAtPath: solverURL.path(percentEncoded: false)

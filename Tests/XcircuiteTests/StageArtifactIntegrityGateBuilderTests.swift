@@ -6,7 +6,7 @@ import CircuiteFoundation
 @Suite("Stage artifact integrity gate")
 struct StageArtifactIntegrityGateBuilderTests {
     @Test
-    func foundationDiagnosticsPreserveArtifactIdentity() throws {
+    func foundationDiagnosticsPreserveArtifactIdentity() async throws {
         let root = try makeTemporaryRoot()
         defer { removeTemporaryRoot(root) }
 
@@ -38,7 +38,7 @@ struct StageArtifactIntegrityGateBuilderTests {
     }
 
     @Test
-    func foundationGatePassesForMatchingArtifact() throws {
+    func foundationGatePassesForMatchingArtifact() async throws {
         let root = try makeTemporaryRoot()
         defer { removeTemporaryRoot(root) }
 

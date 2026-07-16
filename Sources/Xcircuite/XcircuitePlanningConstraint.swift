@@ -7,7 +7,7 @@ public struct XcircuitePlanningConstraint: Codable, Sendable, Hashable {
     public var severity: String
     public var description: String
     public var sourceRefIDs: [String]
-    public var evidence: [String: XcircuiteJSONValue]
+    public var evidence: [String: PlanningParameterValue]
 
     public init(
         constraintID: String,
@@ -15,7 +15,7 @@ public struct XcircuitePlanningConstraint: Codable, Sendable, Hashable {
         severity: String,
         description: String,
         sourceRefIDs: [String] = [],
-        evidence: [String: XcircuiteJSONValue] = [:]
+        evidence: [String: PlanningParameterValue] = [:]
     ) {
         self.constraintID = constraintID
         self.kind = kind
@@ -42,7 +42,7 @@ public struct XcircuitePlanningConstraint: Codable, Sendable, Hashable {
         self.description = try container.decode(String.self, forKey: .description)
         self.sourceRefIDs = try container.decode([String].self, forKey: .sourceRefIDs)
         self.evidence = try container.decode(
-            [String: XcircuiteJSONValue].self,
+            [String: PlanningParameterValue].self,
             forKey: .evidence
         )
     }

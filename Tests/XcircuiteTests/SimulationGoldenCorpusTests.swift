@@ -304,9 +304,10 @@ struct SimulationGoldenCorpusTests {
     @Test func sourcePreservingNetlistEditFeedsGoldenCorpusQualification() async throws {
         let projectRoot = try makeTemporaryRoot("simulation-golden-source-edit")
         defer { removeTemporaryRoot(projectRoot) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: projectRoot)
-        try store.createRunDirectory(for: "run-source-edit", inProjectAt: projectRoot)
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-source-edit", store: store)
 
         let sourceNetlistPath = "circuits/source-edit.spice"
         try writeText(
@@ -320,28 +321,31 @@ struct SimulationGoldenCorpusTests {
             toProjectPath: sourceNetlistPath,
             projectRoot: projectRoot
         )
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        _ = try await artifactStore.persistCandidatePlan(
             sourcePreservingEditPlan(sourceNetlistPath: sourceNetlistPath),
             runID: "run-source-edit",
             projectRoot: projectRoot
         )
 
-        let executionResult = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let executionResult = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-source-edit"),
             projectRoot: projectRoot
         )
         #expect(executionResult.status == "executed")
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: projectRoot.appending(path: executionResult.planExecutionArtifact.path)
+            from: executionResult.planExecutionArtifact.path
         )
         let stepResult = try #require(execution.stepResults.first)
         let editReportRef = try #require(stepResult.artifactReferences.first {
             $0.id.rawValue == "candidate-step-1-netlist-parameter-edit-report"
         })
-        let editReport = try store.readJSON(
+        let editReport = try await store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: projectRoot.appending(path: editReportRef.path)
+            from: editReportRef.path
         )
 
         #expect(editReport.sourceNetlistPath == sourceNetlistPath)
@@ -412,7 +416,7 @@ struct SimulationGoldenCorpusTests {
         #expect(caseResult.comparisonArtifact?.sha256.count == 64)
     }
 
-    @Test func actionDomainSnapshotIncludesGoldenCorpusQualificationOperation() throws {
+    @Test func actionDomainSnapshotIncludesGoldenCorpusQualificationOperation() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "simulation-golden-corpus-action-domain",
             generatedAt: "2026-06-29T00:00:00Z"
@@ -479,12 +483,9 @@ struct SimulationGoldenCorpusTests {
                     verificationGates: ["artifact-integrity", "simulation-golden-corpus"],
                     reason: "Materialize a source-preserving parameter edit and re-run simulation golden qualification.",
                     parameterHints: [
-                        "netlistPath": .string(sourceNetlistPath),
-                        "assignments": .array([
-                            .object([
-                                "name": .string("R1"),
-                                "value": .number(2000),
-                            ]),
+                        "netlistPath": .text(sourceNetlistPath),
+                        "assignments": .parameterAssignments([
+                            XcircuiteParameterAssignment(name: "R1", value: 2_000),
                         ]),
                     ],
                     blockers: []

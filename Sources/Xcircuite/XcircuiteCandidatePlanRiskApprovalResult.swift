@@ -8,7 +8,7 @@ public struct XcircuiteCandidatePlanRiskApprovalResult: Codable, Sendable, Hasha
     public var runID: String
     public var approvalID: String
     public var approvalPath: String
-    public var approval: XcircuiteApprovalRecord
+    public var approval: FlowApprovalRecord
     public var approvalArtifact: ArtifactReference
     public var nextActions: [String]
 
@@ -18,7 +18,7 @@ public struct XcircuiteCandidatePlanRiskApprovalResult: Codable, Sendable, Hasha
         runID: String,
         approvalID: String,
         approvalPath: String,
-        approval: XcircuiteApprovalRecord,
+        approval: FlowApprovalRecord,
         approvalArtifact: ArtifactReference,
         nextActions: [String]
     ) {

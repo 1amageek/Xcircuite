@@ -541,7 +541,7 @@ violation bucket through per-rule channels:
 | `drc-rule-<index>-<rule>-suggested-fixes` | Engine-owned repair hints for the bucket when available |
 | `drc-tool-evidence-count` / `drc-qualified-calibration` | Explicit missing / uncalibrated tool-evidence channels |
 
-Failed active buckets emit `XcircuiteFeedbackSignal` records routed to
+Failed active buckets emit `FlowFeedbackSignal` records routed to
 `localSurface` with `inspect-drc-violation`, `generate-planning-problem`, and
 `apply-drc-repair-hint` suggested actions. If a DRC run fails without active
 violation buckets, feedback is routed to `structureMapping` so Agent review can
@@ -613,7 +613,7 @@ bucket through per-bucket channels:
 | `lvs-device-policy-*` | Device-policy application status and applied / ignored / unobserved rule counts when policy evidence exists |
 | `lvs-tool-evidence-count` / `lvs-qualified-calibration` | Explicit missing / uncalibrated tool-evidence channels |
 
-Failed active buckets emit `XcircuiteFeedbackSignal` records. Local model,
+Failed active buckets emit `FlowFeedbackSignal` records. Local model,
 parameter, port, and count mismatches route to `localSurface`; policy,
 equivalence, or blackbox-related mismatches route to `structureMapping` so Agent
 planning can choose between netlist/layout edits and policy repair.
@@ -689,20 +689,14 @@ not proof of foundry qualification.
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `evidenceID` | string | yes | Stable evidence identifier |
-| `kind` | string | yes | `smoke`, `corpus`, `oracle`, `healthCheck`, `productionApproval` |
-| `artifact` | `ArtifactReference` or null | no | Evidence artifact reference |
-| `qualification` | `ToolEvidenceQualificationSummary` or null | no | Generic pass/fail qualification summary |
-| `checkedAt` | ISO 8601 date string or legacy numeric Date | no | Check timestamp when available |
+| `kind` | string | yes | `smoke`, `corpus`, `oracle`, or `healthCheck` |
+| `artifact` | `ArtifactReference` or null | qualified evidence: yes | Digest-bound canonical qualification result |
+| `checkedAt` | ISO 8601 date string | qualified evidence: yes | Must exactly match the retained result timestamp |
 
-`ToolEvidenceQualificationSummary` fields:
-
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `qualified` | boolean | yes | Whether this evidence satisfies its policy |
-| `policyID` | string or null | no | Policy identifier |
-| `observedMetrics` | object string to number | no | Aggregate metrics such as pass rate |
-| `observedCounts` | object string to integer | no | Aggregate counts such as case count |
-| `failureCodes` | array of string | no | Typed failure codes when not qualified |
+Corpus, oracle, and health-check evidence is not qualified by an embedded
+boolean summary. The artifact must be workspace-relative, SHA-256 bound,
+non-empty, and produced by the same engine issuer recorded in the canonical
+typed result. The trust evaluator verifies the bytes before deriving eligibility.
 
 ## XcircuiteFlowEvidenceExport v1
 
@@ -735,12 +729,25 @@ then the selected runtime tool must provide at least one `ToolEvidence` with:
 ```json
 {
   "kind": "corpus",
-  "checkedAt": "2026-06-18T00:00:00Z",
-  "qualification": {
-    "qualified": true
-  }
+  "artifact": {
+    "id": "corpus-result",
+    "locator": {
+      "location": { "storage": "workspaceRelative", "value": "qualification/corpus.json" },
+      "role": "output",
+      "kind": "evidence",
+      "format": "json"
+    },
+    "digest": { "algorithm": "sha256", "hexadecimalValue": "<64 lowercase hexadecimal characters>" },
+    "byteCount": 1,
+    "producer": { "kind": "engine", "identifier": "qualification-runner", "version": "1" }
+  },
+  "checkedAt": "<ISO 8601 timestamp>"
 }
 ```
+
+The referenced bytes must decode canonically as a passing
+`ToolCorpusQualificationResult` for the selected tool and must carry the same
+issuer and timestamp. A structurally valid reference alone is insufficient.
 
 Otherwise the flow blocks at the `tool-trust` gate and writes the rejected
 decision to:

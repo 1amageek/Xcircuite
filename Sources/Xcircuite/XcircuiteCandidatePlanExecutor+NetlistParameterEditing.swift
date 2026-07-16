@@ -9,42 +9,29 @@ import DesignFlowKernel
 
 extension XcircuiteCandidatePlanExecutor {
     func parameterAssignments(step: XcircuiteCandidatePlanStep) throws -> [XcircuiteParameterAssignment] {
-        guard case .array(let values) = step.parameterHints["assignments"] else {
+        guard case .parameterAssignments(let assignments) = step.parameterHints["assignments"] else {
             throw XcircuiteCandidatePlanExecutionError.invalidHint(
                 stepID: step.stepID,
                 key: "assignments",
                 expected: "array of assignment objects"
             )
         }
-        return try values.enumerated().map { index, value in
-            guard case .object(let object) = value else {
-                throw XcircuiteCandidatePlanExecutionError.invalidHint(
-                    stepID: step.stepID,
-                    key: "assignments[\(index)]",
-                    expected: "object"
-                )
-            }
-            guard case .string(let name) = object["name"] else {
+        return try assignments.enumerated().map { index, assignment in
+            guard !assignment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw XcircuiteCandidatePlanExecutionError.invalidHint(
                     stepID: step.stepID,
                     key: "assignments[\(index)].name",
-                    expected: "string"
+                    expected: "non-empty string"
                 )
             }
-            guard case .number(let value) = object["value"], value.isFinite else {
+            guard assignment.value.isFinite else {
                 throw XcircuiteCandidatePlanExecutionError.invalidHint(
                     stepID: step.stepID,
                     key: "assignments[\(index)].value",
                     expected: "finite number"
                 )
             }
-            let unit: String?
-            if case .string(let rawUnit) = object["unit"] {
-                unit = rawUnit
-            } else {
-                unit = nil
-            }
-            return XcircuiteParameterAssignment(name: name, value: value, unit: unit)
+            return assignment
         }
     }
 
@@ -362,7 +349,7 @@ extension XcircuiteCandidatePlanExecutor {
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> Bool? {
-        guard case .bool(let value) = step.parameterHints[key] else {
+        guard case .boolean(let value) = step.parameterHints[key] else {
             return nil
         }
         return value
@@ -388,7 +375,7 @@ extension XcircuiteCandidatePlanExecutor {
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> String? {
-        guard case .string(let value) = step.parameterHints[key] else {
+        guard case .text(let value) = step.parameterHints[key] else {
             return nil
         }
         return value
@@ -402,7 +389,7 @@ extension XcircuiteCandidatePlanExecutor {
         guard let value = step.parameterHints[key] else {
             return defaultValue
         }
-        guard case .number(let number) = value, number.isFinite else {
+        guard case .scalar(let number) = value, number.isFinite else {
             throw XcircuiteCandidatePlanExecutionError.invalidHint(
                 stepID: step.stepID,
                 key: key,

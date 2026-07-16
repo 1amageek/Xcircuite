@@ -9,13 +9,12 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
     @Test func formulateRepairPlanningProblemCLICompilesAuditableProblemAndPDDLExport() async throws {
         let root = try makeTemporaryRoot("repair-formulation")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-formulation", inProjectAt: root)
-        try persistActionDomainSnapshot(root: root, runID: "run-formulation")
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-formulation", store: store)
+        try await persistActionDomainSnapshot(store: store, runID: "run-formulation")
         let formulation = makeFormulation(runID: "run-formulation")
-        let formulationURL = root.appending(path: "agent-repair-formulation.json")
-        try store.writeJSON(formulation, to: formulationURL, forProjectAt: root)
+        try await store.writeJSON(formulation, to: ".xcircuite/agent-repair-formulation.json")
 
         let json = try await XcircuiteFlowCLICommand.run(arguments: [
             "formulate-repair-planning-problem",
@@ -24,7 +23,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
             "--run-id",
             "run-formulation",
             "--formulation-path",
-            "agent-repair-formulation.json",
+            ".xcircuite/agent-repair-formulation.json",
             "--problem-id",
             "agent-compiled-repair-problem",
             "--pretty",
@@ -39,19 +38,19 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         #expect(result.problemArtifact.path == ".xcircuite/runs/run-formulation/planning/problem.json")
         #expect(result.diagnosticCodes.contains("verification-gates-generated"))
 
-        let persistedFormulation = try store.readJSON(
+        let persistedFormulation = try await store.readJSON(
             XcircuiteRepairPlanFormulation.self,
-            from: root.appending(path: result.formulationArtifact.path)
+            from: result.formulationArtifact.path
         )
         #expect(persistedFormulation.formulationID == "agent-sizing-repair")
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: result.problemArtifact.path)
+            from: result.problemArtifact.path
         )
         #expect(problem.problemID == "agent-compiled-repair-problem")
         #expect(problem.sourceRefs.first?.kind == "repair-plan-formulation")
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([.string("gain-restored")]))
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList(["gain-restored"]))
         #expect(problem.candidateActions.first?.operationID == "simulation.set-netlist-parameters")
         #expect(problem.verificationGates.map(\.gateID).contains("simulation-metric-gate"))
         #expect(problem.resumeContract.requiredArtifacts.contains("planning/repair-formulation.json"))
@@ -87,10 +86,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         })
         #expect(pddlResult.export.actionMappings.map(\.operationID) == ["simulation.set-netlist-parameters"])
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-formulation/manifest.json")
-        )
+        let manifest = try await store.loadRunLedger(runID: "run-formulation").runManifest
         let artifactIDs = Set(manifest.artifacts.map(\.artifactID))
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.repairPlanFormulationArtifactID))
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.problemArtifactID))
@@ -98,17 +94,17 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         #expect(artifactIDs.contains(XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID))
     }
 
-    @Test func compilerRejectsActionReferencingUnknownGoal() throws {
+    @Test func compilerRejectsActionReferencingUnknownGoal() async throws {
         let root = try makeTemporaryRoot("repair-formulation-unknown-goal")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-formulation", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-formulation", store: store)
         var formulation = makeFormulation(runID: "run-formulation")
         formulation.actions[0].sourceGoalIDs = ["missing-goal"]
 
         do {
-            _ = try XcircuiteRepairPlanFormulationCompiler().compile(
+            _ = try await makeCompiler(store: store).compile(
                 request: XcircuiteRepairPlanFormulationCompilationRequest(
                     runID: "run-formulation",
                     formulation: formulation
@@ -124,51 +120,51 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         }
     }
 
-    @Test func compilerRejectsUnsupportedSchemaVersion() throws {
+    @Test func compilerRejectsUnsupportedSchemaVersion() async throws {
         var formulation = makeFormulation(runID: "run-formulation")
         formulation.schemaVersion = 2
 
-        try expectCompilationError(
+        try await expectCompilationError(
             .unsupportedSchemaVersion(2),
             formulation: formulation,
             rootName: "repair-formulation-schema-version"
         )
     }
 
-    @Test func compilerRejectsDuplicateReferenceIDs() throws {
+    @Test func compilerRejectsDuplicateReferenceIDs() async throws {
         var formulation = makeFormulation(runID: "run-formulation")
         formulation.sourceRefs.append(formulation.initialStateRefs[0])
 
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateReferenceID("source-netlist"),
             formulation: formulation,
             rootName: "repair-formulation-duplicate-ref"
         )
     }
 
-    @Test func compilerRejectsDuplicateGoalIDs() throws {
+    @Test func compilerRejectsDuplicateGoalIDs() async throws {
         var formulation = makeFormulation(runID: "run-formulation")
         formulation.goals.append(formulation.goals[0])
 
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateGoalID("restore-gain"),
             formulation: formulation,
             rootName: "repair-formulation-duplicate-goal"
         )
     }
 
-    @Test func compilerRejectsDuplicateActionIDs() throws {
+    @Test func compilerRejectsDuplicateActionIDs() async throws {
         var formulation = makeFormulation(runID: "run-formulation")
         formulation.actions.append(formulation.actions[0])
 
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateActionID("set-bias-current"),
             formulation: formulation,
             rootName: "repair-formulation-duplicate-action"
         )
     }
 
-    @Test func compilerRejectsDuplicateCopiedPlanningEntityIDs() throws {
+    @Test func compilerRejectsDuplicateCopiedPlanningEntityIDs() async throws {
         let assumption = XcircuitePlanningAssumption(
             assumptionID: "review-assumption",
             source: "agent",
@@ -179,7 +175,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         )
         var assumptionFormulation = makeFormulation(runID: "run-formulation")
         assumptionFormulation.assumptions = [assumption, assumption]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateAssumptionID("review-assumption"),
             formulation: assumptionFormulation,
             rootName: "repair-formulation-duplicate-assumption"
@@ -196,7 +192,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         )
         var riskFormulation = makeFormulation(runID: "run-formulation")
         riskFormulation.riskClassifications = [risk, risk]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateRiskID("approval-risk"),
             formulation: riskFormulation,
             rootName: "repair-formulation-duplicate-risk"
@@ -211,7 +207,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         )
         var constraintFormulation = makeFormulation(runID: "run-formulation")
         constraintFormulation.constraints = [constraint, constraint]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateConstraintID("human-approval-required"),
             formulation: constraintFormulation,
             rootName: "repair-formulation-duplicate-constraint"
@@ -219,7 +215,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
 
         var actionDomainFormulation = makeFormulation(runID: "run-formulation")
         actionDomainFormulation.actionDomainRefs.append("simulation-analysis")
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateActionDomainRef("simulation-analysis"),
             formulation: actionDomainFormulation,
             rootName: "repair-formulation-duplicate-action-domain"
@@ -232,7 +228,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         )
         var gateFormulation = makeFormulation(runID: "run-formulation")
         gateFormulation.verificationGates = [gate, gate]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateVerificationGateID("simulation-metric-gate"),
             formulation: gateFormulation,
             rootName: "repair-formulation-duplicate-gate"
@@ -249,17 +245,17 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
             strategy: "test",
             terms: [costTerm, costTerm]
         )
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateCostTermID("repair.action-count"),
             formulation: costFormulation,
             rootName: "repair-formulation-duplicate-cost-term"
         )
     }
 
-    @Test func compilerRejectsDuplicateNestedActionReferences() throws {
+    @Test func compilerRejectsDuplicateNestedActionReferences() async throws {
         var goalSourceFormulation = makeFormulation(runID: "run-formulation")
         goalSourceFormulation.goals[0].sourceRefIDs = ["simulation-summary", "simulation-summary"]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateGoalSourceReference(goalID: "restore-gain", refID: "simulation-summary"),
             formulation: goalSourceFormulation,
             rootName: "repair-formulation-duplicate-goal-source"
@@ -267,7 +263,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
 
         var actionGoalFormulation = makeFormulation(runID: "run-formulation")
         actionGoalFormulation.actions[0].sourceGoalIDs = ["restore-gain", "restore-gain"]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateActionGoalReference(actionID: "set-bias-current", goalID: "restore-gain"),
             formulation: actionGoalFormulation,
             rootName: "repair-formulation-duplicate-action-goal"
@@ -275,7 +271,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
 
         var actionInputFormulation = makeFormulation(runID: "run-formulation")
         actionInputFormulation.actions[0].requiredInputRefs = ["source-netlist", "source-netlist"]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateActionInputReference(actionID: "set-bias-current", refID: "source-netlist"),
             formulation: actionInputFormulation,
             rootName: "repair-formulation-duplicate-action-input"
@@ -283,7 +279,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
 
         var actionGateFormulation = makeFormulation(runID: "run-formulation")
         actionGateFormulation.actions[0].verificationGates = ["simulation-metric-gate", "simulation-metric-gate"]
-        try expectCompilationError(
+        try await expectCompilationError(
             .duplicateActionVerificationGateID(actionID: "set-bias-current", gateID: "simulation-metric-gate"),
             formulation: actionGateFormulation,
             rootName: "repair-formulation-duplicate-action-gate"
@@ -294,15 +290,15 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
         _ expectedError: XcircuiteRepairPlanFormulationCompilationError,
         formulation: XcircuiteRepairPlanFormulation,
         rootName: String
-    ) throws {
+    ) async throws {
         let root = try makeTemporaryRoot(rootName)
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: formulation.runID, inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: formulation.runID, store: store)
 
         do {
-            _ = try XcircuiteRepairPlanFormulationCompiler().compile(
+            _ = try await makeCompiler(store: store).compile(
                 request: XcircuiteRepairPlanFormulationCompilationRequest(
                     runID: formulation.runID,
                     formulation: formulation
@@ -328,7 +324,7 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
                     path: ".xcircuite/runs/\(runID)/planning/verification/simulation-metric/simulation-summary.json",
                     artifactID: "planning-simulation-summary",
                     metadata: [
-                        "symbolicStateAtoms": .array([.string("gain-low")]),
+                        "symbolicStateAtoms": .textList(["gain-low"]),
                     ]
                 ),
             ],
@@ -353,8 +349,8 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
                     priority: "error",
                     sourceRefIDs: ["simulation-summary"],
                     target: "gain-within-spec",
-                    currentValue: .number(8),
-                    requiredValue: .number(10),
+                    currentValue: .scalar(8),
+                    requiredValue: .scalar(10),
                     unit: "V/V",
                     description: "Recovered gain must meet the design specification.",
                     symbolicGoalAtoms: ["gain-restored"]
@@ -372,15 +368,18 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
                     requiredInputRefs: ["source-netlist"],
                     verificationGates: ["simulation-metric-gate"],
                     parameterHints: [
-                        "parameterName": .string("IBIAS"),
-                        "candidateValue": .number(0.0012),
+                        "parameterName": .text("IBIAS"),
+                        "candidateValue": .scalar(0.0012),
                     ]
                 ),
             ]
         )
     }
 
-    private func persistActionDomainSnapshot(root: URL, runID: String) throws {
+    private func persistActionDomainSnapshot(
+        store: XcircuiteWorkspaceStore,
+        runID: String
+    ) async throws {
         let snapshot = XcircuitePlanningActionDomainSnapshot(
             runID: runID,
             generatedAt: "2026-06-23T00:00:00Z",
@@ -403,22 +402,29 @@ struct XcircuiteRepairPlanFormulationCompilerTests {
                 ),
             ]
         )
-        let store = XcircuiteWorkspaceStore()
-        let snapshotURL = root.appending(path: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json")
-        try FileManager.default.createDirectory(
-            at: snapshotURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try store.writeJSON(snapshot, to: snapshotURL, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json",
+        let relativePath = ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json"
+        try await store.writeJSON(snapshot, to: relativePath)
+        let reference = try await store.makeArtifactReference(
+            forProjectRelativePath: relativePath,
             artifactID: XcircuitePlanningArtifactStore.actionDomainArtifactID,
             kind: .other,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(
+            reference,
+            runID: runID,
+            store: store,
+            projectRoot: store.projectRoot
+        )
+    }
+
+    private func makeCompiler(
+        store: XcircuiteWorkspaceStore
+    ) -> XcircuiteRepairPlanFormulationCompiler {
+        XcircuiteRepairPlanFormulationCompiler(
+            workspaceStore: store,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+        )
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

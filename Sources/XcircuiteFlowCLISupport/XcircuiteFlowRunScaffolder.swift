@@ -3,17 +3,13 @@ import Foundation
 import PEXEngine
 import ToolQualification
 import Xcircuite
-import DesignFlowKernel
 
 /// Generates a minimal valid `XcircuiteFlowRunSpec` + `XcircuiteFlowRuntimeSpec`
-/// pair so a caller never has to hand-write the trust-evidence shape from
-/// memory. Stage IDs are sequential (`001-…`), each stage kind carries its
-/// contract-correct `requiredTool` block (the mock PEX stage stays at
-/// minimum level `unknown` with no qualified-evidence requirement — the
-/// runtime's mock contract), and every corpus evidence block is stamped
-/// with `checkedAt` at scaffold time so the future-timestamp trap cannot
-/// occur. `make()` validates coverage on the constructed pair before
-/// returning — an invalid scaffold is a typed error, never a file.
+/// pair without claiming qualification that has not been performed. Stage
+/// IDs are sequential (`001-…`), and every generated tool starts at the
+/// honest `unknown` trust level with no fabricated qualification evidence.
+/// `make()` validates coverage on the constructed pair before returning —
+/// an invalid scaffold is a typed error, never a file.
 struct XcircuiteFlowRunScaffolder: Sendable {
 
     enum StageKind: String, CaseIterable, Sendable {
@@ -67,12 +63,10 @@ struct XcircuiteFlowRunScaffolder: Sendable {
 
     let runID: String
     let stageKinds: [StageKind]
-    let checkedAt: Date
 
-    init(runID: String, stageKinds: [StageKind], checkedAt: Date) {
+    init(runID: String, stageKinds: [StageKind]) {
         self.runID = runID
         self.stageKinds = stageKinds
-        self.checkedAt = checkedAt
     }
 
     func make() throws -> Scaffold {
@@ -88,7 +82,7 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 requiredTool: requiredTool(for: kind),
                 requiresApproval: false
             ))
-            executors.append(executor(for: kind, stageID: stageID))
+            executors.append(try executor(for: kind, stageID: stageID))
             placeholderPaths.append(contentsOf: placeholders(for: kind))
         }
 
@@ -119,13 +113,12 @@ struct XcircuiteFlowRunScaffolder: Sendable {
             ToolTrustRequirement(
                 kind: .simulation,
                 operationID: "run-simulation",
-                minimumLevel: .corpusChecked,
+                minimumLevel: .unknown,
                 requiredInputFormats: [.spice],
                 requiredOutputFormats: [.csv, .json],
                 requiredEvidenceKinds: [],
-                requiredQualifiedEvidenceKinds: [.corpus],
-                maximumEvidenceAgeSeconds: 86_400,
-                requirePassingHealthCheck: true
+                requiredQualifiedEvidenceKinds: [],
+                requirePassingHealthCheck: false
             )
         case .mockPEX:
             // The runtime's mock contract: a mock executor cannot declare a
@@ -139,29 +132,31 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 requiredOutputFormats: [.spef, .json],
                 requiredEvidenceKinds: [],
                 requiredQualifiedEvidenceKinds: [],
-                requirePassingHealthCheck: true
+                requirePassingHealthCheck: false
             )
         case .postLayoutComparison:
             ToolTrustRequirement(
                 kind: .simulation,
                 operationID: "compare-waveforms",
-                minimumLevel: .corpusChecked,
+                minimumLevel: .unknown,
                 requiredInputFormats: [.csv],
                 requiredOutputFormats: [.json],
                 requiredEvidenceKinds: [],
-                requiredQualifiedEvidenceKinds: [.corpus],
-                maximumEvidenceAgeSeconds: 86_400,
-                requirePassingHealthCheck: true
+                requiredQualifiedEvidenceKinds: [],
+                requirePassingHealthCheck: false
             )
         }
     }
 
     // MARK: - Runtime executors
 
-    private func executor(for kind: StageKind, stageID: String) -> XcircuiteFlowStageExecutorSpec {
+    private func executor(
+        for kind: StageKind,
+        stageID: String
+    ) throws -> XcircuiteFlowStageExecutorSpec {
         switch kind {
         case .coreSpiceSimulation:
-            .coreSpiceSimulation(XcircuiteFlowStageExecutorSpec.CoreSpiceSimulation(
+            return .coreSpiceSimulation(XcircuiteFlowStageExecutorSpec.CoreSpiceSimulation(
                 stageID: stageID,
                 netlistPath: Self.placeholderNetlistPath,
                 expectations: [
@@ -171,10 +166,10 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                         tolerance: 0.1
                     ),
                 ],
-                tool: simulationToolSpec()
+                tool: XcircuiteFlowToolSpec()
             ))
         case .mockPEX:
-            .mockPEX(XcircuiteFlowStageExecutorSpec.MockPEX(
+            return .mockPEX(XcircuiteFlowStageExecutorSpec.MockPEX(
                 stageID: stageID,
                 layoutPath: Self.placeholderLayoutPath,
                 layoutFormat: .gds,
@@ -185,11 +180,11 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 technology: .jsonFile(path: Self.placeholderPEXTechnologyPath),
                 tool: XcircuiteFlowToolSpec(
                     qualificationLevel: .unknown,
-                    healthStatus: .passed
+                    healthStatus: .notChecked
                 )
             ))
         case .postLayoutComparison:
-            .postLayoutComparison(XcircuiteFlowStageExecutorSpec.PostLayoutComparison(
+            return .postLayoutComparison(XcircuiteFlowStageExecutorSpec.PostLayoutComparison(
                 stageID: stageID,
                 preLayoutWaveformPath: Self.placeholderPreLayoutWaveformPath,
                 postLayoutWaveformPath: Self.placeholderPostLayoutWaveformPath,
@@ -198,43 +193,9 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                     maxRelativeDelta: 1.0,
                     relativeDeltaDenominatorFloor: 0.05
                 ),
-                tool: comparisonToolSpec()
+                tool: XcircuiteFlowToolSpec()
             ))
         }
-    }
-
-    /// Shared across every simulation stage so repeated kinds bind one
-    /// consistent tool descriptor and health result.
-    private func simulationToolSpec() -> XcircuiteFlowToolSpec {
-        corpusCheckedToolSpec(evidenceID: "\(runID)-corespice-corpus")
-    }
-
-    private func comparisonToolSpec() -> XcircuiteFlowToolSpec {
-        corpusCheckedToolSpec(evidenceID: "\(runID)-comparison-corpus")
-    }
-
-    private func corpusCheckedToolSpec(evidenceID: String) -> XcircuiteFlowToolSpec {
-        XcircuiteFlowToolSpec(
-            qualificationLevel: .corpusChecked,
-            healthStatus: .passed,
-            evidence: [
-                ToolEvidence(
-                    evidenceID: evidenceID,
-                    kind: .corpus,
-                    qualification: ToolEvidenceQualificationSummary(
-                        qualified: true,
-                        policyID: "\(runID)-scaffold-corpus-policy",
-                        observedMetrics: ["passRate": 1],
-                        observedCounts: ["caseCount": 1],
-                        failureCodes: []
-                    ),
-                    // Stamped with the scaffold-time clock: a future
-                    // checkedAt is rejected by the trust evaluator, so
-                    // the scaffold never hands out that trap.
-                    checkedAt: checkedAt
-                ),
-            ]
-        )
     }
 
     private func placeholders(for kind: StageKind) -> [String] {

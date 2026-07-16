@@ -4,7 +4,7 @@ import DesignFlowKernel
 struct XcircuiteCandidatePlanRiskReviewer: Sendable {
     func riskReviews(
         for plan: XcircuiteCandidatePlan,
-        approvals: [XcircuiteApprovalRecord] = []
+        approvals: [FlowApprovalRecord] = []
     ) -> [XcircuitePlanRiskReview] {
         let approvalsByID = Dictionary(uniqueKeysWithValues: approvals.map { ($0.stageID, $0) })
         return plan.riskClassifications.map { risk in
@@ -131,7 +131,7 @@ struct XcircuiteCandidatePlanRiskReviewer: Sendable {
 
     private func approvalReview(
         for approvalID: String,
-        approvalsByID: [String: XcircuiteApprovalRecord]
+        approvalsByID: [String: FlowApprovalRecord]
     ) -> XcircuitePlanApprovalReview {
         guard let approval = approvalsByID[approvalID] else {
             return XcircuitePlanApprovalReview(

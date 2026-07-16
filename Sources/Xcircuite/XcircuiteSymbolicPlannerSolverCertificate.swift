@@ -86,7 +86,7 @@ public struct XcircuiteSymbolicPlannerSolverCertificate: Codable, Sendable, Hash
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1,
+            schemaVersion: try container.decode(Int.self, forKey: .schemaVersion),
             certificateID: try container.decodeIfPresent(String.self, forKey: .certificateID),
             solverName: try container.decodeIfPresent(String.self, forKey: .solverName),
             solverFamily: try container.decodeIfPresent(String.self, forKey: .solverFamily),
@@ -106,5 +106,12 @@ public struct XcircuiteSymbolicPlannerSolverCertificate: Codable, Sendable, Hash
             claims: try container.decodeIfPresent([XcircuiteSymbolicPlannerSolverCertificateClaim].self, forKey: .claims) ?? [],
             evidenceLines: try container.decodeIfPresent([String].self, forKey: .evidenceLines) ?? []
         )
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported symbolic planner solver certificate schema version: \(schemaVersion)."
+            )
+        }
     }
 }

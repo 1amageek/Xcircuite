@@ -88,7 +88,7 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
             return
         }
         do {
-            try XcircuiteIdentifierValidator().validate(cornerID, kind: .artifactID)
+            try FlowIdentifierValidator().validate(cornerID, kind: .artifactID)
         } catch {
             issues.append(
                 XcircuiteFlowToolchainProfileReadinessIssue(
@@ -265,7 +265,7 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
             return
         }
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+            try FlowIdentifierValidator().validate(value, kind: .artifactID)
         } catch {
             issues.append(
                 XcircuiteFlowToolchainProfileReadinessIssue(
@@ -285,16 +285,8 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
         switch reference {
         case .path(let path):
             validateRuntimePath(path, field: field, into: &issues)
-        case .artifact(let artifact):
-            if artifact.sha256 == nil || artifact.byteCount == nil {
-                issues.append(
-                    XcircuiteFlowToolchainProfileReadinessIssue(
-                        code: Self.invalidFieldCode,
-                        field: field,
-                        message: "\(field) artifact references must include SHA-256 and byte count."
-                    )
-                )
-            }
+        case .artifact:
+            break
         case .stageArtifact(let artifact):
             validateStageArtifact(artifact, field: field, into: &issues)
         case .stageRawArtifact(let artifact):
@@ -351,12 +343,12 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
 
     private func validateIdentifier(
         _ value: String,
-        kind: XcircuiteIdentifierKind,
+        kind: FlowIdentifierKind,
         field: String,
         into issues: inout [XcircuiteFlowToolchainProfileReadinessIssue]
     ) {
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: kind)
+            try FlowIdentifierValidator().validate(value, kind: kind)
         } catch {
             issues.append(
                 XcircuiteFlowToolchainProfileReadinessIssue(

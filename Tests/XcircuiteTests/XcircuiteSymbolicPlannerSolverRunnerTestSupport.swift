@@ -1,10 +1,10 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 import Testing
 import ToolQualification
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 import Darwin
@@ -15,12 +15,12 @@ func prepareRun(
     root: URL,
     runID: String,
     repair: DRCRepairFixture = .width,
-    includeViolationAtom: Bool = true
-) throws {
-    let store = XcircuiteWorkspaceStore()
-    try store.createWorkspace(at: root)
-    try store.createRunDirectory(for: runID, inProjectAt: root)
-    try XcircuitePlanningArtifactStore().persistPlanningProblem(
+    includeViolationAtom: Bool = true,
+    workspaceStore: XcircuiteWorkspaceStore,
+    artifactStore: XcircuitePlanningArtifactStore
+) async throws {
+    try await prepareTestRun(runID: runID, store: workspaceStore)
+    _ = try await artifactStore.persistPlanningProblem(
         makePlanningProblem(
             runID: runID,
             repair: repair,
@@ -29,17 +29,22 @@ func prepareRun(
         runID: runID,
         projectRoot: root
     )
-    let snapshotURL = root.appending(path: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json")
-    try store.writeJSON(makeActionDomainSnapshot(runID: runID, repair: repair), to: snapshotURL, forProjectAt: root)
-    let reference = try store.fileReference(
-        forProjectRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json",
-        artifactID: XcircuitePlanningArtifactStore.actionDomainArtifactID,
-        kind: .other,
-        format: .json,
-        inProjectAt: root,
-        producedByRunID: runID
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    _ = try await workspaceStore.persistArtifact(
+        content: encoder.encode(makeActionDomainSnapshot(runID: runID, repair: repair)),
+        id: try ArtifactID(rawValue: XcircuitePlanningArtifactStore.actionDomainArtifactID),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(
+                workspaceRelativePath: ".xcircuite/runs/\(runID)/planning/action-domain-snapshot.json"
+            ),
+            role: .output,
+            kind: .other,
+            format: .json
+        ),
+        runID: runID,
+        mode: .replaceable
     )
-    try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
 }
 
 func makePlanningProblem(
@@ -56,7 +61,7 @@ func makePlanningProblem(
                 kind: "layout",
                 artifactID: "layout-json",
                 metadata: includeViolationAtom
-                    ? ["symbolicStateAtoms": .array([.string(repair.violationAtom)])]
+                    ? ["symbolicStateAtoms": .textList([repair.violationAtom])]
                     : [:]
             ),
         ],
@@ -69,11 +74,11 @@ func makePlanningProblem(
                 priority: "error",
                 sourceRefIDs: ["layout-drc-input"],
                 target: repair.target,
-                currentValue: .number(1),
-                requiredValue: .number(0),
+                currentValue: .scalar(1),
+                requiredValue: .scalar(0),
                 description: repair.objectiveDescription,
                 evidence: [
-                    "symbolicGoalAtoms": .array([.string(repair.goalAtom)]),
+                    "symbolicGoalAtoms": .textList([repair.goalAtom]),
                 ]
             ),
         ],
@@ -319,13 +324,11 @@ func waitForProcessExit(_ pid: pid_t, timeoutSeconds: Double) async -> Bool {
 }
 
 func writeMockPlanner(to solverURL: URL, planText: String) throws {
-    try XcircuiteWorkspaceStore().writeText(
-        """
+    let script = """
         #!/bin/sh
         printf '\(planText)'
-        """,
-        to: solverURL
-    )
+        """
+    try Data(script.utf8).write(to: solverURL, options: .atomic)
     try FileManager.default.setAttributes(
         [.posixPermissions: 0o755],
         ofItemAtPath: solverURL.path(percentEncoded: false)
@@ -338,8 +341,7 @@ func writeMockProofChecker(
     success: Bool
 ) throws {
     let failureExit = success ? 3 : 4
-    try XcircuiteWorkspaceStore().writeText(
-        """
+    let script = """
         #!/bin/sh
         if grep -q '\(expectedText)' "$1"; then
           echo 'proof valid'
@@ -347,9 +349,8 @@ func writeMockProofChecker(
         fi
         echo 'proof invalid' >&2
         exit \(failureExit)
-        """,
-        to: checkerURL
-    )
+        """
+    try Data(script.utf8).write(to: checkerURL, options: .atomic)
     try FileManager.default.setAttributes(
         [.posixPermissions: 0o755],
         ofItemAtPath: checkerURL.path(percentEncoded: false)
@@ -357,8 +358,7 @@ func writeMockProofChecker(
 }
 
 func writeDRCRepairMockPlanner(to solverURL: URL) throws {
-    try XcircuiteWorkspaceStore().writeText(
-        """
+    let script = """
         #!/bin/sh
         case "$1" in
           *run-drc-width*) printf '0.000: (a-fix-m1-width) [1.000]\\n' ;;
@@ -373,9 +373,8 @@ func writeDRCRepairMockPlanner(to solverURL: URL) throws {
           *run-drc-cut*) printf '0.000: (a-fix-drc-cut-rule) [1.000]\\n' ;;
           *) exit 2 ;;
         esac
-        """,
-        to: solverURL
-    )
+        """
+    try Data(script.utf8).write(to: solverURL, options: .atomic)
     try FileManager.default.setAttributes(
         [.posixPermissions: 0o755],
         ofItemAtPath: solverURL.path(percentEncoded: false)

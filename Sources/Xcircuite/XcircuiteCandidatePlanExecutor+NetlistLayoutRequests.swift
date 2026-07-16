@@ -15,16 +15,13 @@ extension XcircuiteCandidatePlanExecutor {
         context: inout CandidatePlanExecutionContext
     ) async throws -> XcircuiteCandidatePlanExecutionStepResult {
         let executionDirectory = try executionDirectoryURL(plan: plan, step: step, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: executionDirectory)
+        try await ensureWorkspaceDirectory(at: executionDirectory, projectRoot: projectRoot)
         guard let sourceNetlistPath = stringHint("netlistPath", step: step)
             ?? stringHint("inputNetlistPath", step: step)
             ?? context.latestNetlistPath else {
             throw XcircuiteCandidatePlanExecutionError.missingNetlistInput(stepID: step.stepID)
         }
-        let sourceNetlistURL = try workspaceStore.url(
-            forProjectRelativePath: sourceNetlistPath,
-            inProjectAt: projectRoot
-        )
+        let sourceNetlistURL = try projectURL(for: sourceNetlistPath, projectRoot: projectRoot)
         let source = try String(contentsOf: sourceNetlistURL, encoding: .utf8)
         let parsed = try await SPICEIO.parse(
             source,
@@ -40,15 +37,14 @@ extension XcircuiteCandidatePlanExecutor {
         let outputNetlistURL = executionDirectory.appending(path: "netlist.spice")
         let outputNetlistPath = try projectRelativePath(for: outputNetlistURL, projectRoot: projectRoot)
         let serialized = SPICESerializer().serialize(edited.netlist, options: .default)
-        try workspaceStore.writeText(serialized, to: outputNetlistURL)
+        try await writeWorkspaceText(serialized, to: outputNetlistURL, projectRoot: projectRoot)
         context.latestNetlistPath = outputNetlistPath
         let outputNetlistRef = try artifactBuilder.reference(
             for: outputNetlistURL,
             projectRoot: projectRoot,
             artifactID: "candidate-step-\(step.order)-edited-netlist",
             kind: .netlist,
-            format: .spice,
-            producedByRunID: plan.runID
+            format: .spice
         )
 
         let reportURL = executionDirectory.appending(path: "netlist-parameter-edit-report.json")
@@ -60,25 +56,20 @@ extension XcircuiteCandidatePlanExecutor {
             sourceParameterCandidateID: stringHint("sourceParameterCandidateID", step: step),
             sourceNetlistPath: sourceNetlistPath,
             outputNetlistPath: outputNetlistPath,
-            outputNetlistArtifactID: outputNetlistRef.artifactID ?? "candidate-step-\(step.order)-edited-netlist",
+            outputNetlistArtifactID: outputNetlistRef.artifactID,
             edits: edited.edits
         )
-        try workspaceStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try await writeWorkspaceJSON(report, to: reportURL, projectRoot: projectRoot)
         let reportRef = try artifactBuilder.reference(
             for: reportURL,
             projectRoot: projectRoot,
             artifactID: "candidate-step-\(step.order)-netlist-parameter-edit-report",
             kind: .report,
-            format: .json,
-            producedByRunID: plan.runID
+            format: .json
         )
-        let artifacts = [outputNetlistRef, reportRef]
-        for artifact in artifacts {
-            try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
-        }
-        let artifactReferences = try foundationArtifactReferences(
-            artifacts,
-            field: "candidate-step-netlist-parameter-edit"
+        let artifacts = try await retainRunArtifacts(
+            [outputNetlistRef, reportRef],
+            runID: plan.runID
         )
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
@@ -87,7 +78,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "executed",
-            artifactReferences: artifactReferences,
+            artifactReferences: artifacts,
             nextActions: signoffNextActions(for: step)
         )
     }
@@ -184,17 +175,14 @@ extension XcircuiteCandidatePlanExecutor {
         guard requiresExistingCell(step.operationID) else {
             return step
         }
-        let documentURL = try workspaceStore.url(
-            forProjectRelativePath: inputDocumentPath,
-            inProjectAt: projectRoot
-        )
+        let documentURL = try projectURL(for: inputDocumentPath, projectRoot: projectRoot)
         let documentData = try Data(contentsOf: documentURL)
         let document = try LayoutDocumentSerializer().decodeDocument(documentData)
         guard let cellID = document.topCellID ?? document.cells.first?.id else {
             return step
         }
         var inferred = step
-        inferred.parameterHints["cellID"] = .string(cellID.uuidString)
+        inferred.parameterHints["cellID"] = .text(cellID.uuidString)
         return inferred
     }
 
@@ -346,10 +334,7 @@ extension XcircuiteCandidatePlanExecutor {
         }
         let cellID = try uuidHint("cellID", step: step, fallbackIndex: step.order * 10 + 1)
         let shapeID = try uuidHint("shapeID", step: step, fallbackIndex: step.order * 10 + 3)
-        let documentURL = try workspaceStore.url(
-            forProjectRelativePath: inputDocumentPath,
-            inProjectAt: projectRoot
-        )
+        let documentURL = try projectURL(for: inputDocumentPath, projectRoot: projectRoot)
         let documentData = try Data(contentsOf: documentURL)
         let document = try LayoutDocumentSerializer().decodeDocument(documentData)
         guard let cell = document.cell(withID: cellID),

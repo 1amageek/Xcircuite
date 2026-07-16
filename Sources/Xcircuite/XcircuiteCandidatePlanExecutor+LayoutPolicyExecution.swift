@@ -13,9 +13,9 @@ extension XcircuiteCandidatePlanExecutor {
         plan: XcircuiteCandidatePlan,
         projectRoot: URL,
         context: inout CandidatePlanExecutionContext
-    ) throws -> XcircuiteCandidatePlanExecutionStepResult {
+    ) async throws -> XcircuiteCandidatePlanExecutionStepResult {
         let executionDirectory = try executionDirectoryURL(plan: plan, step: step, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: executionDirectory)
+        try await ensureWorkspaceDirectory(at: executionDirectory, projectRoot: projectRoot)
         let request = try layoutCommandRequest(
             step: step,
             plan: plan,
@@ -24,7 +24,7 @@ extension XcircuiteCandidatePlanExecutor {
             context: context
         )
         let requestURL = executionDirectory.appending(path: "layout-command-request.json")
-        try workspaceStore.writeJSON(request, to: requestURL, forProjectAt: projectRoot)
+        try await writeWorkspaceJSON(request, to: requestURL, projectRoot: projectRoot)
 
         let result = try layoutRunner.run(request: request, baseURL: projectRoot)
         let validatedArtifacts = try validateLayoutCommandResult(
@@ -43,32 +43,28 @@ extension XcircuiteCandidatePlanExecutor {
                 projectRoot: projectRoot,
                 artifactID: "candidate-step-\(step.order)-layout-request",
                 kind: .other,
-                format: .json,
-                producedByRunID: plan.runID
+                format: .json
             ),
             artifactBuilder.reference(
                 for: validatedArtifacts.outputDocumentURL,
                 projectRoot: projectRoot,
                 artifactID: "candidate-step-\(step.order)-layout-document",
                 kind: .layout,
-                format: .json,
-                producedByRunID: plan.runID
+                format: .json
             ),
             artifactBuilder.reference(
                 for: validatedArtifacts.resultURL,
                 projectRoot: projectRoot,
                 artifactID: "candidate-step-\(step.order)-layout-result",
                 kind: .report,
-                format: .json,
-                producedByRunID: plan.runID
+                format: .json
             ),
             artifactBuilder.reference(
                 for: validatedArtifacts.manifestURL,
                 projectRoot: projectRoot,
                 artifactID: "candidate-step-\(step.order)-layout-manifest",
                 kind: .report,
-                format: .json,
-                producedByRunID: plan.runID
+                format: .json
             ),
         ]
         artifacts.append(contentsOf: try standardLayoutArtifactRefs(
@@ -79,13 +75,7 @@ extension XcircuiteCandidatePlanExecutor {
             executionDirectory: executionDirectory,
             projectRoot: projectRoot
         ))
-        for artifact in artifacts {
-            try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
-        }
-        let artifactReferences = try foundationArtifactReferences(
-            artifacts,
-            field: "candidate-step-layout-command"
-        )
+        artifacts = try await retainRunArtifacts(artifacts, runID: plan.runID)
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
             order: step.order,
@@ -93,7 +83,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "executed",
-            artifactReferences: artifactReferences,
+            artifactReferences: artifacts,
             nextActions: signoffNextActions(for: step)
         )
     }
@@ -102,9 +92,9 @@ extension XcircuiteCandidatePlanExecutor {
         step: XcircuiteCandidatePlanStep,
         plan: XcircuiteCandidatePlan,
         projectRoot: URL
-    ) throws -> XcircuiteCandidatePlanExecutionStepResult {
+    ) async throws -> XcircuiteCandidatePlanExecutionStepResult {
         let executionDirectory = try executionDirectoryURL(plan: plan, step: step, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: executionDirectory)
+        try await ensureWorkspaceDirectory(at: executionDirectory, projectRoot: projectRoot)
 
         let policyKind = try lvsPolicyRepairKind(from: step)
         let policyURL: URL
@@ -114,13 +104,13 @@ extension XcircuiteCandidatePlanExecutor {
         case "model-equivalence":
             let policy = try modelEquivalencePolicy(from: step)
             policyURL = executionDirectory.appending(path: "model-equivalence-policy.json")
-            try workspaceStore.writeJSON(policy, to: policyURL, forProjectAt: projectRoot)
+            try await writeWorkspaceJSON(policy, to: policyURL, projectRoot: projectRoot)
             policyArtifactID = "candidate-step-\(step.order)-model-equivalence-policy"
             terminalPolicyMetadata = nil
         case "terminal-equivalence":
             let policy = try terminalEquivalencePolicy(from: step)
             policyURL = executionDirectory.appending(path: "terminal-equivalence-policy.json")
-            try workspaceStore.writeJSON(policy.policy, to: policyURL, forProjectAt: projectRoot)
+            try await writeWorkspaceJSON(policy.policy, to: policyURL, projectRoot: projectRoot)
             policyArtifactID = "candidate-step-\(step.order)-terminal-equivalence-policy"
             terminalPolicyMetadata = (
                 kind: policy.rule.kind,
@@ -160,34 +150,24 @@ extension XcircuiteCandidatePlanExecutor {
             rationale: step.reason
         )
         let reportURL = executionDirectory.appending(path: "lvs-policy-repair-report.json")
-        try workspaceStore.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
+        try await writeWorkspaceJSON(report, to: reportURL, projectRoot: projectRoot)
 
-        let artifacts = try [
+        let artifacts = try await retainRunArtifacts([
             artifactBuilder.reference(
                 for: policyURL,
                 projectRoot: projectRoot,
                 artifactID: policyArtifactID,
                 kind: .model,
-                format: .json,
-                producedByRunID: plan.runID
+                format: .json
             ),
             artifactBuilder.reference(
                 for: reportURL,
                 projectRoot: projectRoot,
                 artifactID: "candidate-step-\(step.order)-lvs-policy-repair-report",
                 kind: .report,
-                format: .json,
-                producedByRunID: plan.runID
+                format: .json
             ),
-        ]
-        for artifact in artifacts {
-            try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
-        }
-        let artifactReferences = try foundationArtifactReferences(
-            artifacts,
-            field: "candidate-step-lvs-policy-repair"
-        )
-
+        ], runID: plan.runID)
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
             order: step.order,
@@ -195,7 +175,7 @@ extension XcircuiteCandidatePlanExecutor {
             domainID: step.domainID,
             operationID: step.operationID,
             status: "executed",
-            artifactReferences: artifactReferences,
+            artifactReferences: artifacts,
             nextActions: signoffNextActions(for: step)
         )
     }
@@ -207,14 +187,14 @@ extension XcircuiteCandidatePlanExecutor {
         outputDocumentURL: URL,
         executionDirectory: URL,
         projectRoot: URL
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let specs = try standardLayoutExportSpecs(from: step)
         guard !specs.isEmpty else {
             return []
         }
         let documentData = try Data(contentsOf: outputDocumentURL)
         let document = try LayoutDocumentSerializer().decodeDocument(documentData)
-        let runDirectory = try XcircuiteWorkspace(projectRoot: projectRoot).runDirectoryURL(for: plan.runID)
+        let runDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot).runDirectoryURL(for: plan.runID)
         return try specs.map { spec in
             let artifact = try exportStandardLayout(
                 document,
@@ -228,8 +208,7 @@ extension XcircuiteCandidatePlanExecutor {
                 projectRoot: projectRoot,
                 artifactID: artifact.artifactID,
                 kind: .layout,
-                format: artifact.format,
-                producedByRunID: plan.runID
+                format: artifact.format
             )
         }
     }
@@ -258,18 +237,9 @@ extension XcircuiteCandidatePlanExecutor {
                 field: "resultPath"
             )
         }
-        let outputURL = try workspaceStore.url(
-            forProjectRelativePath: request.outputDocumentPath,
-            inProjectAt: projectRoot
-        )
-        let manifestURL = try workspaceStore.url(
-            forProjectRelativePath: manifestPath,
-            inProjectAt: projectRoot
-        )
-        let resultURL = try workspaceStore.url(
-            forProjectRelativePath: resultPath,
-            inProjectAt: projectRoot
-        )
+        let outputURL = try projectURL(for: request.outputDocumentPath, projectRoot: projectRoot)
+        let manifestURL = try projectURL(for: manifestPath, projectRoot: projectRoot)
+        let resultURL = try projectURL(for: resultPath, projectRoot: projectRoot)
         try requireLayoutCommandPath(
             result.outputDocumentPath,
             equals: outputURL,
@@ -317,8 +287,8 @@ extension XcircuiteCandidatePlanExecutor {
         outputURL: URL,
         stepID: String
     ) throws {
-        let hasher = XcircuiteHasher()
-        let byteCount = try hasher.byteCount(fileAt: outputURL)
+        let fingerprint = try LocalFileFingerprinter().fingerprint(fileAt: outputURL)
+        let byteCount = Int64(fingerprint.byteCount)
         guard byteCount == Int64(result.outputDocumentByteCount) else {
             throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputByteCountMismatch(
                 stepID: stepID,
@@ -327,7 +297,7 @@ extension XcircuiteCandidatePlanExecutor {
                 actual: byteCount
             )
         }
-        let digest = try hasher.sha256(fileAt: outputURL)
+        let digest = fingerprint.digest.hexadecimalValue
         guard digest == result.outputDocumentSHA256 else {
             throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputDigestMismatch(
                 stepID: stepID,
@@ -345,11 +315,8 @@ extension XcircuiteCandidatePlanExecutor {
     func standardLayoutExportSpecs(
         from step: XcircuiteCandidatePlanStep
     ) throws -> [LayoutCommandStandardLayoutExportSpec] {
-        if let specs: [LayoutCommandStandardLayoutExportSpec] = try decodedHint("standardLayoutExports", from: step) {
+        if case .standardLayoutExports(let specs)? = step.parameterHints["standardLayoutExports"] {
             return specs
-        }
-        if let spec: LayoutCommandStandardLayoutExportSpec = try decodedHint("standardLayoutExport", from: step) {
-            return [spec]
         }
         return []
     }
@@ -361,7 +328,7 @@ extension XcircuiteCandidatePlanExecutor {
         runDirectory: URL,
         projectRoot: URL
     ) throws -> CandidatePlanStandardLayoutArtifact {
-        try XcircuiteIdentifierValidator().validate(spec.artifactID, kind: .artifactID)
+        try FlowIdentifierValidator().validate(spec.artifactID, kind: .artifactID)
         let exportURL = executionDirectory.appending(
             path: "\(spec.artifactID).\(try standardLayoutFileExtension(for: spec.format))"
         )
@@ -374,7 +341,7 @@ extension XcircuiteCandidatePlanExecutor {
         return CandidatePlanStandardLayoutArtifact(
             url: exportURL,
             artifactID: spec.artifactID,
-            format: try xcircuiteFileFormat(for: spec.format)
+            format: try artifactFormat(for: spec.format)
         )
     }
 
@@ -405,7 +372,7 @@ extension XcircuiteCandidatePlanExecutor {
         }
     }
 
-    func xcircuiteFileFormat(for format: LayoutFileFormat) throws -> XcircuiteFileFormat {
+    func artifactFormat(for format: LayoutFileFormat) throws -> ArtifactFormat {
         switch format {
         case .gds:
             return .gdsii
@@ -421,20 +388,17 @@ extension XcircuiteCandidatePlanExecutor {
     func initialLayoutDocumentPathIfNeeded(
         for plan: XcircuiteCandidatePlan,
         projectRoot: URL
-    ) throws -> String? {
+    ) async throws -> String? {
         guard plan.steps.contains(where: needsInitialLayoutDocument) else {
             return nil
         }
         guard let problemPath = plan.sourceProblemRef.path else {
             return nil
         }
-        let problemURL = try workspaceStore.url(
-            forProjectRelativePath: problemPath,
-            inProjectAt: projectRoot
-        )
-        let problem = try workspaceStore.readJSON(
+        let problemURL = try projectURL(for: problemPath, projectRoot: projectRoot)
+        let problem = try JSONDecoder().decode(
             XcircuiteCircuitPlanningProblem.self,
-            from: problemURL
+            from: Data(contentsOf: problemURL)
         )
         guard let layoutPath = problem.initialStateRefs.first(where: { $0.refID == "layout-ref" })?.path else {
             return nil
@@ -442,10 +406,7 @@ extension XcircuiteCandidatePlanExecutor {
         guard layoutPath.lowercased().hasSuffix(".json") else {
             return nil
         }
-        let layoutURL = try workspaceStore.url(
-            forProjectRelativePath: layoutPath,
-            inProjectAt: projectRoot
-        )
+        let layoutURL = try projectURL(for: layoutPath, projectRoot: projectRoot)
         guard FileManager.default.fileExists(atPath: layoutURL.path(percentEncoded: false)) else {
             return nil
         }

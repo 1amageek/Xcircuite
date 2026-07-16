@@ -1,13 +1,13 @@
 import Foundation
 import PEXEngine
 import Testing
-import Xcircuite
+@testable import Xcircuite
 import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
 @Suite("Xcircuite diagnostic planning problem builder PEX")
 struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
-    @Test func pexSummaryCreatesMetricRecoveryProblem() throws {
+    @Test func pexSummaryCreatesMetricRecoveryProblem() async throws {
         let summary = makePEXSummary()
         let metricReport = makePostLayoutMetricReport()
 
@@ -30,7 +30,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             "drc-signoff",
             "lvs-signoff",
         ])
-        #expect(problem.sourceRefs.first?.metadata["pexRunID"] == .string("pex-run-1"))
+        #expect(problem.sourceRefs.first?.metadata["pexRunID"] == .text("pex-run-1"))
         #expect(problem.initialStateRefs.contains {
             $0.refID == "source-netlist-ref" && $0.path == "circuits/top.postpex.spice"
         })
@@ -46,38 +46,38 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         let metricRef = try #require(problem.sourceRefs.first {
             $0.refID == "post-layout-metric-report"
         })
-        #expect(metricRef.metadata["gateStatus"] == .string("failed"))
-        #expect(metricRef.metadata["gateViolationCount"] == .number(1))
+        #expect(metricRef.metadata["gateStatus"] == .text("failed"))
+        #expect(metricRef.metadata["gateViolationCount"] == .scalar(1))
         #expect(problem.objectives.contains {
             $0.target == "reduce-parasitic-hotspot"
-                && $0.evidence["netName"] == .string("OUT")
-                && $0.currentValue == .number(3.0e-12)
+                && $0.evidence["netName"] == .text("OUT")
+                && $0.currentValue == .scalar(3.0e-12)
         })
         #expect(problem.objectives.contains {
             $0.target == "resolve-pex-summary-diagnostic"
-                && $0.evidence["code"] == .string("PEX_WARN_COUPLING")
+                && $0.evidence["code"] == .text("PEX_WARN_COUPLING")
         })
         #expect(problem.objectives.contains {
             $0.target == "post-layout-metric-gate-passed"
                 && $0.sourceRefIDs == ["post-layout-metric-report"]
-                && $0.currentValue == .string("failed")
-                && $0.requiredValue == .string("passed")
+                && $0.currentValue == .text("failed")
+                && $0.requiredValue == .text("passed")
         })
         #expect(problem.objectives.contains {
             $0.target == "reduce-post-layout-waveform-delta"
-                && $0.evidence["variableName"] == .string("vout")
-                && $0.currentValue == .number(0.30)
+                && $0.evidence["variableName"] == .text("vout")
+                && $0.currentValue == .scalar(0.30)
                 && $0.unit == "ratio"
         })
         #expect(problem.objectives.contains {
             $0.target == "restore-required-post-layout-variable"
-                && $0.evidence["variableName"] == .string("clk")
-                && $0.evidence["present"] == .bool(false)
+                && $0.evidence["variableName"] == .text("clk")
+                && $0.evidence["present"] == .boolean(false)
         })
         #expect(problem.objectives.contains {
             $0.target == "recover-post-layout-oscillation-metric"
-                && $0.evidence["variableName"] == .string("vout")
-                && $0.evidence["frequencyRelativeDelta"] == .number(0.18)
+                && $0.evidence["variableName"] == .text("vout")
+                && $0.evidence["frequencyRelativeDelta"] == .scalar(0.18)
         })
         #expect(problem.candidateActions.contains {
             $0.domainID == "pex-extraction"
@@ -87,11 +87,11 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
                 && $0.requiredInputRefs.contains("pex-technology-ref")
         })
         #expect(problem.candidateActions.contains {
-            guard case .object(let inputs) = $0.parameterHints["pexInputs"] else {
+            guard case .pexInputs(let inputs) = $0.parameterHints["pexInputs"] else {
                 return false
             }
-            return inputs["technologyRef"] == .string("pex-technology-ref")
-                && inputs["backendID"] == .string("mock-pex")
+            return inputs.technologyReferenceID == "pex-technology-ref"
+                && inputs.backendID == "mock-pex"
         })
         #expect(problem.candidateActions.contains {
             $0.domainID == "simulation-analysis"
@@ -106,19 +106,19 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         #expect(problem.verificationGates.contains {
             $0.gateID == "simulation-metric-gate" && $0.required
         })
-        try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-3/planning/problem.json")
+        try await expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-3/planning/problem.json")
     }
 
     @Test func generatePlanningProblemCLIReadsPEXSummaryFromRunManifest() async throws {
         let root = try makeTemporaryRoot("pex-planning-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-3", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-3", store: store)
         let summaryPath = ".xcircuite/runs/run-3/stages/009-pex/raw/pex-summary.json"
         let layoutPath = ".xcircuite/runs/run-3/stages/006-layout/raw/layout.gds"
         let technologyPath = "tech/pex-technology.json"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makePEXSummary(),
             artifactID: "pex-summary",
             path: summaryPath,
@@ -127,7 +127,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             root: root,
             runID: "run-3"
         )
-        try registerDataArtifact(
+        try await registerDataArtifact(
             Data("GDS payload\n".utf8),
             artifactID: "layout-gds",
             path: layoutPath,
@@ -136,7 +136,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             root: root,
             runID: "run-3"
         )
-        try registerDataArtifact(
+        try await registerDataArtifact(
             Data(#"{"processName":"test_process","stack":[],"logicalToPhysicalLayerMap":{},"vias":[],"defaultExtractionRules":{"reductionPolicy":"none"},"backendHints":{}}"#.utf8),
             artifactID: "pex-technology",
             path: technologyPath,
@@ -149,11 +149,10 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             at: root.appending(path: "reports"),
             withIntermediateDirectories: true
         )
-        try store.writeJSON(
-            makePostLayoutMetricReport(),
-            to: root.appending(path: "reports/post-layout-metrics.json"),
-            forProjectAt: root
-        )
+        let metricReportURL = root.appending(path: "reports/post-layout-metrics.json")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(makePostLayoutMetricReport()).write(to: metricReportURL, options: .atomic)
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -186,9 +185,9 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         #expect(result.technologyPath == technologyPath)
         #expect(result.metricReportPath == "reports/post-layout-metrics.json")
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: result.problemArtifact.path)
+            from: result.problemArtifact.path
         )
         #expect(problem.sourceRefs.first?.path == summaryPath)
         #expect(problem.initialStateRefs.contains {
@@ -198,15 +197,15 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             $0.refID == "pex-technology-ref" && $0.path == technologyPath
         })
         #expect(problem.objectives.contains {
-            $0.target == "reduce-parasitic-hotspot" && $0.evidence["netName"] == .string("OUT")
+            $0.target == "reduce-parasitic-hotspot" && $0.evidence["netName"] == .text("OUT")
         })
         #expect(problem.objectives.contains {
             $0.target == "post-layout-metric-gate-passed"
-                && $0.currentValue == .string("failed")
+                && $0.currentValue == .text("failed")
         })
         #expect(problem.objectives.contains {
             $0.target == "reduce-post-layout-waveform-delta"
-                && $0.evidence["variableName"] == .string("vout")
+                && $0.evidence["variableName"] == .text("vout")
         })
         #expect(problem.candidateActions.contains {
             $0.operationID == "pex.metric-recovery-objective"
@@ -214,14 +213,14 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         })
     }
 
-    @Test func generatePlanningProblemRejectsMissingExplicitMetricReport() throws {
+    @Test func generatePlanningProblemRejectsMissingExplicitMetricReport() async throws {
         let root = try makeTemporaryRoot("pex-planning-missing-metric-report")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-missing-metric", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-missing-metric", store: store)
         let summaryPath = ".xcircuite/runs/run-missing-metric/stages/009-pex/raw/pex-summary.json"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makePEXSummary(),
             artifactID: "pex-summary",
             path: summaryPath,
@@ -231,10 +230,13 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             runID: "run-missing-metric"
         )
 
-        #expect(throws: XcircuitePlanningProblemGenerationError.explicitPathNotFound(
+        await #expect(throws: XcircuitePlanningProblemGenerationError.explicitPathNotFound(
             path: "reports/missing-post-layout-metrics.json"
         )) {
-            _ = try XcircuitePlanningProblemGenerator().generateRepairProblem(
+            _ = try await XcircuitePlanningProblemGenerator(
+                workspaceStore: store,
+                artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+            ).generateRepairProblem(
                 request: XcircuitePlanningProblemGenerationRequest(
                     runID: "run-missing-metric",
                     source: .pexSummary,
@@ -347,12 +349,16 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
     private func expectValidPlanningProblem(
         _ problem: XcircuiteCircuitPlanningProblem,
         problemPath: String
-    ) throws {
+    ) async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: problem.runID,
             generatedAt: "2026-06-21T00:00:00Z"
         )
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let store = try XcircuiteWorkspaceStore(projectRoot: FileManager.default.temporaryDirectory)
+        let validation = XcircuitePlanningProblemValidator(
+            workspaceStore: store,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+        ).makeValidation(
             problem: problem,
             problemPath: problemPath,
             actionDomainSnapshot: snapshot
@@ -365,53 +371,53 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         _ value: T,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
         root: URL,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
+    ) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try store.writeJSON(value, to: url, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: path,
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(value).write(to: url, options: .atomic)
+        let reference = try StageArtifactReferenceBuilder().reference(
+            for: url,
+            projectRoot: root,
             artifactID: artifactID,
             kind: kind,
             format: format,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(reference, runID: runID, store: store, projectRoot: root)
     }
 
     private func registerDataArtifact(
         _ data: Data,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
         root: URL,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
+    ) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try data.write(to: url, options: .atomic)
-        let reference = try store.fileReference(
-            forProjectRelativePath: path,
+        let reference = try StageArtifactReferenceBuilder().reference(
+            for: url,
+            projectRoot: root,
             artifactID: artifactID,
             kind: kind,
             format: format,
-            inProjectAt: root,
-            producedByRunID: runID
         )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
+        _ = try await retainTestArtifact(reference, runID: runID, store: store, projectRoot: root)
     }
 }

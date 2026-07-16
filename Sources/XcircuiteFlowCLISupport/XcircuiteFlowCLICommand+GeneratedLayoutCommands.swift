@@ -4,7 +4,7 @@ import Xcircuite
 import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
-    static func collectGeneratedLayoutSignoffCorpus(arguments: [String]) throws -> String {
+    static func collectGeneratedLayoutSignoffCorpus(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var requestURL: URL?
@@ -40,14 +40,19 @@ extension XcircuiteFlowCLICommand {
             from: requestURL,
             option: "--request"
         )
-        let collector = XcircuiteGeneratedLayoutSignoffCorpusCollector()
-        let report = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let collector = XcircuiteGeneratedLayoutSignoffCorpusCollector(
+            ledgerLoader: workspaceStore,
+            reviewBundler: makeReviewBundler(store: workspaceStore),
+            workspaceStore: workspaceStore
+        )
+        let report = try await persist
             ? collector.collectAndPersist(request: request, projectRoot: projectRoot)
             : collector.collect(request: request, projectRoot: projectRoot)
         return try encode(report, pretty: pretty)
     }
 
-    static func qualifyGeneratedLayoutSignoffCorpus(arguments: [String]) throws -> String {
+    static func qualifyGeneratedLayoutSignoffCorpus(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var reportURL: URL?
@@ -97,14 +102,15 @@ extension XcircuiteFlowCLICommand {
             policy = .defaultPolicy(requiredCoverageTags: report.summary.requiredCoverageTags)
         }
 
-        let qualifier = XcircuiteGeneratedLayoutSignoffCorpusQualifier()
-        let result = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let qualifier = XcircuiteGeneratedLayoutSignoffCorpusQualifier(workspaceStore: workspaceStore)
+        let result = try await persist
             ? qualifier.qualifyAndPersist(report: report, policy: policy, projectRoot: projectRoot)
             : qualifier.qualify(report: report, policy: policy)
         return try encode(result, pretty: pretty)
     }
 
-    static func attachGeneratedLayoutReadyOracleEvidence(arguments: [String]) throws -> String {
+    static func attachGeneratedLayoutReadyOracleEvidence(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var reportURL: URL?
@@ -151,8 +157,9 @@ extension XcircuiteFlowCLICommand {
             from: retainedSignoffReportURL,
             option: "--retained-signoff-report"
         )
-        let attacher = XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher()
-        let result = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let attacher = XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher(workspaceStore: workspaceStore)
+        let result = try await persist
             ? attacher.attachAndPersist(
                 report: report,
                 retainedSignoffReport: retainedReport,
@@ -167,7 +174,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func auditGeneratedLayoutSignoffCorpusCoverage(arguments: [String]) throws -> String {
+    static func auditGeneratedLayoutSignoffCorpusCoverage(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var reportURL: URL?
@@ -214,14 +221,15 @@ extension XcircuiteFlowCLICommand {
             from: policyURL,
             option: "--policy"
         )
-        let auditor = XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor()
-        let audit = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let auditor = XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditor(workspaceStore: workspaceStore)
+        let audit = try await persist
             ? auditor.auditAndPersist(report: report, policy: policy, projectRoot: projectRoot)
             : auditor.audit(report: report, policy: policy)
         return try encode(audit, pretty: pretty)
     }
 
-    static func assessGeneratedLayoutSignoffPromotion(arguments: [String]) throws -> String {
+    static func assessGeneratedLayoutSignoffPromotion(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var qualificationURL: URL?
@@ -276,8 +284,9 @@ extension XcircuiteFlowCLICommand {
         let request = XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
             promotionID: promotionID ?? "generated-layout-signoff-promotion"
         )
-        let assessor = XcircuiteGeneratedLayoutSignoffPromotionAssessor()
-        let assessment = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let assessor = XcircuiteGeneratedLayoutSignoffPromotionAssessor(workspaceStore: workspaceStore)
+        let assessment = try await persist
             ? assessor.assessAndPersist(
                 request: request,
                 qualification: qualification,
@@ -294,7 +303,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(assessment, pretty: pretty)
     }
 
-    static func collectGeneratedLayoutFailureLadder(arguments: [String]) throws -> String {
+    static func collectGeneratedLayoutFailureLadder(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -332,14 +341,19 @@ extension XcircuiteFlowCLICommand {
             ladderID: ladderID ?? "generated-layout-failure-ladder-\(runID)",
             runID: runID
         )
-        let collector = XcircuiteGeneratedLayoutFailureLadderCollector()
-        let report = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let collector = XcircuiteGeneratedLayoutFailureLadderCollector(
+            ledgerLoader: workspaceStore,
+            reviewBundler: makeReviewBundler(store: workspaceStore),
+            workspaceStore: workspaceStore
+        )
+        let report = try await persist
             ? collector.collectAndPersist(request: request, projectRoot: projectRoot)
             : collector.collect(request: request, projectRoot: projectRoot)
         return try encode(report, pretty: pretty)
     }
 
-    static func auditGeneratedLayoutFailureLadderCoverage(arguments: [String]) throws -> String {
+    static func auditGeneratedLayoutFailureLadderCoverage(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var policyURL: URL?
@@ -388,8 +402,9 @@ extension XcircuiteFlowCLICommand {
                 option: "--report"
             )
         }
-        let auditor = XcircuiteGeneratedLayoutFailureLadderCoverageAuditor()
-        let audit = try persist
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let auditor = XcircuiteGeneratedLayoutFailureLadderCoverageAuditor(workspaceStore: workspaceStore)
+        let audit = try await persist
             ? auditor.auditAndPersist(reports: reports, policy: policy, projectRoot: projectRoot)
             : auditor.audit(reports: reports, policy: policy)
         return try encode(audit, pretty: pretty)

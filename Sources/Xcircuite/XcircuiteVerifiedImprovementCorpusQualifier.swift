@@ -1,28 +1,26 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     private let storage: any VerifiedImprovementCorpusStoring
-    private let identifierValidator: XcircuiteIdentifierValidator
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
-        storage: any VerifiedImprovementCorpusStoring = XcircuiteWorkspaceStore(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        storage: any VerifiedImprovementCorpusStoring,
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.storage = storage
         self.identifierValidator = identifierValidator
-        self.fileReferenceVerifier = fileReferenceVerifier
     }
 
     public func qualify(
-        suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec,
-        projectRoot: URL
-    ) throws -> XcircuiteVerifiedImprovementCorpusReport {
+        suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec
+    ) async throws -> XcircuiteVerifiedImprovementCorpusReport {
         try validate(suiteSpec)
-        let caseResults = suiteSpec.cases.map { caseSpec in
-            qualifyCase(caseSpec, projectRoot: projectRoot)
+        var caseResults: [XcircuiteVerifiedImprovementCorpusReport.CaseResult] = []
+        for caseSpec in suiteSpec.cases {
+            caseResults.append(try await qualifyCase(caseSpec))
         }
         return makeReport(
             suiteSpec: suiteSpec,
@@ -33,29 +31,21 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     }
 
     public func qualifyAndPersist(
-        suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec,
-        projectRoot: URL
-    ) throws -> XcircuiteVerifiedImprovementCorpusReport {
+        suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec
+    ) async throws -> XcircuiteVerifiedImprovementCorpusReport {
         try validate(suiteSpec)
-        let suiteDirectory = try suiteDirectoryURL(suiteID: suiteSpec.suiteID, projectRoot: projectRoot)
-        try storage.ensureDirectory(at: suiteDirectory)
-
         let suiteSpecPath = suiteProjectRelativePath(suiteID: suiteSpec.suiteID, fileName: "corpus-suite.json")
-        let suiteSpecURL = try storage.url(forProjectRelativePath: suiteSpecPath, inProjectAt: projectRoot)
-        try storage.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
-        let suiteSpecArtifact = try storage.fileReference(
-            forProjectRelativePath: suiteSpecPath,
-            artifactID: "verified-improvement-corpus-suite",
+        let suiteSpecArtifact = try await storage.persistProjectJSON(
+            suiteSpec,
+            id: "verified-improvement-corpus-suite",
+            path: suiteSpecPath,
             kind: .report,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: nil,
-            verifiedByRunID: nil
+            mode: .immutable
         )
-        try storage.upsertFileReference(suiteSpecArtifact, forProjectAt: projectRoot)
 
-        let caseResults = suiteSpec.cases.map { caseSpec in
-            qualifyCase(caseSpec, projectRoot: projectRoot)
+        var caseResults: [XcircuiteVerifiedImprovementCorpusReport.CaseResult] = []
+        for caseSpec in suiteSpec.cases {
+            caseResults.append(try await qualifyCase(caseSpec))
         }
         let reportWithoutSelfRef = makeReport(
             suiteSpec: suiteSpec,
@@ -65,18 +55,13 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         )
 
         let reportPath = suiteProjectRelativePath(suiteID: suiteSpec.suiteID, fileName: "corpus-report.json")
-        let reportURL = try storage.url(forProjectRelativePath: reportPath, inProjectAt: projectRoot)
-        try storage.writeJSON(reportWithoutSelfRef, to: reportURL, forProjectAt: projectRoot)
-        let reportArtifact = try storage.fileReference(
-            forProjectRelativePath: reportPath,
-            artifactID: "verified-improvement-corpus-report",
+        let reportArtifact = try await storage.persistProjectJSON(
+            reportWithoutSelfRef,
+            id: "verified-improvement-corpus-report",
+            path: reportPath,
             kind: .report,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: nil,
-            verifiedByRunID: nil
+            mode: .immutable
         )
-        try storage.upsertFileReference(reportArtifact, forProjectAt: projectRoot)
 
         var report = reportWithoutSelfRef
         report.reportArtifact = reportArtifact
@@ -117,52 +102,49 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     }
 
     private func qualifyCase(
-        _ caseSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec.CaseSpec,
-        projectRoot: URL
-    ) -> XcircuiteVerifiedImprovementCorpusReport.CaseResult {
+        _ caseSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec.CaseSpec
+    ) async throws -> XcircuiteVerifiedImprovementCorpusReport.CaseResult {
         var diagnostics: [XcircuiteVerifiedImprovementCorpusReport.Diagnostic] = []
-        var artifactRefs: [XcircuiteFileReference] = []
+        var artifactRefs: [ArtifactReference] = []
         var producedArtifactIDs: [String] = []
         var diagnosticCodes: [String] = []
         var failedGateIDs: [String] = []
         var numericLoop: XcircuiteNumericRepairLoopResult?
         var improvementLoop: XcircuiteImprovementLoopResult?
 
-        let runManifest = loadRunManifest(runID: caseSpec.runID, projectRoot: projectRoot, diagnostics: &diagnostics)
+        let runManifest = await loadRunManifest(runID: caseSpec.runID, diagnostics: &diagnostics)
 
-        let numericLoopResolution = resolveLoopArtifact(
+        let numericLoopResolution = await resolveLoopArtifact(
             explicitPath: caseSpec.numericRepairLoopPath,
             artifactID: XcircuitePlanningArtifactStore.numericRepairLoopArtifactID,
             field: "numericRepairLoopPath",
             runManifest: runManifest,
             runID: caseSpec.runID,
-            projectRoot: projectRoot,
             diagnostics: &diagnostics
         )
         if let numericLoopResolution {
             artifactRefs.append(numericLoopResolution.reference)
-            numericLoop = readJSON(
+            numericLoop = decodeJSON(
                 XcircuiteNumericRepairLoopResult.self,
-                from: numericLoopResolution.url,
+                from: numericLoopResolution.data,
                 description: "numeric repair loop",
                 diagnostics: &diagnostics
             )
         }
 
-        let improvementLoopResolution = resolveLoopArtifact(
+        let improvementLoopResolution = await resolveLoopArtifact(
             explicitPath: caseSpec.improvementLoopPath,
             artifactID: XcircuitePlanningArtifactStore.improvementLoopArtifactID,
             field: "improvementLoopPath",
             runManifest: runManifest,
             runID: caseSpec.runID,
-            projectRoot: projectRoot,
             diagnostics: &diagnostics
         )
         if let improvementLoopResolution {
             artifactRefs.append(improvementLoopResolution.reference)
-            improvementLoop = readJSON(
+            improvementLoop = decodeJSON(
                 XcircuiteImprovementLoopResult.self,
-                from: improvementLoopResolution.url,
+                from: improvementLoopResolution.data,
                 description: "improvement loop",
                 diagnostics: &diagnostics
             )
@@ -175,10 +157,9 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
             artifactRefs.append(contentsOf: collectNumericArtifactRefs(numericLoop))
 
             for planVerificationArtifact in collectPlanVerificationRefs(numericLoop) {
-                let verification = readPlanVerification(
+                let verification = await readPlanVerification(
                     planVerificationArtifact,
                     runID: caseSpec.runID,
-                    projectRoot: projectRoot,
                     diagnostics: &diagnostics
                 )
                 if let verification {
@@ -213,7 +194,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         let statusMatches = observedStatus == caseSpec.expectedStatus
         let acceptedMatches = caseSpec.expectedAccepted.map { $0 == accepted } ?? true
         let observedArtifactIDs = stableUnique(
-            artifactRefs.compactMap(\.artifactID) + producedArtifactIDs
+            artifactRefs.map(\.artifactID) + producedArtifactIDs
         )
         let missingArtifactIDs = caseSpec.requiredArtifactIDs
             .filter { !observedArtifactIDs.contains($0) }
@@ -258,8 +239,8 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     private func makeReport(
         suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec,
         caseResults: [XcircuiteVerifiedImprovementCorpusReport.CaseResult],
-        suiteSpecArtifact: XcircuiteFileReference?,
-        reportArtifact: XcircuiteFileReference?
+        suiteSpecArtifact: ArtifactReference?,
+        reportArtifact: ArtifactReference?
     ) -> XcircuiteVerifiedImprovementCorpusReport {
         let coveredFamilies = Array(Set(caseResults.map(\.family))).sorted { $0.rawValue < $1.rawValue }
         let requiredFamilies = Array(Set(suiteSpec.requiredFamilies)).sorted { $0.rawValue < $1.rawValue }
@@ -303,11 +284,30 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
 
     private func loadRunManifest(
         runID: String,
-        projectRoot: URL,
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
-    ) -> XcircuiteRunManifest? {
+    ) async -> FlowRunManifest? {
         do {
-            return try storage.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+            return try await storage.loadRunManifest(runID: runID)
+        } catch FlowRunManifestError.invalidManifest(_, let reason)
+            where Self.isDuplicateArtifactManifestReason(reason) {
+            diagnostics.append(
+                diagnostic(
+                    severity: "error",
+                    code: "artifact-reference-duplicate",
+                    message: "Run manifest for \(runID) contains an ambiguous artifact reference: \(reason)"
+                )
+            )
+            return nil
+        } catch FlowRunLedgerPersistenceError.storageFailed(let reason)
+            where Self.isDuplicateArtifactManifestReason(reason) {
+            diagnostics.append(
+                diagnostic(
+                    severity: "error",
+                    code: "artifact-reference-duplicate",
+                    message: "Run manifest for \(runID) contains an ambiguous artifact reference: \(reason)"
+                )
+            )
+            return nil
         } catch {
             diagnostics.append(
                 diagnostic(
@@ -320,15 +320,19 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         }
     }
 
+    private static func isDuplicateArtifactManifestReason(_ reason: String) -> Bool {
+        reason.contains("must be unique")
+            && (reason.contains("artifactID") || reason.contains("artifact path"))
+    }
+
     private func resolveLoopArtifact(
         explicitPath: String?,
         artifactID: String,
         field: String,
-        runManifest: XcircuiteRunManifest?,
+        runManifest: FlowRunManifest?,
         runID: String,
-        projectRoot: URL,
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
-    ) -> (reference: XcircuiteFileReference, url: URL)? {
+    ) async -> (reference: ArtifactReference, data: Data)? {
         let matches = runManifest?.artifacts.filter { $0.artifactID == artifactID } ?? []
         if let explicitPath {
             guard !matches.isEmpty else {
@@ -363,18 +367,17 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
                 )
                 return nil
             }
-            guard let url = verifiedArtifactURL(
+            guard let data = await verifiedArtifactData(
                 reference,
                 expectedArtifactID: artifactID,
                 expectedFormat: .json,
                 runID: runID,
                 field: field,
-                projectRoot: projectRoot,
                 diagnostics: &diagnostics
             ) else {
                 return nil
             }
-            return (reference, url)
+            return (reference, data)
         }
 
         guard !matches.isEmpty else {
@@ -399,34 +402,33 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         }
 
         let reference = matches[0]
-        guard let url = verifiedArtifactURL(
+        guard let data = await verifiedArtifactData(
             reference,
             expectedArtifactID: artifactID,
             expectedFormat: .json,
             runID: runID,
             field: field,
-            projectRoot: projectRoot,
             diagnostics: &diagnostics
         ) else {
             return nil
         }
-        return (reference, url)
+        return (reference, data)
     }
 
-    private func readJSON<T: Decodable>(
+    private func decodeJSON<T: Decodable>(
         _ type: T.Type,
-        from url: URL,
+        from data: Data,
         description: String,
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
     ) -> T? {
         do {
-            return try storage.readJSON(type, from: url)
+            return try JSONDecoder().decode(type, from: data)
         } catch {
             diagnostics.append(
                 diagnostic(
                     severity: "error",
                     code: "\(description.replacingOccurrences(of: " ", with: "-"))-unavailable",
-                    message: "\(description) could not be loaded from \(url.lastPathComponent): \(error.localizedDescription)"
+                    message: "\(description) could not be decoded: \(error.localizedDescription)"
                 )
             )
             return nil
@@ -434,45 +436,42 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     }
 
     private func readPlanVerification(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         runID: String,
-        projectRoot: URL,
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
-    ) -> XcircuitePlanVerification? {
-        guard let url = verifiedArtifactURL(
+    ) async -> XcircuitePlanVerification? {
+        guard let data = await verifiedArtifactData(
             reference,
             expectedArtifactID: XcircuitePlanningArtifactStore.planVerificationArtifactID,
             expectedFormat: .json,
             runID: runID,
             field: "planVerificationArtifact",
-            projectRoot: projectRoot,
             diagnostics: &diagnostics
         ) else {
             return nil
         }
-        return readJSON(
+        return decodeJSON(
             XcircuitePlanVerification.self,
-            from: url,
+            from: data,
             description: "plan verification",
             diagnostics: &diagnostics
         )
     }
 
-    private func verifiedArtifactURL(
-        _ reference: XcircuiteFileReference,
+    private func verifiedArtifactData(
+        _ reference: ArtifactReference,
         expectedArtifactID: String,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String,
         field: String,
-        projectRoot: URL,
         diagnostics: inout [XcircuiteVerifiedImprovementCorpusReport.Diagnostic]
-    ) -> URL? {
+    ) async -> Data? {
         guard reference.artifactID == expectedArtifactID else {
             diagnostics.append(
                 diagnostic(
                     severity: "error",
                     code: "artifact-reference-invalid",
-                    message: "\(field) expected artifact \(expectedArtifactID) but found \(reference.artifactID ?? "<missing>")."
+                    message: "\(field) expected artifact \(expectedArtifactID) but found \(reference.artifactID)."
                 )
             )
             return nil
@@ -487,44 +486,23 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
             )
             return nil
         }
-        guard reference.producedByRunID == runID else {
-            diagnostics.append(
-                diagnostic(
-                    severity: "error",
-                    code: "artifact-reference-invalid",
-                    message: "\(field) for artifact \(expectedArtifactID) must be produced by run \(runID), not \(reference.producedByRunID ?? "<missing>")."
-                )
-            )
-            return nil
-        }
-
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        do {
+            return try await storage.verifiedData(for: reference)
+        } catch {
             diagnostics.append(
                 diagnostic(
                     severity: "error",
                     code: "artifact-integrity-failed",
-                    message: "\(field) for artifact \(expectedArtifactID) failed integrity verification with \(integrity.status.rawValue): \(integrity.message)"
+                    message: "\(field) for artifact \(expectedArtifactID) failed integrity verification: \(error.localizedDescription)"
                 )
             )
             return nil
         }
-        guard let url = fileReferenceVerifier.resolvedURL(for: reference, projectRoot: projectRoot) else {
-            diagnostics.append(
-                diagnostic(
-                    severity: "error",
-                    code: "artifact-path-unavailable",
-                    message: "\(field) for artifact \(expectedArtifactID) path \(reference.path) could not be resolved inside the project root."
-                )
-            )
-            return nil
-        }
-        return url
     }
 
     private func collectNumericArtifactRefs(
         _ loop: XcircuiteNumericRepairLoopResult
-    ) -> [XcircuiteFileReference] {
+    ) -> [ArtifactReference] {
         loop.iterations.flatMap { iteration in
             [
                 iteration.parameterCandidatesArtifact,
@@ -536,23 +514,23 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
                 iteration.planVerificationArtifact,
                 iteration.rejectedPlansArtifact
             ].compactMap { $0 }.map {
-                legacyArtifactReferenceWithProvenance($0, producedByRunID: loop.runID)
+                $0
             }
                 + iteration.producedArtifacts.map {
-                    legacyArtifactReferenceWithProvenance($0, producedByRunID: loop.runID)
+                    $0
                 }
                 + iteration.archivedArtifactRefs.map {
-                    legacyArtifactReferenceWithProvenance($0, producedByRunID: loop.runID)
+                    $0
                 }
         }
     }
 
     private func collectPlanVerificationRefs(
         _ loop: XcircuiteNumericRepairLoopResult
-    ) -> [XcircuiteFileReference] {
+    ) -> [ArtifactReference] {
         stableUniqueArtifactRefs(
             loop.iterations.compactMap(\.planVerificationArtifact).map {
-                legacyArtifactReferenceWithProvenance($0, producedByRunID: loop.runID)
+                $0
             }
         )
     }
@@ -628,20 +606,13 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         return counts
     }
 
-    private func suiteDirectoryURL(suiteID: String, projectRoot: URL) throws -> URL {
-        try storage.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/verified-improvement/\(suiteID)",
-            inProjectAt: projectRoot
-        )
-    }
-
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/qualification/verified-improvement/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/verified-improvement/\(suiteID)/\(fileName)"
     }
 
-    private func isDesignDiffArtifact(_ reference: XcircuiteFileReference) -> Bool {
+    private func isDesignDiffArtifact(_ reference: ArtifactReference) -> Bool {
         reference.kind == .designDiff
-            || reference.artifactID?.contains("design-diff") == true
+            || reference.artifactID.contains("design-diff")
             || reference.path.contains("design-diff")
     }
 
@@ -689,9 +660,9 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         return result
     }
 
-    private func stableUniqueArtifactRefs(_ refs: [XcircuiteFileReference]) -> [XcircuiteFileReference] {
+    private func stableUniqueArtifactRefs(_ refs: [ArtifactReference]) -> [ArtifactReference] {
         var seen: Set<String> = []
-        var result: [XcircuiteFileReference] = []
+        var result: [ArtifactReference] = []
         for ref in refs where !seen.contains(ref.path) {
             seen.insert(ref.path)
             result.append(ref)
@@ -699,9 +670,9 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         return result
     }
 
-    private func artifactRefSortOrder(_ lhs: XcircuiteFileReference, _ rhs: XcircuiteFileReference) -> Bool {
-        let lhsID = lhs.artifactID ?? ""
-        let rhsID = rhs.artifactID ?? ""
+    private func artifactRefSortOrder(_ lhs: ArtifactReference, _ rhs: ArtifactReference) -> Bool {
+        let lhsID = lhs.artifactID
+        let rhsID = rhs.artifactID
         if lhsID != rhsID {
             return lhsID < rhsID
         }

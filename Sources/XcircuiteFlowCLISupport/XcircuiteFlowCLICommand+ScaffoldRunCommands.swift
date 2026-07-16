@@ -4,6 +4,7 @@ import Xcircuite
 extension XcircuiteFlowCLICommand {
     static func scaffoldRun(arguments: [String]) throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
+        var projectRoot: URL?
         var runID: String?
         var runSpecURL: URL?
         var runtimeConfigURL: URL?
@@ -12,6 +13,8 @@ extension XcircuiteFlowCLICommand {
 
         while let argument = parser.next() {
             switch argument {
+            case "--project-root":
+                projectRoot = URL(filePath: try parser.requiredValue(after: argument))
             case "--run-id":
                 runID = try parser.requiredValue(after: argument)
             case "--out-run-spec":
@@ -35,6 +38,9 @@ extension XcircuiteFlowCLICommand {
             }
         }
 
+        guard let projectRoot else {
+            throw XcircuiteFlowCLIError.missingOption("--project-root")
+        }
         guard let runID else {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
@@ -50,8 +56,7 @@ extension XcircuiteFlowCLICommand {
 
         let scaffold = try XcircuiteFlowRunScaffolder(
             runID: runID,
-            stageKinds: stageKinds,
-            checkedAt: Date()
+            stageKinds: stageKinds
         ).make()
 
         // Validation gate before writing: the exact bytes that reach disk
@@ -76,7 +81,10 @@ extension XcircuiteFlowCLICommand {
                 "Scaffolded specs failed to round-trip through the spec types: \(error.localizedDescription)"
             )
         }
-        try decodedRuntimeSpec.validateCoverage(for: decodedRunSpec)
+        try decodedRuntimeSpec.validateCoverage(
+            for: decodedRunSpec,
+            projectRoot: projectRoot
+        )
 
         try writeScaffoldData(runSpecData, to: runSpecURL)
         try writeScaffoldData(runtimeConfigData, to: runtimeConfigURL)
@@ -93,7 +101,8 @@ extension XcircuiteFlowCLICommand {
                 placeholderPaths: scaffold.placeholderPaths,
                 nextActions: [
                     "Replace the placeholder input paths (\(scaffold.placeholderPaths.joined(separator: ", "))) with real artifacts relative to your project root.",
-                    "Validate: xcircuite-flow validate --run-spec \(runSpecPath) --runtime-config \(runtimeConfigPath)",
+                    "Attach retained ToolQualification evidence and raise each tool requirement only to the verified qualification level.",
+                    "Validate: xcircuite-flow validate --project-root \(projectRoot.path(percentEncoded: false)) --run-spec \(runSpecPath) --runtime-config \(runtimeConfigPath)",
                     "Run: xcircuite-flow run --project-root <path> --run-spec \(runSpecPath) --runtime-config \(runtimeConfigPath)",
                 ]
             ),

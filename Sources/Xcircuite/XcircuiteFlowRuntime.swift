@@ -11,43 +11,64 @@ public struct XcircuiteFlowRuntime: Sendable {
     private let resumer: DefaultFlowRunResumer
     private let planningArtifactStore: XcircuitePlanningArtifactStore
     private let toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore
+    private let workspaceStore: XcircuiteWorkspaceStore
 
     public init(
         toolRegistry: ToolRegistry,
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],
+        workspaceStore: XcircuiteWorkspaceStore,
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil,
-        orchestrator: DefaultFlowOrchestrator = DefaultFlowOrchestrator(),
-        resumer: DefaultFlowRunResumer = DefaultFlowRunResumer(),
-        planningArtifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore =
-            XcircuiteFlowToolchainProfileArtifactStore()
+        orchestrator: DefaultFlowOrchestrator? = nil,
+        resumer: DefaultFlowRunResumer? = nil,
+        planningArtifactStore: XcircuitePlanningArtifactStore? = nil,
+        toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore? = nil
     ) {
+        let progressStore = FlowRunProgressStore(persistence: workspaceStore)
+        let resolvedOrchestrator = orchestrator ?? DefaultFlowOrchestrator(
+            infrastructure: workspaceStore,
+            ledgerPersistence: workspaceStore,
+            progressStore: progressStore
+        )
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
         self.toolRegistry = toolRegistry
         self.healthResults = healthResults
         self.executors = executors
         self.toolchainProfile = toolchainProfile
-        self.orchestrator = orchestrator
-        self.resumer = resumer
+        self.orchestrator = resolvedOrchestrator
+        self.resumer = resumer ?? DefaultFlowRunResumer(
+            loader: workspaceStore,
+            orchestrator: resolvedOrchestrator,
+            inspector: inspector,
+            artifactPersistence: workspaceStore
+        )
         self.planningArtifactStore = planningArtifactStore
+            ?? XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
         self.toolchainProfileArtifactStore = toolchainProfileArtifactStore
+            ?? XcircuiteFlowToolchainProfileArtifactStore(workspaceStore: workspaceStore)
+        self.workspaceStore = workspaceStore
     }
 
     public init(
         descriptors: [ToolDescriptor],
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],
+        workspaceStore: XcircuiteWorkspaceStore,
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil,
-        orchestrator: DefaultFlowOrchestrator = DefaultFlowOrchestrator(),
-        resumer: DefaultFlowRunResumer = DefaultFlowRunResumer(),
-        planningArtifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore =
-            XcircuiteFlowToolchainProfileArtifactStore()
+        orchestrator: DefaultFlowOrchestrator? = nil,
+        resumer: DefaultFlowRunResumer? = nil,
+        planningArtifactStore: XcircuitePlanningArtifactStore? = nil,
+        toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore? = nil
     ) {
         self.init(
             toolRegistry: ToolRegistry(descriptors: descriptors),
             healthResults: healthResults,
             executors: executors,
+            workspaceStore: workspaceStore,
             toolchainProfile: toolchainProfile,
             orchestrator: orchestrator,
             resumer: resumer,
@@ -64,11 +85,11 @@ public struct XcircuiteFlowRuntime: Sendable {
             healthResults: healthResults,
             executors: executors
         )
-        try persistToolchainProfileIfNeeded(
+        try await persistToolchainProfileIfNeeded(
             runID: operationRequest.runID,
             projectRoot: operationRequest.projectRoot
         )
-        try planningArtifactStore.persistActionDomainSnapshot(
+        _ = try await planningArtifactStore.persistActionDomainSnapshot(
             runID: operationRequest.runID,
             projectRoot: operationRequest.projectRoot
         )
@@ -84,15 +105,16 @@ public struct XcircuiteFlowRuntime: Sendable {
             executors: executors,
             toolchainProfile: profileRecord
         )
-        try persistToolchainProfileIfNeeded(
+        try await persistToolchainProfileIfNeeded(
             runID: request.runID,
             projectRoot: request.projectRoot
         )
-        try planningArtifactStore.persistActionDomainSnapshot(
+        _ = try await planningArtifactStore.persistActionDomainSnapshot(
             runID: request.runID,
             projectRoot: request.projectRoot
         )
-        let summary = try DefaultFlowRunLedgerInspector().inspectRun(
+        let reviewBundler = DefaultFlowRunReviewBundler(loader: workspaceStore, persistence: workspaceStore)
+        let summary = try await DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler).inspectRun(
             runID: request.runID,
             projectRoot: request.projectRoot
         )
@@ -117,11 +139,11 @@ public struct XcircuiteFlowRuntime: Sendable {
         )
     }
 
-    private func persistToolchainProfileIfNeeded(runID: String, projectRoot: URL) throws {
+    private func persistToolchainProfileIfNeeded(runID: String, projectRoot: URL) async throws {
         guard let toolchainProfile else {
             return
         }
-        try toolchainProfileArtifactStore.persistProfile(
+        try await toolchainProfileArtifactStore.persistProfile(
             toolchainProfile,
             runID: runID,
             projectRoot: projectRoot

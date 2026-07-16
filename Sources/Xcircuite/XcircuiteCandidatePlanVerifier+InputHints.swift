@@ -7,22 +7,11 @@ import PEXEngine
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifier {
-    func decodedHint<T: Decodable>(
-        _ key: String,
-        from step: XcircuiteCandidatePlanStep
-    ) throws -> T? {
-        guard let value = step.parameterHints[key] else {
-            return nil
-        }
-        let data = try JSONEncoder().encode(value)
-        return try JSONDecoder().decode(T.self, from: data)
-    }
-
     func stringHint(
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> String? {
-        guard case .string(let value) = step.parameterHints[key] else {
+        guard case .text(let value) = step.parameterHints[key] else {
             return nil
         }
         return value
@@ -32,15 +21,10 @@ extension XcircuiteCandidatePlanVerifier {
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> [String]? {
-        guard case .array(let values) = step.parameterHints[key] else {
+        guard case .textList(let values) = step.parameterHints[key] else {
             return nil
         }
-        let strings = values.compactMap { value -> String? in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return string
-        }
+        let strings = values
         return strings.isEmpty ? nil : strings
     }
 
@@ -48,7 +32,7 @@ extension XcircuiteCandidatePlanVerifier {
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> Int? {
-        guard case .number(let value) = step.parameterHints[key] else {
+        guard case .scalar(let value) = step.parameterHints[key] else {
             return nil
         }
         guard value.rounded(.towardZero) == value else {
@@ -61,7 +45,7 @@ extension XcircuiteCandidatePlanVerifier {
         _ key: String,
         step: XcircuiteCandidatePlanStep
     ) -> Bool? {
-        guard case .bool(let value) = step.parameterHints[key] else {
+        guard case .boolean(let value) = step.parameterHints[key] else {
             return nil
         }
         return value

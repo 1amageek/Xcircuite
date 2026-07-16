@@ -20,8 +20,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                 sourceRefIDs: [summaryRefID],
                 requiredBeforeExecution: true,
                 evidence: [
-                    "reviewSurface": .string("planning/problem-validation.json"),
-                    "verificationGate": .string("artifact-integrity"),
+                    "reviewSurface": .text("planning/problem-validation.json"),
+                    "verificationGate": .text("artifact-integrity"),
                 ]
             ),
             XcircuitePlanningAssumption(
@@ -33,7 +33,7 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                 sourceRefIDs: [actionDomainRefID],
                 requiredBeforeExecution: true,
                 evidence: [
-                    "reviewSurface": .string("planning/action-domain-snapshot.json"),
+                    "reviewSurface": .text("planning/action-domain-snapshot.json"),
                 ]
             ),
         ]
@@ -57,8 +57,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                 affectedActionIDs: candidateActions.map(\.actionID),
                 mitigationActions: ["native-drc", "native-lvs", "artifact-integrity"],
                 evidence: [
-                    "sourceOperation": .string("xcircuite.generate-planning-problem"),
-                    "candidateOperationIDs": .array(candidateActions.map { .string($0.operationID) }),
+                    "sourceOperation": .text("xcircuite.generate-planning-problem"),
+                    "candidateOperationIDs": .textList(candidateActions.map(\.operationID)),
                 ]
             ),
         ]
@@ -82,8 +82,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                     affectedActionIDs: layoutActions.map(\.actionID),
                     mitigationActions: ["native-lvs", "native-drc", "artifact-integrity"],
                     evidence: [
-                        "sourceOperation": .string("xcircuite.generate-planning-problem"),
-                        "candidateOperationIDs": .array(layoutActions.map { .string($0.operationID) }),
+                        "sourceOperation": .text("xcircuite.generate-planning-problem"),
+                        "candidateOperationIDs": .textList(layoutActions.map(\.operationID)),
                     ]
                 )
             )
@@ -102,8 +102,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                     requiredApprovals: ["policy-repair-approval"],
                     mitigationActions: ["approval-gate", "native-lvs", "artifact-integrity"],
                     evidence: [
-                        "sourceOperation": .string("xcircuite.generate-planning-problem"),
-                        "candidateOperationIDs": .array(policyActions.map { .string($0.operationID) }),
+                        "sourceOperation": .text("xcircuite.generate-planning-problem"),
+                        "candidateOperationIDs": .textList(policyActions.map(\.operationID)),
                     ]
                 )
             )
@@ -121,8 +121,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                     affectedActionIDs: netlistEditActions.map(\.actionID),
                     mitigationActions: ["native-lvs", "artifact-integrity"],
                     evidence: [
-                        "sourceOperation": .string("xcircuite.generate-planning-problem"),
-                        "candidateOperationIDs": .array(netlistEditActions.map { .string($0.operationID) }),
+                        "sourceOperation": .text("xcircuite.generate-planning-problem"),
+                        "candidateOperationIDs": .textList(netlistEditActions.map(\.operationID)),
                     ]
                 )
             )
@@ -161,9 +161,9 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
                 affectedActionIDs: candidateActions.map(\.actionID),
                 mitigationActions: mitigationActions,
                 evidence: [
-                    "sourceOperation": .string("xcircuite.generate-planning-problem"),
-                    "hasMetricReport": .bool(hasMetricReport),
-                    "candidateOperationIDs": .array(candidateActions.map { .string($0.operationID) }),
+                    "sourceOperation": .text("xcircuite.generate-planning-problem"),
+                    "hasMetricReport": .boolean(hasMetricReport),
+                    "candidateOperationIDs": .textList(candidateActions.map(\.operationID)),
                 ]
             ),
         ]

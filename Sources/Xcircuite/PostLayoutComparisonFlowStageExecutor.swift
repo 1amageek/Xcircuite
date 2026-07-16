@@ -9,7 +9,6 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
     private let postLayoutWaveformInput: XcircuiteFlowInputReference
     private let options: PostLayoutComparisonOptions
     private let service: PostLayoutComparisonService
-    private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
         stageID: String,
@@ -25,7 +24,6 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
         self.postLayoutWaveformInput = .path(postLayoutWaveformURL.path(percentEncoded: false))
         self.options = options
         self.service = service
-        self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
     public init(
@@ -42,7 +40,6 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
         self.postLayoutWaveformInput = postLayoutWaveformInput
         self.options = options
         self.service = service
-        self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
     public func execute(
@@ -50,15 +47,8 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
-            let rawDirectory = context.runDirectory
-                .appending(path: "stages")
-                .appending(path: stage.stageID)
-                .appending(path: "raw")
-            try context.storage.ensureDirectory(at: rawDirectory)
-            try context.checkCancellation()
-
             let preLayoutWaveformURL = try preLayoutWaveformInput.resolveExisting(
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
@@ -69,31 +59,23 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
             )
             let preLayoutCSV = try String(contentsOf: preLayoutWaveformURL, encoding: .utf8)
             let postLayoutCSV = try String(contentsOf: postLayoutWaveformURL, encoding: .utf8)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let report = try service.compare(
                 preLayoutCSV: preLayoutCSV,
                 postLayoutCSV: postLayoutCSV,
                 options: options
             )
-            try context.checkCancellation()
-            let reportURL = rawDirectory.appending(path: "comparison-report.json")
-            try context.storage.writeJSON(
+            try await context.checkCancellation()
+            let reportArtifact = try await context.persistJSONArtifact(
                 report,
-                to: reportURL,
-                forProjectAt: context.projectRoot
+                artifactID: "post-layout-comparison",
+                stageID: stageID,
+                fileName: "comparison-report.json"
             )
 
             let diagnostics = diagnostics(from: report)
             let gateStatus: FlowGateStatus = report.gateViolations.isEmpty ? .passed : .failed
-            let artifacts = [
-                try artifactBuilder.reference(
-                    for: reportURL,
-                    projectRoot: context.projectRoot,
-                    artifactID: "post-layout-comparison",
-                    kind: ArtifactKind.report,
-                    format: ArtifactFormat.json
-                ),
-            ]
+            let artifacts = [reportArtifact]
             let artifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
                 projectRoot: context.projectRoot
@@ -160,7 +142,7 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        let validator = XcircuiteIdentifierValidator()
+        let validator = FlowIdentifierValidator()
         try validator.validate(stage.stageID, kind: .stageID)
         try validator.validate(toolID, kind: .toolID)
     }

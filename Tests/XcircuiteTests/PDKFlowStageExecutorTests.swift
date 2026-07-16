@@ -15,7 +15,7 @@ struct PDKFlowStageExecutorTests {
         try FileManager.default.createDirectory(at: pdkRoot, withIntermediateDirectories: true)
         try Data("{\"processID\":\"adapter-process\",\"version\":\"1\"}".utf8)
             .write(to: pdkRoot.appending(path: "pdk.json"), options: [.atomic])
-        let context = makeContext(root: root, runID: "pdk-discovery-adapter")
+        let context = try makeContext(root: root, runID: "pdk-discovery-adapter")
 
         let result = try await PDKDiscoveryFlowStageExecutor.local(
             searchRoots: [.path(pdkRoot.path)],
@@ -40,7 +40,7 @@ struct PDKFlowStageExecutorTests {
         let manifestURL = pdkRoot.appending(path: "pdk.json")
         try Data("{\"processID\":\"adapter-process\",\"version\":\"1\"}".utf8)
             .write(to: manifestURL, options: [.atomic])
-        let context = makeContext(root: root, runID: "pdk-validation-adapter")
+        let context = try makeContext(root: root, runID: "pdk-validation-adapter")
 
         let result = try await PDKValidationFlowStageExecutor.local(
             manifestInput: .path(manifestURL.path)
@@ -61,7 +61,7 @@ struct PDKFlowStageExecutorTests {
         let root = try makeRoot(name: "pdk-corpus-adapter")
         defer { removeRoot(root) }
         _ = try makeFixtureProject(root: root)
-        let context = makeContext(root: root, runID: "pdk-corpus-adapter")
+        let context = try makeContext(root: root, runID: "pdk-corpus-adapter")
 
         let result = try await PDKCorpusValidationFlowStageExecutor.local(
             suiteInput: .path("fixtures/pdk-corpus.json"),
@@ -88,7 +88,7 @@ struct PDKFlowStageExecutorTests {
         let fixtureRoot = try makeFixtureProject(root: root)
         try writeQualificationReports(root: root, fixtureRoot: fixtureRoot)
 
-        let standardContext = makeContext(root: root, runID: "pdk-standard-view-adapter")
+        let standardContext = try makeContext(root: root, runID: "pdk-standard-view-adapter")
         let standardResult = try await PDKStandardViewInspectionFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             assetID: "cells",
@@ -103,7 +103,7 @@ struct PDKFlowStageExecutorTests {
         #expect(standardResult.status == .succeeded)
         #expect(standardResult.artifacts.count == 1)
 
-        let ruleDeckContext = makeContext(root: root, runID: "pdk-rule-deck-adapter")
+        let ruleDeckContext = try makeContext(root: root, runID: "pdk-rule-deck-adapter")
         let ruleDeckResult = try await PDKRuleDeckInspectionFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             assetID: "rules"
@@ -130,7 +130,7 @@ struct PDKFlowStageExecutorTests {
         #expect(sourceArtifact.byteCount > 0)
         #expect(sourceArtifact.locator.role == .input)
 
-        let oracleContext = makeContext(root: root, runID: "pdk-oracle-adapter")
+        let oracleContext = try makeContext(root: root, runID: "pdk-oracle-adapter")
         let oracleResult = try await PDKOracleFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             oracleInput: .path("fixtures/standard-view-oracle.json")
@@ -144,7 +144,7 @@ struct PDKFlowStageExecutorTests {
         #expect(oracleResult.status == .succeeded)
         #expect(oracleResult.artifacts.count == 1)
 
-        let qualificationContext = makeContext(root: root, runID: "pdk-qualification-adapter")
+        let qualificationContext = try makeContext(root: root, runID: "pdk-qualification-adapter")
         let qualificationResult = try await PDKQualificationFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             corpusInput: .path("corpus-report.json"),
@@ -178,14 +178,9 @@ struct PDKFlowStageExecutorTests {
         let fixtureRoot = try makeFixtureProject(root: root)
         try writeQualificationReports(root: root, fixtureRoot: fixtureRoot)
 
-        let scope = ToolQualificationScope(
-            implementationID: "pdk-qualification",
-            binaryDigest: "binary-a",
-            algorithmVersion: "1",
-            processProfileID: "fixture-180nm:2026.1",
-            deckDigest: "fixture-deck"
-        )
-        let descriptor = makeQualifiedDescriptor(scope: scope)
+        let scope = QualifiedToolFixtures.qualificationScope(toolID: "pdk-qualification")
+        let descriptor = makeQualifiedDescriptor()
+        try QualifiedToolFixtures.materializeEvidence(for: [descriptor], in: root)
         let executor = PDKQualificationFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             corpusInput: .path("corpus-report.json"),
@@ -200,7 +195,6 @@ struct PDKFlowStageExecutorTests {
                 minimumLevel: .oracleChecked,
                 requiredInputFormats: [.json],
                 requiredOutputFormats: [.json],
-                maximumEvidenceAgeSeconds: 3_600,
                 qualificationScope: scope
             ),
             requiresApproval: true
@@ -208,12 +202,13 @@ struct PDKFlowStageExecutorTests {
         let runtime = XcircuiteFlowRuntime(
             descriptors: [descriptor],
             healthResults: [
-                descriptor.toolID: ToolHealthCheckResult(
+                descriptor.toolID: QualifiedToolFixtures.health(
                     toolID: descriptor.toolID,
-                    status: .passed
+                    level: .oracleChecked
                 ),
             ],
-            executors: [executor]
+            executors: [executor],
+            workspaceStore: try XcircuiteWorkspaceStore(projectRoot: root)
         )
         let request = FlowOperationRequest(
             projectRoot: root,
@@ -228,7 +223,16 @@ struct PDKFlowStageExecutorTests {
         } == true)
         #expect(first.stages.first?.artifacts.isEmpty == false)
 
-        let approval = try DefaultFlowGateApprovalRecorder().recordApproval(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
+        let approval = try await DefaultFlowGateApprovalRecorder(
+            loader: workspaceStore,
+            inspector: DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler),
+            ledgerPersistence: workspaceStore
+        ).recordApproval(
             FlowGateApprovalRequest(
                 projectRoot: root,
                 runID: request.runID,
@@ -250,18 +254,31 @@ struct PDKFlowStageExecutorTests {
 
         let wrongScope = ToolQualificationScope(
             implementationID: scope.implementationID,
-            binaryDigest: "binary-b",
+            binaryDigest: String(repeating: "b", count: 64),
             algorithmVersion: scope.algorithmVersion,
             processProfileID: scope.processProfileID,
+            processProfileDigest: scope.processProfileDigest,
             deckDigest: scope.deckDigest
         )
-        let mismatchDescriptor = makeQualifiedDescriptor(scope: wrongScope)
+        let mismatchStage = FlowStageDefinition(
+            stageID: PDKKitAPI.qualificationStageID,
+            displayName: "PDK qualification with mismatched scope",
+            requiredTool: ToolTrustRequirement(
+                kind: .reporting,
+                operationID: "pdk-qualify",
+                minimumLevel: .oracleChecked,
+                requiredInputFormats: [.json],
+                requiredOutputFormats: [.json],
+                qualificationScope: wrongScope
+            ),
+            requiresApproval: true
+        )
         let mismatchRuntime = XcircuiteFlowRuntime(
-            descriptors: [mismatchDescriptor],
+            descriptors: [descriptor],
             healthResults: [
-                mismatchDescriptor.toolID: ToolHealthCheckResult(
-                    toolID: mismatchDescriptor.toolID,
-                    status: .passed
+                descriptor.toolID: QualifiedToolFixtures.health(
+                    toolID: descriptor.toolID,
+                    level: .oracleChecked
                 ),
             ],
             executors: [
@@ -270,13 +287,14 @@ struct PDKFlowStageExecutorTests {
                     corpusInput: .path("corpus-report.json"),
                     oracleInput: .path("oracle-report.json")
                 ),
-            ]
+            ],
+            workspaceStore: try XcircuiteWorkspaceStore(projectRoot: root)
         )
         let mismatchRequest = FlowOperationRequest(
             projectRoot: root,
             runID: "pdk-qualification-scope-mismatch",
             intent: "Reject qualification evidence from a different tool build.",
-            stages: [stage]
+            stages: [mismatchStage]
         )
         let mismatch = try await mismatchRuntime.run(request: mismatchRequest)
         #expect(mismatch.status == .blocked)
@@ -286,7 +304,7 @@ struct PDKFlowStageExecutorTests {
     }
 
     @Test("PDK runtime specifications round-trip through the agent-facing contract")
-    func runtimeSpecRoundTripsPDKAdapters() throws {
+    func runtimeSpecRoundTripsPDKAdapters() async throws {
         let specs: [XcircuiteFlowStageExecutorSpec] = [
             .pdkDiscovery(.init(searchRoots: [.path("fixtures")])),
             .pdkValidation(.init(manifestInput: .path("fixtures/valid-pdk/pdk.json"))),
@@ -328,9 +346,9 @@ struct PDKFlowStageExecutorTests {
         }
     }
 
-    private func makeContext(root: URL, runID: String) -> FlowExecutionContext {
+    private func makeContext(root: URL, runID: String) throws -> FlowExecutionContext {
         let runDirectory = root
-            .appending(path: XcircuiteWorkspace.directoryName)
+            .appending(path: XcircuiteWorkspaceLayout.directoryName)
             .appending(path: "runs")
             .appending(path: runID)
         do {
@@ -342,7 +360,7 @@ struct PDKFlowStageExecutorTests {
             projectRoot: root,
             runID: runID,
             runDirectory: runDirectory,
-            storage: XcircuiteWorkspaceStore(),
+            infrastructure: try XcircuiteWorkspaceStore(projectRoot: root),
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -421,24 +439,7 @@ struct PDKFlowStageExecutorTests {
         )
     }
 
-    private func makeQualifiedDescriptor(scope: ToolQualificationScope) -> ToolDescriptor {
-        let evidenceKinds: [(ToolEvidenceKind, String)] = [
-            (.corpus, "pdk-corpus-evidence"),
-            (.oracle, "pdk-oracle-evidence"),
-        ]
-        let evidence = evidenceKinds.map { kind, evidenceID in
-            ToolEvidence(
-                evidenceID: evidenceID,
-                kind: kind,
-                qualification: ToolEvidenceQualificationSummary(
-                    qualified: true,
-                    policyID: "fixture-process-policy",
-                    observedCounts: ["caseCount": 1],
-                    scope: scope
-                ),
-                checkedAt: Date()
-            )
-        }
+    private func makeQualifiedDescriptor() -> ToolDescriptor {
         return ToolDescriptor(
             toolID: "pdk-qualification",
             displayName: "PDK qualification",
@@ -453,7 +454,10 @@ struct PDKFlowStageExecutorTests {
             ],
             trustProfile: ToolTrustProfile(
                 level: .oracleChecked,
-                evidence: evidence
+                evidence: QualifiedToolFixtures.evidenceSupporting(
+                    level: .oracleChecked,
+                    toolID: "pdk-qualification"
+                )
             ),
             environment: ToolEnvironment(platform: "macOS")
         )

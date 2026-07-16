@@ -4,12 +4,12 @@ import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let caseQualifier: XcircuiteSymbolicPlannerSolverQualifier
+    private let caseQualifier: XcircuiteSymbolicPlannerSolverQualifier?
     private let coverageTagValidator: XcircuiteSymbolicPlannerCoverageTagValidator
 
     public init(
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        caseQualifier: XcircuiteSymbolicPlannerSolverQualifier = XcircuiteSymbolicPlannerSolverQualifier(),
+        artifactStore: XcircuitePlanningArtifactStore,
+        caseQualifier: XcircuiteSymbolicPlannerSolverQualifier? = nil,
         coverageTagValidator: XcircuiteSymbolicPlannerCoverageTagValidator = XcircuiteSymbolicPlannerCoverageTagValidator()
     ) {
         self.artifactStore = artifactStore
@@ -21,7 +21,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         request: XcircuiteSymbolicPlannerSolverCorpusQualificationRequest,
         projectRoot: URL
     ) async throws -> XcircuiteSymbolicPlannerSolverCorpusQualificationResult {
-        let identifierValidator = XcircuiteIdentifierValidator()
+        let identifierValidator = FlowIdentifierValidator()
         try identifierValidator.validate(request.suiteID, kind: .artifactID)
         for coverageTag in request.requiredCoverageTags {
             try identifierValidator.validate(coverageTag, kind: .artifactID)
@@ -30,7 +30,12 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         guard !request.cases.isEmpty else {
             throw XcircuiteSymbolicPlannerSolverError.emptyQualificationCorpus
         }
-        let suiteSpecArtifact = try artifactStore.persistSymbolicPlannerSolverQualificationCorpusSuiteSpec(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let caseQualifier = caseQualifier ?? XcircuiteSymbolicPlannerSolverQualifier(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore
+        )
+        let suiteSpecArtifact = try await artifactStore.persistSymbolicPlannerSolverQualificationCorpusSuiteSpec(
             XcircuiteSymbolicPlannerSolverCorpusSuiteSpec(request: request),
             projectRoot: projectRoot
         )
@@ -115,7 +120,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
             suiteSpecArtifact: suiteSpecArtifact,
             corpusArtifact: nil
         )
-        let corpusArtifact = try artifactStore.persistSymbolicPlannerSolverQualificationCorpus(
+        let corpusArtifact = try await artifactStore.persistSymbolicPlannerSolverQualificationCorpus(
             result,
             projectRoot: projectRoot
         )
@@ -144,8 +149,8 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         coveredCoverageTags: [String],
         missingRequiredCoverageTags: [String],
         coverageTagCounts: [String: Int],
-        suiteSpecArtifact: XcircuiteFileReference?,
-        corpusArtifact: XcircuiteFileReference?
+        suiteSpecArtifact: ArtifactReference?,
+        corpusArtifact: ArtifactReference?
     ) -> XcircuiteSymbolicPlannerSolverCorpusQualificationResult {
         var failureCodes = unique(caseResults.flatMap(\.failureCodes))
         if !missingRequiredCoverageTags.isEmpty {
@@ -155,35 +160,10 @@ public struct XcircuiteSymbolicPlannerSolverCorpusQualifier: Sendable {
         let failedCaseCount = caseResults.count - qualifiedCaseCount
         let healthStatus: ToolHealthStatus = status == "qualified" ? .passed : .failed
         let requiredCoverageTags = unique(requiredCoverageTags)
-        let coveredRequiredCoverageTagCount = requiredCoverageTags.count - missingRequiredCoverageTags.count
-        let coverageRate = requiredCoverageTags.isEmpty
-            ? 1
-            : Double(coveredRequiredCoverageTagCount) / Double(requiredCoverageTags.count)
-        let passRate = caseResults.isEmpty
-            ? 0
-            : Double(qualifiedCaseCount) / Double(caseResults.count)
         let evidence = ToolEvidence(
             evidenceID: "\(toolID)-symbolic-planner-corpus-\(suiteID)",
             kind: .corpus,
-            artifact: (corpusArtifact ?? suiteSpecArtifact).flatMap(foundationArtifactReference),
-            qualification: ToolEvidenceQualificationSummary(
-                qualified: status == "qualified",
-                policyID: policyID,
-                observedMetrics: [
-                    "coverageRate": coverageRate,
-                    "passRate": passRate,
-                ],
-                observedCounts: [
-                    "coverageTagCount": coverageTagCounts.count,
-                    "caseCount": caseResults.count,
-                    "qualifiedCaseCount": qualifiedCaseCount,
-                    "failedCaseCount": failedCaseCount,
-                    "requiredCoverageTagCount": requiredCoverageTags.count,
-                    "coveredRequiredCoverageTagCount": coveredRequiredCoverageTagCount,
-                    "missingRequiredCoverageTagCount": missingRequiredCoverageTags.count,
-                ],
-                failureCodes: failureCodes
-            ),
+            artifact: corpusArtifact ?? suiteSpecArtifact,
             checkedAt: Date()
         )
         let toolHealth = ToolHealthCheckResult(

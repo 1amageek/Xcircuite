@@ -29,7 +29,7 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let requestURL = try requestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -52,8 +52,8 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
                 request.streamOut = streamOut
             }
             let result = try await engine.execute(request)
-            try context.checkCancellation()
-            let artifact = try support.persistResult(
+            try await context.checkCancellation()
+            let artifact = try await support.persistResult(
                 result,
                 stageID: stageID,
                 artifactID: "release-tapeout-result",
@@ -63,7 +63,7 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
                 result: result,
                 stageID: stageID,
                 artifacts: [artifact],
-                approved: result.payload.approved
+                approved: result.payload.completed
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

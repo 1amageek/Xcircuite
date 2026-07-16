@@ -35,7 +35,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-comparison",
@@ -122,7 +122,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
             root: root
         )
 
-        let result = try await DefaultFlowOrchestrator().run(
+        let result = try await makeOrchestrator(root: root).run(
             request: FlowOperationRequest(
                 projectRoot: root,
                 runID: "run-comparison-fail",
@@ -153,7 +153,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         })
     }
 
-    @Test func serviceFailsGateForPartialPostLayoutSweepCoverageByDefault() throws {
+    @Test func serviceFailsGateForPartialPostLayoutSweepCoverageByDefault() async throws {
         let preLayout = """
         time,V(out)
         0,0
@@ -176,7 +176,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(report.diagnostics.contains { $0.contains("Candidate sweep has insufficient increasing points") })
     }
 
-    @Test func serviceFailsGateForMissingPreLayoutVariableByDefault() throws {
+    @Test func serviceFailsGateForMissingPreLayoutVariableByDefault() async throws {
         let preLayout = """
         time,V(out),I(vdd)
         0,0,0
@@ -198,7 +198,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(report.gateViolations.contains { $0.contains("missing pre-layout variable I(vdd)") })
     }
 
-    @Test func serviceMatchesPostLayoutVariablesCaseInsensitively() throws {
+    @Test func serviceMatchesPostLayoutVariablesCaseInsensitively() async throws {
         let preLayout = """
         time,V(out)
         0,0
@@ -220,7 +220,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(report.comparedVariables.map(\.variableName) == ["V(out)"])
     }
 
-    @Test func serviceMatchesOscillationVariablesCaseInsensitively() throws {
+    @Test func serviceMatchesOscillationVariablesCaseInsensitively() async throws {
         let preLayout = """
         time,V(out)
         0,0
@@ -257,7 +257,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(report.oscillationMetrics.first?.violations.isEmpty == true)
     }
 
-    @Test func variableLimitTighterThanGlobalGatesOnlyThatVariable() throws {
+    @Test func variableLimitTighterThanGlobalGatesOnlyThatVariable() async throws {
         let preLayout = """
         time,V(vout),V(nmir)
         0,0,0
@@ -293,7 +293,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(!report.gateViolations.contains { $0.contains("global limit") })
     }
 
-    @Test func variableLimitLooserThanGlobalAllowsVariableWhileOthersStayOnGlobal() throws {
+    @Test func variableLimitLooserThanGlobalAllowsVariableWhileOthersStayOnGlobal() async throws {
         let preLayout = """
         time,V(vout),V(nmir)
         0,0,0
@@ -329,7 +329,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(!report.gateViolations.contains { $0.contains("variable-specific limit") })
     }
 
-    @Test func variableLimitLooserThanGlobalPassesWhenOthersAreWithinGlobal() throws {
+    @Test func variableLimitLooserThanGlobalPassesWhenOthersAreWithinGlobal() async throws {
         let preLayout = """
         time,V(vout),V(nmir)
         0,0,0
@@ -358,7 +358,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         #expect(report.gateViolations.isEmpty)
     }
 
-    @Test func variableLimitOverridesOnlyItsOwnMetric() throws {
+    @Test func variableLimitOverridesOnlyItsOwnMetric() async throws {
         let preLayout = """
         time,V(vout)
         0,0
@@ -391,7 +391,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         })
     }
 
-    @Test func variableLimitForUncomparedVariableFailsGate() throws {
+    @Test func variableLimitForUncomparedVariableFailsGate() async throws {
         let preLayout = """
         time,V(vout)
         0,0
@@ -419,7 +419,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         })
     }
 
-    @Test func optionsRejectMissingRequiredLimitCollections() throws {
+    @Test func optionsRejectMissingRequiredLimitCollections() async throws {
         let json = """
         {"maxAbsoluteDelta":0.05,"requiredPostVariables":["V(out)"]}
         """
@@ -431,7 +431,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
         }
     }
 
-    @Test func optionsWithVariableLimitsRoundTripThroughCodable() throws {
+    @Test func optionsWithVariableLimitsRoundTripThroughCodable() async throws {
         let options = PostLayoutComparisonOptions(
             maxAbsoluteDelta: 0.05,
             variableLimits: [
@@ -454,6 +454,15 @@ struct PostLayoutComparisonFlowStageExecutorTests {
             minimumLevel: .smokeChecked,
             requiredInputFormats: [.csv],
             requiredOutputFormats: [.json]
+        )
+    }
+
+    private func makeOrchestrator(root: URL) throws -> DefaultFlowOrchestrator {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return DefaultFlowOrchestrator(
+            infrastructure: store,
+            ledgerPersistence: store,
+            progressStore: FlowRunProgressStore(persistence: store)
         )
     }
 

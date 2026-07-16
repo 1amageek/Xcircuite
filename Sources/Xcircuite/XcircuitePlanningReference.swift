@@ -6,14 +6,14 @@ public struct XcircuitePlanningReference: Codable, Sendable, Hashable {
     public var kind: String
     public var path: String?
     public var artifactID: String?
-    public var metadata: [String: XcircuiteJSONValue]
+    public var metadata: [String: PlanningParameterValue]
 
     public init(
         refID: String,
         kind: String,
         path: String? = nil,
         artifactID: String? = nil,
-        metadata: [String: XcircuiteJSONValue] = [:]
+        metadata: [String: PlanningParameterValue] = [:]
     ) {
         self.refID = refID
         self.kind = kind

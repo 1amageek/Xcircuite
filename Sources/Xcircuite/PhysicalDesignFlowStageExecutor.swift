@@ -43,7 +43,7 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let requestURL = try requestInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -71,7 +71,7 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
                 artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: context.projectRoot)
             )
             let result = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let diagnostics = result.diagnostics.map { diagnostic in
                 let severity: FlowDiagnosticSeverity
                 switch diagnostic.severity {
@@ -128,8 +128,8 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private func gateStatus(for status: PhysicalDesignExecutionStatus) -> FlowGateStatus {

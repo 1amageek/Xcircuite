@@ -12,7 +12,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
@@ -39,46 +39,40 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
             confidence: confidence
         ) + waveformChannelResults(summary: summary, confidence: confidence)
             + measurementChannelResults(summary: summary, confidence: confidence)
-        let envelope = XcircuiteArtifactEnvelope(
+        var observationChannels = baseObservationChannels(
+            artifactID: artifactID,
+            gateStatus: gateStatus,
+            diagnostics: diagnostics,
+            toolEvidenceCount: toolEvidenceCount,
+            hasQualifiedEvidence: hasQualifiedEvidence,
+            confidence: confidence
+        )
+        observationChannels.append(contentsOf: waveformChannels)
+        observationChannels.append(contentsOf: measurementChannels)
+        let envelope = FlowArtifactEnvelope(
             artifactID: artifactID,
             role: "simulation-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: XcircuiteArtifactProducer(
+            producer: FlowArtifactProducer(
                 producerID: toolID,
                 toolID: toolID
             ),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
-            evaluationSpec: XcircuiteEvaluationSpec(
+            evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",
                 objective: "Evaluate simulation measurement evidence for stage readiness.",
                 criteria: criteria,
                 requiredArtifactRoles: ["simulation-summary", "measurement", "waveform"],
-                confidence: XcircuiteEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false),
-                metadata: [
-                    "analysis": .string(summary.summary.analysis),
-                    "expectationCount": .number(Double(summary.summary.expectationCount)),
-                ]
+                confidence: FlowEvidenceConfidence(value: 0.5, posteriorVariance: 0.5, calibrated: false)
             ),
-            observationSet: XcircuiteObservationSet(
+            observationSet: FlowObservationSet(
                 observationSetID: "\(artifactID)-observations",
                 specID: "\(artifactID)-evaluation-spec",
-                channels: baseObservationChannels(
-                    artifactID: artifactID,
-                    gateStatus: gateStatus,
-                    diagnostics: diagnostics,
-                    toolEvidenceCount: toolEvidenceCount,
-                    hasQualifiedEvidence: hasQualifiedEvidence,
-                    confidence: confidence
-                ) + waveformChannels + measurementChannels,
-                confidence: confidence,
-                metadata: [
-                    "analysis": .string(summary.summary.analysis),
-                    "measurementCount": .number(Double(summary.summary.measurementCount)),
-                    "waveformVariableCount": .number(Double(summary.summary.waveformVariableCount)),
-                ]
+                channels: observationChannels,
+                confidence: confidence
             ),
-            evaluationResult: XcircuiteEvaluationResult(
+            evaluationResult: FlowEvaluationResult(
                 evaluationID: "\(artifactID)-evaluation",
                 specID: "\(artifactID)-evaluation-spec",
                 status: evaluationStatus(from: gateStatus),
@@ -92,80 +86,67 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
                     gateStatus: gateStatus,
                     confidence: confidence
                 ),
-                summary: "Simulation summary evaluation ended with gate status \(gateStatus.rawValue).",
-                metadata: [
-                    "analysis": .string(summary.summary.analysis),
-                    "failedExpectationCount": .number(Double(summary.summary.failedExpectationCount)),
-                ]
-            ),
-            metadata: [
-                "gateID": .string("simulation"),
-                "gateStatus": .string(gateStatus.rawValue),
-                "stageID": .string(stageID),
-                "toolID": .string(toolID),
-            ]
+                summary: "Simulation summary evaluation ended with gate status \(gateStatus.rawValue)."
+            )
         )
 
-        return try context.storage.writeArtifactEnvelope(
-            envelope,
-            runID: context.runID,
-            inProjectAt: context.projectRoot
-        )
+        return try await context.persistArtifactEnvelope(envelope)
     }
 
-    private func baseCriteria(artifactID: String) -> [XcircuiteEvaluationCriterion] {
+    private func baseCriteria(artifactID: String) -> [FlowEvaluationCriterion] {
         [
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "simulation-gate-status",
                 channelID: "simulation-gate-status",
                 comparator: .equal,
-                target: .string(FlowGateStatus.passed.rawValue)
+                target: .text(FlowGateStatus.passed.rawValue)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "simulation-waveform-variable-count",
                 channelID: "simulation-waveform-variable-count",
                 comparator: .greaterThan,
-                target: .number(0)
+                target: .scalar(0)
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "simulation-tool-evidence",
                 channelID: "simulation-tool-evidence-count",
                 comparator: .greaterThanOrEqual,
-                target: .number(1),
+                target: .scalar(1),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "simulation-calibration",
                 channelID: "simulation-qualified-calibration",
                 comparator: .equal,
-                target: .bool(true),
+                target: .boolean(true),
                 required: false
             ),
-            XcircuiteEvaluationCriterion(
+            FlowEvaluationCriterion(
                 criterionID: "simulation-summary-artifact",
                 channelID: "simulation-summary-artifact-present",
                 comparator: .equal,
-                target: .bool(true),
-                metadata: ["artifactID": .string(artifactID)]
+                target: .boolean(true),
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
         ]
     }
 
     private func measurementCriteria(
         summary: SimulationRunSummaryReport
-    ) -> [XcircuiteEvaluationCriterion] {
+    ) -> [FlowEvaluationCriterion] {
         summary.expectations.enumerated().map { index, expectation in
             let baseID = measurementChannelBase(index: index, name: expectation.name)
-            return XcircuiteEvaluationCriterion(
+            return FlowEvaluationCriterion(
                 criterionID: "\(baseID)-within-tolerance",
                 channelID: "\(baseID)-within-tolerance",
                 comparator: .equal,
-                target: .bool(true),
+                target: .boolean(true),
                 tolerance: expectation.tolerance,
-                metadata: [
-                    "measurementName": .string(expectation.name),
-                    "target": .number(expectation.target),
-                ]
+                context: FlowEvaluationContext(
+                    metricChannelID: baseID,
+                    parameterName: expectation.name,
+                    requiredValue: expectation.target
+                )
             )
         }
     }
@@ -176,41 +157,41 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         toolEvidenceCount: Int,
         hasQualifiedEvidence: Bool,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "simulation-summary-artifact-present",
                 status: .observed,
-                value: .bool(true),
+                value: .boolean(true),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "simulation-gate-status",
                 status: .observed,
-                value: .string(gateStatus.rawValue),
+                value: .text(gateStatus.rawValue),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence,
-                metadata: ["gateID": .string("simulation")]
+                context: FlowEvaluationContext(gateID: "simulation")
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "simulation-diagnostic-count",
                 status: .observed,
-                value: .number(Double(diagnostics.count)),
+                value: .scalar(Double(diagnostics.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "simulation-tool-evidence-count",
                 status: toolEvidenceCount > 0 ? .observed : .missing,
-                value: .number(Double(toolEvidenceCount)),
+                value: .scalar(Double(toolEvidenceCount)),
                 confidence: confidence
             ),
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "simulation-qualified-calibration",
                 status: hasQualifiedEvidence ? .observed : .uncalibrated,
-                value: .bool(hasQualifiedEvidence),
+                value: .boolean(hasQualifiedEvidence),
                 confidence: confidence
             ),
         ]
@@ -219,20 +200,13 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
     private func waveformObservationChannels(
         summary: SimulationRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         [
-            XcircuiteObservationChannel(
+            FlowObservationChannel(
                 channelID: "simulation-waveform-variable-count",
                 status: summary.waveformVariables.isEmpty ? .missing : .observed,
-                value: .number(Double(summary.waveformVariables.count)),
-                sourceArtifactIDs: [artifactID],
-                confidence: confidence
-            ),
-            XcircuiteObservationChannel(
-                channelID: "simulation-waveform-variables",
-                status: summary.waveformVariables.isEmpty ? .missing : .observed,
-                value: .array(summary.waveformVariables.map { .string($0) }),
+                value: .scalar(Double(summary.waveformVariables.count)),
                 sourceArtifactIDs: [artifactID],
                 confidence: confidence
             ),
@@ -242,8 +216,8 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
     private func measurementObservationChannels(
         summary: SimulationRunSummaryReport,
         artifactID: String,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteObservationChannel] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowObservationChannel] {
         let measurementsByName = Dictionary(
             summary.measurements.map { ($0.name.lowercased(), $0) },
             uniquingKeysWith: { first, _ in first }
@@ -251,48 +225,48 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         return summary.expectations.enumerated().flatMap { index, expectation in
             let baseID = measurementChannelBase(index: index, name: expectation.name)
             let measurement = measurementsByName[expectation.name.lowercased()]
-            let valueStatus: XcircuiteObservationChannelStatus = measurement == nil ? .missing : .observed
-            let residualStatus: XcircuiteObservationChannelStatus = expectation.residual == nil ? .missing : .observed
-            let withinStatus: XcircuiteObservationChannelStatus = expectation.status == "missing" ? .missing : .observed
+            let valueStatus: FlowObservationChannelStatus = measurement == nil ? .missing : .observed
+            let residualStatus: FlowObservationChannelStatus = expectation.residual == nil ? .missing : .observed
+            let withinStatus: FlowObservationChannelStatus = expectation.status == "missing" ? .missing : .observed
             return [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-value",
                     label: expectation.name,
                     status: valueStatus,
-                    value: measurement.map { .number($0.value) },
+                    value: measurement.map { .scalar($0.value) },
                     unit: measurement?.unit,
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: [
-                        "measurementName": .string(expectation.name),
-                        "target": .number(expectation.target),
-                    ]
+                    context: FlowEvaluationContext(
+                        parameterName: expectation.name,
+                        requiredValue: expectation.target
+                    )
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-residual",
                     label: "\(expectation.name) residual",
                     status: residualStatus,
-                    value: expectation.residual.map { .number($0) },
+                    value: expectation.residual.map { .scalar($0) },
                     unit: measurement?.unit,
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: [
-                        "measurementName": .string(expectation.name),
-                        "tolerance": .number(expectation.tolerance),
-                    ]
+                    context: FlowEvaluationContext(
+                        parameterName: expectation.name,
+                        maximumValue: expectation.tolerance
+                    )
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(baseID)-within-tolerance",
                     label: "\(expectation.name) within tolerance",
                     status: withinStatus,
-                    value: expectation.status == "missing" ? nil : .bool(expectation.status == "passed"),
+                    value: expectation.status == "missing" ? nil : .boolean(expectation.status == "passed"),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence,
-                    metadata: [
-                        "measurementName": .string(expectation.name),
-                        "target": .number(expectation.target),
-                        "tolerance": .number(expectation.tolerance),
-                    ]
+                    context: FlowEvaluationContext(
+                        parameterName: expectation.name,
+                        maximumValue: expectation.tolerance,
+                        requiredValue: expectation.target
+                    )
                 ),
             ]
         }
@@ -302,42 +276,42 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         gateStatus: FlowGateStatus,
         diagnostics: [FlowDiagnostic],
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         [
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "simulation-gate-status",
                 channelID: "simulation-gate-status",
                 status: evaluationStatus(from: gateStatus),
-                observedValue: .string(gateStatus.rawValue),
+                observedValue: .text(gateStatus.rawValue),
                 residual: gateStatus == .passed ? 0 : 1,
                 likelihood: likelihood(from: gateStatus),
                 confidence: confidence,
                 diagnostics: diagnostics.map(runActionDiagnostic)
             ),
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "simulation-summary-artifact",
                 channelID: "simulation-summary-artifact-present",
                 status: .accepted,
-                observedValue: .bool(true),
+                observedValue: .boolean(true),
                 residual: 0,
                 likelihood: 1,
                 confidence: confidence,
-                metadata: ["artifactID": .string(artifactID)]
+                context: FlowEvaluationContext(artifactID: artifactID)
             ),
         ]
     }
 
     private func waveformChannelResults(
         summary: SimulationRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         [
-            XcircuiteEvaluationChannelResult(
+            FlowEvaluationChannelResult(
                 criterionID: "simulation-waveform-variable-count",
                 channelID: "simulation-waveform-variable-count",
                 status: summary.waveformVariables.isEmpty ? .inconclusive : .accepted,
-                observedValue: .number(Double(summary.waveformVariables.count)),
+                observedValue: .scalar(Double(summary.waveformVariables.count)),
                 residual: summary.waveformVariables.isEmpty ? 1 : 0,
                 likelihood: summary.waveformVariables.isEmpty ? 0 : 1,
                 confidence: confidence
@@ -347,23 +321,23 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
 
     private func measurementChannelResults(
         summary: SimulationRunSummaryReport,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteEvaluationChannelResult] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowEvaluationChannelResult] {
         summary.expectations.enumerated().map { index, expectation in
             let baseID = measurementChannelBase(index: index, name: expectation.name)
-            return XcircuiteEvaluationChannelResult(
+            return FlowEvaluationChannelResult(
                 criterionID: "\(baseID)-within-tolerance",
                 channelID: "\(baseID)-within-tolerance",
                 status: evaluationStatus(from: expectation.status),
-                observedValue: expectation.status == "missing" ? nil : .bool(expectation.status == "passed"),
+                observedValue: expectation.status == "missing" ? nil : .boolean(expectation.status == "passed"),
                 residual: normalizedResidual(for: expectation),
                 likelihood: likelihood(for: expectation),
                 confidence: confidence,
-                metadata: [
-                    "measurementName": .string(expectation.name),
-                    "target": .number(expectation.target),
-                    "tolerance": .number(expectation.tolerance),
-                ]
+                context: FlowEvaluationContext(
+                    parameterName: expectation.name,
+                    maximumValue: expectation.tolerance,
+                    requiredValue: expectation.target
+                )
             )
         }
     }
@@ -372,11 +346,11 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         artifactID: String,
         summary: SimulationRunSummaryReport,
         gateStatus: FlowGateStatus,
-        confidence: XcircuiteEvidenceConfidence
-    ) -> [XcircuiteFeedbackSignal] {
+        confidence: FlowEvidenceConfidence
+    ) -> [FlowFeedbackSignal] {
         guard gateStatus != .passed else {
             return [
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-continue",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "simulation-gate-status",
@@ -395,7 +369,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
             .map { index, expectation in
                 let baseID = measurementChannelBase(index: index, name: expectation.name)
                 let isMissing = expectation.status == "missing"
-                return XcircuiteFeedbackSignal(
+                return FlowFeedbackSignal(
                     signalID: "\(baseID)-feedback",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "\(baseID)-within-tolerance",
@@ -409,12 +383,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
                     suggestedActions: isMissing
                         ? ["inspect-measurement-definition", "update-simulation-observation"]
                         : ["inspect-simulation-measurement", "adjust-design-parameters"],
-                    confidence: confidence,
-                    metadata: [
-                        "measurementName": .string(expectation.name),
-                        "target": .number(expectation.target),
-                        "tolerance": .number(expectation.tolerance),
-                    ]
+                    confidence: confidence
                 )
             }
     }
@@ -422,35 +391,38 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
     private func dependencies(
         from artifacts: [ArtifactReference],
         excluding summaryArtifact: ArtifactReference
-    ) -> [XcircuiteArtifactDependency] {
+    ) -> [FlowArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }
             .map { artifact in
-                XcircuiteArtifactDependency(
+                FlowArtifactDependency(
                     artifactID: artifact.artifactID,
                     path: artifact.path,
-                    role: artifact.artifactID ?? artifact.kind.rawValue,
+                    role: artifact.artifactID,
                     required: true
                 )
             }
     }
 
     private func hasQualifiedEvidence(context: FlowExecutionContext, toolID: String) -> Bool {
-        context.healthResults[toolID]?.evidence.contains { evidence in
-            evidence.qualification?.qualified == true
-        } == true
+        guard let descriptor = context.toolRegistry.descriptor(toolID: toolID),
+              descriptor.trustProfile.level >= .corpusChecked,
+              context.healthResults[toolID]?.status == .passed else {
+            return false
+        }
+        return descriptor.trustProfile.evidence.contains(where: \.hasVerifiableArtifactBinding)
     }
 
-    private func confidence(hasQualifiedEvidence: Bool) -> XcircuiteEvidenceConfidence {
+    private func confidence(hasQualifiedEvidence: Bool) -> FlowEvidenceConfidence {
         if hasQualifiedEvidence {
-            return XcircuiteEvidenceConfidence(
+            return FlowEvidenceConfidence(
                 value: 0.8,
                 posteriorVariance: 0.2,
                 calibrationCoefficient: 0.7,
                 calibrated: true
             )
         }
-        return XcircuiteEvidenceConfidence(
+        return FlowEvidenceConfidence(
             value: 0.35,
             posteriorVariance: 0.65,
             calibrationCoefficient: 0,
@@ -490,7 +462,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         return max(0, min(1, 1 - residual))
     }
 
-    private func evaluationStatus(from status: String) -> XcircuiteEvaluationStatus {
+    private func evaluationStatus(from status: String) -> FlowEvaluationStatus {
         switch status {
         case "passed":
             .accepted
@@ -501,7 +473,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func evaluationStatus(from status: FlowGateStatus) -> XcircuiteEvaluationStatus {
+    private func evaluationStatus(from status: FlowGateStatus) -> FlowEvaluationStatus {
         switch status {
         case .passed, .waived:
             .accepted
@@ -529,8 +501,8 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         }
     }
 
-    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> XcircuiteRunActionDiagnostic {
-        XcircuiteRunActionDiagnostic(
+    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> FlowRunDiagnostic {
+        FlowRunDiagnostic(
             severity: runActionSeverity(diagnostic.severity),
             code: diagnostic.code,
             message: diagnostic.message
@@ -539,7 +511,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
 
     private func runActionSeverity(
         _ severity: FlowDiagnosticSeverity
-    ) -> XcircuiteRunActionDiagnosticSeverity {
+    ) -> FlowRunDiagnosticSeverity {
         switch severity {
         case .info:
             .info

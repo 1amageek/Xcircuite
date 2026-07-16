@@ -7,8 +7,8 @@ public struct XcircuiteVerifiedImprovementCorpusReport: Codable, Sendable, Hasha
     public var status: Status
     public var summary: Summary
     public var caseResults: [CaseResult]
-    public var suiteSpecArtifact: XcircuiteFileReference?
-    public var reportArtifact: XcircuiteFileReference?
+    public var suiteSpecArtifact: ArtifactReference?
+    public var reportArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -16,8 +16,8 @@ public struct XcircuiteVerifiedImprovementCorpusReport: Codable, Sendable, Hasha
         status: Status,
         summary: Summary,
         caseResults: [CaseResult],
-        suiteSpecArtifact: XcircuiteFileReference? = nil,
-        reportArtifact: XcircuiteFileReference? = nil
+        suiteSpecArtifact: ArtifactReference? = nil,
+        reportArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suiteID = suiteID
@@ -96,7 +96,7 @@ public struct XcircuiteVerifiedImprovementCorpusReport: Codable, Sendable, Hasha
         public var failedGateIDs: [String]
         public var requiredFailedGateIDs: [String]
         public var missingFailedGateIDs: [String]
-        public var artifactRefs: [XcircuiteFileReference]
+        public var artifactRefs: [ArtifactReference]
         public var missingArtifactIDs: [String]
         public var diagnostics: [Diagnostic]
 
@@ -117,7 +117,7 @@ public struct XcircuiteVerifiedImprovementCorpusReport: Codable, Sendable, Hasha
             failedGateIDs: [String],
             requiredFailedGateIDs: [String],
             missingFailedGateIDs: [String],
-            artifactRefs: [XcircuiteFileReference],
+            artifactRefs: [ArtifactReference],
             missingArtifactIDs: [String],
             diagnostics: [Diagnostic]
         ) {

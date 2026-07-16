@@ -5,7 +5,7 @@ import XcircuiteFlowCLISupport
 
 @Suite("Xcircuite platform capability readiness")
 struct XcircuitePlatformCapabilityReadinessTests {
-    @Test func assessorBuildsMilestoneReadinessFromActionDomains() throws {
+    @Test func assessorBuildsMilestoneReadinessFromActionDomains() async throws {
         let report = try XcircuitePlatformCapabilityReadinessAssessor().assess(
             runID: "capability-run",
             generatedAt: "2026-06-28T00:00:00Z"
@@ -91,7 +91,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(decoded == report)
     }
 
-    @Test func assessorPassesMilestonesWhenTestEvidenceExecutionPassed() throws {
+    @Test func assessorPassesMilestonesWhenTestEvidenceExecutionPassed() async throws {
         let baseline = try XcircuitePlatformCapabilityReadinessAssessor().assess(
             runID: "capability-run",
             generatedAt: "2026-06-28T00:00:00Z"
@@ -201,7 +201,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.isEmpty)
     }
 
-    @Test func assessorKeepsMilestonePartialWhenRequiredOperationIsPartial() throws {
+    @Test func assessorKeepsMilestonePartialWhenRequiredOperationIsPartial() async throws {
         let snapshot = try snapshotWithOperation(
             "drc.import-foundry-rule-seed",
             maturity: "partial"
@@ -234,7 +234,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("qualify-operation:drc.import-foundry-rule-seed"))
     }
 
-    @Test func assessorKeepsMilestonePartialWhenRequiredOperationIsPlanned() throws {
+    @Test func assessorKeepsMilestonePartialWhenRequiredOperationIsPlanned() async throws {
         let snapshot = try snapshotWithOperation(
             "pex.metric-recovery-objective",
             maturity: "planned"
@@ -267,7 +267,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("add-regression-test:pex.metric-recovery-objective"))
     }
 
-    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceIsMissing() throws {
+    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceIsMissing() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -310,7 +310,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("add-regression-test:drc-foundry-rule-import-agent-envelope"))
     }
 
-    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceDoesNotCoverMilestone() throws {
+    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceDoesNotCoverMilestone() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -347,7 +347,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         })
     }
 
-    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceExecutionFailed() throws {
+    @Test func assessorFailsMilestoneWhenRequiredTestEvidenceExecutionFailed() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -386,7 +386,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         })
     }
 
-    @Test func assessorRejectsRequiredTestEvidenceWithoutExecutableCommand() throws {
+    @Test func assessorRejectsRequiredTestEvidenceWithoutExecutableCommand() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -424,7 +424,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("fix-test-evidence:drc-foundry-rule-import-agent-envelope"))
     }
 
-    @Test func assessorRejectsRequiredTestEvidenceWhenCommandDoesNotRunDeclaredFilter() throws {
+    @Test func assessorRejectsRequiredTestEvidenceWhenCommandDoesNotRunDeclaredFilter() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -468,7 +468,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("fix-test-evidence:drc-foundry-rule-import-agent-envelope"))
     }
 
-    @Test func assessorRejectsRequiredTestEvidenceWithoutTimeoutWrapper() throws {
+    @Test func assessorRejectsRequiredTestEvidenceWithoutTimeoutWrapper() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -502,7 +502,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         })
     }
 
-    @Test func assessorRejectsRequiredTestEvidenceWithoutXcodebuildRunner() throws {
+    @Test func assessorRejectsRequiredTestEvidenceWithoutXcodebuildRunner() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -535,7 +535,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         })
     }
 
-    @Test func assessorRejectsRequiredTestEvidenceWithoutArtifactCoverage() throws {
+    @Test func assessorRejectsRequiredTestEvidenceWithoutArtifactCoverage() async throws {
         let assessor = XcircuitePlatformCapabilityReadinessAssessor()
         let baseline = try assessor.assess(
             runID: "test-evidence-baseline",
@@ -571,7 +571,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("fix-test-evidence:drc-foundry-rule-import-agent-envelope"))
     }
 
-    @Test func platformCapabilitySummaryRejectsMissingExecutionCounts() throws {
+    @Test func platformCapabilitySummaryRejectsMissingExecutionCounts() async throws {
         let json = """
         {
           "schemaVersion": 2,
@@ -604,7 +604,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         }
     }
 
-    @Test func platformCapabilityTestEvidenceRejectsMissingExecutionStatus() throws {
+    @Test func platformCapabilityTestEvidenceRejectsMissingExecutionStatus() async throws {
         let json = """
         {
           "evidenceID": "incomplete-evidence",
@@ -672,7 +672,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(globalHelp.contains("inspect-platform-capabilities"))
     }
 
-    @Test func assessorReportsMissingDomainOperationArtifactAndGate() throws {
+    @Test func assessorReportsMissingDomainOperationArtifactAndGate() async throws {
         let snapshot = XcircuitePlanningActionDomainSnapshot(
             runID: "minimal-run",
             generatedAt: "2026-06-28T00:00:00Z",
@@ -715,7 +715,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("add-verification-gate:simulation-summary"))
     }
 
-    @Test func actionDomainSnapshotExposesSimulationContractsUsedByReadiness() throws {
+    @Test func actionDomainSnapshotExposesSimulationContractsUsedByReadiness() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "action-domain-contract",
             generatedAt: "2026-06-28T00:00:00Z"

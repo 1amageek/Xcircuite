@@ -2,12 +2,12 @@ import Foundation
 import DesignFlowKernel
 
 public struct XcircuiteResolvedSuggestedCommand: Sendable, Hashable, Codable {
-    public var selection: XcircuiteSuggestedCommandSelection
+    public var selection: FlowSuggestedCommandSelection
     public var commandName: String
     public var dispatchArguments: [String]
 
     public init(
-        selection: XcircuiteSuggestedCommandSelection,
+        selection: FlowSuggestedCommandSelection,
         commandName: String,
         dispatchArguments: [String]
     ) {

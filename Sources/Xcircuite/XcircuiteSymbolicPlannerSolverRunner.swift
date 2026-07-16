@@ -9,15 +9,15 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
     private let artifactReferenceResolver: XcircuiteSymbolicPlannerArtifactReferenceResolver
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
             workspaceStore: workspaceStore,
-            fileReferenceVerifier: fileReferenceVerifier
+            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
         )
     }
 
@@ -25,13 +25,13 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
         request: XcircuiteSymbolicPlannerSolverRequest,
         projectRoot: URL
     ) async throws -> XcircuiteSymbolicPlannerSolverResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         guard request.timeoutSeconds.isFinite, request.timeoutSeconds > 0 else {
             throw XcircuiteSymbolicPlannerSolverError.invalidTimeout(request.timeoutSeconds)
         }
 
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let domainArtifact = try artifactReference(
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let domainArtifact = try await artifactReference(
             explicitPath: request.domainPath,
             artifactID: request.domainArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLDomainArtifactID,
             missingReferenceError: .missingDomainReference,
@@ -40,7 +40,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             projectRoot: projectRoot,
             format: .text
         )
-        let problemArtifact = try artifactReference(
+        let problemArtifact = try await artifactReference(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLProblemArtifactID,
             missingReferenceError: .missingProblemReference,
@@ -49,26 +49,29 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             projectRoot: projectRoot,
             format: .text
         )
-        let pddlExportArtifact = try optionalPDDLExportArtifact(
+        let pddlExportArtifact = try await optionalPDDLExportArtifact(
             request: request,
             manifest: manifest,
             projectRoot: projectRoot
         )
-        let domainURL = try workspaceStore.url(forProjectRelativePath: domainArtifact.path, inProjectAt: projectRoot)
-        let problemURL = try workspaceStore.url(forProjectRelativePath: problemArtifact.path, inProjectAt: projectRoot)
-        let pddlExportURL = try pddlExportArtifact.map { artifact in
-            try workspaceStore.url(forProjectRelativePath: artifact.path, inProjectAt: projectRoot)
+        let domainURL = try await workspaceStore.url(for: domainArtifact.path)
+        let problemURL = try await workspaceStore.url(for: problemArtifact.path)
+        let pddlExportURL: URL?
+        if let pddlExportArtifact {
+            pddlExportURL = try await workspaceStore.url(for: pddlExportArtifact.path)
+        } else {
+            pddlExportURL = nil
         }
         let workingDirectoryPath = request.workingDirectoryPath ?? defaultSolverWorkingDirectoryPath(runID: request.runID)
-        let workingDirectoryURL = try workspaceStore.url(
-            forProjectRelativePath: workingDirectoryPath,
-            inProjectAt: projectRoot
-        )
-        try workspaceStore.ensureDirectory(at: workingDirectoryURL)
+        let workingDirectoryURL = try await workspaceStore.url(for: workingDirectoryPath)
+        try await workspaceStore.ensureWorkspaceDirectory(at: workingDirectoryPath)
 
         let solverPlanOutputPath = solverPlanOutputPath(for: request)
-        let solverPlanOutputURL = try solverPlanOutputPath.map {
-            try workspaceStore.url(forProjectRelativePath: $0, inProjectAt: projectRoot)
+        let solverPlanOutputURL: URL?
+        if let solverPlanOutputPath {
+            solverPlanOutputURL = try await workspaceStore.url(for: solverPlanOutputPath)
+        } else {
+            solverPlanOutputURL = nil
         }
         if let solverPlanOutputURL, let solverPlanOutputPath {
             try validateSolverPlanOutput(
@@ -85,7 +88,9 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                     pddlExportURL: pddlExportURL
                 )
             )
-            try workspaceStore.ensureDirectory(at: solverPlanOutputURL.deletingLastPathComponent())
+            try await workspaceStore.ensureWorkspaceDirectory(
+                at: String(solverPlanOutputPath.split(separator: "/").dropLast().joined(separator: "/"))
+            )
         }
         let arguments = resolvedArguments(
             request.arguments,
@@ -141,7 +146,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                     )
                     status = "solved-without-import"
                 } else {
-                    let imported = try XcircuiteSymbolicPlannerPlanImporter(
+                    let imported = try await XcircuiteSymbolicPlannerPlanImporter(
                         workspaceStore: workspaceStore,
                         artifactStore: artifactStore
                     ).importSolverPlan(
@@ -156,19 +161,15 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                     importResult = imported
                     solverPlanArtifact = imported.solverPlanArtifact
                     if let pddlExportArtifact {
-                        let replay = try replayValidation(
+                        let replay = try await replayValidation(
                             importResult: imported,
-                            pddlExportArtifact: pddlExportArtifact,
-                            projectRoot: projectRoot
+                            pddlExportArtifact: pddlExportArtifact
                         )
                         planReplayValidation = replay
-                        planReplayValidationArtifact = try requireFoundationArtifactReference(
-                            artifactStore.persistSymbolicPlannerPlanReplayValidation(
-                                replay,
-                                runID: request.runID,
-                                projectRoot: projectRoot
-                            ),
-                            field: "solver.planReplayValidationArtifact"
+                        planReplayValidationArtifact = try await artifactStore.persistSymbolicPlannerPlanReplayValidation(
+                            replay,
+                            runID: request.runID,
+                            projectRoot: projectRoot
                         )
                         diagnostics.append(contentsOf: replayDiagnostics(from: replay))
                     }
@@ -181,13 +182,10 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
                     }
                 }
             } else {
-                solverPlanArtifact = try requireFoundationArtifactReference(
-                    artifactStore.persistSymbolicPlannerSolverPlan(
-                        solverPlanText,
-                        runID: request.runID,
-                        projectRoot: projectRoot
-                    ),
-                    field: "solver.solverPlanArtifact"
+                solverPlanArtifact = try await artifactStore.persistSymbolicPlannerSolverPlan(
+                    solverPlanText,
+                    runID: request.runID,
+                    projectRoot: projectRoot
                 )
                 status = "solved-without-import"
             }
@@ -227,7 +225,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
             finishedAt: finishedAt,
             diagnostics: diagnostics
         )
-        let solverArtifacts = try artifactStore.persistSymbolicPlannerSolverExecution(
+        let solverArtifacts = try await artifactStore.persistSymbolicPlannerSolverExecution(
             report: report,
             standardOutput: processOutcome.standardOutput,
             standardError: processOutcome.standardError,
@@ -258,15 +256,11 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
 
     private func replayValidation(
         importResult: XcircuiteSymbolicPlannerPlanImportResult,
-        pddlExportArtifact: ArtifactReference,
-        projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerPlanReplayValidation {
-        let pddlExport = try workspaceStore.readJSON(
+        pddlExportArtifact: ArtifactReference
+    ) async throws -> XcircuiteSymbolicPlannerPlanReplayValidation {
+        let pddlExport = try await workspaceStore.readJSON(
             XcircuiteSymbolicPlannerPDDLExport.self,
-            from: workspaceStore.url(
-                forProjectRelativePath: pddlExportArtifact.path,
-                inProjectAt: projectRoot
-            )
+            from: pddlExportArtifact.path
         )
         return XcircuiteSymbolicPlannerPlanReplayValidator().validate(
             candidatePlan: importResult.candidatePlan,
@@ -525,11 +519,11 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
 
     private func optionalPDDLExportArtifact(
         request: XcircuiteSymbolicPlannerSolverRequest,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> ArtifactReference? {
+    ) async throws -> ArtifactReference? {
         if request.importCandidatePlan || request.pddlExportPath != nil || request.pddlExportArtifactID != nil {
-            return try artifactReference(
+            return try await artifactReference(
                 explicitPath: request.pddlExportPath,
                 artifactID: request.pddlExportArtifactID ?? XcircuitePlanningArtifactStore.symbolicPlannerPDDLExportArtifactID,
                 missingReferenceError: .missingPDDLExportReference,
@@ -546,13 +540,13 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
         explicitPath: String?,
         artifactID: String?,
         missingReferenceError: XcircuiteSymbolicPlannerSolverError,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL,
-        format: XcircuiteFileFormat
-    ) throws -> ArtifactReference {
+        format: ArtifactFormat
+    ) async throws -> ArtifactReference {
         if let explicitPath {
-            return try artifactReferenceResolver.projectArtifactReference(
+            return try await artifactReferenceResolver.projectArtifactReference(
                 path: explicitPath,
                 artifactID: artifactID,
                 field: "solverInputArtifact",
@@ -564,7 +558,7 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
         guard let artifactID else {
             throw missingReferenceError
         }
-        return try artifactReferenceResolver.uniqueManifestArtifactReference(
+        return try await artifactReferenceResolver.uniqueManifestArtifactReference(
             artifactID: artifactID,
             field: "solverInputArtifact",
             expectedFormat: format,
@@ -608,15 +602,15 @@ public struct XcircuiteSymbolicPlannerSolverRunner: XcircuiteSymbolicPlannerSolv
     }
 
     private func defaultSolverWorkingDirectoryPath(runID: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-work"
+        "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-work"
     }
 
     private func defaultSolverPlanOutputPath(runID: String) -> String {
         "\(defaultSolverWorkingDirectoryPath(runID: runID))/solver-plan.out"
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try artifactReferenceResolver.runManifest(runID: runID, projectRoot: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await artifactReferenceResolver.runManifest(runID: runID)
     }
 
     private static func currentTimestamp() -> String {

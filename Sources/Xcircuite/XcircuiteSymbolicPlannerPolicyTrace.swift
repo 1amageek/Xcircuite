@@ -7,9 +7,9 @@ public struct XcircuiteSymbolicPlannerPolicyTrace: Codable, Sendable, Hashable {
     public var baseStrategy: String
     public var selectedStrategy: String
     public var usesCalibrationArtifacts: Bool
-    public var metricThresholdProfileArtifact: XcircuiteFileReference?
-    public var costCalibrationArtifact: XcircuiteFileReference?
-    public var paretoCandidatesArtifact: XcircuiteFileReference?
+    public var metricThresholdProfileArtifact: ArtifactReference?
+    public var costCalibrationArtifact: ArtifactReference?
+    public var paretoCandidatesArtifact: ArtifactReference?
     public var reasonCodes: [String]
     public var diagnostics: [String]
 
@@ -19,9 +19,9 @@ public struct XcircuiteSymbolicPlannerPolicyTrace: Codable, Sendable, Hashable {
         baseStrategy: String,
         selectedStrategy: String,
         usesCalibrationArtifacts: Bool,
-        metricThresholdProfileArtifact: XcircuiteFileReference? = nil,
-        costCalibrationArtifact: XcircuiteFileReference? = nil,
-        paretoCandidatesArtifact: XcircuiteFileReference? = nil,
+        metricThresholdProfileArtifact: ArtifactReference? = nil,
+        costCalibrationArtifact: ArtifactReference? = nil,
+        paretoCandidatesArtifact: ArtifactReference? = nil,
         reasonCodes: [String] = [],
         diagnostics: [String] = []
     ) {

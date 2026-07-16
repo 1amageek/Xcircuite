@@ -50,7 +50,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage, context: context)
             let layoutURL = try layoutInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -61,7 +61,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 layoutInput,
                 artifactID: "electrical-standard-layout-input",
                 kind: .layout,
-                format: xcircuiteFileFormat(for: layoutFormat),
+                format: artifactFormat(for: layoutFormat),
                 context: context
             )]
             if let technologyInput {
@@ -69,7 +69,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                     technologyInput,
                     artifactID: "electrical-standard-technology-input",
                     kind: .technology,
-                    format: xcircuiteFileFormat(for: technologyFormat),
+                    format: artifactFormat(for: technologyFormat),
                     context: context
                 ))
             }
@@ -100,7 +100,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                     connectivityInput,
                     artifactID: "electrical-standard-connectivity-input",
                     kind: .layout,
-                    format: xcircuiteFileFormat(for: connectivityFormat),
+                    format: artifactFormat(for: connectivityFormat),
                     context: context
                 ))
             } else {
@@ -114,39 +114,28 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 connectivityDocument: connectivityDocument,
                 connectivitySourceFormat: connectivityInput == nil ? nil : connectivityFormat.rawValue
             )
-            try context.checkCancellation()
-            let relativePath = ".xcircuite/runs/\(context.runID)/electrical-signoff/physical-design-snapshot.json"
-            let url = try context.storage.url(
-                forProjectRelativePath: relativePath,
-                inProjectAt: context.projectRoot
+            try await context.checkCancellation()
+            let reference = try await context.persistJSONArtifact(
+                snapshot,
+                artifactID: "electrical-standard-physical-snapshot",
+                stageID: stageID,
+                fileName: "physical-design-snapshot.json",
+                kind: ArtifactKind.layout,
+                mode: .replaceable
             )
-            try context.storage.ensureDirectory(at: url.deletingLastPathComponent())
-            try context.storage.writeJSON(snapshot, to: url, forProjectAt: context.projectRoot)
             let inputManifest = ElectricalSignoffInputArtifactManifest(
                 runID: context.runID,
                 stageID: stage.stageID,
                 inputArtifacts: inputArtifacts
             )
             try inputManifest.validate()
-            let manifestPath = ".xcircuite/runs/\(context.runID)/electrical-signoff/standard-layout-inputs.json"
-            let manifestURL = try context.storage.url(
-                forProjectRelativePath: manifestPath,
-                inProjectAt: context.projectRoot
-            )
-            try context.storage.writeJSON(inputManifest, to: manifestURL, forProjectAt: context.projectRoot)
-            let manifestReference = try StageArtifactReferenceBuilder().reference(
-                for: manifestURL,
-                projectRoot: context.projectRoot,
+            let manifestReference = try await context.persistJSONArtifact(
+                inputManifest,
                 artifactID: "electrical-standard-layout-input-manifest",
+                stageID: stageID,
+                fileName: "standard-layout-inputs.json",
                 kind: ArtifactKind.report,
-                format: ArtifactFormat.json
-            )
-            let reference = try StageArtifactReferenceBuilder().reference(
-                for: url,
-                projectRoot: context.projectRoot,
-                artifactID: "electrical-standard-physical-snapshot",
-                kind: ArtifactKind.layout,
-                format: ArtifactFormat.json
+                mode: .replaceable
             )
             let gate = FlowGateResult(
                 gateID: "electrical-standard-layout-import",
@@ -176,8 +165,8 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         guard !context.runID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ElectricalStandardLayoutImportError.stageMismatch
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
         guard [.gds, .oasis, .def].contains(layoutFormat) else {
             throw ElectricalStandardLayoutImportError.unsupportedLayoutFormat(layoutFormat.rawValue)
         }
@@ -262,7 +251,6 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 projectRoot: context.projectRoot,
                 runDirectory: context.runDirectory
             )
-            let path = try projectRelativePath(for: url, projectRoot: context.projectRoot)
             return try StageArtifactReferenceBuilder().reference(
                 for: url,
                 projectRoot: context.projectRoot,
@@ -273,7 +261,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         }
     }
 
-    private func xcircuiteFileFormat(for format: LayoutFileFormat) -> ArtifactFormat {
+    private func artifactFormat(for format: LayoutFileFormat) -> ArtifactFormat {
         switch format {
         case .json:
             return .json

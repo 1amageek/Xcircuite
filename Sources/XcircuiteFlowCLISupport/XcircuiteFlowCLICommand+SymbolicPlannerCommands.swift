@@ -25,7 +25,7 @@ extension XcircuiteFlowCLICommand {
         )
     }
 
-    static func exportSymbolicPlannerProblem(arguments: [String]) throws -> String {
+    static func exportSymbolicPlannerProblem(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -65,7 +65,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteSymbolicPlannerPDDLExporter().exportSymbolicPlannerProblem(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerPDDLExporter(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).exportSymbolicPlannerProblem(
             request: XcircuiteSymbolicPlannerPDDLExportRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -78,7 +82,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func importSymbolicPlannerPlan(arguments: [String]) throws -> String {
+    static func importSymbolicPlannerPlan(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -124,7 +128,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteSymbolicPlannerPlanImporter().importSolverPlan(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerPlanImporter(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).importSolverPlan(
             request: XcircuiteSymbolicPlannerPlanImportRequest(
                 runID: runID,
                 problemArtifactID: problemArtifactID,
@@ -210,7 +218,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--executable-path")
         }
 
-        let result = try await XcircuiteSymbolicPlannerSolverRunner().solve(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerSolverRunner(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).solve(
             request: XcircuiteSymbolicPlannerSolverRequest(
                 runID: runID,
                 executablePath: executablePath,
@@ -358,7 +370,11 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--executable-path")
         }
 
-        let result = try await XcircuiteSymbolicPlannerSolverQualifier().qualify(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerSolverQualifier(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).qualify(
             request: XcircuiteSymbolicPlannerSolverQualificationRequest(
                 runID: runID,
                 toolID: toolID,
@@ -395,7 +411,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(result, pretty: pretty)
     }
 
-    static func compareSymbolicPlannerSolverFamily(arguments: [String]) throws -> String {
+    static func compareSymbolicPlannerSolverFamily(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -434,7 +450,11 @@ extension XcircuiteFlowCLICommand {
         guard let runID else {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
-        let result = try XcircuiteSymbolicPlannerSolverFamilyComparator().compare(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerSolverFamilyComparator(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).compare(
             request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest(
                 runID: runID,
                 comparisonID: comparisonID,
@@ -496,7 +516,11 @@ extension XcircuiteFlowCLICommand {
         guard let runID else {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
-        let result = try await XcircuiteSymbolicPlannerSolverFamilyPromoter().promote(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerSolverFamilyPromoter(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).promote(
             request: XcircuiteSymbolicPlannerSolverFamilyPromotionRequest(
                 runID: runID,
                 comparisonID: comparisonID,
@@ -551,9 +575,9 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--spec")
         }
 
-        var request = try XcircuiteWorkspaceStore().readJSON(
+        var request = try JSONDecoder().decode(
             XcircuiteSymbolicPlannerSolverFamilyBatchRequest.self,
-            from: URL(filePath: specPath)
+            from: Data(contentsOf: URL(filePath: specPath))
         )
         if let comparisonID {
             request.comparisonID = comparisonID
@@ -568,14 +592,18 @@ extension XcircuiteFlowCLICommand {
             request.verifyPromotedPlan = verifyPromotedPlan
         }
 
-        let result = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner().run(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerSolverFamilyBatchRunner(
+            workspaceStore: workspaceStore,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).run(
             request: request,
             projectRoot: projectRoot
         )
         return try encode(result, pretty: pretty)
     }
 
-    static func discoverInstalledSymbolicPlannerSolvers(arguments: [String]) throws -> String {
+    static func discoverInstalledSymbolicPlannerSolvers(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var runID: String?
@@ -624,7 +652,10 @@ extension XcircuiteFlowCLICommand {
             throw XcircuiteFlowCLIError.missingOption("--run-id")
         }
 
-        let result = try XcircuiteSymbolicPlannerInstalledSolverLaneResolver().discover(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let result = try await XcircuiteSymbolicPlannerInstalledSolverLaneResolver(
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        ).discover(
             request: XcircuiteSymbolicPlannerInstalledSolverLaneRequest(
                 runID: runID,
                 laneID: laneID,
@@ -638,10 +669,11 @@ extension XcircuiteFlowCLICommand {
         )
         if let batchSpecOutputPath,
            let batchRequest = result.lane.batchRequest {
-            try XcircuiteWorkspaceStore().writeJSON(
-                batchRequest,
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(batchRequest).write(
                 to: URL(filePath: batchSpecOutputPath),
-                forProjectAt: projectRoot
+                options: .atomic
             )
         }
         return try encode(result, pretty: pretty)
@@ -765,12 +797,10 @@ extension XcircuiteFlowCLICommand {
                     value: "cannot be combined with per-suite qualification options"
                 )
             }
-            request = try XcircuiteWorkspaceStore()
-                .readJSON(
-                    XcircuiteSymbolicPlannerSolverCorpusSuiteSpec.self,
-                    from: URL(filePath: suiteSpecPath)
-                )
-                .qualificationRequest
+            request = try JSONDecoder().decode(
+                XcircuiteSymbolicPlannerSolverCorpusSuiteSpec.self,
+                from: Data(contentsOf: URL(filePath: suiteSpecPath))
+            ).qualificationRequest
         } else {
             guard let suiteID else {
                 throw XcircuiteFlowCLIError.missingOption("--suite-id")
@@ -811,7 +841,15 @@ extension XcircuiteFlowCLICommand {
             )
         }
 
-        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier().qualify(
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        let result = try await XcircuiteSymbolicPlannerSolverCorpusQualifier(
+            artifactStore: artifactStore,
+            caseQualifier: XcircuiteSymbolicPlannerSolverQualifier(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
+        ).qualify(
             request: request,
             projectRoot: projectRoot
         )

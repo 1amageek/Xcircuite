@@ -1,5 +1,6 @@
-import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
+import Foundation
 
 public struct XcircuitePlanningArtifactStore: Sendable {
     public static let actionDomainArtifactID = "planning-action-domain-snapshot"
@@ -86,1284 +87,324 @@ public struct XcircuitePlanningArtifactStore: Sendable {
     public static let rejectedFeedbackLearningReportArtifactID = "planning-rejected-feedback-learning-report"
     public static let rejectedFeedbackLearningReportRelativePath = "planning/rejected-feedback-learning-report.json"
 
-    private let storage: any FlowExecutionStorage
+    private let workspaceStore: XcircuiteWorkspaceStore
     private let snapshotBuilder: XcircuiteActionDomainSnapshotBuilder
 
     public init(
-        storage: any FlowExecutionStorage = DesignFlowStorageDefaults.makeExecutionStorage(),
+        workspaceStore: XcircuiteWorkspaceStore,
         snapshotBuilder: XcircuiteActionDomainSnapshotBuilder = XcircuiteActionDomainSnapshotBuilder()
     ) {
-        self.storage = storage
+        self.workspaceStore = workspaceStore
         self.snapshotBuilder = snapshotBuilder
     }
 
-    @discardableResult
-    public func persistActionDomainSnapshot(
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try persistActionDomainSnapshot(
-            runID: runID,
-            projectRoot: projectRoot,
-            generatedAt: Self.currentTimestamp()
-        )
+    public func persistActionDomainSnapshot(runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try await persistActionDomainSnapshot(runID: runID, projectRoot: projectRoot, generatedAt: Self.currentTimestamp())
     }
 
-    @discardableResult
-    public func persistActionDomainSnapshot(
-        runID: String,
-        projectRoot: URL,
-        generatedAt: String
-    ) throws -> XcircuiteFileReference {
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
+    public func persistActionDomainSnapshot(runID: String, projectRoot: URL, generatedAt: String) async throws -> ArtifactReference {
         let snapshot = try snapshotBuilder.snapshot(runID: runID, generatedAt: generatedAt)
-        let snapshotURL = planningDirectory.appending(path: "action-domain-snapshot.json")
-        try storage.writeJSON(snapshot, to: snapshotURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.actionDomainRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.actionDomainArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+        return try await persistRunJSON(snapshot, id: Self.actionDomainArtifactID, path: Self.actionDomainRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistRepairPlanFormulation(
-        _ formulation: XcircuiteRepairPlanFormulation,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard formulation.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: formulation.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let formulationURL = planningDirectory.appending(path: "repair-formulation.json")
-        try storage.writeJSON(formulation, to: formulationURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.repairPlanFormulationRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.repairPlanFormulationArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistRepairPlanFormulation(_ value: XcircuiteRepairPlanFormulation, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.repairPlanFormulationArtifactID, path: Self.repairPlanFormulationRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistPlanningProblem(
-        _ problem: XcircuiteCircuitPlanningProblem,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard problem.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: problem.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let problemURL = planningDirectory.appending(path: "problem.json")
-        try storage.writeJSON(problem, to: problemURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.problemRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.problemArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistPlanningProblem(_ value: XcircuiteCircuitPlanningProblem, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.problemArtifactID, path: Self.problemRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistPlanningProblemValidation(
-        _ validation: XcircuitePlanningProblemValidation,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard validation.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: validation.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let validationURL = planningDirectory.appending(path: "problem-validation.json")
-        try storage.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.planningProblemValidationRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.planningProblemValidationArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistPlanningProblemValidation(_ value: XcircuitePlanningProblemValidation, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.planningProblemValidationArtifactID, path: Self.planningProblemValidationRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistProblemTranslationAudit(
-        _ audit: XcircuiteProblemTranslationAudit,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard audit.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: audit.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let auditURL = planningDirectory.appending(path: "problem-translation-audit.json")
-        try storage.writeJSON(audit, to: auditURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.problemTranslationAuditRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.problemTranslationAuditArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistProblemTranslationAudit(_ value: XcircuiteProblemTranslationAudit, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.problemTranslationAuditArtifactID, path: Self.problemTranslationAuditRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistParameterCandidates(
-        _ candidates: [XcircuiteParameterCandidate],
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        if let mismatched = candidates.first(where: { $0.runID != runID }) {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: mismatched.runID)
+    public func persistParameterCandidates(_ values: [XcircuiteParameterCandidate], runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        if let mismatch = values.first(where: { $0.runID != runID }) {
+            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: mismatch.runID)
         }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let candidatesURL = planningDirectory.appending(path: "parameter-candidates.jsonl")
-        try storage.writeText(try jsonLines(for: candidates), to: candidatesURL)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.parameterCandidatesRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.parameterCandidatesArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+        return try await persistRunText(try jsonLines(values), id: Self.parameterCandidatesArtifactID, path: Self.parameterCandidatesRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func appendRejectedPlan(
-        _ record: XcircuiteRejectedPlanRecord,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard record.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: record.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let rejectedPlansURL = planningDirectory.appending(path: "rejected-plans.jsonl")
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(record)
-        guard let line = String(data: data, encoding: .utf8) else {
-            throw XcircuitePlanningArtifactError.invalidUTF8
-        }
-        let existingRecords = try readRejectedPlanLedger(from: rejectedPlansURL, runID: runID)
-        if existingRecords.contains(where: { $0.rejectionID == record.rejectionID }) {
+    public func appendRejectedPlan(_ record: XcircuiteRejectedPlanRecord, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(record.runID, expected: runID)
+        let store = try resolvedWorkspaceStore(projectRoot: projectRoot)
+        let path = runPath(Self.rejectedPlansRelativePath, runID: runID)
+        let locator = try artifactLocator(path: path, format: .text)
+        let existing = try await store.loadArtifactContent(at: locator) ?? Data()
+        let records = try decodeRejectedPlans(existing, runID: runID)
+        guard !records.contains(where: { $0.rejectionID == record.rejectionID }) else {
             throw XcircuitePlanningArtifactError.duplicateRejectedPlan(rejectionID: record.rejectionID)
         }
-        let existingText = try rejectedPlanLedgerText(from: rejectedPlansURL)
-        let prefix = existingText.isEmpty || existingText.hasSuffix("\n") ? existingText : "\(existingText)\n"
-        try storage.writeText("\(prefix)\(line)\n", to: rejectedPlansURL)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.rejectedPlansRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.rejectedPlansArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var updated = existing
+        if !updated.isEmpty, updated.last != 0x0A { updated.append(0x0A) }
+        updated.append(try encoder.encode(record))
+        updated.append(0x0A)
+        return try await store.persistArtifact(content: updated, id: try ArtifactID(rawValue: Self.rejectedPlansArtifactID), locator: locator, runID: runID, mode: .replaceable)
     }
 
-    @discardableResult
-    public func persistParameterCandidateSearchTrace(
-        _ trace: XcircuiteParameterCandidateSearchTrace,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard trace.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: trace.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let traceURL = planningDirectory.appending(path: "parameter-candidate-search-trace.json")
-        try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.parameterCandidateSearchTraceRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.parameterCandidateSearchTraceArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistParameterCandidateSearchTrace(_ value: XcircuiteParameterCandidateSearchTrace, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.parameterCandidateSearchTraceArtifactID, path: Self.parameterCandidateSearchTraceRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistParameterCandidateSelectionTrace(
-        _ trace: XcircuiteParameterCandidateSelectionTrace,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let traceURL = planningDirectory.appending(path: "parameter-candidate-selection-trace.json")
-        try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.parameterCandidateSelectionTraceRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.parameterCandidateSelectionTraceArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistParameterCandidateSelectionTrace(_ value: XcircuiteParameterCandidateSelectionTrace, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        return try await persistRunJSON(value, id: Self.parameterCandidateSelectionTraceArtifactID, path: Self.parameterCandidateSelectionTraceRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistCandidatePlan(
-        _ plan: XcircuiteCandidatePlan,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard plan.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: plan.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let candidatePlanURL = planningDirectory.appending(path: "candidate-plan.json")
-        try storage.writeJSON(plan, to: candidatePlanURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.candidatePlanRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.candidatePlanArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistCandidatePlan(_ value: XcircuiteCandidatePlan, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.candidatePlanArtifactID, path: Self.candidatePlanRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerTrace(
-        _ trace: XcircuiteSymbolicPlannerTrace,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard trace.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: trace.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let traceURL = planningDirectory.appending(path: "symbolic-planner-trace.json")
-        try storage.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerTraceRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.symbolicPlannerTraceArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistSymbolicPlannerTrace(_ value: XcircuiteSymbolicPlannerTrace, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.symbolicPlannerTraceArtifactID, path: Self.symbolicPlannerTraceRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerFamilyRun(
-        _ familyRun: XcircuiteSymbolicPlannerFamilyRun,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(familyRun.familyRunID, kind: .artifactID)
-        guard familyRun.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: familyRun.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let familyDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "family")
-            .appending(path: familyRun.familyRunID)
-        try storage.ensureDirectory(at: familyDirectory)
-
-        let familyRunURL = familyDirectory.appending(path: "family-run.json")
-        try storage.writeJSON(familyRun, to: familyRunURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/family/\(familyRun.familyRunID)/family-run.json"
-        let familyArtifactID = "\(Self.symbolicPlannerFamilyRunArtifactID)-\(String(familyRun.familyRunID.prefix(80)))"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: familyArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    public func persistSymbolicPlannerFamilyRun(_ value: XcircuiteSymbolicPlannerFamilyRun, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        try FlowIdentifierValidator().validate(value.familyRunID, kind: .artifactID)
+        let path = "planning/symbolic-planner/family/\(value.familyRunID)/family-run.json"
+        let id = "\(Self.symbolicPlannerFamilyRunArtifactID)-\(String(value.familyRunID.prefix(80)))"
+        return try await persistRunJSON(value, id: id, path: path, runID: runID, projectRoot: projectRoot)
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerPDDLExport(
-        _ export: XcircuiteSymbolicPlannerPDDLExport,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerPDDLArtifactSet {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard export.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: export.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
+    public func persistSymbolicPlannerPDDLExport(_ value: XcircuiteSymbolicPlannerPDDLExport, runID: String, projectRoot: URL) async throws -> XcircuiteSymbolicPlannerPDDLArtifactSet {
+        try validateRun(value.runID, expected: runID)
+        let domain = try await persistRunText(value.domainPDDL, id: Self.symbolicPlannerPDDLDomainArtifactID, path: Self.symbolicPlannerPDDLDomainRelativePath, runID: runID, projectRoot: projectRoot)
+        let problem = try await persistRunText(value.problemPDDL, id: Self.symbolicPlannerPDDLProblemArtifactID, path: Self.symbolicPlannerPDDLProblemRelativePath, runID: runID, projectRoot: projectRoot)
+        let export = try await persistRunJSON(value, id: Self.symbolicPlannerPDDLExportArtifactID, path: Self.symbolicPlannerPDDLExportRelativePath, runID: runID, projectRoot: projectRoot)
+        return XcircuiteSymbolicPlannerPDDLArtifactSet(domainArtifact: domain, problemArtifact: problem, exportArtifact: export)
+    }
 
-        let domainURL = exportDirectory.appending(path: "domain.pddl")
-        let problemURL = exportDirectory.appending(path: "problem.pddl")
-        let exportURL = exportDirectory.appending(path: "pddl-export.json")
-        try storage.writeText(export.domainPDDL, to: domainURL)
-        try storage.writeText(export.problemPDDL, to: problemURL)
-        try storage.writeJSON(export, to: exportURL, forProjectAt: projectRoot)
+    public func persistSymbolicPlannerSolverPlan(_ text: String, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try await persistRunText(text, id: Self.symbolicPlannerSolverPlanArtifactID, path: Self.symbolicPlannerSolverPlanRelativePath, runID: runID, projectRoot: projectRoot)
+    }
 
-        let domainArtifact = try pddlFileReference(
-            relativePath: Self.symbolicPlannerPDDLDomainRelativePath,
-            artifactID: Self.symbolicPlannerPDDLDomainArtifactID,
+    public func persistSymbolicPlannerPlanReplayValidation(_ value: XcircuiteSymbolicPlannerPlanReplayValidation, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.symbolicPlannerPlanReplayValidationArtifactID, path: Self.symbolicPlannerPlanReplayValidationRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverCertificate(_ value: XcircuiteSymbolicPlannerSolverCertificateParseResult, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.symbolicPlannerSolverCertificateArtifactID, path: Self.symbolicPlannerSolverCertificateRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerProofValidation(_ value: XcircuiteSymbolicPlannerProofValidation, standardOutput: String, standardError: String, runID: String, projectRoot: URL) async throws -> XcircuiteSymbolicPlannerProofValidationArtifactSet {
+        try validateRun(value.runID, expected: runID)
+        let stdout = try await persistRunText(standardOutput, id: Self.symbolicPlannerProofValidationStdoutArtifactID, path: Self.symbolicPlannerProofValidationStdoutRelativePath, runID: runID, projectRoot: projectRoot)
+        let stderr = try await persistRunText(standardError, id: Self.symbolicPlannerProofValidationStderrArtifactID, path: Self.symbolicPlannerProofValidationStderrRelativePath, runID: runID, projectRoot: projectRoot)
+        var persisted = value
+        persisted.standardOutputArtifact = stdout
+        persisted.standardErrorArtifact = stderr
+        let validation = try await persistRunJSON(persisted, id: Self.symbolicPlannerProofValidationArtifactID, path: Self.symbolicPlannerProofValidationRelativePath, runID: runID, projectRoot: projectRoot)
+        return XcircuiteSymbolicPlannerProofValidationArtifactSet(validationArtifact: validation, standardOutputArtifact: stdout, standardErrorArtifact: stderr)
+    }
+
+    public func persistSymbolicPlannerSolverExecution(report: XcircuiteSymbolicPlannerSolverExecutionReport, standardOutput: String, standardError: String, runID: String, projectRoot: URL) async throws -> XcircuiteSymbolicPlannerSolverArtifactSet {
+        try validateRun(report.runID, expected: runID)
+        let stdout = try await persistRunText(standardOutput, id: Self.symbolicPlannerSolverStdoutArtifactID, path: Self.symbolicPlannerSolverStdoutRelativePath, runID: runID, projectRoot: projectRoot)
+        let stderr = try await persistRunText(standardError, id: Self.symbolicPlannerSolverStderrArtifactID, path: Self.symbolicPlannerSolverStderrRelativePath, runID: runID, projectRoot: projectRoot)
+        let run = try await persistRunJSON(report, id: Self.symbolicPlannerSolverRunArtifactID, path: Self.symbolicPlannerSolverRunRelativePath, runID: runID, projectRoot: projectRoot)
+        return XcircuiteSymbolicPlannerSolverArtifactSet(runArtifact: run, standardOutputArtifact: stdout, standardErrorArtifact: stderr)
+    }
+
+    public func persistSymbolicPlannerSolverQualification(_ value: XcircuiteSymbolicPlannerSolverQualificationResult, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value.detachingQualificationArtifactReferencesForPersistence(), id: Self.symbolicPlannerSolverQualificationArtifactID, path: Self.symbolicPlannerSolverQualificationRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverFamilyComparison(_ value: XcircuiteSymbolicPlannerSolverFamilyComparison, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        try FlowIdentifierValidator().validate(value.comparisonID, kind: .artifactID)
+        let path = "planning/symbolic-planner/solver-family/\(value.comparisonID)/solver-family-comparison.json"
+        let id = "\(Self.symbolicPlannerSolverFamilyComparisonArtifactID)-\(String(value.comparisonID.prefix(80)))"
+        return try await persistRunJSON(value, id: id, path: path, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverFamilyPromotion(_ value: XcircuiteSymbolicPlannerSolverFamilyPromotion, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        try FlowIdentifierValidator().validate(value.comparisonID, kind: .artifactID)
+        let path = "planning/symbolic-planner/solver-family/\(value.comparisonID)/solver-family-promotion.json"
+        let id = "\(Self.symbolicPlannerSolverFamilyPromotionArtifactID)-\(String(value.comparisonID.prefix(80)))"
+        return try await persistRunJSON(value, id: id, path: path, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverFamilyBatch(_ value: XcircuiteSymbolicPlannerSolverFamilyBatchRun, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        try FlowIdentifierValidator().validate(value.comparisonID, kind: .artifactID)
+        let path = "planning/symbolic-planner/solver-family/\(value.comparisonID)/solver-family-batch.json"
+        let id = "\(Self.symbolicPlannerSolverFamilyBatchArtifactID)-\(String(value.comparisonID.prefix(80)))"
+        return try await persistRunJSON(value, id: id, path: path, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerInstalledSolverLane(_ value: XcircuiteSymbolicPlannerInstalledSolverLane, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        try FlowIdentifierValidator().validate(value.laneID, kind: .artifactID)
+        let id = "\(Self.symbolicPlannerInstalledSolverLaneArtifactID)-\(String(value.laneID.prefix(80)))"
+        return try await persistRunJSON(value, id: id, path: Self.symbolicPlannerInstalledSolverLaneRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverFamilyQualification(_ value: XcircuiteSymbolicPlannerSolverQualificationResult, runID: String, comparisonID: String, candidateID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateFamilyIdentifiers(runID: runID, comparisonID: comparisonID, candidateID: candidateID)
+        try validateRun(value.runID, expected: runID)
+        let path = familyCandidatePath(comparisonID: comparisonID, candidateID: candidateID, fileName: "solver-qualification.json")
+        let id = familyArtifactID(Self.symbolicPlannerSolverFamilyQualificationArtifactID, comparisonID: comparisonID, candidateID: candidateID)
+        return try await persistRunJSON(value.detachingQualificationArtifactReferencesForPersistence(), id: id, path: path, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverFamilySolverPlan(_ text: String, runID: String, comparisonID: String, candidateID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateFamilyIdentifiers(runID: runID, comparisonID: comparisonID, candidateID: candidateID)
+        let path = familyCandidatePath(comparisonID: comparisonID, candidateID: candidateID, fileName: "solver-plan.txt")
+        let id = familyArtifactID(Self.symbolicPlannerSolverFamilySolverPlanArtifactID, comparisonID: comparisonID, candidateID: candidateID)
+        return try await persistRunText(text, id: id, path: path, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverFamilyCertificate(_ value: XcircuiteSymbolicPlannerSolverCertificateParseResult, runID: String, comparisonID: String, candidateID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateFamilyIdentifiers(runID: runID, comparisonID: comparisonID, candidateID: candidateID)
+        try validateRun(value.runID, expected: runID)
+        let path = familyCandidatePath(comparisonID: comparisonID, candidateID: candidateID, fileName: "solver-certificate.json")
+        let id = familyArtifactID(Self.symbolicPlannerSolverFamilyCertificateArtifactID, comparisonID: comparisonID, candidateID: candidateID)
+        return try await persistRunJSON(value, id: id, path: path, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverQualificationCorpusSuiteSpec(_ value: XcircuiteSymbolicPlannerSolverCorpusSuiteSpec, projectRoot: URL) async throws -> ArtifactReference {
+        try FlowIdentifierValidator().validate(value.suiteID, kind: .artifactID)
+        let path = "\(XcircuiteWorkspaceLayout.directoryName)/qualification/symbolic-planner/\(value.suiteID)/solver-qualification-corpus-suite.json"
+        return try await persistProjectJSON(value, id: Self.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID, path: path, projectRoot: projectRoot)
+    }
+
+    public func persistSymbolicPlannerSolverQualificationCorpus(_ value: XcircuiteSymbolicPlannerSolverCorpusQualificationResult, projectRoot: URL) async throws -> ArtifactReference {
+        try FlowIdentifierValidator().validate(value.suiteID, kind: .artifactID)
+        let path = "\(XcircuiteWorkspaceLayout.directoryName)/qualification/symbolic-planner/\(value.suiteID)/solver-qualification-corpus.json"
+        return try await persistProjectJSON(value, id: Self.symbolicPlannerSolverQualificationCorpusArtifactID, path: path, projectRoot: projectRoot)
+    }
+
+    public func persistPlanVerification(_ value: XcircuitePlanVerification, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.planVerificationArtifactID, path: Self.planVerificationRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistPlanExecution(_ value: XcircuiteCandidatePlanExecution, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.planExecutionArtifactID, path: Self.planExecutionRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistNumericRepairLoop(_ value: XcircuiteNumericRepairLoopResult, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.numericRepairLoopArtifactID, path: Self.numericRepairLoopRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistMetricThresholdProfile(_ value: XcircuiteMetricThresholdProfile, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.metricThresholdProfileArtifactID, path: Self.metricThresholdProfileRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistCostCalibrationReport(_ value: XcircuiteCostCalibrationReport, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.costCalibrationArtifactID, path: Self.costCalibrationRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistParetoCandidates(_ value: XcircuiteParetoCandidateSet, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunText(try jsonLines(value.candidates), id: Self.paretoCandidatesArtifactID, path: Self.paretoCandidatesRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistImprovementLoop(_ value: XcircuiteImprovementLoopResult, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.improvementLoopArtifactID, path: Self.improvementLoopRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func persistRejectedFeedbackLearningReport(_ value: XcircuiteRejectedFeedbackLearningReport, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try validateRun(value.runID, expected: runID)
+        return try await persistRunJSON(value, id: Self.rejectedFeedbackLearningReportArtifactID, path: Self.rejectedFeedbackLearningReportRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    private func persistRunJSON<Value: Encodable & Sendable>(_ value: Value, id: String, path: String, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try await persistRunData(encoder.encode(value), id: id, path: path, format: .json, runID: runID, projectRoot: projectRoot)
+    }
+
+    private func persistRunText(_ text: String, id: String, path: String, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try await persistRunData(Data(text.utf8), id: id, path: path, format: .text, runID: runID, projectRoot: projectRoot)
+    }
+
+    private func persistRunData(_ data: Data, id: String, path: String, format: ArtifactFormat, runID: String, projectRoot: URL) async throws -> ArtifactReference {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        let store = try resolvedWorkspaceStore(projectRoot: projectRoot)
+        return try await store.persistArtifact(
+            content: data,
+            id: try ArtifactID(rawValue: id),
+            locator: try artifactLocator(path: runPath(path, runID: runID), format: format),
             runID: runID,
-            projectRoot: projectRoot
-        )
-        let problemArtifact = try pddlFileReference(
-            relativePath: Self.symbolicPlannerPDDLProblemRelativePath,
-            artifactID: Self.symbolicPlannerPDDLProblemArtifactID,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-        let exportArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPDDLExportRelativePath)",
-            artifactID: Self.symbolicPlannerPDDLExportArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-
-        try storage.upsertRunArtifact(domainArtifact, runID: runID, inProjectAt: projectRoot)
-        try storage.upsertRunArtifact(problemArtifact, runID: runID, inProjectAt: projectRoot)
-        try storage.upsertRunArtifact(exportArtifact, runID: runID, inProjectAt: projectRoot)
-
-        return XcircuiteSymbolicPlannerPDDLArtifactSet(
-            domainArtifact: try requireFoundationArtifactReference(
-                domainArtifact,
-                field: "pddl.domainArtifact"
-            ),
-            problemArtifact: try requireFoundationArtifactReference(
-                problemArtifact,
-                field: "pddl.problemArtifact"
-            ),
-            exportArtifact: try requireFoundationArtifactReference(
-                exportArtifact,
-                field: "pddl.exportArtifact"
-            )
+            mode: .replaceable
         )
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerSolverPlan(
-        _ text: String,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let planURL = exportDirectory.appending(path: "solver-plan.txt")
-        try storage.writeText(text, to: planURL)
-
-        let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverPlanRelativePath)",
-            artifactID: Self.symbolicPlannerSolverPlanArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
+    private func persistProjectJSON<Value: Encodable & Sendable>(_ value: Value, id: String, path: String, projectRoot: URL) async throws -> ArtifactReference {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let store = try resolvedWorkspaceStore(projectRoot: projectRoot)
+        return try await store.persistProjectArtifact(
+            content: encoder.encode(value),
+            id: try ArtifactID(rawValue: id),
+            locator: try artifactLocator(path: path, format: .json)
         )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerPlanReplayValidation(
-        _ validation: XcircuiteSymbolicPlannerPlanReplayValidation,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard validation.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: validation.runID)
+    private func resolvedWorkspaceStore(projectRoot: URL) throws -> XcircuiteWorkspaceStore {
+        let canonicalRoot = projectRoot.standardizedFileURL
+        guard workspaceStore.projectRoot == canonicalRoot else {
+            throw XcircuiteWorkspaceStoreError.invalidArtifactLocation(projectRoot.path(percentEncoded: false))
         }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let validationURL = exportDirectory.appending(path: "plan-replay-validation.json")
-        try storage.writeJSON(validation, to: validationURL, forProjectAt: projectRoot)
-
-        let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerPlanReplayValidationRelativePath)",
-            artifactID: Self.symbolicPlannerPlanReplayValidationArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+        return workspaceStore
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerSolverCertificate(
-        _ certificate: XcircuiteSymbolicPlannerSolverCertificateParseResult,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard certificate.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: certificate.runID)
+    private func artifactLocator(path: String, format: ArtifactFormat) throws -> ArtifactLocator {
+        ArtifactLocator(location: try ArtifactLocation(workspaceRelativePath: path), role: .output, kind: .other, format: format)
+    }
+
+    private func runPath(_ path: String, runID: String) -> String {
+        "\(XcircuiteWorkspaceLayout.directoryName)/runs/\(runID)/\(path)"
+    }
+
+    private func validateRun(_ actual: String, expected: String) throws {
+        try FlowIdentifierValidator().validate(expected, kind: .runID)
+        guard actual == expected else {
+            throw XcircuitePlanningArtifactError.runMismatch(expected: expected, actual: actual)
         }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let certificateURL = exportDirectory.appending(path: "solver-certificate.json")
-        try storage.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
-
-        let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverCertificateRelativePath)",
-            artifactID: Self.symbolicPlannerSolverCertificateArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerProofValidation(
-        _ validation: XcircuiteSymbolicPlannerProofValidation,
-        standardOutput: String,
-        standardError: String,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerProofValidationArtifactSet {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard validation.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: validation.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let stdoutURL = exportDirectory.appending(path: "proof-validation-stdout.txt")
-        let stderrURL = exportDirectory.appending(path: "proof-validation-stderr.txt")
-        let validationURL = exportDirectory.appending(path: "proof-validation.json")
-        try storage.writeText(standardOutput, to: stdoutURL)
-        try storage.writeText(standardError, to: stderrURL)
-
-        let stdoutArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStdoutRelativePath)",
-            artifactID: Self.symbolicPlannerProofValidationStdoutArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        let stderrArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationStderrRelativePath)",
-            artifactID: Self.symbolicPlannerProofValidationStderrArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        var persistedValidation = validation
-        persistedValidation.standardOutputArtifact = try requireFoundationArtifactReference(
-            stdoutArtifact,
-            field: "proofValidation.standardOutputArtifact"
-        )
-        persistedValidation.standardErrorArtifact = try requireFoundationArtifactReference(
-            stderrArtifact,
-            field: "proofValidation.standardErrorArtifact"
-        )
-        try storage.writeJSON(persistedValidation, to: validationURL, forProjectAt: projectRoot)
-
-        let validationArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerProofValidationRelativePath)",
-            artifactID: Self.symbolicPlannerProofValidationArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-
-        try storage.upsertRunArtifact(stdoutArtifact, runID: runID, inProjectAt: projectRoot)
-        try storage.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
-        try storage.upsertRunArtifact(validationArtifact, runID: runID, inProjectAt: projectRoot)
-        return XcircuiteSymbolicPlannerProofValidationArtifactSet(
-            validationArtifact: try requireFoundationArtifactReference(
-                validationArtifact,
-                field: "proofValidation.validationArtifact"
-            ),
-            standardOutputArtifact: try requireFoundationArtifactReference(
-                stdoutArtifact,
-                field: "proofValidation.standardOutputArtifact"
-            ),
-            standardErrorArtifact: try requireFoundationArtifactReference(
-                stderrArtifact,
-                field: "proofValidation.standardErrorArtifact"
-            )
-        )
+    private func validateFamilyIdentifiers(runID: String, comparisonID: String, candidateID: String) throws {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        try FlowIdentifierValidator().validate(comparisonID, kind: .artifactID)
+        try FlowIdentifierValidator().validate(candidateID, kind: .artifactID)
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerSolverExecution(
-        report: XcircuiteSymbolicPlannerSolverExecutionReport,
-        standardOutput: String,
-        standardError: String,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerSolverArtifactSet {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard report.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: report.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let stdoutURL = exportDirectory.appending(path: "solver-stdout.txt")
-        let stderrURL = exportDirectory.appending(path: "solver-stderr.txt")
-        let reportURL = exportDirectory.appending(path: "solver-run.json")
-        try storage.writeText(standardOutput, to: stdoutURL)
-        try storage.writeText(standardError, to: stderrURL)
-        try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
-
-        let stdoutArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStdoutRelativePath)",
-            artifactID: Self.symbolicPlannerSolverStdoutArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        let stderrArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverStderrRelativePath)",
-            artifactID: Self.symbolicPlannerSolverStderrArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        let runArtifact = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverRunRelativePath)",
-            artifactID: Self.symbolicPlannerSolverRunArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-
-        try storage.upsertRunArtifact(stdoutArtifact, runID: runID, inProjectAt: projectRoot)
-        try storage.upsertRunArtifact(stderrArtifact, runID: runID, inProjectAt: projectRoot)
-        try storage.upsertRunArtifact(runArtifact, runID: runID, inProjectAt: projectRoot)
-        return XcircuiteSymbolicPlannerSolverArtifactSet(
-            runArtifact: try requireFoundationArtifactReference(
-                runArtifact,
-                field: "solver.runArtifact"
-            ),
-            standardOutputArtifact: try requireFoundationArtifactReference(
-                stdoutArtifact,
-                field: "solver.standardOutputArtifact"
-            ),
-            standardErrorArtifact: try requireFoundationArtifactReference(
-                stderrArtifact,
-                field: "solver.standardErrorArtifact"
-            )
-        )
+    private func familyCandidatePath(comparisonID: String, candidateID: String, fileName: String) -> String {
+        "planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/\(fileName)"
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerSolverQualification(
-        _ qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard qualification.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: qualification.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let reportURL = exportDirectory.appending(path: "solver-qualification.json")
-        let persistedQualification = qualification.detachingQualificationArtifactReferencesForPersistence()
-        try storage.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
-
-        let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.symbolicPlannerSolverQualificationRelativePath)",
-            artifactID: Self.symbolicPlannerSolverQualificationArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
+    private func familyArtifactID(_ prefix: String, comparisonID: String, candidateID: String) -> String {
+        "\(prefix)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
     }
 
-    @discardableResult
-    public func persistSymbolicPlannerSolverFamilyComparison(
-        _ comparison: XcircuiteSymbolicPlannerSolverFamilyComparison,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(comparison.comparisonID, kind: .artifactID)
-        guard comparison.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: comparison.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "solver-family")
-            .appending(path: comparison.comparisonID)
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let reportURL = exportDirectory.appending(path: "solver-family-comparison.json")
-        try storage.writeJSON(comparison, to: reportURL, forProjectAt: projectRoot)
-
-        let comparisonArtifactID = "\(Self.symbolicPlannerSolverFamilyComparisonArtifactID)-\(String(comparison.comparisonID.prefix(80)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparison.comparisonID)/solver-family-comparison.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: comparisonArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverFamilyPromotion(
-        _ promotion: XcircuiteSymbolicPlannerSolverFamilyPromotion,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(promotion.comparisonID, kind: .artifactID)
-        guard promotion.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: promotion.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "solver-family")
-            .appending(path: promotion.comparisonID)
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let reportURL = exportDirectory.appending(path: "solver-family-promotion.json")
-        try storage.writeJSON(promotion, to: reportURL, forProjectAt: projectRoot)
-
-        let promotionArtifactID = "\(Self.symbolicPlannerSolverFamilyPromotionArtifactID)-\(String(promotion.comparisonID.prefix(80)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(promotion.comparisonID)/solver-family-promotion.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: promotionArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverFamilyBatch(
-        _ batchRun: XcircuiteSymbolicPlannerSolverFamilyBatchRun,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(batchRun.comparisonID, kind: .artifactID)
-        guard batchRun.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: batchRun.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "solver-family")
-            .appending(path: batchRun.comparisonID)
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let reportURL = exportDirectory.appending(path: "solver-family-batch.json")
-        try storage.writeJSON(batchRun, to: reportURL, forProjectAt: projectRoot)
-
-        let batchArtifactID = "\(Self.symbolicPlannerSolverFamilyBatchArtifactID)-\(String(batchRun.comparisonID.prefix(80)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(batchRun.comparisonID)/solver-family-batch.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: batchArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerInstalledSolverLane(
-        _ lane: XcircuiteSymbolicPlannerInstalledSolverLane,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(lane.laneID, kind: .artifactID)
-        guard lane.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: lane.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let reportURL = exportDirectory.appending(path: "installed-solver-lane.json")
-        try storage.writeJSON(lane, to: reportURL, forProjectAt: projectRoot)
-
-        let artifactID = "\(Self.symbolicPlannerInstalledSolverLaneArtifactID)-\(String(lane.laneID.prefix(80)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/installed-solver-lane.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: artifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverFamilyQualification(
-        _ qualification: XcircuiteSymbolicPlannerSolverQualificationResult,
-        runID: String,
-        comparisonID: String,
-        candidateID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(comparisonID, kind: .artifactID)
-        try XcircuiteIdentifierValidator().validate(candidateID, kind: .artifactID)
-        guard qualification.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: qualification.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "solver-family")
-            .appending(path: comparisonID)
-            .appending(path: "candidates")
-            .appending(path: candidateID)
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let reportURL = exportDirectory.appending(path: "solver-qualification.json")
-        let persistedQualification = qualification.detachingQualificationArtifactReferencesForPersistence()
-        try storage.writeJSON(persistedQualification, to: reportURL, forProjectAt: projectRoot)
-
-        let artifactID = "\(Self.symbolicPlannerSolverFamilyQualificationArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-qualification.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: artifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverFamilySolverPlan(
-        _ solverPlanText: String,
-        runID: String,
-        comparisonID: String,
-        candidateID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(comparisonID, kind: .artifactID)
-        try XcircuiteIdentifierValidator().validate(candidateID, kind: .artifactID)
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "solver-family")
-            .appending(path: comparisonID)
-            .appending(path: "candidates")
-            .appending(path: candidateID)
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let solverPlanURL = exportDirectory.appending(path: "solver-plan.txt")
-        try storage.writeText(solverPlanText, to: solverPlanURL)
-
-        let artifactID = "\(Self.symbolicPlannerSolverFamilySolverPlanArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-plan.txt"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: artifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverFamilyCertificate(
-        _ certificate: XcircuiteSymbolicPlannerSolverCertificateParseResult,
-        runID: String,
-        comparisonID: String,
-        candidateID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(comparisonID, kind: .artifactID)
-        try XcircuiteIdentifierValidator().validate(candidateID, kind: .artifactID)
-        guard certificate.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: certificate.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let exportDirectory = runDirectory
-            .appending(path: "planning")
-            .appending(path: "symbolic-planner")
-            .appending(path: "solver-family")
-            .appending(path: comparisonID)
-            .appending(path: "candidates")
-            .appending(path: candidateID)
-        try storage.ensureDirectory(at: exportDirectory)
-
-        let certificateURL = exportDirectory.appending(path: "solver-certificate.json")
-        try storage.writeJSON(certificate, to: certificateURL, forProjectAt: projectRoot)
-
-        let artifactID = "\(Self.symbolicPlannerSolverFamilyCertificateArtifactID)-\(String(comparisonID.prefix(48)))-\(String(candidateID.prefix(48)))"
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/planning/symbolic-planner/solver-family/\(comparisonID)/candidates/\(candidateID)/solver-certificate.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: artifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverQualificationCorpusSuiteSpec(
-        _ suiteSpec: XcircuiteSymbolicPlannerSolverCorpusSuiteSpec,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(suiteSpec.suiteID, kind: .artifactID)
-        let suiteDirectory = try storage.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)",
-            inProjectAt: projectRoot
-        )
-        try storage.ensureDirectory(at: suiteDirectory)
-
-        let suiteSpecURL = suiteDirectory.appending(path: "solver-qualification-corpus-suite.json")
-        try storage.writeJSON(suiteSpec, to: suiteSpecURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(suiteSpec.suiteID)/solver-qualification-corpus-suite.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.symbolicPlannerSolverQualificationCorpusSuiteSpecArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot
-        )
-        try storage.upsertFileReference(reference, forProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistSymbolicPlannerSolverQualificationCorpus(
-        _ corpus: XcircuiteSymbolicPlannerSolverCorpusQualificationResult,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(corpus.suiteID, kind: .artifactID)
-        let corpusDirectory = try storage.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)",
-            inProjectAt: projectRoot
-        )
-        try storage.ensureDirectory(at: corpusDirectory)
-
-        let corpusURL = corpusDirectory.appending(path: "solver-qualification-corpus.json")
-        try storage.writeJSON(corpus, to: corpusURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/qualification/symbolic-planner/\(corpus.suiteID)/solver-qualification-corpus.json"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.symbolicPlannerSolverQualificationCorpusArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot
-        )
-        try storage.upsertFileReference(reference, forProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistPlanVerification(
-        _ verification: XcircuitePlanVerification,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard verification.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: verification.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let verificationURL = planningDirectory.appending(path: "plan-verification.json")
-        try storage.writeJSON(verification, to: verificationURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.planVerificationRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.planVerificationArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistPlanExecution(
-        _ execution: XcircuiteCandidatePlanExecution,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard execution.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: execution.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let executionURL = planningDirectory.appending(path: "plan-execution.json")
-        try storage.writeJSON(execution, to: executionURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.planExecutionRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.planExecutionArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistNumericRepairLoop(
-        _ loop: XcircuiteNumericRepairLoopResult,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard loop.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: loop.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let loopURL = planningDirectory.appending(path: "numeric-repair-loop.json")
-        try storage.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
-
-        let projectRelativePath = "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.numericRepairLoopRelativePath)"
-        let reference = try storage.fileReference(
-            forProjectRelativePath: projectRelativePath,
-            artifactID: Self.numericRepairLoopArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistMetricThresholdProfile(
-        _ profile: XcircuiteMetricThresholdProfile,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard profile.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: profile.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let profileURL = planningDirectory.appending(path: "metric-threshold-profile.json")
-        try storage.writeJSON(profile, to: profileURL, forProjectAt: projectRoot)
-
-        let reference = try jsonPlanningFileReference(
-            relativePath: Self.metricThresholdProfileRelativePath,
-            artifactID: Self.metricThresholdProfileArtifactID,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistCostCalibrationReport(
-        _ report: XcircuiteCostCalibrationReport,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard report.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: report.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let reportURL = planningDirectory.appending(path: "cost-calibration.json")
-        try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
-
-        let reference = try jsonPlanningFileReference(
-            relativePath: Self.costCalibrationRelativePath,
-            artifactID: Self.costCalibrationArtifactID,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistParetoCandidates(
-        _ candidateSet: XcircuiteParetoCandidateSet,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard candidateSet.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: candidateSet.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let candidatesURL = planningDirectory.appending(path: "pareto-candidates.jsonl")
-        try storage.writeText(try jsonLines(for: candidateSet.candidates), to: candidatesURL)
-
-        let reference = try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(Self.paretoCandidatesRelativePath)",
-            artifactID: Self.paretoCandidatesArtifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistImprovementLoop(
-        _ loop: XcircuiteImprovementLoopResult,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard loop.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: loop.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let loopURL = planningDirectory.appending(path: "improvement-loop.json")
-        try storage.writeJSON(loop, to: loopURL, forProjectAt: projectRoot)
-
-        let reference = try jsonPlanningFileReference(
-            relativePath: Self.improvementLoopRelativePath,
-            artifactID: Self.improvementLoopArtifactID,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    @discardableResult
-    public func persistRejectedFeedbackLearningReport(
-        _ report: XcircuiteRejectedFeedbackLearningReport,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try XcircuiteIdentifierValidator().validate(runID, kind: .runID)
-        guard report.runID == runID else {
-            throw XcircuitePlanningArtifactError.runMismatch(expected: runID, actual: report.runID)
-        }
-        let runDirectory = try storage.runDirectory(for: runID, inProjectAt: projectRoot)
-        let planningDirectory = runDirectory.appending(path: "planning")
-        try storage.ensureDirectory(at: planningDirectory)
-
-        let reportURL = planningDirectory.appending(path: "rejected-feedback-learning-report.json")
-        try storage.writeJSON(report, to: reportURL, forProjectAt: projectRoot)
-
-        let reference = try jsonPlanningFileReference(
-            relativePath: Self.rejectedFeedbackLearningReportRelativePath,
-            artifactID: Self.rejectedFeedbackLearningReportArtifactID,
-            runID: runID,
-            projectRoot: projectRoot
-        )
-        try storage.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
-    }
-
-    private static func currentTimestamp() -> String {
-        ISO8601DateFormatter().string(from: Date())
-    }
-
-    private func jsonLines<T: Encodable>(for values: [T]) throws -> String {
+    private func jsonLines<Value: Encodable>(_ values: [Value]) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         var lines: [String] = []
@@ -1377,95 +418,29 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return lines.joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
     }
 
-    private func rejectedPlanLedgerText(from url: URL) throws -> String {
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
-            return ""
-        }
-        return try String(contentsOf: url, encoding: .utf8)
-    }
-
-    private func readRejectedPlanLedger(
-        from url: URL,
-        runID: String
-    ) throws -> [XcircuiteRejectedPlanRecord] {
-        let text = try rejectedPlanLedgerText(from: url)
-        guard !text.isEmpty else {
-            return []
-        }
-
-        let decoder = JSONDecoder()
-        let path = url.path(percentEncoded: false)
+    private func decodeRejectedPlans(_ data: Data, runID: String) throws -> [XcircuiteRejectedPlanRecord] {
         var records: [XcircuiteRejectedPlanRecord] = []
-        var seenRejectionIDs: Set<String> = []
-        for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let lineNumber = index + 1
-            let lineText = String(line)
-            guard !lineText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                continue
-            }
-            let record: XcircuiteRejectedPlanRecord
+        var identifiers: Set<String> = []
+        for (index, line) in data.split(separator: 0x0A).enumerated() {
             do {
-                record = try decoder.decode(XcircuiteRejectedPlanRecord.self, from: Data(lineText.utf8))
+                let record = try JSONDecoder().decode(XcircuiteRejectedPlanRecord.self, from: Data(line))
+                try validateRun(record.runID, expected: runID)
+                guard identifiers.insert(record.rejectionID).inserted else {
+                    throw XcircuitePlanningArtifactError.duplicateRejectedPlan(rejectionID: record.rejectionID)
+                }
+                records.append(record)
             } catch {
                 throw XcircuitePlanningArtifactError.invalidJSONLLine(
-                    path: path,
-                    line: lineNumber,
+                    path: runPath(Self.rejectedPlansRelativePath, runID: runID),
+                    line: index + 1,
                     message: error.localizedDescription
                 )
             }
-            guard record.runID == runID else {
-                throw XcircuitePlanningArtifactError.invalidJSONLLine(
-                    path: path,
-                    line: lineNumber,
-                    message: XcircuitePlanningArtifactError.runMismatch(
-                        expected: runID,
-                        actual: record.runID
-                    ).localizedDescription
-                )
-            }
-            guard seenRejectionIDs.insert(record.rejectionID).inserted else {
-                throw XcircuitePlanningArtifactError.invalidJSONLLine(
-                    path: path,
-                    line: lineNumber,
-                    message: XcircuitePlanningArtifactError.duplicateRejectedPlan(
-                        rejectionID: record.rejectionID
-                    ).localizedDescription
-                )
-            }
-            records.append(record)
         }
         return records
     }
 
-    private func pddlFileReference(
-        relativePath: String,
-        artifactID: String,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(relativePath)",
-            artifactID: artifactID,
-            kind: .other,
-            format: .text,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
-    }
-
-    private func jsonPlanningFileReference(
-        relativePath: String,
-        artifactID: String,
-        runID: String,
-        projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        try storage.fileReference(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/runs/\(runID)/\(relativePath)",
-            artifactID: artifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
+    private static func currentTimestamp() -> String {
+        ISO8601DateFormatter().string(from: Date())
     }
 }

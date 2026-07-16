@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LVSEngine
@@ -8,12 +9,12 @@ import DesignFlowKernel
 
 @Suite("Xcircuite diagnostic planning problem builder")
 struct XcircuiteDiagnosticPlanningProblemBuilderTests {
-    @Test func drcSummaryBecomesPlanningProblemAndRunArtifact() throws {
+    @Test func drcSummaryBecomesPlanningProblemAndRunArtifact() async throws {
         let root = try makeTemporaryRoot("drc-planning")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-1", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-1", store: store)
         let summary = DRCRunSummaryReport(
             reportURL: nil,
             manifestURL: nil,
@@ -52,7 +53,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             summaryArtifactPath: ".xcircuite/runs/run-1/stages/007-drc/raw/drc-summary.json",
             layoutArtifactPath: ".xcircuite/runs/run-1/stages/006-layout/raw/layout.gds"
         )
-        let reference = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let reference = try await artifactStore.persistPlanningProblem(
             problem,
             runID: "run-1",
             projectRoot: root
@@ -70,12 +71,12 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
                 && $0.affectedActionIDs == problem.candidateActions.map(\.actionID)
         })
         #expect(problem.objectives.map(\.target) == ["no-active-violations-for-bucket"])
-        #expect(problem.objectives.first?.evidence["ruleID"] == .string("M1.width"))
-        #expect(problem.objectives.first?.evidence["problemSourceOperation"] == .string("xcircuite.generate-planning-problem"))
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("drc.run-native"))
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("shape-size-updated"),
-            .string("artifact:layout-document"),
+        #expect(problem.objectives.first?.evidence["ruleID"] == .text("M1.width"))
+        #expect(problem.objectives.first?.evidence["problemSourceOperation"] == .text("xcircuite.generate-planning-problem"))
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("drc.run-native"))
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "shape-size-updated",
+            "artifact:layout-document",
         ]))
         #expect(!problem.candidateActions.contains {
             $0.domainID == "drc-signoff"
@@ -85,31 +86,28 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             $0.domainID == "layout-edit"
                 && $0.operationID == "layout.resize-shape"
                 && $0.maturity == "implemented"
-                && $0.parameterHints["shapeID"] == .string("shape-1")
-                && $0.parameterHints["deltaMaxX"] == .number(0.020000000000000018)
+                && $0.parameterHints["shapeID"] == .text("shape-1")
+                && $0.parameterHints["deltaMaxX"] == .scalar(0.020000000000000018)
         })
         #expect(reference.artifactID == XcircuitePlanningArtifactStore.problemArtifactID)
         #expect(reference.path == ".xcircuite/runs/run-1/planning/problem.json")
-        #expect(reference.sha256?.isEmpty == false)
-        #expect(reference.byteCount != nil)
+        #expect(!reference.sha256.isEmpty)
+        #expect(reference.byteCount > 0)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
-        #expect(manifest.artifacts.contains {
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.problemArtifactID
                 && $0.path == reference.path
         })
-        let loaded = try store.readJSON(
+        let loaded = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: reference.path)
+            from: reference.path
         )
         #expect(loaded == problem)
         try expectValidPlanningProblem(problem, problemPath: reference.path)
     }
 
-    @Test func drcRepairHintsBecomeEngineOwnedPlanningCandidates() throws {
+    @Test func drcRepairHintsBecomeEngineOwnedPlanningCandidates() async throws {
         let summary = makeDRCSummary()
         let hints = makeDRCRepairHints()
 
@@ -130,27 +128,27 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
                 && $0.path == ".xcircuite/runs/run-drc-hints/stages/007-drc/raw/drc-repair-hints.json"
         })
         #expect(problem.objectives.first?.sourceRefIDs == ["drc-summary", "drc-repair-hints"])
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("drc.export-repair-hints"))
-        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .string("drc-repair-0-M1-width"))
-        #expect(problem.objectives.first?.evidence["repairHintConfidence"] == .string("high"))
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("shape-size-updated"),
-            .string("artifact:layout-document"),
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("drc.export-repair-hints"))
+        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .text("drc-repair-0-M1-width"))
+        #expect(problem.objectives.first?.evidence["repairHintConfidence"] == .text("high"))
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "shape-size-updated",
+            "artifact:layout-document",
         ]))
 
         let action = try #require(problem.candidateActions.first)
         #expect(action.operationID == "layout.resize-shape")
         #expect(action.reason == "M1.width maps to layout.resize-shape.")
-        #expect(action.parameterHints["sourceRepairHintID"] == .string("drc-repair-0-M1-width"))
-        #expect(action.parameterHints["repairHintConfidence"] == .string("high"))
-        #expect(action.parameterHints["shapeID"] == .string("shape-1"))
-        #expect(action.parameterHints["deltaMaxX"] == .number(0.02))
+        #expect(action.parameterHints["sourceRepairHintID"] == .text("drc-repair-0-M1-width"))
+        #expect(action.parameterHints["repairHintConfidence"] == .text("high"))
+        #expect(action.parameterHints["shapeID"] == .text("shape-1"))
+        #expect(action.parameterHints["deltaMaxX"] == .scalar(0.02))
         #expect(action.parameterHints["lvsInputs"] != nil)
         #expect(action.verificationGates == ["native-drc", "artifact-integrity", "native-lvs"])
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-drc-hints/planning/problem.json")
     }
 
-    @Test func drcRepairProblemDoesNotInventUnresolvableLayoutReference() throws {
+    @Test func drcRepairProblemDoesNotInventUnresolvableLayoutReference() async throws {
         let problem = try XcircuiteDiagnosticPlanningProblemBuilder().makeDRCRepairProblem(
             runID: "run-drc-missing-layout",
             summary: makeDRCSummary(),
@@ -166,7 +164,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             runID: problem.runID,
             generatedAt: "2026-06-21T00:00:00Z"
         )
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: problem,
             problemPath: ".xcircuite/runs/run-drc-missing-layout/planning/problem.json",
             actionDomainSnapshot: snapshot
@@ -181,7 +179,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         })
     }
 
-    @Test func drcViaRepairHintPreservesRelatedViaIDsInPlanningCandidates() throws {
+    @Test func drcViaRepairHintPreservesRelatedViaIDsInPlanningCandidates() async throws {
         let summary = makeDRCSummary()
         let hints = DRCRepairHintReport(
             status: "ready",
@@ -234,18 +232,18 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
 
         let objective = try #require(problem.objectives.first)
-        #expect(objective.evidence["relatedViaIDs"] == .array([.string("cut-a")]))
+        #expect(objective.evidence["relatedViaIDs"] == .textList(["cut-a"]))
 
         let action = try #require(problem.candidateActions.first)
         #expect(action.operationID == "layout.add-via")
-        #expect(action.parameterHints["relatedViaIDs"] == .array([.string("cut-a")]))
-        #expect(action.parameterHints["positionX"] == .number(1))
-        #expect(action.parameterHints["viaDefinitionID"] == .string("VIA1"))
+        #expect(action.parameterHints["relatedViaIDs"] == .textList(["cut-a"]))
+        #expect(action.parameterHints["positionX"] == .scalar(1))
+        #expect(action.parameterHints["viaDefinitionID"] == .text("VIA1"))
         #expect(action.verificationGates == ["native-drc", "artifact-integrity", "native-lvs"])
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-drc-via-hints/planning/problem.json")
     }
 
-    @Test func drcEnclosedAreaRepairHintBecomesFillRectCandidate() throws {
+    @Test func drcEnclosedAreaRepairHintBecomesFillRectCandidate() async throws {
         let summary = makeDRCSummary()
         let hints = DRCRepairHintReport(
             status: "ready",
@@ -297,21 +295,21 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
 
         let objective = try #require(problem.objectives.first)
-        #expect(objective.evidence["repairHintOperationID"] == .string("layout.add-rect"))
-        #expect(objective.evidence["symbolicGoalAtoms"] == .array([
-            .string("rect-shape-created"),
-            .string("artifact:layout-document"),
+        #expect(objective.evidence["repairHintOperationID"] == .text("layout.add-rect"))
+        #expect(objective.evidence["symbolicGoalAtoms"] == .textList([
+            "rect-shape-created",
+            "artifact:layout-document",
         ]))
 
         let action = try #require(problem.candidateActions.first)
         #expect(action.operationID == "layout.add-rect")
-        #expect(action.parameterHints["fillPurpose"] == .string("minimumEnclosedArea"))
-        #expect(action.parameterHints["originX"] == .number(1))
-        #expect(action.parameterHints["originY"] == .number(1))
-        #expect(action.parameterHints["width"] == .number(0.2))
-        #expect(action.parameterHints["height"] == .number(0.2))
-        #expect(action.parameterHints["enclosedArea"] == .number(0.04))
-        #expect(action.parameterHints["requiredEnclosedArea"] == .number(0.1))
+        #expect(action.parameterHints["fillPurpose"] == .text("minimumEnclosedArea"))
+        #expect(action.parameterHints["originX"] == .scalar(1))
+        #expect(action.parameterHints["originY"] == .scalar(1))
+        #expect(action.parameterHints["width"] == .scalar(0.2))
+        #expect(action.parameterHints["height"] == .scalar(0.2))
+        #expect(action.parameterHints["enclosedArea"] == .scalar(0.04))
+        #expect(action.parameterHints["requiredEnclosedArea"] == .scalar(0.1))
         #expect(action.verificationGates == ["native-drc", "artifact-integrity", "native-lvs"])
         try expectValidPlanningProblem(
             problem,
@@ -319,7 +317,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
     }
 
-    @Test func drcMinimumDensityRepairHintBecomesFillRectCandidate() throws {
+    @Test func drcMinimumDensityRepairHintBecomesFillRectCandidate() async throws {
         let summary = makeDRCSummary()
         let fillSide = sqrt(0.1375)
         let fillOrigin = (1.0 - fillSide) / 2.0
@@ -379,23 +377,23 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
 
         let objective = try #require(problem.objectives.first)
-        #expect(objective.evidence["repairHintOperationID"] == .string("layout.add-rect"))
-        #expect(objective.evidence["symbolicGoalAtoms"] == .array([
-            .string("rect-shape-created"),
-            .string("artifact:layout-document"),
+        #expect(objective.evidence["repairHintOperationID"] == .text("layout.add-rect"))
+        #expect(objective.evidence["symbolicGoalAtoms"] == .textList([
+            "rect-shape-created",
+            "artifact:layout-document",
         ]))
 
         let action = try #require(problem.candidateActions.first)
         #expect(action.operationID == "layout.add-rect")
-        #expect(action.parameterHints["fillPurpose"] == .string("minimumDensity"))
-        #expect(action.parameterHints["originX"] == .number(fillOrigin))
-        #expect(action.parameterHints["originY"] == .number(fillOrigin))
-        #expect(action.parameterHints["width"] == .number(fillSide))
-        #expect(action.parameterHints["height"] == .number(fillSide))
-        #expect(action.parameterHints["densityWindowArea"] == .number(1))
-        #expect(action.parameterHints["measuredDensity"] == .number(0.0625))
-        #expect(action.parameterHints["requiredDensity"] == .number(0.2))
-        #expect(action.parameterHints["targetFillArea"] == .number(0.1375))
+        #expect(action.parameterHints["fillPurpose"] == .text("minimumDensity"))
+        #expect(action.parameterHints["originX"] == .scalar(fillOrigin))
+        #expect(action.parameterHints["originY"] == .scalar(fillOrigin))
+        #expect(action.parameterHints["width"] == .scalar(fillSide))
+        #expect(action.parameterHints["height"] == .scalar(fillSide))
+        #expect(action.parameterHints["densityWindowArea"] == .scalar(1))
+        #expect(action.parameterHints["measuredDensity"] == .scalar(0.0625))
+        #expect(action.parameterHints["requiredDensity"] == .scalar(0.2))
+        #expect(action.parameterHints["targetFillArea"] == .scalar(0.1375))
         #expect(action.verificationGates == ["native-drc", "artifact-integrity", "native-lvs"])
         try expectValidPlanningProblem(
             problem,
@@ -403,7 +401,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
     }
 
-    @Test func drcOverlapRepairHintCarriesExecutableTranslationVector() throws {
+    @Test func drcOverlapRepairHintCarriesExecutableTranslationVector() async throws {
         let summary = makeDRCSummary()
         let hints = DRCRepairHintReport(
             status: "ready",
@@ -458,22 +456,22 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
 
         let objective = try #require(problem.objectives.first)
-        #expect(objective.evidence["repairHintOperationID"] == .string("layout.translate-shape"))
-        #expect(objective.evidence["symbolicGoalAtoms"] == .array([
-            .string("shape-position-updated"),
-            .string("artifact:layout-document"),
+        #expect(objective.evidence["repairHintOperationID"] == .text("layout.translate-shape"))
+        #expect(objective.evidence["symbolicGoalAtoms"] == .textList([
+            "shape-position-updated",
+            "artifact:layout-document",
         ]))
 
         let action = try #require(problem.candidateActions.first)
         #expect(action.operationID == "layout.translate-shape")
-        #expect(action.parameterHints["shapeID"] == .string("short-left"))
-        #expect(action.parameterHints["anchorShapeID"] == .string("short-right"))
-        #expect(action.parameterHints["translationAxis"] == .string("horizontal"))
-        #expect(action.parameterHints["translationReason"] == .string("overlapSeparation"))
-        #expect(action.parameterHints["deltaX"] == .number(-0.2))
-        #expect(action.parameterHints["deltaY"] == .number(0))
-        #expect(action.parameterHints["translationDistance"] == .number(0.2))
-        #expect(action.parameterHints["overlapArea"] == .number(0.12))
+        #expect(action.parameterHints["shapeID"] == .text("short-left"))
+        #expect(action.parameterHints["anchorShapeID"] == .text("short-right"))
+        #expect(action.parameterHints["translationAxis"] == .text("horizontal"))
+        #expect(action.parameterHints["translationReason"] == .text("overlapSeparation"))
+        #expect(action.parameterHints["deltaX"] == .scalar(-0.2))
+        #expect(action.parameterHints["deltaY"] == .scalar(0))
+        #expect(action.parameterHints["translationDistance"] == .scalar(0.2))
+        #expect(action.parameterHints["overlapArea"] == .scalar(0.12))
         #expect(action.verificationGates == ["native-drc", "artifact-integrity", "native-lvs"])
         try expectValidPlanningProblem(
             problem,
@@ -481,7 +479,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
     }
 
-    @Test func lvsSummaryCreatesPolicyRepairCandidate() throws {
+    @Test func lvsSummaryCreatesPolicyRepairCandidate() async throws {
         let summary = LVSRunSummaryReport(
             reportURL: nil,
             manifestURL: nil,
@@ -540,12 +538,12 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
                 && $0.affectedActionIDs == ["lvs-policy-1"]
         })
         #expect(problem.objectives.map(\.target) == ["layout-and-schematic-equivalent-for-bucket"])
-        #expect(problem.objectives.first?.evidence["category"] == .string("model-equivalence"))
-        #expect(problem.objectives.first?.evidence["problemSourceOperation"] == .string("xcircuite.generate-planning-problem"))
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("lvs.run-native"))
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("model-or-terminal-equivalence-policy-updated"),
-            .string("artifact:policy-artifact"),
+        #expect(problem.objectives.first?.evidence["category"] == .text("model-equivalence"))
+        #expect(problem.objectives.first?.evidence["problemSourceOperation"] == .text("xcircuite.generate-planning-problem"))
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("lvs.run-native"))
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "model-or-terminal-equivalence-policy-updated",
+            "artifact:policy-artifact",
         ]))
         #expect(!problem.candidateActions.contains {
             $0.domainID == "lvs-signoff"
@@ -563,7 +561,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-2/planning/problem.json")
     }
 
-    @Test func lvsRepairHintsBecomeEngineOwnedPlanningCandidates() throws {
+    @Test func lvsRepairHintsBecomeEngineOwnedPlanningCandidates() async throws {
         let summary = makeLVSPortSummary()
         let hints = makeLVSPortRepairHints()
 
@@ -584,12 +582,12 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         })
         #expect(problem.objectives.first?.sourceRefIDs == ["lvs-summary", "lvs-repair-hints"])
         #expect(problem.objectives.first?.target == "layout-and-schematic-equivalent-for-repair-hint")
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("lvs.export-repair-hints"))
-        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .string("lvs-repair-0-LVS_PORT_MISMATCH"))
-        #expect(problem.objectives.first?.evidence["repairHintConfidence"] == .string("high"))
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("label-created"),
-            .string("artifact:layout-document"),
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("lvs.export-repair-hints"))
+        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .text("lvs-repair-0-LVS_PORT_MISMATCH"))
+        #expect(problem.objectives.first?.evidence["repairHintConfidence"] == .text("high"))
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "label-created",
+            "artifact:layout-document",
         ]))
 
         let action = try #require(problem.candidateActions.first)
@@ -597,17 +595,17 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         #expect(action.operationID == "layout.add-label")
         #expect(action.maturity == "implemented")
         #expect(action.reason.contains("LVS_PORT_MISMATCH maps to layout.add-label"))
-        #expect(action.parameterHints["sourceRepairHintID"] == .string("lvs-repair-0-LVS_PORT_MISMATCH"))
-        #expect(action.parameterHints["repairHintConfidence"] == .string("high"))
-        #expect(action.parameterHints["portName"] == .string("VDD"))
-        #expect(action.parameterHints["labelText"] == .string("VDD"))
-        #expect(action.parameterHints["netName"] == .string("VDD"))
+        #expect(action.parameterHints["sourceRepairHintID"] == .text("lvs-repair-0-LVS_PORT_MISMATCH"))
+        #expect(action.parameterHints["repairHintConfidence"] == .text("high"))
+        #expect(action.parameterHints["portName"] == .text("VDD"))
+        #expect(action.parameterHints["labelText"] == .text("VDD"))
+        #expect(action.parameterHints["netName"] == .text("VDD"))
         #expect(action.verificationGates.contains("native-lvs"))
         #expect(action.verificationGates.contains("native-drc"))
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-lvs-hints/planning/problem.json")
     }
 
-    @Test func lvsParameterRepairHintBecomesNetlistParameterEditCandidate() throws {
+    @Test func lvsParameterRepairHintBecomesNetlistParameterEditCandidate() async throws {
         let summary = makeLVSPortSummary()
         let hints = makeLVSParameterRepairHints()
 
@@ -623,10 +621,10 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
 
         #expect(problem.actionDomainRefs.contains("simulation-analysis"))
-        #expect(problem.objectives.first?.evidence["repairHintOperationID"] == .string("simulation.set-netlist-parameters"))
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("edited-spice-netlist-produced"),
-            .string("parameter-edit-report-produced"),
+        #expect(problem.objectives.first?.evidence["repairHintOperationID"] == .text("simulation.set-netlist-parameters"))
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "edited-spice-netlist-produced",
+            "parameter-edit-report-produced",
         ]))
 
         let action = try #require(problem.candidateActions.first)
@@ -634,20 +632,19 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         #expect(action.operationID == "simulation.set-netlist-parameters")
         #expect(action.requiredInputRefs == ["layout-netlist-ref", "schematic-netlist-ref"])
         #expect(action.verificationGates == ["artifact-integrity", "native-lvs"])
-        #expect(action.parameterHints["assignmentName"] == .string("M1.w"))
-        #expect(action.parameterHints["assignmentValue"] == .number(2e-6))
-        #expect(action.parameterHints["lvsEditedNetlistRole"] == .string("layout"))
-        #expect(action.parameterHints["assignments"] == .array([
-            .object([
-                "name": .string("M1.w"),
-                "value": .number(2e-6),
-            ]),
+        #expect(action.parameterHints["assignmentName"] == .text("M1.w"))
+        #expect(action.parameterHints["assignmentValue"] == .scalar(2e-6))
+        #expect(action.parameterHints["lvsEditedNetlistRole"] == .text("layout"))
+        #expect(action.parameterHints["assignments"] == .parameterAssignments([
+            XcircuiteParameterAssignment(name: "M1.w", value: 2e-6),
         ]))
-        #expect(action.parameterHints["lvsInputs"] == .object([
-            "layoutNetlistRef": .string("layout-netlist-ref"),
-            "schematicNetlistRef": .string("schematic-netlist-ref"),
-            "topCell": .string("TOP"),
-        ]))
+        #expect(action.parameterHints["lvsInputs"] == .lvsInputs(
+            PlanningLVSInputs(
+                layoutNetlistReferenceID: "layout-netlist-ref",
+                schematicNetlistReferenceID: "schematic-netlist-ref",
+                topCell: "TOP"
+            )
+        ))
         #expect(problem.riskClassifications.contains {
             $0.riskID == "lvs-netlist-parameter-edit-risk"
                 && $0.affectedActionIDs == [action.actionID]
@@ -655,7 +652,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-lvs-parameter-hints/planning/problem.json")
     }
 
-    @Test func lvsPortMismatchCreatesConcreteLayoutCandidates() throws {
+    @Test func lvsPortMismatchCreatesConcreteLayoutCandidates() async throws {
         let summary = makeLVSPortSummary()
 
         let problem = try XcircuiteDiagnosticPlanningProblemBuilder().makeLVSRepairProblem(
@@ -681,14 +678,14 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             $0.domainID == "lvs-signoff"
                 && $0.operationID == "lvs.diagnostic-to-repair-objective"
         })
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("label-created"),
-            .string("artifact:layout-document"),
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "label-created",
+            "artifact:layout-document",
         ]))
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-lvs-port/planning/problem.json")
     }
 
-    @Test func drcMaximumDensityCreatesDeleteShapeCandidate() throws {
+    @Test func drcMaximumDensityCreatesDeleteShapeCandidate() async throws {
         let summary = DRCRunSummaryReport(
             reportURL: nil,
             manifestURL: nil,
@@ -728,21 +725,21 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             layoutArtifactPath: ".xcircuite/runs/run-density/stages/006-layout/raw/layout.gds"
         )
 
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("shape-deleted"),
-            .string("artifact:layout-document"),
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "shape-deleted",
+            "artifact:layout-document",
         ]))
         let action = try #require(problem.candidateActions.first)
         #expect(action.domainID == "layout-edit")
         #expect(action.operationID == "layout.delete-shape")
         #expect(action.maturity == "implemented")
-        #expect(action.parameterHints["shapeID"] == .string("fill-shape-1"))
+        #expect(action.parameterHints["shapeID"] == .text("fill-shape-1"))
         #expect(action.verificationGates.contains("native-drc"))
         #expect(action.verificationGates.contains("native-lvs"))
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-density/planning/problem.json")
     }
 
-    @Test func drcNotchCreatesFillRectCandidate() throws {
+    @Test func drcNotchCreatesFillRectCandidate() async throws {
         let summary = DRCRunSummaryReport(
             reportURL: nil,
             manifestURL: nil,
@@ -783,30 +780,30 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             layoutArtifactPath: ".xcircuite/runs/run-notch/stages/006-layout/raw/layout.gds"
         )
 
-        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .array([
-            .string("rect-shape-created"),
-            .string("artifact:layout-document"),
+        #expect(problem.objectives.first?.evidence["symbolicGoalAtoms"] == .textList([
+            "rect-shape-created",
+            "artifact:layout-document",
         ]))
         let action = try #require(problem.candidateActions.first)
         #expect(action.domainID == "layout-edit")
         #expect(action.operationID == "layout.add-rect")
         #expect(action.maturity == "implemented")
         #expect(action.parameterHints["shapeID"] == nil)
-        #expect(action.parameterHints["originX"] == .number(1.0))
-        #expect(action.parameterHints["originY"] == .number(0.0))
-        #expect(action.parameterHints["width"] == .number(0.2))
-        #expect(action.parameterHints["height"] == .number(2.0))
+        #expect(action.parameterHints["originX"] == .scalar(1.0))
+        #expect(action.parameterHints["originY"] == .scalar(0.0))
+        #expect(action.parameterHints["width"] == .scalar(0.2))
+        #expect(action.parameterHints["height"] == .scalar(2.0))
         #expect(action.verificationGates.contains("native-drc"))
         #expect(action.verificationGates.contains("native-lvs"))
         try expectValidPlanningProblem(problem, problemPath: ".xcircuite/runs/run-notch/planning/problem.json")
     }
 
-    @Test func planningProblemPersistenceRejectsRunMismatch() throws {
+    @Test func planningProblemPersistenceRejectsRunMismatch() async throws {
         let root = try makeTemporaryRoot("run-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-expected", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-expected", store: store)
         let problem = XcircuiteCircuitPlanningProblem(
             problemID: "problem-1",
             runID: "run-actual",
@@ -825,11 +822,11 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             )
         )
 
-        #expect(throws: XcircuitePlanningArtifactError.runMismatch(
+        await #expect(throws: XcircuitePlanningArtifactError.runMismatch(
             expected: "run-expected",
             actual: "run-actual"
         )) {
-            try XcircuitePlanningArtifactStore().persistPlanningProblem(
+            try await artifactStore.persistPlanningProblem(
                 problem,
                 runID: "run-expected",
                 projectRoot: root
@@ -840,37 +837,36 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
     @Test func generatePlanningProblemCLIReadsDRCSummaryFromRunManifest() async throws {
         let root = try makeTemporaryRoot("drc-planning-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-1", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: store)
         let summaryPath = ".xcircuite/runs/run-1/stages/007-drc/raw/drc-summary.json"
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/layout.gds"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeDRCSummary(),
             artifactID: "drc-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: "run-1"
         )
         let repairHintPath = ".xcircuite/runs/run-1/stages/007-drc/raw/drc-repair-hints.json"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeDRCRepairHints(),
             artifactID: "drc-repair-hints",
             path: repairHintPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: "run-1"
         )
-        try registerDataArtifact(
+        try await registerDataArtifact(
             Data("GDS payload\n".utf8),
             artifactID: "layout-gds",
             path: layoutPath,
             kind: .layout,
             format: .gdsii,
-            root: root,
+            store: store,
             runID: "run-1"
         )
 
@@ -906,11 +902,11 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         #expect(result.layoutNetlistPath == "circuits/layout.spice")
         #expect(result.schematicNetlistPath == "circuits/schematic.spice")
         #expect(result.problemArtifact.artifactID == XcircuitePlanningArtifactStore.problemArtifactID)
-        #expect(result.problemArtifact.byteCount != nil)
+        #expect(result.problemArtifact.byteCount > 0)
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: result.problemArtifact.path)
+            from: result.problemArtifact.path
         )
         #expect(problem.sourceRefs.first?.path == summaryPath)
         #expect(problem.sourceRefs.contains {
@@ -924,36 +920,41 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             $0.refID == "schematic-netlist-ref" && $0.path == "circuits/schematic.spice"
         })
         #expect(problem.objectives.map(\.target) == ["no-active-violation-for-repair-hint"])
-        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .string("drc-repair-0-M1-width"))
+        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .text("drc-repair-0-M1-width"))
         #expect(problem.candidateActions.map(\.operationID) == ["layout.resize-shape"])
-        #expect(problem.candidateActions.first?.parameterHints["sourceRepairHintID"] == .string("drc-repair-0-M1-width"))
-        #expect(problem.candidateActions.first?.parameterHints["lvsInputs"] == .object([
-            "layoutNetlistRef": .string("layout-netlist-ref"),
-            "schematicNetlistRef": .string("schematic-netlist-ref"),
-            "topCell": .string("TOP"),
-        ]))
+        #expect(problem.candidateActions.first?.parameterHints["sourceRepairHintID"] == .text("drc-repair-0-M1-width"))
+        #expect(problem.candidateActions.first?.parameterHints["lvsInputs"] == .lvsInputs(
+            PlanningLVSInputs(
+                layoutNetlistReferenceID: "layout-netlist-ref",
+                schematicNetlistReferenceID: "schematic-netlist-ref",
+                topCell: "TOP"
+            )
+        ))
     }
 
-    @Test func generatePlanningProblemRejectsStaleManifestArtifact() throws {
+    @Test func generatePlanningProblemRejectsStaleManifestArtifact() async throws {
         let root = try makeTemporaryRoot("drc-planning-stale-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-stale", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-stale", store: store)
         let summaryPath = ".xcircuite/runs/run-stale/stages/007-drc/raw/drc-summary.json"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeDRCSummary(),
             artifactID: "drc-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: "run-stale"
         )
-        try store.writeText(#"{"stale":true}"#, to: root.appending(path: summaryPath))
+        try await store.writeWorkspaceText(#"{"stale":true}"#, to: summaryPath)
 
         do {
-            _ = try XcircuitePlanningProblemGenerator().generateRepairProblem(
+            _ = try await XcircuitePlanningProblemGenerator(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).generateRepairProblem(
                 request: XcircuitePlanningProblemGenerationRequest(
                     runID: "run-stale",
                     source: .drcSummary
@@ -972,72 +973,60 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         }
     }
 
-    @Test func generatePlanningProblemRejectsAmbiguousCanonicalManifest() throws {
+    @Test func artifactRegistrationReplacesDuplicateIdentityBeforePlanning() async throws {
         let root = try makeTemporaryRoot("drc-planning-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-duplicate", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-duplicate", store: store)
         let summaryPath = ".xcircuite/runs/run-duplicate/stages/007-drc/raw/drc-summary.json"
-        try registerJSONArtifact(
+        try await registerJSONArtifact(
             makeDRCSummary(),
             artifactID: "drc-summary",
             path: summaryPath,
             kind: .report,
             format: .json,
-            root: root,
+            store: store,
             runID: "run-duplicate"
         )
 
         let duplicatePath = ".xcircuite/runs/run-duplicate/stages/007-drc/raw/drc-summary-copy.json"
-        let duplicateURL = root.appending(path: duplicatePath)
-        try FileManager.default.createDirectory(
-            at: duplicateURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try store.writeJSON(makeDRCSummary(), to: duplicateURL, forProjectAt: root)
-        let duplicateReference = try store.fileReference(
-            forProjectRelativePath: duplicatePath,
+        try await registerJSONArtifact(
+            makeDRCSummary(),
             artifactID: "drc-summary",
+            path: duplicatePath,
             kind: .report,
             format: .json,
-            inProjectAt: root,
-            producedByRunID: "run-duplicate"
+            store: store,
+            runID: "run-duplicate"
         )
-        let manifestURL = try XcircuiteWorkspace(projectRoot: root)
-            .runDirectoryURL(for: "run-duplicate")
-            .appending(path: "manifest.json")
-        try XcircuiteRunManifestTamper.append([duplicateReference], to: manifestURL)
+        let ledger = try await store.loadRunLedger(runID: "run-duplicate")
+        let retained = ledger.artifacts.filter { $0.id.rawValue == "drc-summary" }
+        #expect(retained.count == 1)
+        #expect(retained.first?.path == duplicatePath)
 
-        #expect(throws: XcircuiteWorkspaceError.decodeFailed(
-            "manifest.json: Invalid run manifest for run-duplicate: artifactID 'drc-summary' must be unique."
-        )) {
-            _ = try XcircuitePlanningProblemGenerator().generateRepairProblem(
-                request: XcircuitePlanningProblemGenerationRequest(
-                    runID: "run-duplicate",
-                    source: .drcSummary
-                ),
-                projectRoot: root
-            )
-        }
+        let result = try await XcircuitePlanningProblemGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateRepairProblem(
+            request: XcircuitePlanningProblemGenerationRequest(
+                runID: "run-duplicate",
+                source: .drcSummary
+            ),
+            projectRoot: root
+        )
+        #expect(result.summaryPath == duplicatePath)
     }
 
     @Test func generatePlanningProblemCLIReadsLVSSummaryFromExplicitPath() async throws {
         let root = try makeTemporaryRoot("lvs-planning-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-2", inProjectAt: root)
-        let summaryPath = "summaries/lvs-summary.json"
-        let summaryURL = root.appending(path: summaryPath)
-        let repairHintPath = "summaries/lvs-repair-hints.json"
-        let repairHintURL = root.appending(path: repairHintPath)
-        try FileManager.default.createDirectory(
-            at: summaryURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try store.writeJSON(makeLVSSummary(), to: summaryURL, forProjectAt: root)
-        try store.writeJSON(makeLVSPolicyRepairHints(), to: repairHintURL, forProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-2", store: store)
+        let summaryPath = ".xcircuite/runs/run-2/inputs/lvs-summary.json"
+        let repairHintPath = ".xcircuite/runs/run-2/inputs/lvs-repair-hints.json"
+        try await store.writeJSON(makeLVSSummary(), to: summaryPath)
+        try await store.writeJSON(makeLVSPolicyRepairHints(), to: repairHintPath)
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -1067,9 +1056,9 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         #expect(result.repairHintPath == repairHintPath)
         #expect(result.schematicNetlistPath == "circuits/top.spice")
 
-        let problem = try store.readJSON(
+        let problem = try await store.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: root.appending(path: result.problemArtifact.path)
+            from: result.problemArtifact.path
         )
         #expect(problem.sourceRefs.first?.path == summaryPath)
         #expect(problem.initialStateRefs.contains {
@@ -1078,11 +1067,11 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         #expect(problem.sourceRefs.contains {
             $0.refID == "lvs-repair-hints" && $0.path == repairHintPath
         })
-        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .string("lvs.export-repair-hints"))
-        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .string("lvs-repair-0-LVS_MODEL_MISMATCH"))
+        #expect(problem.objectives.first?.evidence["sourceEngineOperation"] == .text("lvs.export-repair-hints"))
+        #expect(problem.objectives.first?.evidence["sourceRepairHintID"] == .text("lvs-repair-0-LVS_MODEL_MISMATCH"))
         #expect(problem.candidateActions.contains {
             $0.operationID == "lvs.policy-repair"
-                && $0.parameterHints["sourceRepairHintID"] == .string("lvs-repair-0-LVS_MODEL_MISMATCH")
+                && $0.parameterHints["sourceRepairHintID"] == .text("lvs-repair-0-LVS_MODEL_MISMATCH")
         })
     }
 
@@ -1388,7 +1377,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
             runID: problem.runID,
             generatedAt: "2026-06-21T00:00:00Z"
         )
-        let validation = XcircuitePlanningProblemValidator().makeValidation(
+        let validation = try makeValidator().makeValidation(
             problem: problem,
             problemPath: problemPath,
             actionDomainSnapshot: snapshot
@@ -1397,57 +1386,61 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         #expect(validation.diagnostics == [])
     }
 
-    private func registerJSONArtifact<T: Encodable>(
+    private func makeValidator() throws -> XcircuitePlanningProblemValidator {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "XcircuiteDiagnosticPlanningProblemBuilderTests-validator-\(UUID().uuidString)")
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        return XcircuitePlanningProblemValidator(
+            workspaceStore: store,
+            artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+        )
+    }
+
+    private func registerJSONArtifact<T: Encodable & Sendable>(
         _ value: T,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        root: URL,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        store: XcircuiteWorkspaceStore,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let url = root.appending(path: path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    ) async throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        _ = try await store.persistArtifact(
+            content: encoder.encode(value),
+            id: ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try store.writeJSON(value, to: url, forProjectAt: root)
-        let reference = try store.fileReference(
-            forProjectRelativePath: path,
-            artifactID: artifactID,
-            kind: kind,
-            format: format,
-            inProjectAt: root,
-            producedByRunID: runID
-        )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 
     private func registerDataArtifact(
         _ data: Data,
         artifactID: String,
         path: String,
-        kind: XcircuiteFileKind,
-        format: XcircuiteFileFormat,
-        root: URL,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        store: XcircuiteWorkspaceStore,
         runID: String
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        let url = root.appending(path: path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
+    ) async throws {
+        _ = try await store.persistArtifact(
+            content: data,
+            id: ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: path),
+                role: .input,
+                kind: kind,
+                format: format
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try data.write(to: url, options: .atomic)
-        let reference = try store.fileReference(
-            forProjectRelativePath: path,
-            artifactID: artifactID,
-            kind: kind,
-            format: format,
-            inProjectAt: root,
-            producedByRunID: runID
-        )
-        try store.upsertRunArtifact(reference, runID: runID, inProjectAt: root)
     }
 }

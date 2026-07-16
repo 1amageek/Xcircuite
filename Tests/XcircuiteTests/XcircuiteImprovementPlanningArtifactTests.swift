@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
@@ -6,30 +7,29 @@ import DesignFlowKernel
 
 @Suite("Xcircuite improvement planning artifacts")
 struct XcircuiteImprovementPlanningArtifactTests {
-    @Test func cp7ArtifactsPersistIntoRunManifest() throws {
+    @Test func cp7ArtifactsPersistIntoRunManifest() async throws {
         let root = try makeTemporaryRoot("cp7-artifacts")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        let thresholdRef = try planningStore.persistMetricThresholdProfile(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        let thresholdRef = try await planningStore.persistMetricThresholdProfile(
             makeThresholdProfile(),
             runID: "run-1",
             projectRoot: root
         )
-        let calibrationRef = try planningStore.persistCostCalibrationReport(
+        let calibrationRef = try await planningStore.persistCostCalibrationReport(
             makeCalibrationReport(thresholdArtifactID: thresholdRef.artifactID),
             runID: "run-1",
             projectRoot: root
         )
-        let paretoRef = try planningStore.persistParetoCandidates(
+        let paretoRef = try await planningStore.persistParetoCandidates(
             try makeParetoSet(thresholdArtifactID: thresholdRef.artifactID, calibrationArtifactID: calibrationRef.artifactID),
             runID: "run-1",
             projectRoot: root
         )
-        let loopRef = try planningStore.persistImprovementLoop(
+        let loopRef = try await planningStore.persistImprovementLoop(
             makeImprovementLoop(
                 thresholdArtifactID: thresholdRef.artifactID,
                 calibrationArtifactID: calibrationRef.artifactID,
@@ -43,40 +43,40 @@ struct XcircuiteImprovementPlanningArtifactTests {
         #expect(calibrationRef.path == ".xcircuite/runs/run-1/planning/cost-calibration.json")
         #expect(paretoRef.path == ".xcircuite/runs/run-1/planning/pareto-candidates.jsonl")
         #expect(loopRef.path == ".xcircuite/runs/run-1/planning/improvement-loop.json")
-        #expect([thresholdRef, calibrationRef, paretoRef, loopRef].allSatisfy { $0.sha256 != nil && $0.byteCount != nil })
+        #expect([thresholdRef, calibrationRef, paretoRef, loopRef].allSatisfy {
+            $0.sha256.utf8.count == 64 && $0.byteCount > 0
+        })
 
-        let persistedProfile = try workspaceStore.readJSON(
+        let persistedProfile = try await workspaceStore.readJSON(
             XcircuiteMetricThresholdProfile.self,
-            from: root.appending(path: thresholdRef.path)
+            from: thresholdRef.path
         )
         #expect(persistedProfile.thresholds.map(\.metricID) == ["metric-vfinal"])
 
-        let persistedCalibration = try workspaceStore.readJSON(
+        let persistedCalibration = try await workspaceStore.readJSON(
             XcircuiteCostCalibrationReport.self,
-            from: root.appending(path: calibrationRef.path)
+            from: calibrationRef.path
         )
         #expect(persistedCalibration.thresholdProfileArtifactID == thresholdRef.artifactID)
         #expect(persistedCalibration.calibratedTerms.first?.calibratedWeight == 2.0)
 
-        let paretoCandidates = try readJSONLines(
+        let paretoCandidates = try await readJSONLines(
             XcircuiteParetoCandidateSet.Candidate.self,
-            from: root.appending(path: paretoRef.path)
+            from: paretoRef.path,
+            workspaceStore: workspaceStore
         )
         #expect(paretoCandidates.map(\.candidateID) == ["candidate-a", "candidate-b"])
         #expect(paretoCandidates.first?.runID == "run-1")
 
-        let persistedLoop = try workspaceStore.readJSON(
+        let persistedLoop = try await workspaceStore.readJSON(
             XcircuiteImprovementLoopResult.self,
-            from: root.appending(path: loopRef.path)
+            from: loopRef.path
         )
         #expect(persistedLoop.thresholdProfileArtifactID == thresholdRef.artifactID)
         #expect(persistedLoop.costCalibrationArtifactID == calibrationRef.artifactID)
         #expect(persistedLoop.paretoCandidateArtifactID == paretoRef.artifactID)
 
-        let manifest = try workspaceStore.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
+        let manifest = try await workspaceStore.loadRunLedger(runID: "run-1").runManifest
         for reference in [thresholdRef, calibrationRef, paretoRef, loopRef] {
             let manifestReference = manifest.artifacts.first {
                 $0.artifactID == reference.artifactID && $0.path == reference.path
@@ -86,7 +86,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
         }
     }
 
-    @Test func paretoCandidateSetRejectsMalformedDecisionEvidence() throws {
+    @Test func paretoCandidateSetRejectsMalformedDecisionEvidence() async throws {
         let validMetric = try XcircuiteParetoCandidateSet.Metric(
             metricID: "metric-vfinal",
             value: 1.25,
@@ -240,22 +240,21 @@ struct XcircuiteImprovementPlanningArtifactTests {
     @Test func generateImprovementArtifactsCLIReadsNumericRepairLoopOutcome() async throws {
         let root = try makeTemporaryRoot("cp7-cli")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        try planningStore.persistPlanningProblem(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        _ = try await planningStore.persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-1",
             projectRoot: root
         )
-        let selectionTraceRef = try planningStore.persistParameterCandidateSelectionTrace(
+        let selectionTraceRef = try await planningStore.persistParameterCandidateSelectionTrace(
             makeSelectionTrace(),
             runID: "run-1",
             projectRoot: root
         )
-        try planningStore.persistNumericRepairLoop(
+        _ = try await planningStore.persistNumericRepairLoop(
             try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
@@ -285,39 +284,37 @@ struct XcircuiteImprovementPlanningArtifactTests {
         #expect(result.improvementLoopArtifact.path == ".xcircuite/runs/run-1/planning/improvement-loop.json")
         #expect(result.rejectedFeedbackLearningReportArtifact?.path == ".xcircuite/runs/run-1/planning/rejected-feedback-learning-report.json")
 
-        let profile = try workspaceStore.readJSON(
+        let profile = try await workspaceStore.readJSON(
             XcircuiteMetricThresholdProfile.self,
-            from: root.appending(path: result.thresholdProfileArtifact.path)
+            from: result.thresholdProfileArtifact.path
         )
         #expect(profile.thresholds.first?.metricID == "metric-vfinal")
         #expect(profile.thresholds.first?.targetValue == 0.889)
 
-        let calibration = try workspaceStore.readJSON(
+        let calibration = try await workspaceStore.readJSON(
             XcircuiteCostCalibrationReport.self,
-            from: root.appending(path: result.costCalibrationArtifact.path)
+            from: result.costCalibrationArtifact.path
         )
         #expect(calibration.observations.first?.candidateID == "iteration-1-candidate-a")
         #expect(calibration.observations.first?.failedGateIDs == ["simulation-metric-gate"])
         #expect(calibration.calibratedTerms.first?.gateID == "simulation-metric-gate")
 
-        let paretoCandidates = try readJSONLines(
+        let paretoCandidates = try await readJSONLines(
             XcircuiteParetoCandidateSet.Candidate.self,
-            from: root.appending(path: result.paretoCandidatesArtifact.path)
+            from: result.paretoCandidatesArtifact.path,
+            workspaceStore: workspaceStore
         )
         #expect(paretoCandidates.first?.candidateID == "iteration-1-candidate-a")
         #expect(paretoCandidates.first?.gateStatuses["simulation-metric-gate"] == "failed")
 
-        let loop = try workspaceStore.readJSON(
+        let loop = try await workspaceStore.readJSON(
             XcircuiteImprovementLoopResult.self,
-            from: root.appending(path: result.improvementLoopArtifact.path)
+            from: result.improvementLoopArtifact.path
         )
         #expect(loop.status == "iteration-limit-reached")
         #expect(loop.iterations.first?.failedGateIDs == ["simulation-metric-gate"])
 
-        let manifest = try workspaceStore.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
+        let manifest = try await workspaceStore.loadRunLedger(runID: "run-1").runManifest
         for reference in [
             result.thresholdProfileArtifact,
             result.costCalibrationArtifact,
@@ -330,34 +327,33 @@ struct XcircuiteImprovementPlanningArtifactTests {
                     && $0.path == reference.locator.location.value
             }
             #expect(manifestReference?.sha256 == reference.digest.hexadecimalValue)
-            #expect(reference.byteCount == UInt64(manifestReference?.byteCount ?? 0))
+            #expect(reference.byteCount == manifestReference?.byteCount)
         }
     }
 
     @Test func rejectedFeedbackLearningReportPersistsRankImpactAndFailureProvenance() async throws {
         let root = try makeTemporaryRoot("feedback-learning")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        try planningStore.persistPlanningProblem(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        _ = try await planningStore.persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-1",
             projectRoot: root
         )
-        let rejectedPlansRef = try planningStore.appendRejectedPlan(
-            makeRejectedPlanRecord(),
+        let rejectedPlansRef = try await planningStore.appendRejectedPlan(
+            try makeRejectedPlanRecord(),
             runID: "run-1",
             projectRoot: root
         )
-        let selectionTraceRef = try planningStore.persistParameterCandidateSelectionTrace(
+        let selectionTraceRef = try await planningStore.persistParameterCandidateSelectionTrace(
             makeRankChangingSelectionTrace(rejectedPlansPath: rejectedPlansRef.path),
             runID: "run-1",
             projectRoot: root
         )
-        try planningStore.persistNumericRepairLoop(
+        _ = try await planningStore.persistNumericRepairLoop(
             try makeNumericRepairLoopWithRankChange(
                 selectionTraceRef: selectionTraceRef,
                 rejectedPlansRef: rejectedPlansRef
@@ -380,9 +376,9 @@ struct XcircuiteImprovementPlanningArtifactTests {
             from: try #require(output.data(using: .utf8))
         )
         let learningRef = try #require(result.rejectedFeedbackLearningReportArtifact)
-        let report = try workspaceStore.readJSON(
+        let report = try await workspaceStore.readJSON(
             XcircuiteRejectedFeedbackLearningReport.self,
-            from: root.appending(path: learningRef.locator.location.value)
+            from: learningRef.locator.location.value
         )
 
         #expect(report.rejectedPlansPath == rejectedPlansRef.path)
@@ -402,19 +398,16 @@ struct XcircuiteImprovementPlanningArtifactTests {
         #expect(impact.sourceRejectionIDs == ["rejection-a"])
         #expect(impact.sourcePlanIDs == ["plan-a"])
 
-        let manifest = try workspaceStore.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
+        let manifest = try await workspaceStore.loadRunLedger(runID: "run-1").runManifest
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.rejectedFeedbackLearningReportArtifactID
                 && $0.path == learningRef.locator.location.value
                 && $0.sha256 == learningRef.digest.hexadecimalValue
-                && learningRef.byteCount == UInt64($0.byteCount ?? 0)
+                && learningRef.byteCount == $0.byteCount
         })
     }
 
-    @Test func rejectedFeedbackLearningReportRejectsMalformedDecisionEvidence() throws {
+    @Test func rejectedFeedbackLearningReportRejectsMalformedDecisionEvidence() async throws {
         let validImpact = try makeValidRejectedFeedbackImpact()
         let longProvenanceID =
             "run-cp7-run-cp7-numeric-repair-problem-run-cp7-numeric-repair-problem-parameter-candidate-metric-search-1-R1-1000-ohm-edit-plan-post-execution-rejected"
@@ -534,85 +527,95 @@ struct XcircuiteImprovementPlanningArtifactTests {
         }
     }
 
-    @Test func generationRejectsAmbiguousCanonicalManifest() throws {
+    @Test func generationRejectsAmbiguousCanonicalManifest() async throws {
         let root = try makeTemporaryRoot("duplicate-manifest-artifact")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        try planningStore.persistPlanningProblem(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        _ = try await planningStore.persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-1",
             projectRoot: root
         )
-        let selectionTraceRef = try planningStore.persistParameterCandidateSelectionTrace(
+        let selectionTraceRef = try await planningStore.persistParameterCandidateSelectionTrace(
             makeSelectionTrace(),
             runID: "run-1",
             projectRoot: root
         )
-        try planningStore.persistNumericRepairLoop(
+        _ = try await planningStore.persistNumericRepairLoop(
             try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
 
         let stalePath = ".xcircuite/runs/run-1/planning/stale-numeric-repair-loop.json"
-        let manifestURL = root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        let staleReference = XcircuiteFileReference(
+        let ledgerURL = root.appending(path: ".xcircuite/runs/run-1/ledger.json")
+        let staleReference = try fixtureArtifactReference(
             artifactID: XcircuitePlanningArtifactStore.numericRepairLoopArtifactID,
             path: stalePath,
             kind: .other,
             format: .json,
-            producedByRunID: "run-1"
         )
-        try XcircuiteRunManifestTamper.append([staleReference], to: manifestURL)
+        try XcircuiteRunLedgerTamper.append([staleReference], to: ledgerURL)
 
-        #expect(throws: XcircuiteWorkspaceError.decodeFailed(
-            "manifest.json: Invalid run manifest for run-1: artifactID 'planning-numeric-repair-loop' must be unique."
-        )) {
-            try XcircuiteImprovementPlanningArtifactGenerator().generateImprovementPlanningArtifacts(
+        let generator = XcircuiteImprovementPlanningArtifactGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: planningStore
+        )
+        do {
+            _ = try await generator.generateImprovementPlanningArtifacts(
                 request: XcircuiteImprovementPlanningArtifactGenerationRequest(
                     runID: "run-1",
                     generatedAt: "2026-06-22T00:00:05Z"
                 ),
                 projectRoot: root
             )
+            Issue.record("Expected an invalid run ledger error.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .storageFailed(let reason) = error else {
+                Issue.record("Expected storageFailed, got \(error).")
+                return
+            }
+            #expect(reason.contains("must be unique"))
         }
     }
 
-    @Test func generationRejectsStaleLoopIterationCount() throws {
+    @Test func generationRejectsStaleLoopIterationCount() async throws {
         let root = try makeTemporaryRoot("stale-loop-count")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        try planningStore.persistPlanningProblem(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        _ = try await planningStore.persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-1",
             projectRoot: root
         )
-        let selectionTraceRef = try planningStore.persistParameterCandidateSelectionTrace(
+        let selectionTraceRef = try await planningStore.persistParameterCandidateSelectionTrace(
             makeSelectionTrace(),
             runID: "run-1",
             projectRoot: root
         )
         var loop = try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef)
         loop.iterationCount = 2
-        try planningStore.persistNumericRepairLoop(
+        _ = try await planningStore.persistNumericRepairLoop(
             loop,
             runID: "run-1",
             projectRoot: root
         )
 
-        #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.loopIterationCountMismatch(
+        let generator = XcircuiteImprovementPlanningArtifactGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: planningStore
+        )
+        await #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.loopIterationCountMismatch(
             reported: 2,
             actual: 1
         )) {
-            try XcircuiteImprovementPlanningArtifactGenerator().generateImprovementPlanningArtifacts(
+            _ = try await generator.generateImprovementPlanningArtifacts(
                 request: XcircuiteImprovementPlanningArtifactGenerationRequest(
                     runID: "run-1",
                     generatedAt: "2026-06-22T00:00:06Z"
@@ -622,35 +625,38 @@ struct XcircuiteImprovementPlanningArtifactTests {
         }
     }
 
-    @Test func generationRejectsDuplicateSelectionCandidateIDs() throws {
+    @Test func generationRejectsDuplicateSelectionCandidateIDs() async throws {
         let root = try makeTemporaryRoot("duplicate-selection-candidate")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        try planningStore.persistPlanningProblem(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        _ = try await planningStore.persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-1",
             projectRoot: root
         )
-        let selectionTraceRef = try planningStore.persistParameterCandidateSelectionTrace(
+        let selectionTraceRef = try await planningStore.persistParameterCandidateSelectionTrace(
             makeSelectionTraceWithDuplicateCandidateID(),
             runID: "run-1",
             projectRoot: root
         )
-        try planningStore.persistNumericRepairLoop(
+        _ = try await planningStore.persistNumericRepairLoop(
             try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
 
-        #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.duplicateSelectionCandidateID(
+        let generator = XcircuiteImprovementPlanningArtifactGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: planningStore
+        )
+        await #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.duplicateSelectionCandidateID(
             iterationIndex: 1,
             candidateID: "candidate-a"
         )) {
-            try XcircuiteImprovementPlanningArtifactGenerator().generateImprovementPlanningArtifacts(
+            _ = try await generator.generateImprovementPlanningArtifacts(
                 request: XcircuiteImprovementPlanningArtifactGenerationRequest(
                     runID: "run-1",
                     generatedAt: "2026-06-22T00:00:07Z"
@@ -660,38 +666,40 @@ struct XcircuiteImprovementPlanningArtifactTests {
         }
     }
 
-    @Test func generationRejectsSelectionTraceRunMismatch() throws {
+    @Test func generationRejectsSelectionTraceRunMismatch() async throws {
         let root = try makeTemporaryRoot("selection-trace-run-mismatch")
         defer { removeTemporaryRoot(root) }
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.createWorkspace(at: root)
-        try workspaceStore.createRunDirectory(for: "run-1", inProjectAt: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-1", store: workspaceStore)
 
-        let planningStore = XcircuitePlanningArtifactStore()
-        try planningStore.persistPlanningProblem(
+        let planningStore = XcircuitePlanningArtifactStore(workspaceStore: workspaceStore)
+        _ = try await planningStore.persistPlanningProblem(
             makePlanningProblem(),
             runID: "run-1",
             projectRoot: root
         )
         var staleTrace = makeSelectionTrace()
         staleTrace.runID = "run-stale"
-        let selectionTraceRef = try persistSelectionTraceWithoutRunGate(
+        let selectionTraceRef = try await persistSelectionTraceWithoutRunGate(
             staleTrace,
             runID: "run-1",
-            projectRoot: root,
             workspaceStore: workspaceStore
         )
-        try planningStore.persistNumericRepairLoop(
+        _ = try await planningStore.persistNumericRepairLoop(
             try makeNumericRepairLoop(selectionTraceRef: selectionTraceRef),
             runID: "run-1",
             projectRoot: root
         )
 
-        #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(
+        let generator = XcircuiteImprovementPlanningArtifactGenerator(
+            workspaceStore: workspaceStore,
+            artifactStore: planningStore
+        )
+        await #expect(throws: XcircuiteImprovementPlanningArtifactGenerationError.runMismatch(
             expected: "run-1",
             actual: "run-stale"
         )) {
-            try XcircuiteImprovementPlanningArtifactGenerator().generateImprovementPlanningArtifacts(
+            _ = try await generator.generateImprovementPlanningArtifacts(
                 request: XcircuiteImprovementPlanningArtifactGenerationRequest(
                     runID: "run-1",
                     generatedAt: "2026-06-22T00:00:08Z"
@@ -847,13 +855,13 @@ struct XcircuiteImprovementPlanningArtifactTests {
                     priority: "error",
                     sourceRefIDs: ["simulation-summary"],
                     target: "measurement-within-tolerance",
-                    currentValue: .number(1.0),
-                    requiredValue: .number(0.889),
+                    currentValue: .scalar(1.0),
+                    requiredValue: .scalar(0.889),
                     unit: "V",
                     description: "Recover simulation metric by bounded parameter search.",
                     evidence: [
-                        "metricName": .string("vfinal"),
-                        "tolerance": .number(0.02),
+                        "metricName": .text("vfinal"),
+                        "tolerance": .scalar(0.02),
                     ]
                 ),
             ],
@@ -975,7 +983,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
         )
     }
 
-    private func makeRejectedPlanRecord() -> XcircuiteRejectedPlanRecord {
+    private func makeRejectedPlanRecord() throws -> XcircuiteRejectedPlanRecord {
         XcircuiteRejectedPlanRecord(
             rejectionID: "rejection-a",
             runID: "run-1",
@@ -986,11 +994,11 @@ struct XcircuiteImprovementPlanningArtifactTests {
             sourceParameterCandidateIDs: ["candidate-a"],
             failedStepIDs: ["step-a"],
             failedGateIDs: ["simulation-metric-gate"],
-            candidatePlanRef: dummyPlanningReference(
+            candidatePlanRef: try dummyPlanningReference(
                 artifactID: "planning-candidate-plan",
                 path: ".xcircuite/runs/run-1/planning/candidate-plan.json"
             ),
-            planVerificationRef: dummyPlanningReference(
+            planVerificationRef: try dummyPlanningReference(
                 artifactID: "planning-plan-verification",
                 path: ".xcircuite/runs/run-1/planning/plan-verification.json"
             ),
@@ -1008,18 +1016,20 @@ struct XcircuiteImprovementPlanningArtifactTests {
         )
     }
 
-    private func dummyPlanningReference(artifactID: String, path: String) -> XcircuiteFileReference {
-        XcircuiteFileReference(
+    private func dummyPlanningReference(
+        artifactID: String,
+        path: String
+    ) throws -> ArtifactReference {
+        try fixtureArtifactReference(
             artifactID: artifactID,
             path: path,
             kind: .other,
             format: .json,
-            producedByRunID: "run-1"
         )
     }
 
     private func makeNumericRepairLoop(
-        selectionTraceRef: XcircuiteFileReference
+        selectionTraceRef: ArtifactReference
     ) throws -> XcircuiteNumericRepairLoopResult {
         XcircuiteNumericRepairLoopResult(
             status: "iteration-limit-reached",
@@ -1044,7 +1054,7 @@ struct XcircuiteImprovementPlanningArtifactTests {
                     planID: "plan-a",
                     verificationStatus: "rejected",
                     accepted: false,
-                    selectionTraceArtifact: try foundationReference(selectionTraceRef),
+                    selectionTraceArtifact: selectionTraceRef,
                     diagnostics: [
                         XcircuiteNumericRepairLoopDiagnostic(
                             severity: "warning",
@@ -1069,8 +1079,8 @@ struct XcircuiteImprovementPlanningArtifactTests {
     }
 
     private func makeNumericRepairLoopWithRankChange(
-        selectionTraceRef: XcircuiteFileReference,
-        rejectedPlansRef: XcircuiteFileReference
+        selectionTraceRef: ArtifactReference,
+        rejectedPlansRef: ArtifactReference
     ) throws -> XcircuiteNumericRepairLoopResult {
         XcircuiteNumericRepairLoopResult(
             status: "iteration-limit-reached",
@@ -1095,8 +1105,8 @@ struct XcircuiteImprovementPlanningArtifactTests {
                     planID: "plan-b",
                     verificationStatus: "rejected",
                     accepted: false,
-                    selectionTraceArtifact: try foundationReference(selectionTraceRef),
-                    rejectedPlansArtifact: try foundationReference(rejectedPlansRef),
+                    selectionTraceArtifact: selectionTraceRef,
+                    rejectedPlansArtifact: rejectedPlansRef,
                     diagnostics: [
                         XcircuiteNumericRepairLoopDiagnostic(
                             severity: "warning",
@@ -1233,8 +1243,15 @@ struct XcircuiteImprovementPlanningArtifactTests {
         )
     }
 
-    private func readJSONLines<T: Decodable>(_ type: T.Type, from url: URL) throws -> [T] {
-        let text = try String(contentsOf: url, encoding: .utf8)
+    private func readJSONLines<T: Decodable>(
+        _ type: T.Type,
+        from relativePath: String,
+        workspaceStore: XcircuiteWorkspaceStore
+    ) async throws -> [T] {
+        let text = try String(
+            decoding: await workspaceStore.read(from: relativePath),
+            as: UTF8.self
+        )
         let decoder = JSONDecoder()
         return try text
             .split(separator: "\n")
@@ -1246,23 +1263,25 @@ struct XcircuiteImprovementPlanningArtifactTests {
     private func persistSelectionTraceWithoutRunGate(
         _ trace: XcircuiteParameterCandidateSelectionTrace,
         runID: String,
-        projectRoot: URL,
         workspaceStore: XcircuiteWorkspaceStore
-    ) throws -> XcircuiteFileReference {
-        let runDirectory = try XcircuiteWorkspace(projectRoot: projectRoot).runDirectoryURL(for: runID)
+    ) async throws -> ArtifactReference {
         let tracePath = ".xcircuite/runs/\(runID)/planning/parameter-candidate-selection-trace.json"
-        let traceURL = runDirectory.appending(path: "planning/parameter-candidate-selection-trace.json")
-        try workspaceStore.writeJSON(trace, to: traceURL, forProjectAt: projectRoot)
-        let reference = try workspaceStore.fileReference(
-            forProjectRelativePath: tracePath,
-            artifactID: XcircuitePlanningArtifactStore.parameterCandidateSelectionTraceArtifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try await workspaceStore.persistArtifact(
+            content: encoder.encode(trace),
+            id: try ArtifactID(
+                rawValue: XcircuitePlanningArtifactStore.parameterCandidateSelectionTraceArtifactID
+            ),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: tracePath),
+                role: .output,
+                kind: .other,
+                format: .json
+            ),
+            runID: runID,
+            mode: .replaceable
         )
-        try workspaceStore.upsertRunArtifact(reference, runID: runID, inProjectAt: projectRoot)
-        return reference
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

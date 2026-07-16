@@ -1,4 +1,5 @@
 import DRCEngine
+import CircuiteFoundation
 import Foundation
 import LVSEngine
 import DesignFlowKernel
@@ -7,10 +8,10 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private struct LoadedReports {
         var drc: DRCRepairHintReport?
         var drcPath: String?
-        var drcReference: XcircuiteFileReference?
+        var drcReference: ArtifactReference?
         var lvs: LVSRepairHintReport?
         var lvsPath: String?
-        var lvsReference: XcircuiteFileReference?
+        var lvsReference: ArtifactReference?
     }
 
     private struct DraftAction {
@@ -22,26 +23,29 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let compiler: XcircuiteRepairPlanFormulationCompiler
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        compiler: XcircuiteRepairPlanFormulationCompiler = XcircuiteRepairPlanFormulationCompiler(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        compiler: XcircuiteRepairPlanFormulationCompiler? = nil,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.compiler = compiler
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.compiler = compiler ?? XcircuiteRepairPlanFormulationCompiler(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore
+        )
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func compile(
         request: XcircuiteSignoffRepairFormulationRequest,
         projectRoot: URL
-    ) throws -> XcircuiteSignoffRepairFormulationResult {
-        let loadedReports = try loadReports(request: request, projectRoot: projectRoot)
-        let actionDomainArtifact = try artifactStore.persistActionDomainSnapshot(
+    ) async throws -> XcircuiteSignoffRepairFormulationResult {
+        let loadedReports = try await loadReports(request: request, projectRoot: projectRoot)
+        let actionDomainArtifact = try await artifactStore.persistActionDomainSnapshot(
             runID: request.runID,
             projectRoot: projectRoot
         )
@@ -50,7 +54,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
             loadedReports: loadedReports,
             actionDomainArtifact: actionDomainArtifact
         )
-        let compilation = try compiler.compile(
+        let compilation = try await compiler.compile(
             request: XcircuiteRepairPlanFormulationCompilationRequest(
                 runID: request.runID,
                 formulation: formulation,
@@ -71,9 +75,9 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     public func makeFormulation(
         request: XcircuiteSignoffRepairFormulationRequest,
         projectRoot: URL
-    ) throws -> XcircuiteRepairPlanFormulation {
-        let loadedReports = try loadReports(request: request, projectRoot: projectRoot)
-        let actionDomainArtifact = try artifactStore.persistActionDomainSnapshot(
+    ) async throws -> XcircuiteRepairPlanFormulation {
+        let loadedReports = try await loadReports(request: request, projectRoot: projectRoot)
+        let actionDomainArtifact = try await artifactStore.persistActionDomainSnapshot(
             runID: request.runID,
             projectRoot: projectRoot
         )
@@ -87,33 +91,39 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private func loadReports(
         request: XcircuiteSignoffRepairFormulationRequest,
         projectRoot: URL
-    ) throws -> LoadedReports {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
+    ) async throws -> LoadedReports {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         guard request.drcRepairHintPath != nil || request.lvsRepairHintPath != nil else {
             throw XcircuiteSignoffRepairFormulationError.missingRepairHintSource
         }
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let drc = try request.drcRepairHintPath.map {
-            try loadVerifiedReport(
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let drc: (report: DRCRepairHintReport, reference: ArtifactReference)?
+        if let drcPath = request.drcRepairHintPath {
+            drc = try await loadVerifiedReport(
                 DRCRepairHintReport.self,
                 sourceKind: "drc",
-                path: $0,
+                path: drcPath,
                 expectedArtifactID: "drc-repair-hints",
                 runID: request.runID,
                 manifest: manifest,
                 projectRoot: projectRoot
             )
+        } else {
+            drc = nil
         }
-        let lvs = try request.lvsRepairHintPath.map {
-            try loadVerifiedReport(
+        let lvs: (report: LVSRepairHintReport, reference: ArtifactReference)?
+        if let lvsPath = request.lvsRepairHintPath {
+            lvs = try await loadVerifiedReport(
                 LVSRepairHintReport.self,
                 sourceKind: "lvs",
-                path: $0,
+                path: lvsPath,
                 expectedArtifactID: "lvs-repair-hints",
                 runID: request.runID,
                 manifest: manifest,
                 projectRoot: projectRoot
             )
+        } else {
+            lvs = nil
         }
         return LoadedReports(
             drc: drc?.report,
@@ -125,21 +135,22 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         )
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
-    private func loadVerifiedReport<T: Decodable>(
+    private func loadVerifiedReport<T: Decodable & Sendable>(
         _ type: T.Type,
         sourceKind: String,
         path: String,
         expectedArtifactID: String,
         runID: String,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
-    ) throws -> (report: T, reference: XcircuiteFileReference) {
+    ) async throws -> (report: T, reference: ArtifactReference) {
         do {
-            _ = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+            let location = try ArtifactLocation(workspaceRelativePath: path)
+            _ = try location.resolvedFileURL(relativeTo: projectRoot)
         } catch {
             throw XcircuiteSignoffRepairFormulationError.invalidRepairHintArtifact(
                 sourceKind: sourceKind,
@@ -178,37 +189,27 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 reason: "repair hint reports must be JSON report artifacts."
             )
         }
-        guard reference.producedByRunID == runID else {
-            throw XcircuiteSignoffRepairFormulationError.repairHintProducerRunMismatch(
-                sourceKind: sourceKind,
-                expected: runID,
-                actual: reference.producedByRunID
-            )
-        }
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteSignoffRepairFormulationError.repairHintArtifactIntegrityFailed(
                 sourceKind: sourceKind,
                 path: path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
 
-        return (
-            report: try load(type, path: path, projectRoot: projectRoot),
-            reference: reference
-        )
-    }
-
-    private func load<T: Decodable>(
-        _ type: T.Type,
-        path: String,
-        projectRoot: URL
-    ) throws -> T {
+        let data: Data
         do {
-            let url = try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
-            return try workspaceStore.readJSON(type, from: url)
+            data = try await workspaceStore.verifiedData(for: reference)
+        } catch {
+            throw XcircuiteSignoffRepairFormulationError.reportReadFailed(
+                path: path,
+                message: error.localizedDescription
+            )
+        }
+        do {
+            return (report: try JSONDecoder().decode(type, from: data), reference: reference)
         } catch {
             throw XcircuiteSignoffRepairFormulationError.reportReadFailed(
                 path: path,
@@ -220,7 +221,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private func makeFormulation(
         request: XcircuiteSignoffRepairFormulationRequest,
         loadedReports: LoadedReports,
-        actionDomainArtifact: XcircuiteFileReference
+        actionDomainArtifact: ArtifactReference
     ) throws -> XcircuiteRepairPlanFormulation {
         let drcRepairDrafts: [DraftAction] = loadedReports.drc.map {
             drcDrafts(report: $0, sourcePath: loadedReports.drcPath)
@@ -322,9 +323,8 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 unsupportedDiagnosticCount: report.unsupportedDiagnosticIndexes.count,
                 artifactID: loadedReports.drcReference?.artifactID,
                 sha256: loadedReports.drcReference?.sha256,
-                byteCount: loadedReports.drcReference?.byteCount,
-                producedByRunID: loadedReports.drcReference?.producedByRunID,
-                integrityStatus: XcircuiteFileReferenceIntegrityStatus.verified.rawValue
+                byteCount: loadedReports.drcReference.flatMap { Int64(exactly: $0.byteCount) },
+                integrityStatus: FlowArtifactVerificationStatus.verified.rawValue
             ))
         }
         if let report = loadedReports.lvs, let path = loadedReports.lvsPath {
@@ -339,9 +339,8 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 unsupportedDiagnosticCount: report.unsupportedDiagnosticIndexes.count,
                 artifactID: loadedReports.lvsReference?.artifactID,
                 sha256: loadedReports.lvsReference?.sha256,
-                byteCount: loadedReports.lvsReference?.byteCount,
-                producedByRunID: loadedReports.lvsReference?.producedByRunID,
-                integrityStatus: XcircuiteFileReferenceIntegrityStatus.verified.rawValue
+                byteCount: loadedReports.lvsReference.flatMap { Int64(exactly: $0.byteCount) },
+                integrityStatus: FlowArtifactVerificationStatus.verified.rawValue
             ))
         }
         return reports
@@ -364,8 +363,8 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 priority: "error",
                 sourceRefIDs: ["drc-repair-hints"],
                 target: target,
-                currentValue: hint.measured.map { .number($0) },
-                requiredValue: hint.required.map { .number($0) },
+                currentValue: hint.measured.map { .scalar($0) },
+                requiredValue: hint.required.map { .scalar($0) },
                 unit: hint.stringParameters["unit"],
                 description: "Clear active DRC diagnostic \(hint.hintID) for \(hint.ruleID ?? hint.kind ?? "unknown-rule").",
                 symbolicGoalAtoms: [target],
@@ -442,24 +441,23 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         activeDiagnosticCount: Int,
         hintCount: Int,
         unsupportedDiagnosticCount: Int,
-        reference: XcircuiteFileReference?
-    ) -> [String: XcircuiteJSONValue] {
-        var metadata: [String: XcircuiteJSONValue] = [
-            "sourceKind": .string(sourceKind),
-            "backendID": .string(backendID),
-            "topCell": .string(topCell),
-            "status": .string(status),
-            "activeDiagnosticCount": .number(Double(activeDiagnosticCount)),
-            "hintCount": .number(Double(hintCount)),
-            "unsupportedDiagnosticCount": .number(Double(unsupportedDiagnosticCount)),
+        reference: ArtifactReference?
+    ) -> [String: PlanningParameterValue] {
+        var metadata: [String: PlanningParameterValue] = [
+            "sourceKind": .text(sourceKind),
+            "backendID": .text(backendID),
+            "topCell": .text(topCell),
+            "status": .text(status),
+            "activeDiagnosticCount": .scalar(Double(activeDiagnosticCount)),
+            "hintCount": .scalar(Double(hintCount)),
+            "unsupportedDiagnosticCount": .scalar(Double(unsupportedDiagnosticCount)),
         ]
         if let reference {
-            metadata["artifactID"] = reference.artifactID.map { .string($0) }
-            metadata["artifactPath"] = .string(reference.path)
-            metadata["artifactSHA256"] = reference.sha256.map { .string($0) }
-            metadata["artifactByteCount"] = reference.byteCount.map { .number(Double($0)) }
-            metadata["artifactProducedByRunID"] = reference.producedByRunID.map { .string($0) }
-            metadata["artifactIntegrityStatus"] = .string(XcircuiteFileReferenceIntegrityStatus.verified.rawValue)
+            metadata["artifactID"] = .text(reference.artifactID)
+            metadata["artifactPath"] = .text(reference.path)
+            metadata["artifactSHA256"] = .text(reference.sha256)
+            metadata["artifactByteCount"] = .scalar(Double(reference.byteCount))
+            metadata["artifactIntegrityStatus"] = .text(FlowArtifactVerificationStatus.verified.rawValue)
         }
         return metadata
     }
@@ -467,41 +465,38 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private func drcEvidence(
         hint: DRCRepairHint,
         sourcePath: String?
-    ) -> [String: XcircuiteJSONValue] {
+    ) -> [String: PlanningParameterValue] {
         var evidence = drcParameterHints(hint: hint, sourcePath: sourcePath)
-        evidence["sourceEngineOperation"] = .string("drc.export-repair-hints")
-        evidence["sourceDiagnosticIndex"] = .number(Double(hint.sourceDiagnosticIndex))
-        evidence["repairHintID"] = .string(hint.hintID)
-        evidence["repairHintConfidence"] = .string(hint.confidence)
+        evidence["sourceEngineOperation"] = .text("drc.export-repair-hints")
+        evidence["sourceDiagnosticIndex"] = .scalar(Double(hint.sourceDiagnosticIndex))
+        evidence["repairHintID"] = .text(hint.hintID)
+        evidence["repairHintConfidence"] = .text(hint.confidence)
         return evidence
     }
 
     private func drcParameterHints(
         hint: DRCRepairHint,
         sourcePath: String?
-    ) -> [String: XcircuiteJSONValue] {
+    ) -> [String: PlanningParameterValue] {
         var values = jsonValues(strings: hint.stringParameters, numbers: hint.numericParameters)
-        values["sourceKind"] = .string("drc")
-        values["sourceRepairHintPath"] = sourcePath.map { .string($0) }
-        values["repairHintID"] = .string(hint.hintID)
-        values["operationID"] = .string(hint.operationID)
-        values["confidence"] = .string(hint.confidence)
+        values["sourceKind"] = .text("drc")
+        values["sourceRepairHintPath"] = sourcePath.map { .text($0) }
+        values["repairHintID"] = .text(hint.hintID)
+        values["operationID"] = .text(hint.operationID)
+        values["confidence"] = .text(hint.confidence)
         values["targetShapeIDs"] = jsonArray(hint.targetShapeIDs)
         values["relatedViaIDs"] = jsonArray(hint.relatedViaIDs)
         values["relatedNetIDs"] = jsonArray(hint.relatedNetIDs)
         if let measured = hint.measured {
-            values["measured"] = .number(measured)
+            values["measured"] = .scalar(measured)
         }
         if let required = hint.required {
-            values["required"] = .number(required)
+            values["required"] = .scalar(required)
         }
         if let region = hint.region {
-            values["region"] = .object([
-                "x": .number(region.x),
-                "y": .number(region.y),
-                "width": .number(region.width),
-                "height": .number(region.height),
-            ])
+            values["region"] = .region(
+                PlanningRegion(x: region.x, y: region.y, width: region.width, height: region.height)
+            )
         }
         return values
     }
@@ -509,42 +504,42 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private func lvsEvidence(
         hint: LVSRepairHint,
         sourcePath: String?
-    ) -> [String: XcircuiteJSONValue] {
+    ) -> [String: PlanningParameterValue] {
         var evidence = lvsParameterHints(hint: hint, sourcePath: sourcePath)
-        evidence["sourceEngineOperation"] = .string("lvs.export-repair-hints")
-        evidence["sourceDiagnosticIndex"] = .number(Double(hint.sourceDiagnosticIndex))
-        evidence["repairHintID"] = .string(hint.hintID)
-        evidence["repairHintConfidence"] = .string(hint.confidence)
+        evidence["sourceEngineOperation"] = .text("lvs.export-repair-hints")
+        evidence["sourceDiagnosticIndex"] = .scalar(Double(hint.sourceDiagnosticIndex))
+        evidence["repairHintID"] = .text(hint.hintID)
+        evidence["repairHintConfidence"] = .text(hint.confidence)
         return evidence
     }
 
     private func lvsParameterHints(
         hint: LVSRepairHint,
         sourcePath: String?
-    ) -> [String: XcircuiteJSONValue] {
+    ) -> [String: PlanningParameterValue] {
         var values = jsonValues(strings: hint.stringParameters, numbers: [:])
-        values["sourceKind"] = .string("lvs")
-        values["sourceRepairHintPath"] = sourcePath.map { .string($0) }
-        values["repairHintID"] = .string(hint.hintID)
-        values["operationID"] = .string(hint.operationID)
-        values["confidence"] = .string(hint.confidence)
+        values["sourceKind"] = .text("lvs")
+        values["sourceRepairHintPath"] = sourcePath.map { .text($0) }
+        values["repairHintID"] = .text(hint.hintID)
+        values["operationID"] = .text(hint.operationID)
+        values["confidence"] = .text(hint.confidence)
         values["layoutPorts"] = jsonArray(hint.layoutPorts)
         values["schematicPorts"] = jsonArray(hint.schematicPorts)
         if let layoutCount = hint.layoutCount {
-            values["layoutCount"] = .number(Double(layoutCount))
+            values["layoutCount"] = .scalar(Double(layoutCount))
         }
         if let schematicCount = hint.schematicCount {
-            values["schematicCount"] = .number(Double(schematicCount))
+            values["schematicCount"] = .scalar(Double(schematicCount))
         }
         return values
     }
 
-    private func lvsCurrentValue(_ hint: LVSRepairHint) -> XcircuiteJSONValue? {
+    private func lvsCurrentValue(_ hint: LVSRepairHint) -> PlanningParameterValue? {
         if let value = hint.layoutValue {
-            return .string(value)
+            return .text(value)
         }
         if let count = hint.layoutCount {
-            return .number(Double(count))
+            return .scalar(Double(count))
         }
         if !hint.layoutPorts.isEmpty {
             return jsonArray(hint.layoutPorts)
@@ -552,12 +547,12 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         return nil
     }
 
-    private func lvsRequiredValue(_ hint: LVSRepairHint) -> XcircuiteJSONValue? {
+    private func lvsRequiredValue(_ hint: LVSRepairHint) -> PlanningParameterValue? {
         if let value = hint.schematicValue {
-            return .string(value)
+            return .text(value)
         }
         if let count = hint.schematicCount {
-            return .number(Double(count))
+            return .scalar(Double(count))
         }
         if !hint.schematicPorts.isEmpty {
             return jsonArray(hint.schematicPorts)
@@ -603,9 +598,9 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
             requiredApprovals: severity == "high" ? ["layout-review"] : [],
             mitigationActions: ["run-native-drc", "run-native-lvs"],
             evidence: [
-                "repairHintID": .string(hint.hintID),
-                "operationID": .string(hint.operationID),
-                "confidence": .string(hint.confidence),
+                "repairHintID": .text(hint.hintID),
+                "operationID": .text(hint.operationID),
+                "confidence": .text(hint.confidence),
             ]
         )
     }
@@ -627,9 +622,9 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 requiredApprovals: ["lvs-policy-review"],
                 mitigationActions: ["run-native-lvs", "review-policy-diff"],
                 evidence: [
-                    "repairHintID": .string(hint.hintID),
-                    "operationID": .string(hint.operationID),
-                    "confidence": .string(hint.confidence),
+                    "repairHintID": .text(hint.hintID),
+                    "operationID": .text(hint.operationID),
+                    "confidence": .text(hint.confidence),
                 ]
             )
         }
@@ -645,9 +640,9 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 requiredApprovals: ["layout-review"],
                 mitigationActions: ["run-native-lvs", "run-native-drc"],
                 evidence: [
-                    "repairHintID": .string(hint.hintID),
-                    "operationID": .string(hint.operationID),
-                    "confidence": .string(hint.confidence),
+                    "repairHintID": .text(hint.hintID),
+                    "operationID": .text(hint.operationID),
+                    "confidence": .text(hint.confidence),
                 ]
             )
         }
@@ -666,7 +661,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 description: "Any selected signoff repair must be verified by the native DRC/LVS gates declared on the action.",
                 sourceRefIDs: sourceRefIDs,
                 evidence: [
-                    "coveredSourceRefIDs": .array(sourceRefIDs.map { .string($0) }),
+                    "coveredSourceRefIDs": .textList(sourceRefIDs),
                 ]
             ),
         ]
@@ -678,7 +673,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 description: "High-risk layout or LVS policy repair actions require explicit human approval before execution.",
                 sourceRefIDs: sourceRefIDs,
                 evidence: [
-                    "coveredSourceRefIDs": .array(sourceRefIDs.map { .string($0) }),
+                    "coveredSourceRefIDs": .textList(sourceRefIDs),
                 ]
             ))
         }
@@ -735,13 +730,13 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         return "Repair active \(kinds) signoff diagnostics using engine-derived repair hints, then verify with native signoff gates."
     }
 
-    private func metadata(from loadedReports: LoadedReports) -> [String: XcircuiteJSONValue] {
+    private func metadata(from loadedReports: LoadedReports) -> [String: PlanningParameterValue] {
         let sourceReports = sourceReports(from: loadedReports)
         return [
-            "sourceReportCount": .number(Double(sourceReports.count)),
-            "totalActiveDiagnosticCount": .number(Double(sourceReports.map(\.activeDiagnosticCount).reduce(0, +))),
-            "totalRepairHintCount": .number(Double(sourceReports.map(\.hintCount).reduce(0, +))),
-            "totalUnsupportedDiagnosticCount": .number(Double(sourceReports.map(\.unsupportedDiagnosticCount).reduce(0, +))),
+            "sourceReportCount": .scalar(Double(sourceReports.count)),
+            "totalActiveDiagnosticCount": .scalar(Double(sourceReports.map(\.activeDiagnosticCount).reduce(0, +))),
+            "totalRepairHintCount": .scalar(Double(sourceReports.map(\.hintCount).reduce(0, +))),
+            "totalUnsupportedDiagnosticCount": .scalar(Double(sourceReports.map(\.unsupportedDiagnosticCount).reduce(0, +))),
         ]
     }
 
@@ -771,16 +766,16 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private func jsonValues(
         strings: [String: String],
         numbers: [String: Double]
-    ) -> [String: XcircuiteJSONValue] {
-        var values = strings.mapValues { XcircuiteJSONValue.string($0) }
+    ) -> [String: PlanningParameterValue] {
+        var values = strings.mapValues { PlanningParameterValue.text($0) }
         for (key, value) in numbers {
-            values[key] = .number(value)
+            values[key] = .scalar(value)
         }
         return values
     }
 
-    private func jsonArray(_ values: [String]) -> XcircuiteJSONValue {
-        .array(values.map { .string($0) })
+    private func jsonArray(_ values: [String]) -> PlanningParameterValue {
+        .textList(values)
     }
 
     private func symbolicAtomToken(_ value: String) -> String {

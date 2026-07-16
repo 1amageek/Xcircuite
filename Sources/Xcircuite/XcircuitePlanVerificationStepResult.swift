@@ -11,7 +11,7 @@ public struct XcircuitePlanVerificationStepResult: Codable, Sendable, Hashable {
     public var gateIDs: [String]
     public var symbolicEvaluation: XcircuiteSymbolicPlannerStepEvaluation?
     public var diagnostics: [XcircuitePlanVerificationDiagnostic]
-    public var producedArtifactRefs: [XcircuiteFileReference]
+    public var producedArtifactRefs: [ArtifactReference]
 
     public init(
         stepID: String,
@@ -23,7 +23,7 @@ public struct XcircuitePlanVerificationStepResult: Codable, Sendable, Hashable {
         gateIDs: [String],
         symbolicEvaluation: XcircuiteSymbolicPlannerStepEvaluation? = nil,
         diagnostics: [XcircuitePlanVerificationDiagnostic] = [],
-        producedArtifactRefs: [XcircuiteFileReference] = []
+        producedArtifactRefs: [ArtifactReference] = []
     ) {
         self.stepID = stepID
         self.order = order

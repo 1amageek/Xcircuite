@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteProblemTranslationAuditor: Sendable {
@@ -10,47 +11,47 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
 
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
+        workspaceStore: XcircuiteWorkspaceStore,
         actionDomainSnapshotBuilder: XcircuiteActionDomainSnapshotBuilder,
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = XcircuitePlanningArtifactStore(
-            storage: workspaceStore,
+            workspaceStore: workspaceStore,
             snapshotBuilder: actionDomainSnapshotBuilder
         )
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func auditProblemTranslation(
         request: XcircuiteProblemTranslationAuditRequest,
         projectRoot: URL
-    ) throws -> XcircuiteProblemTranslationAuditResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let problemPath = try requiredPath(
+    ) async throws -> XcircuiteProblemTranslationAuditResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let problemPath = try await requiredPath(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try workspaceStore.readJSON(
+        let problem = try await workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: problemPath
         )
         guard problem.runID == request.runID else {
             throw XcircuiteProblemTranslationAuditError.runMismatch(
@@ -59,7 +60,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
             )
         }
 
-        let actionDomainSnapshot = try loadOrPersistActionDomainSnapshot(
+        let actionDomainSnapshot = try await loadOrPersistActionDomainSnapshot(
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
@@ -69,7 +70,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
             problemPath: problemPath,
             actionDomainSnapshot: actionDomainSnapshot
         )
-        let auditRef = try artifactStore.persistProblemTranslationAudit(
+        let auditRef = try await artifactStore.persistProblemTranslationAudit(
             audit,
             runID: request.runID,
             projectRoot: projectRoot
@@ -753,7 +754,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
     }
 
     private func intentClauseIDs(
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
         unique(
             stringArrayValue(for: "intentClauseIDs", in: values)
@@ -806,17 +807,12 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
 
     private func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let array)? = values[key] else {
+        guard case .textList(let array)? = values[key] else {
             return []
         }
-        return array.compactMap { value in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return string
-        }
+        return array
     }
 
     private func edge(
@@ -873,16 +869,16 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
         return result
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func loadOrPersistActionDomainSnapshot(
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuitePlanningActionDomainSnapshot {
-        try XcircuiteActionDomainSnapshotResolver(
+    ) async throws -> XcircuitePlanningActionDomainSnapshot {
+        try await XcircuiteActionDomainSnapshotResolver(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         ).loadDefaultOrPersist(
@@ -895,12 +891,12 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
     private func requiredPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> String {
+    ) async throws -> String {
         if let explicitPath {
-            return try verifiedExplicitProblemPath(
+            return try await verifiedExplicitProblemPath(
                 explicitPath,
                 artifactID: artifactID,
                 manifest: manifest,
@@ -928,10 +924,10 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
     private func verifiedExplicitProblemPath(
         _ explicitPath: String,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) async throws -> ArtifactReference {
         let matches = manifest.artifacts.filter { $0.path == explicitPath }
         guard matches.count <= 1 else {
             throw XcircuiteProblemTranslationAuditError.invalidArtifactReference(
@@ -939,14 +935,17 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? workspaceStore.fileReference(
-            forProjectRelativePath: explicitPath,
-            artifactID: artifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
+        let reference: ArtifactReference
+        if let existing = matches.first {
+            reference = existing
+        } else {
+            reference = try await workspaceStore.makeArtifactReference(
+                forProjectRelativePath: explicitPath,
+                artifactID: artifactID,
+                kind: .other,
+                format: .json
+            )
+        }
         try validateProblemReference(
             reference,
             expectedArtifactID: artifactID,
@@ -958,10 +957,10 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
 
     private func verifiedManifestProblemReference(
         artifactID: String,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         let matches = manifest.artifacts.filter { $0.artifactID == artifactID }
         guard !matches.isEmpty else {
             return nil
@@ -983,7 +982,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
     }
 
     private func validateProblemReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         expectedArtifactID: String?,
         runID: String,
         projectRoot: URL
@@ -1000,18 +999,12 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
                 reason: "planning problems must be JSON artifacts."
             )
         }
-        guard reference.producedByRunID == runID else {
-            throw XcircuiteProblemTranslationAuditError.artifactProducerRunMismatch(
-                expected: runID,
-                actual: reference.producedByRunID
-            )
-        }
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteProblemTranslationAuditError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }

@@ -31,8 +31,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusReport: Codable, Sendable, Ha
     public var status: Status
     public var summary: Summary
     public var caseResults: [CaseResult]
-    public var suiteSpecArtifact: XcircuiteFileReference?
-    public var reportArtifact: XcircuiteFileReference?
+    public var suiteSpecArtifact: ArtifactReference?
+    public var reportArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -40,8 +40,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusReport: Codable, Sendable, Ha
         status: Status,
         summary: Summary,
         caseResults: [CaseResult],
-        suiteSpecArtifact: XcircuiteFileReference? = nil,
-        reportArtifact: XcircuiteFileReference? = nil
+        suiteSpecArtifact: ArtifactReference? = nil,
+        reportArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suiteID = suiteID
@@ -147,7 +147,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusReport: Codable, Sendable, Ha
         public var expectedStatus: FlowStageStatus?
         public var statusMatches: Bool
         public var gateResults: [GateResult]
-        public var artifactRefs: [ArtifactReference]
+        public var artifactRefs: [ArtifactSnapshot]
         public var diagnostics: [Diagnostic]
 
         public init(
@@ -157,7 +157,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusReport: Codable, Sendable, Ha
             expectedStatus: FlowStageStatus?,
             statusMatches: Bool,
             gateResults: [GateResult],
-            artifactRefs: [ArtifactReference],
+            artifactRefs: [ArtifactSnapshot],
             diagnostics: [Diagnostic]
         ) {
             self.stageID = stageID
@@ -183,7 +183,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusReport: Codable, Sendable, Ha
         }
     }
 
-    public struct ArtifactReference: Codable, Sendable, Hashable {
+    public struct ArtifactSnapshot: Codable, Sendable, Hashable {
         public var role: String
         public var artifactID: String?
         public var stageID: String?

@@ -10,7 +10,7 @@ import XcircuiteFlowCLISupport
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanVerifierTests {
-    @Test func artifactIntegrityBlocksWithoutProjectRoot() throws {
+    @Test func artifactIntegrityBlocksWithoutProjectRoot() async throws {
         let plan = makeSingleStepPlan(
             runID: "run-integrity-root",
             domainID: "layout-edit",
@@ -18,9 +18,9 @@ extension XcircuiteCandidatePlanVerifierTests {
             maturity: "implemented"
         )
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier().makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-integrity-root")
+            candidatePlanRef: try candidatePlanRef(runID: "run-integrity-root")
         )
 
         let gate = try #require(verification.gateResults.first { $0.gateID == "artifact-integrity" })
@@ -31,19 +31,19 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.accepted == false)
     }
 
-    @Test func artifactIntegrityFailsWhenCandidateArtifactDigestDoesNotMatchFile() throws {
+    @Test func artifactIntegrityFailsWhenCandidateArtifactDigestDoesNotMatchFile() async throws {
         let root = try makeTemporaryRoot("candidate-plan-artifact-integrity-tamper")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-integrity-tamper", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-integrity-tamper", store: store)
         let plan = makeSingleStepPlan(
             runID: "run-integrity-tamper",
             domainID: "layout-edit",
             operationID: "layout.add-rect",
             maturity: "implemented"
         )
-        let candidatePlanRef = try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let candidatePlanRef = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistCandidatePlan(
             plan,
             runID: "run-integrity-tamper",
             projectRoot: root
@@ -52,7 +52,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         let originalData = try Data(contentsOf: candidatePlanURL)
         try Data(repeating: 0x58, count: originalData.count).write(to: candidatePlanURL)
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier(root: root).makePlanVerification(
             plan: plan,
             candidatePlanRef: candidatePlanRef,
             projectRoot: root
@@ -64,12 +64,12 @@ extension XcircuiteCandidatePlanVerifierTests {
             $0.code == "artifact-integrity-sha256-mismatch"
         })
         #expect(gate.diagnostics.contains {
-            $0.message.contains("actualSHA256=") && $0.message.contains("expectedSHA256=")
+            $0.message.contains("actualDigest=") && $0.message.contains("expectedDigest=")
         })
         #expect(verification.accepted == false)
     }
 
-    @Test func unsupportedPlannerOperationBlocksPlanVerification() throws {
+    @Test func unsupportedPlannerOperationBlocksPlanVerification() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-1",
             generatedAt: "2026-06-20T00:00:00Z"
@@ -81,9 +81,9 @@ extension XcircuiteCandidatePlanVerifierTests {
             maturity: "implemented"
         )
         plan.steps[0].readiness = "ready"
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier().makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-1"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-1"),
             actionDomainSnapshot: snapshot
         )
 
@@ -93,13 +93,13 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.nextActions.contains("revise-plan-to-supported-action"))
     }
 
-    @Test func rejectedPlanDiagnosticClassifierSeparatesRootCausesForAgentFeedback() throws {
+    @Test func rejectedPlanDiagnosticClassifierSeparatesRootCausesForAgentFeedback() async throws {
         let verification = XcircuitePlanVerification(
             problemID: "run-taxonomy-problem",
             planID: "run-taxonomy-plan",
             runID: "run-taxonomy",
             verificationMode: "post-execution",
-            candidatePlanRef: candidatePlanRef(runID: "run-taxonomy"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-taxonomy"),
             stepResults: [
                 XcircuitePlanVerificationStepResult(
                     stepID: "step-unsupported",
@@ -197,7 +197,7 @@ extension XcircuiteCandidatePlanVerifierTests {
                 ),
             ],
             artifactRefs: [
-                XcircuiteFileReference(
+                try fixtureArtifactReference(
                     artifactID: "stale-layout-artifact",
                     path: ".xcircuite/runs/run-taxonomy/layout.gds",
                     kind: .other,
@@ -302,7 +302,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             failedStepIDs: verification.stepResults.map { $0.stepID },
             failedGateIDs: verification.gateResults.map { $0.gateID },
             candidatePlanRef: verification.candidatePlanRef,
-            planVerificationRef: candidatePlanRef(runID: "run-taxonomy"),
+            planVerificationRef: try candidatePlanRef(runID: "run-taxonomy"),
             artifactRefs: verification.artifactRefs,
             diagnostics: verification.diagnostics,
             diagnosticClassifications: classifications,
@@ -326,18 +326,18 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(summary.diagnosticClassCounts["calibration_uncertainty"] == 1)
     }
 
-    @Test func rejectedPlanDiagnosticClassifierTreatsDigestCurrentnessFailuresAsStaleArtifacts() throws {
+    @Test func rejectedPlanDiagnosticClassifierTreatsDigestCurrentnessFailuresAsStaleArtifacts() async throws {
         let verification = XcircuitePlanVerification(
             problemID: "run-currentness-problem",
             planID: "run-currentness-plan",
             runID: "run-currentness",
             verificationMode: "pre-execution",
-            candidatePlanRef: candidatePlanRef(runID: "run-currentness"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-currentness"),
             stepResults: [],
             gateResults: [],
             correctnessGateResults: [],
             artifactRefs: [
-                XcircuiteFileReference(
+                try fixtureArtifactReference(
                     artifactID: "planning-problem",
                     path: ".xcircuite/runs/run-currentness/planning/problem.json",
                     kind: .other,
@@ -369,7 +369,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(staleArtifact.nextActions == ["refresh-artifact:planning-problem"])
     }
 
-    @Test func rejectedPlanRecordRejectsMissingDiagnosticClassifications() throws {
+    @Test func rejectedPlanRecordRejectsMissingDiagnosticClassifications() async throws {
         let record = XcircuiteRejectedPlanRecord(
             rejectionID: "incomplete-rejection",
             runID: "run-incomplete",
@@ -380,8 +380,8 @@ extension XcircuiteCandidatePlanVerifierTests {
             sourceParameterCandidateIDs: ["candidate-incomplete"],
             failedStepIDs: ["step-incomplete"],
             failedGateIDs: ["native-drc"],
-            candidatePlanRef: candidatePlanRef(runID: "run-incomplete"),
-            planVerificationRef: candidatePlanRef(runID: "run-incomplete"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-incomplete"),
+            planVerificationRef: try candidatePlanRef(runID: "run-incomplete"),
             artifactRefs: [],
             diagnostics: [
                 XcircuitePlanVerificationDiagnostic(
@@ -418,7 +418,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         }
     }
 
-    @Test func maturityMismatchBlocksPlanVerification() throws {
+    @Test func maturityMismatchBlocksPlanVerification() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-1",
             generatedAt: "2026-06-20T00:00:00Z"
@@ -429,9 +429,9 @@ extension XcircuiteCandidatePlanVerifierTests {
             operationID: "layout.add-rect",
             maturity: "planned"
         )
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier().makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-1"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-1"),
             actionDomainSnapshot: snapshot
         )
 
@@ -441,7 +441,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.nextActions.contains("refresh-action-domain-snapshot"))
     }
 
-    @Test func symbolicStepEvaluationRecordsSatisfiedPreconditionsAndStateTransition() throws {
+    @Test func symbolicStepEvaluationRecordsSatisfiedPreconditionsAndStateTransition() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-1",
             generatedAt: "2026-06-20T00:00:00Z"
@@ -454,15 +454,15 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         plan.steps[0].requiredInputRefs = ["document-ref", "cell-ref", "layer-ref"]
         plan.steps[0].parameterHints = [
-            "satisfiedPreconditions": .array([
-                .string("cell-exists"),
-                .string("unique-shape-id"),
-                .string("positive-rect-size"),
+            "satisfiedPreconditions": .textList([
+                "cell-exists",
+                "unique-shape-id",
+                "positive-rect-size",
             ]),
         ]
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier().makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-1"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-1"),
             actionDomainSnapshot: snapshot
         )
 
@@ -482,7 +482,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(symbolicEvaluation.stateAfter.contains("artifact:layout-document"))
     }
 
-    @Test func verifierBlocksReadyStepWithUnboundActionDomainInputRefs() throws {
+    @Test func verifierBlocksReadyStepWithUnboundActionDomainInputRefs() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-1",
             generatedAt: "2026-06-20T00:00:00Z"
@@ -495,16 +495,16 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         plan.steps[0].requiredInputRefs = ["document-ref", "cell-ref"]
         plan.steps[0].parameterHints = [
-            "satisfiedPreconditions": .array([
-                .string("cell-exists"),
-                .string("unique-shape-id"),
-                .string("positive-rect-size"),
+            "satisfiedPreconditions": .textList([
+                "cell-exists",
+                "unique-shape-id",
+                "positive-rect-size",
             ]),
         ]
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier().makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-1"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-1"),
             actionDomainSnapshot: snapshot
         )
 
@@ -522,7 +522,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(correctnessGates["action-domain-binding"] == "blocked")
     }
 
-    @Test func verifierBlocksReadyStepWithUnprovenActionDomainPreconditions() throws {
+    @Test func verifierBlocksReadyStepWithUnprovenActionDomainPreconditions() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-1",
             generatedAt: "2026-06-20T00:00:00Z"
@@ -535,9 +535,9 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         plan.steps[0].requiredInputRefs = ["document-ref", "cell-ref", "layer-ref"]
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = try makeVerifier().makePlanVerification(
             plan: plan,
-            candidatePlanRef: candidatePlanRef(runID: "run-1"),
+            candidatePlanRef: try candidatePlanRef(runID: "run-1"),
             actionDomainSnapshot: snapshot
         )
 
@@ -570,12 +570,11 @@ extension XcircuiteCandidatePlanVerifierTests {
         problem.problemID = "run-goal-problem"
         problem.objectives[0].objectiveID = "objective-1"
         problem.objectives[0].evidence = [
-            "symbolicGoalAtoms": .array([
-                .string("unreachable-symbolic-goal"),
-            ]),
+            "symbolicGoalAtoms": .textList(["unreachable-symbolic-goal"]),
         ]
-        try prepareRun(root: root, runID: "run-goal", problem: problem)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        try await prepareRun(root: root, runID: "run-goal", problem: problem)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        _ = try await XcircuitePlanningArtifactStore(workspaceStore: store).persistCandidatePlan(
             makeSingleStepPlan(
                 runID: "run-goal",
                 domainID: "layout-edit",
@@ -586,7 +585,7 @@ extension XcircuiteCandidatePlanVerifierTests {
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanVerifier().verifyCandidatePlan(
+        let result = try await makeVerifier(root: root).verifyCandidatePlan(
             request: XcircuiteCandidatePlanVerificationRequest(runID: "run-goal"),
             projectRoot: root
         )
@@ -594,9 +593,9 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "blocked")
         #expect(result.accepted == false)
         #expect(result.nextActions.contains("revise-plan-to-cover-goals:objective-1"))
-        let verification = try XcircuiteWorkspaceStore().readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.goalCoverageStatus == "missing")
         #expect(verification.missingGoalAtoms == ["objective-1:unreachable-symbolic-goal"])

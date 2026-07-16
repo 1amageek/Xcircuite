@@ -3,11 +3,11 @@ import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let identifierValidator: XcircuiteIdentifierValidator
+    private let identifierValidator: FlowIdentifierValidator
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        identifierValidator: XcircuiteIdentifierValidator = XcircuiteIdentifierValidator()
+        workspaceStore: XcircuiteWorkspaceStore,
+        identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator()
     ) {
         self.workspaceStore = workspaceStore
         self.identifierValidator = identifierValidator
@@ -31,26 +31,18 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
         reports: [XcircuiteGeneratedLayoutFailureLadderReport],
         policy: XcircuiteGeneratedLayoutFailureLadderCoverageAuditPolicy,
         projectRoot: URL
-    ) throws -> XcircuiteGeneratedLayoutFailureLadderCoverageAudit {
+    ) async throws -> XcircuiteGeneratedLayoutFailureLadderCoverageAudit {
         try validate(reports: reports, policy: policy)
         let normalizedPolicy = normalize(policy)
-        let auditDirectory = try auditDirectoryURL(auditID: normalizedPolicy.auditID, projectRoot: projectRoot)
-        try workspaceStore.ensureDirectory(at: auditDirectory)
-
         let policyPath = auditProjectRelativePath(
             auditID: normalizedPolicy.auditID,
             fileName: "failure-ladder-coverage-audit-policy.json"
         )
-        let policyURL = try workspaceStore.url(forProjectRelativePath: policyPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(normalizedPolicy, to: policyURL, forProjectAt: projectRoot)
-        let policyArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: policyPath,
-            artifactID: "generated-layout-failure-ladder-coverage-audit-policy",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let policyArtifact = try await workspaceStore.persistProjectJSON(
+            normalizedPolicy,
+            id: "generated-layout-failure-ladder-coverage-audit-policy",
+            path: policyPath
         )
-        try workspaceStore.upsertFileReference(policyArtifact, forProjectAt: projectRoot)
 
         let auditWithoutSelfRef = makeAudit(
             reports: reports,
@@ -62,16 +54,11 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
             auditID: normalizedPolicy.auditID,
             fileName: "failure-ladder-coverage-audit.json"
         )
-        let auditURL = try workspaceStore.url(forProjectRelativePath: auditPath, inProjectAt: projectRoot)
-        try workspaceStore.writeJSON(auditWithoutSelfRef, to: auditURL, forProjectAt: projectRoot)
-        let auditArtifact = try workspaceStore.fileReference(
-            forProjectRelativePath: auditPath,
-            artifactID: "generated-layout-failure-ladder-coverage-audit",
-            kind: .report,
-            format: .json,
-            inProjectAt: projectRoot
+        let auditArtifact = try await workspaceStore.persistProjectJSON(
+            auditWithoutSelfRef,
+            id: "generated-layout-failure-ladder-coverage-audit",
+            path: auditPath
         )
-        try workspaceStore.upsertFileReference(auditArtifact, forProjectAt: projectRoot)
 
         var audit = auditWithoutSelfRef
         audit.auditArtifact = auditArtifact
@@ -113,8 +100,8 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
     private func makeAudit(
         reports: [XcircuiteGeneratedLayoutFailureLadderReport],
         policy: XcircuiteGeneratedLayoutFailureLadderCoverageAuditPolicy,
-        policyArtifact: XcircuiteFileReference?,
-        auditArtifact: XcircuiteFileReference?
+        policyArtifact: ArtifactReference?,
+        auditArtifact: ArtifactReference?
     ) -> XcircuiteGeneratedLayoutFailureLadderCoverageAudit {
         let reportCases = reports.map(reportCase).sorted { left, right in
             if left.firstFailingFamily?.rawValue != right.firstFailingFamily?.rawValue {
@@ -291,15 +278,8 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
         return sortedStageFamilies(required.filter { !observedSet.contains($0) })
     }
 
-    private func auditDirectoryURL(auditID: String, projectRoot: URL) throws -> URL {
-        try workspaceStore.url(
-            forProjectRelativePath: "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-failure-ladder/\(auditID)",
-            inProjectAt: projectRoot
-        )
-    }
-
     private func auditProjectRelativePath(auditID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspace.directoryName)/qualification/generated-layout-failure-ladder/\(auditID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-failure-ladder/\(auditID)/\(fileName)"
     }
 
     private func missingRequirement(

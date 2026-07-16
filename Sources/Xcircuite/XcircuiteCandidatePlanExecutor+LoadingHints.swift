@@ -8,12 +8,29 @@ import LVSEngine
 import DesignFlowKernel
 
 extension XcircuiteCandidatePlanExecutor {
+    func projectURL(for relativePath: String, projectRoot: URL) throws -> URL {
+        guard !relativePath.isEmpty, !relativePath.hasPrefix("/") else {
+            throw XcircuiteCandidatePlanExecutionError.invalidArtifactReference(
+                path: relativePath,
+                reason: "project artifact path must be relative"
+            )
+        }
+        let url = projectRoot.appending(path: relativePath).standardizedFileURL
+        guard ProjectPathBoundary().contains(url, projectRoot: projectRoot) else {
+            throw XcircuiteRuntimeError.artifactOutsideProject(
+                path: url.path(percentEncoded: false),
+                projectRoot: projectRoot.path(percentEncoded: false)
+            )
+        }
+        return url
+    }
+
     func executionDirectoryURL(
         plan: XcircuiteCandidatePlan,
         step: XcircuiteCandidatePlanStep,
         projectRoot: URL
     ) throws -> URL {
-        try XcircuiteWorkspace(projectRoot: projectRoot)
+        try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
             .runDirectoryURL(for: plan.runID)
             .appending(path: "planning")
             .appending(path: "executions")
@@ -21,17 +38,17 @@ extension XcircuiteCandidatePlanExecutor {
             .appending(path: step.stepID)
     }
 
-    func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     func requiredCandidatePlanReference(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) throws -> ArtifactReference {
         if let explicitPath {
             let matches = manifest.artifacts.filter { $0.path == explicitPath }
             guard matches.count <= 1 else {
@@ -40,13 +57,12 @@ extension XcircuiteCandidatePlanExecutor {
                     reason: "multiple manifest artifacts reference the same explicit path."
                 )
             }
-            let reference = try matches.first ?? workspaceStore.fileReference(
-                forProjectRelativePath: explicitPath,
-                artifactID: artifactID,
+            let reference = try matches.first ?? artifactBuilder.reference(
+                for: projectURL(for: explicitPath, projectRoot: projectRoot),
+                projectRoot: projectRoot,
+                artifactID: artifactID ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                 kind: .other,
-                format: .json,
-                inProjectAt: projectRoot,
-                producedByRunID: runID
+                format: .json
             )
             try validateCandidatePlanReference(
                 reference,
@@ -80,7 +96,7 @@ extension XcircuiteCandidatePlanExecutor {
     }
 
     private func validateCandidatePlanReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         expectedArtifactID: String?,
         runID: String,
         projectRoot: URL
@@ -97,18 +113,12 @@ extension XcircuiteCandidatePlanExecutor {
                 reason: "candidate plans must be JSON artifacts."
             )
         }
-        guard reference.producedByRunID == runID else {
-            throw XcircuiteCandidatePlanExecutionError.artifactProducerRunMismatch(
-                expected: runID,
-                actual: reference.producedByRunID
-            )
-        }
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteCandidatePlanExecutionError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }
@@ -155,7 +165,7 @@ extension XcircuiteCandidatePlanExecutor {
         guard let value = step.parameterHints[key] else {
             return nil
         }
-        guard case .number(let number) = value, number.isFinite else {
+        guard case .scalar(let number) = value, number.isFinite else {
             throw XcircuiteCandidatePlanExecutionError.invalidHint(
                 stepID: step.stepID,
                 key: key,
@@ -165,14 +175,4 @@ extension XcircuiteCandidatePlanExecutor {
         return number
     }
 
-    func decodedHint<T: Decodable>(
-        _ key: String,
-        from step: XcircuiteCandidatePlanStep
-    ) throws -> T? {
-        guard let value = step.parameterHints[key] else {
-            return nil
-        }
-        let data = try JSONEncoder().encode(value)
-        return try JSONDecoder().decode(T.self, from: data)
-    }
 }

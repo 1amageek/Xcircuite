@@ -10,7 +10,7 @@ public enum XcircuiteSymbolicPlannerPlanImportError: Error, LocalizedError, Equa
         field: String,
         artifactID: String?,
         path: String,
-        status: XcircuiteFileReferenceIntegrityStatus,
+        status: FlowArtifactVerificationStatus,
         message: String
     )
     case invalidArtifactReference(field: String, path: String, reason: String)

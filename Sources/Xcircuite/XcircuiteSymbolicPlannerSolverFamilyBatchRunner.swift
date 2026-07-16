@@ -5,16 +5,16 @@ import DesignFlowKernel
 public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let qualifier: XcircuiteSymbolicPlannerSolverQualifier
-    private let comparator: XcircuiteSymbolicPlannerSolverFamilyComparator
-    private let promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter
+    private let qualifier: XcircuiteSymbolicPlannerSolverQualifier?
+    private let comparator: XcircuiteSymbolicPlannerSolverFamilyComparator?
+    private let promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter?
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        qualifier: XcircuiteSymbolicPlannerSolverQualifier = XcircuiteSymbolicPlannerSolverQualifier(),
-        comparator: XcircuiteSymbolicPlannerSolverFamilyComparator = XcircuiteSymbolicPlannerSolverFamilyComparator(),
-        promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter = XcircuiteSymbolicPlannerSolverFamilyPromoter()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        qualifier: XcircuiteSymbolicPlannerSolverQualifier? = nil,
+        comparator: XcircuiteSymbolicPlannerSolverFamilyComparator? = nil,
+        promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter? = nil
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
@@ -27,8 +27,21 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         request: XcircuiteSymbolicPlannerSolverFamilyBatchRequest,
         projectRoot: URL
     ) async throws -> XcircuiteSymbolicPlannerSolverFamilyBatchResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        try XcircuiteIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
+        let workspaceStore = self.workspaceStore
+        let qualifier = qualifier ?? XcircuiteSymbolicPlannerSolverQualifier(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore
+        )
+        let comparator = comparator ?? XcircuiteSymbolicPlannerSolverFamilyComparator(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore
+        )
+        let promoter = promoter ?? XcircuiteSymbolicPlannerSolverFamilyPromoter(
+            workspaceStore: workspaceStore,
+            artifactStore: artifactStore
+        )
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        try FlowIdentifierValidator().validate(request.comparisonID, kind: .artifactID)
         guard !request.candidates.isEmpty else {
             throw XcircuiteSymbolicPlannerSolverError.emptySolverFamilyComparison
         }
@@ -46,27 +59,24 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
                 request: candidate.qualificationRequest(runID: request.runID),
                 projectRoot: projectRoot
             )
-            let solverPlanArtifact = try snapshotSolverPlanIfAvailable(
+            let solverPlanArtifact = try await snapshotSolverPlanIfAvailable(
                 qualification: &qualification,
                 comparisonID: request.comparisonID,
                 candidateID: candidateID,
                 projectRoot: projectRoot
             )
-            let nativeCertificateArtifact = try snapshotNativeCertificateIfAvailable(
+            let nativeCertificateArtifact = try await snapshotNativeCertificateIfAvailable(
                 qualification: &qualification,
                 comparisonID: request.comparisonID,
                 candidateID: candidateID,
                 projectRoot: projectRoot
             )
-            let qualificationArtifact = try requireFoundationArtifactReference(
-                artifactStore.persistSymbolicPlannerSolverFamilyQualification(
-                qualification,
-                runID: request.runID,
-                comparisonID: request.comparisonID,
-                candidateID: candidateID,
-                projectRoot: projectRoot
-                ),
-                field: "solverFamily.qualificationArtifact"
+            let qualificationArtifact = try await artifactStore.persistSymbolicPlannerSolverFamilyQualification(
+            qualification,
+            runID: request.runID,
+            comparisonID: request.comparisonID,
+            candidateID: candidateID,
+            projectRoot: projectRoot
             )
             qualification = qualification.attachingQualificationArtifact(qualificationArtifact)
             candidateResults.append(
@@ -83,11 +93,11 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
             )
         }
 
-        let comparisonResult = try comparator.compare(
+        let comparisonResult = try await comparator.compare(
             request: XcircuiteSymbolicPlannerSolverFamilyComparisonRequest(
                 runID: request.runID,
                 comparisonID: request.comparisonID,
-                qualificationArtifactIDs: candidateResults.compactMap(\.qualificationArtifact.artifactID),
+                qualificationArtifactIDs: candidateResults.map(\.qualificationArtifact.artifactID),
                 selectionPolicy: request.selectionPolicy
             ),
             projectRoot: projectRoot
@@ -96,7 +106,8 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
             request: request,
             comparisonArtifact: comparisonResult.comparisonArtifact,
             projectRoot: projectRoot,
-            diagnostics: &diagnostics
+            diagnostics: &diagnostics,
+            promoter: promoter
         )
         let batchRun = XcircuiteSymbolicPlannerSolverFamilyBatchRun(
             status: batchStatus(
@@ -115,17 +126,14 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
             promotionArtifact: promotionResult?.promotionArtifact,
             diagnostics: diagnostics
         )
-        let batchArtifact = try artifactStore.persistSymbolicPlannerSolverFamilyBatch(
+        let batchArtifact = try await artifactStore.persistSymbolicPlannerSolverFamilyBatch(
             batchRun,
             runID: request.runID,
             projectRoot: projectRoot
         )
         return XcircuiteSymbolicPlannerSolverFamilyBatchResult(
             batchRun: batchRun,
-            batchArtifact: try requireFoundationArtifactReference(
-                batchArtifact,
-                field: "solverFamily.batchArtifact"
-            ),
+            batchArtifact: batchArtifact,
             comparisonResult: comparisonResult,
             promotionResult: promotionResult
         )
@@ -136,34 +144,25 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         comparisonID: String,
         candidateID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference? {
-        let solverPlanArtifact: ArtifactReference
-        if let artifact = qualification.solverResult.solverPlanArtifact {
-            solverPlanArtifact = artifact
-        } else if let legacyArtifact = qualification.solverResult.importResult?.solverPlanArtifact {
-            solverPlanArtifact = legacyArtifact
-        } else {
+    ) async throws -> ArtifactReference? {
+        guard let solverPlanArtifact = qualification.solverResult.solverPlanArtifact else {
             return nil
         }
-        let solverPlanURL = try url(for: solverPlanArtifact.path, projectRoot: projectRoot)
+        let solverPlanURL = try await url(for: solverPlanArtifact.path)
         let solverPlanText = try String(contentsOf: solverPlanURL, encoding: .utf8)
-        let snapshot = try artifactStore.persistSymbolicPlannerSolverFamilySolverPlan(
+        let snapshot = try await artifactStore.persistSymbolicPlannerSolverFamilySolverPlan(
             solverPlanText,
             runID: qualification.runID,
             comparisonID: comparisonID,
             candidateID: candidateID,
             projectRoot: projectRoot
         )
-        let foundationSnapshot = try requireFoundationArtifactReference(
-            snapshot,
-            field: "solverFamily.solverPlanArtifact"
-        )
-        qualification.solverResult.solverPlanArtifact = foundationSnapshot
+        qualification.solverResult.solverPlanArtifact = snapshot
         if var importResult = qualification.solverResult.importResult {
-            importResult.solverPlanArtifact = foundationSnapshot
+            importResult.solverPlanArtifact = snapshot
             qualification.solverResult.importResult = importResult
         }
-        return foundationSnapshot
+        return snapshot
     }
 
     private func snapshotNativeCertificateIfAvailable(
@@ -171,30 +170,27 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         comparisonID: String,
         candidateID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference? {
+    ) async throws -> ArtifactReference? {
         guard let nativeCertificate = qualification.nativeCertificate else {
             return nil
         }
-        let snapshot = try artifactStore.persistSymbolicPlannerSolverFamilyCertificate(
+        let snapshot = try await artifactStore.persistSymbolicPlannerSolverFamilyCertificate(
             nativeCertificate,
             runID: qualification.runID,
             comparisonID: comparisonID,
             candidateID: candidateID,
             projectRoot: projectRoot
         )
-        let foundationSnapshot = try requireFoundationArtifactReference(
-            snapshot,
-            field: "solverFamily.nativeCertificateArtifact"
-        )
-        qualification.nativeCertificateArtifact = foundationSnapshot
-        return foundationSnapshot
+        qualification.nativeCertificateArtifact = snapshot
+        return snapshot
     }
 
     private func promoteIfRequested(
         request: XcircuiteSymbolicPlannerSolverFamilyBatchRequest,
         comparisonArtifact: ArtifactReference,
         projectRoot: URL,
-        diagnostics: inout [XcircuiteSymbolicPlannerSolverDiagnostic]
+        diagnostics: inout [XcircuiteSymbolicPlannerSolverDiagnostic],
+        promoter: XcircuiteSymbolicPlannerSolverFamilyPromoter
     ) async throws -> XcircuiteSymbolicPlannerSolverFamilyPromotionResult? {
         guard request.promoteSelectedPlan else {
             return nil
@@ -254,14 +250,14 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         let trimmed = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "-._"))
         let suffix = trimmed.isEmpty ? "solver" : trimmed
         let candidateID = String("candidate-\(index)-\(suffix)".prefix(96))
-        try XcircuiteIdentifierValidator().validate(candidateID, kind: .artifactID)
+        try FlowIdentifierValidator().validate(candidateID, kind: .artifactID)
         return candidateID
     }
 
     private func validateCandidates(
         _ candidates: [XcircuiteSymbolicPlannerSolverFamilyBatchCandidateRequest]
     ) throws {
-        let validator = XcircuiteIdentifierValidator()
+        let validator = FlowIdentifierValidator()
         var toolIDs: Set<String> = []
         for (index, candidate) in candidates.enumerated() {
             if let candidateID = candidate.candidateID {
@@ -331,7 +327,7 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         _ value: String?,
         field: String,
         index: Int,
-        validator: XcircuiteIdentifierValidator
+        validator: FlowIdentifierValidator
     ) throws {
         guard let value else { return }
         do {
@@ -356,10 +352,10 @@ public struct XcircuiteSymbolicPlannerSolverFamilyBatchRunner: Sendable {
         }
     }
 
-    private func url(for path: String, projectRoot: URL) throws -> URL {
+    private func url(for path: String) async throws -> URL {
         if path.hasPrefix("/") {
             return URL(filePath: path)
         }
-        return try workspaceStore.url(forProjectRelativePath: path, inProjectAt: projectRoot)
+        return try await workspaceStore.url(for: path)
     }
 }

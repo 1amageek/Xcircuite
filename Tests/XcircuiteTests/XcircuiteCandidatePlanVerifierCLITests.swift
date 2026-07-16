@@ -13,8 +13,13 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord() async throws {
         let root = try makeTemporaryRoot("candidate-plan-verify-cli")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        _ = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        _ = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
             projectRoot: root
         )
@@ -46,10 +51,9 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.nextActions.contains("unblock-verification-gate:native-drc"))
         #expect(result.nextActions.contains("unblock-verification-gate:native-lvs"))
 
-        let store = XcircuiteWorkspaceStore()
-        let verification = try store.readJSON(
+        let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
-            from: root.appending(path: result.planVerificationArtifact.path)
+            from: result.planVerificationArtifact.path
         )
         #expect(verification.candidatePlanRef.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID)
         #expect(verification.artifactRefs.contains {
@@ -111,7 +115,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(correctnessGates["feedback-closure"] == "passed")
         #expect(verification.accepted == false)
 
-        let actions = try store.loadRunActions(runID: "run-1", inProjectAt: root)
+        let actions = try await store.loadRunActions(runID: "run-1")
         let action = try #require(actions.last)
         #expect(action.actionKind == "planning.verify-candidate-plan")
         #expect(action.status == .blocked)
@@ -121,11 +125,8 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(action.diagnostics.contains { $0.code == "unbound-operation-input-refs" })
         #expect(action.diagnostics.contains { $0.code == "unproven-operation-preconditions" })
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
-        #expect(manifest.artifacts.contains {
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        #expect(ledger.runManifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
         })
     }
@@ -133,8 +134,13 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func verifyCandidatePlanCLIRejectsTamperedCandidatePlanBeforeUse() async throws {
         let root = try makeTemporaryRoot("candidate-plan-verify-cli-tampered-plan")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        let generation = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        let generation = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
             projectRoot: root
         )
@@ -165,36 +171,36 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func runSelectedSuggestedCommandDispatchesReadyVerifyCandidatePlan() async throws {
         let root = try makeTemporaryRoot("selected-command-verify-cli")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        _ = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        _ = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
             projectRoot: root
         )
-        try XcircuiteWorkspaceStore().appendRunAction(
-            XcircuiteRunActionRecord(
+        try await store.appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-verify",
                 runID: "run-1",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("verify-candidate-plan"),
-                    "nextActionKind": .string("verifyPlanningCorrectness"),
-                    "commandID": .string("xcircuite-flow.verify-candidate-plan"),
-                    "readiness": .string("ready"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("verify-candidate-plan"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-1"),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Run preflight candidate-plan verification."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "verify-candidate-plan",
+                    nextActionKind: "verifyPlanningCorrectness",
+                    commandID: "xcircuite-flow.verify-candidate-plan",
+                    readiness: "ready",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "verify-candidate-plan", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-1", "--pretty",
+                    ],
+                    reason: "Run preflight candidate-plan verification."
+                ))
             ),
-            inProjectAt: root
         )
 
         let json = try await XcircuiteFlowCLICommand.run(
@@ -210,15 +216,16 @@ extension XcircuiteCandidatePlanVerifierTests {
         let result = try JSONDecoder().decode(XcircuiteCandidatePlanVerificationResult.self, from: data)
 
         #expect(result.planVerificationArtifact.artifactID == XcircuitePlanningArtifactStore.planVerificationArtifactID)
-        let actions = try XcircuiteWorkspaceStore().loadRunActions(runID: "run-1", inProjectAt: root)
+        let actions = try await XcircuiteWorkspaceStore(projectRoot: root).loadRunActions(runID: "run-1")
         #expect(actions.contains { $0.actionKind == "planning.verify-candidate-plan" })
     }
 
     @Test func runSelectedSuggestedCommandDispatchesFeedbackAwareCandidatePlanGeneration() async throws {
         let root = try makeTemporaryRoot("selected-command-feedback-plan-cli")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await XcircuitePlanningArtifactStore(workspaceStore: store).appendRejectedPlan(
             XcircuiteRejectedPlanRecord(
                 rejectionID: "rejection-1",
                 runID: "run-1",
@@ -229,13 +236,13 @@ extension XcircuiteCandidatePlanVerifierTests {
                 sourceParameterCandidateIDs: [],
                 failedStepIDs: ["step-1"],
                 failedGateIDs: ["native-drc"],
-                candidatePlanRef: XcircuiteFileReference(
+                candidatePlanRef: try fixtureArtifactReference(
                     artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                     path: ".xcircuite/runs/run-1/planning/candidate-plan.json",
                     kind: .other,
                     format: .json
                 ),
-                planVerificationRef: XcircuiteFileReference(
+                planVerificationRef: try fixtureArtifactReference(
                     artifactID: XcircuitePlanningArtifactStore.planVerificationArtifactID,
                     path: ".xcircuite/runs/run-1/planning/plan-verification.json",
                     kind: .other,
@@ -255,33 +262,27 @@ extension XcircuiteCandidatePlanVerifierTests {
             runID: "run-1",
             projectRoot: root
         )
-        try XcircuiteWorkspaceStore().appendRunAction(
-            XcircuiteRunActionRecord(
+        try await XcircuiteWorkspaceStore(projectRoot: root).appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-generate-with-feedback",
                 runID: "run-1",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("regenerate-candidate-plan-with-feedback"),
-                    "nextActionKind": .string("regenerateCandidatePlanWithFeedback"),
-                    "commandID": .string("xcircuite-flow.generate-candidate-plan.with-rejected-feedback"),
-                    "readiness": .string("ready"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("generate-candidate-plan"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-1"),
-                        .string("--rejected-plans-artifact-id"),
-                        .string(XcircuitePlanningArtifactStore.rejectedPlansArtifactID),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Regenerate planning/candidate-plan.json using feedback."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "regenerate-candidate-plan-with-feedback",
+                    nextActionKind: "regenerateCandidatePlanWithFeedback",
+                    commandID: "xcircuite-flow.generate-candidate-plan.with-rejected-feedback",
+                    readiness: "ready",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "generate-candidate-plan", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-1", "--rejected-plans-artifact-id",
+                        XcircuitePlanningArtifactStore.rejectedPlansArtifactID, "--pretty",
+                    ],
+                    reason: "Regenerate planning/candidate-plan.json using feedback."
+                ))
             ),
-            inProjectAt: root
         )
 
         let json = try await XcircuiteFlowCLICommand.run(
@@ -306,32 +307,27 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func runSelectedSuggestedCommandRejectsInputDependentSelection() async throws {
         let root = try makeTemporaryRoot("selected-command-requires-input")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuiteWorkspaceStore().appendRunAction(
-            XcircuiteRunActionRecord(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        try await XcircuiteWorkspaceStore(projectRoot: root).appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-requires-input",
                 runID: "run-1",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("repair-planning-problem-goals"),
-                    "nextActionKind": .string("repairPlanningCorrectness"),
-                    "commandID": .string("xcircuite-flow.validate-planning-problem.after-goal-edit"),
-                    "readiness": .string("requiresInput"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("validate-planning-problem"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-1"),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Edit planning/problem.json goal atoms first."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "repair-planning-problem-goals",
+                    nextActionKind: "repairPlanningCorrectness",
+                    commandID: "xcircuite-flow.validate-planning-problem.after-goal-edit",
+                    readiness: "requiresInput",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "validate-planning-problem", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-1", "--pretty",
+                    ],
+                    reason: "Edit planning/problem.json goal atoms first."
+                ))
             ),
-            inProjectAt: root
         )
 
         await #expect(throws: XcircuiteFlowCLIError.self) {
@@ -350,34 +346,27 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func runSelectedSuggestedCommandRejectsRepeatedRunIDOverride() async throws {
         let root = try makeTemporaryRoot("selected-command-run-id-override")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuiteWorkspaceStore().appendRunAction(
-            XcircuiteRunActionRecord(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        try await XcircuiteWorkspaceStore(projectRoot: root).appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-verify-overridden-run",
                 runID: "run-1",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("verify-candidate-plan"),
-                    "nextActionKind": .string("verifyPlanningCorrectness"),
-                    "commandID": .string("xcircuite-flow.verify-candidate-plan.override"),
-                    "readiness": .string("ready"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("verify-candidate-plan"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-1"),
-                        .string("--run-id"),
-                        .string("other-run"),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Reject repeated run ID overrides before dispatch."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "verify-candidate-plan",
+                    nextActionKind: "verifyPlanningCorrectness",
+                    commandID: "xcircuite-flow.verify-candidate-plan.override",
+                    readiness: "ready",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "verify-candidate-plan", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-1", "--run-id", "other-run", "--pretty",
+                    ],
+                    reason: "Reject repeated run ID overrides before dispatch."
+                ))
             ),
-            inProjectAt: root
         )
 
         do {
@@ -405,34 +394,27 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func runSelectedSuggestedCommandRejectsAbsoluteArtifactPath() async throws {
         let root = try makeTemporaryRoot("selected-command-absolute-artifact-path")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuiteWorkspaceStore().appendRunAction(
-            XcircuiteRunActionRecord(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        try await XcircuiteWorkspaceStore(projectRoot: root).appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-audit-absolute-path",
                 runID: "run-1",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("audit-problem-translation"),
-                    "nextActionKind": .string("auditProblemTranslation"),
-                    "commandID": .string("xcircuite-flow.audit-problem-translation.absolute-path"),
-                    "readiness": .string("ready"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("audit-problem-translation"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-1"),
-                        .string("--problem-path"),
-                        .string("/tmp/outside-planning-problem.json"),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Reject selected commands that point outside retained artifacts."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "audit-problem-translation",
+                    nextActionKind: "auditProblemTranslation",
+                    commandID: "xcircuite-flow.audit-problem-translation.absolute-path",
+                    readiness: "ready",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "audit-problem-translation", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-1", "--problem-path", "/tmp/outside-planning-problem.json", "--pretty",
+                    ],
+                    reason: "Reject selected commands that point outside retained artifacts."
+                ))
             ),
-            inProjectAt: root
         )
 
         do {
@@ -460,34 +442,27 @@ extension XcircuiteCandidatePlanVerifierTests {
     @Test func runSelectedSuggestedCommandDispatchesSolverFamilyComparison() async throws {
         let root = try makeTemporaryRoot("selected-command-solver-family-comparison")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        try XcircuiteWorkspaceStore().appendRunAction(
-            XcircuiteRunActionRecord(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        try await XcircuiteWorkspaceStore(projectRoot: root).appendRunAction(
+            FlowRunActionRecord(
                 actionID: "selection-solver-family-comparison",
                 runID: "run-1",
-                actor: XcircuiteRunActionActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: XcircuiteSuggestedCommandSelection.actionKind,
+                actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+                actionKind: FlowSuggestedCommandSelection.actionKind,
                 status: .succeeded,
-                metadata: [
-                    "nextActionID": .string("compare-symbolic-planner-solver-family"),
-                    "nextActionKind": .string("compareSymbolicPlannerSolverFamily"),
-                    "commandID": .string("xcircuite-flow.compare-symbolic-planner-solver-family"),
-                    "readiness": .string("ready"),
-                    "executable": .string("xcircuite-flow"),
-                    "arguments": .array([
-                        .string("compare-symbolic-planner-solver-family"),
-                        .string("--project-root"),
-                        .string(root.path(percentEncoded: false)),
-                        .string("--run-id"),
-                        .string("run-1"),
-                        .string("--comparison-id"),
-                        .string("selected-comparison"),
-                        .string("--pretty"),
-                    ]),
-                    "reason": .string("Dispatch an allowlisted solver-family comparison command."),
-                ]
+                context: FlowRunActionContext(suggestedCommand: .init(
+                    nextActionID: "compare-symbolic-planner-solver-family",
+                    nextActionKind: "compareSymbolicPlannerSolverFamily",
+                    commandID: "xcircuite-flow.compare-symbolic-planner-solver-family",
+                    readiness: "ready",
+                    executable: "xcircuite-flow",
+                    arguments: [
+                        "compare-symbolic-planner-solver-family", "--project-root", root.path(percentEncoded: false),
+                        "--run-id", "run-1", "--comparison-id", "selected-comparison", "--pretty",
+                    ],
+                    reason: "Dispatch an allowlisted solver-family comparison command."
+                ))
             ),
-            inProjectAt: root
         )
 
         do {

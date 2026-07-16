@@ -7,12 +7,14 @@ public enum XcircuiteFlowRuntimeFactory {
         descriptors: [ToolDescriptor],
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],
+        projectRoot: URL,
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil
-    ) -> XcircuiteFlowRuntime {
-        XcircuiteFlowRuntime(
+    ) throws -> XcircuiteFlowRuntime {
+        try XcircuiteFlowRuntime(
             descriptors: descriptors,
             healthResults: healthResults,
             executors: executors,
+            workspaceStore: XcircuiteWorkspaceStore(projectRoot: projectRoot),
             toolchainProfile: toolchainProfile
         )
     }
@@ -20,17 +22,19 @@ public enum XcircuiteFlowRuntimeFactory {
     public static func makeHealthyInProcessRuntime(
         executors: [any FlowStageExecutor],
         descriptors: [ToolDescriptor],
+        projectRoot: URL,
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil
-    ) -> XcircuiteFlowRuntime {
+    ) throws -> XcircuiteFlowRuntime {
         let healthResults = Dictionary(
             uniqueKeysWithValues: descriptors.map {
                 ($0.toolID, ToolHealthCheckResult(toolID: $0.toolID, status: .passed))
             }
         )
-        return XcircuiteFlowRuntime(
+        return try XcircuiteFlowRuntime(
             descriptors: descriptors,
             healthResults: healthResults,
             executors: executors,
+            workspaceStore: XcircuiteWorkspaceStore(projectRoot: projectRoot),
             toolchainProfile: toolchainProfile
         )
     }

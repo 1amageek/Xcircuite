@@ -107,30 +107,33 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let rawDirectory = context.runDirectory
                 .appending(path: "stages")
                 .appending(path: stage.stageID)
                 .appending(path: "raw")
-            try context.storage.ensureDirectory(at: rawDirectory)
-            try context.checkCancellation()
+            try FileManager.default.createDirectory(
+                at: rawDirectory,
+                withIntermediateDirectories: true
+            )
+            try await context.checkCancellation()
 
             let request = try preparedRequest(
                 context: context,
                 workingDirectory: rawDirectory
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let executionResult = try await engine.run(
                 request,
                 cancellationCheck: FlowExecutionCancellationProbe.make(context: context)
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
             let persistedSummary = try persistSummaryArtifact(
                 from: executionResult,
                 projectRoot: context.projectRoot
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
             var artifacts = try artifactReferences(
                 from: executionResult,
                 summaryURL: persistedSummary.url,
@@ -138,7 +141,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             )
             let gateStatus = gateStatus(from: executionResult.result)
             let flowDiagnostics = executionResult.result.diagnostics.map(flowDiagnostic)
-            let envelopeArtifact = try DRCSummaryEnvelopeBuilder().envelopeReference(
+            let envelopeArtifact = try await DRCSummaryEnvelopeBuilder().envelopeReference(
                 summary: persistedSummary.summary,
                 summaryArtifactID: "drc-summary",
                 stageArtifacts: artifacts,
@@ -203,7 +206,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             switch error {
             case .cancelled:
                 do {
-                    try context.checkCancellation()
+                    try await context.checkCancellation()
                 } catch let cancellationError as FlowRunCancellationError {
                     throw cancellationError
                 }
@@ -273,8 +276,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stage.stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stage.stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private func artifactReferences(

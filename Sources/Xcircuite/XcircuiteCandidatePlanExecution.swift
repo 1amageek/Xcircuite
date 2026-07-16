@@ -10,11 +10,11 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
     public var problemID: String
     public var planID: String
     public var status: String
-    public var candidatePlanRef: XcircuiteFileReference
+    public var candidatePlanRef: ArtifactReference
     public var stepResults: [XcircuiteCandidatePlanExecutionStepResult]
     public var artifactReferences: [ArtifactReference]
     public var executionCoverage: XcircuiteCandidatePlanExecutionCoverage
-    public var designDiffRef: XcircuiteFileReference?
+    public var designDiffRef: ArtifactReference?
     public var diagnostics: [XcircuitePlanVerificationDiagnostic]
     public var nextActions: [String]
 
@@ -23,7 +23,7 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
         problemID: String,
         planID: String,
         status: String,
-        candidatePlanRef: XcircuiteFileReference,
+        candidatePlanRef: ArtifactReference,
         stepResults: [XcircuiteCandidatePlanExecutionStepResult],
         artifactReferences: [ArtifactReference],
         executionCoverage: XcircuiteCandidatePlanExecutionCoverage = XcircuiteCandidatePlanExecutionCoverage(
@@ -34,7 +34,7 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
             familyCoverage: [],
             producedArtifactIDs: []
         ),
-        designDiffRef: XcircuiteFileReference? = nil,
+        designDiffRef: ArtifactReference? = nil,
         diagnostics: [XcircuitePlanVerificationDiagnostic],
         nextActions: [String]
     ) {
@@ -82,7 +82,7 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
         self.problemID = try container.decode(String.self, forKey: .problemID)
         self.planID = try container.decode(String.self, forKey: .planID)
         self.status = try container.decode(String.self, forKey: .status)
-        self.candidatePlanRef = try container.decode(XcircuiteFileReference.self, forKey: .candidatePlanRef)
+        self.candidatePlanRef = try container.decode(ArtifactReference.self, forKey: .candidatePlanRef)
         self.stepResults = try container.decode(
             [XcircuiteCandidatePlanExecutionStepResult].self,
             forKey: .stepResults
@@ -95,7 +95,7 @@ public struct XcircuiteCandidatePlanExecution: Codable, Sendable, Hashable {
             XcircuiteCandidatePlanExecutionCoverage.self,
             forKey: .executionCoverage
         )
-        self.designDiffRef = try container.decodeIfPresent(XcircuiteFileReference.self, forKey: .designDiffRef)
+        self.designDiffRef = try container.decodeIfPresent(ArtifactReference.self, forKey: .designDiffRef)
         self.diagnostics = try container.decode([XcircuitePlanVerificationDiagnostic].self, forKey: .diagnostics)
         self.nextActions = try container.decode([String].self, forKey: .nextActions)
     }

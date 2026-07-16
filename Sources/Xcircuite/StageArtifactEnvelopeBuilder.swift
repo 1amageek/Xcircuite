@@ -13,12 +13,12 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
 
-        return try summaryEnvelopeReference(
+        return try await summaryEnvelopeReference(
             summaryArtifact: summaryArtifact,
             stageArtifacts: stageArtifacts,
             domain: domain,
@@ -41,15 +41,15 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         stageID: String,
         toolID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         let artifactID = summaryArtifact.artifactID
 
-        let envelope = XcircuiteArtifactEnvelope(
+        let envelope = FlowArtifactEnvelope(
             artifactID: artifactID,
             role: "\(domain)-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: XcircuiteArtifactProducer(
+            producer: FlowArtifactProducer(
                 producerID: toolID,
                 toolID: toolID
             ),
@@ -73,66 +73,56 @@ struct StageArtifactEnvelopeBuilder: Sendable {
                 gateStatus: gateStatus,
                 diagnostics: diagnostics,
                 hasQualifiedEvidence: hasQualifiedEvidence(context: context, toolID: toolID)
-            ),
-            metadata: [
-                "gateID": .string(gateID),
-                "gateStatus": .string(gateStatus.rawValue),
-                "stageID": .string(stageID),
-                "toolID": .string(toolID),
-            ]
+            )
         )
 
-        return try context.storage.writeArtifactEnvelope(
-            envelope,
-            runID: context.runID,
-            inProjectAt: context.projectRoot
-        )
+        return try await context.persistArtifactEnvelope(envelope)
     }
 
     private func dependencies(
         from artifacts: [ArtifactReference],
         excluding summaryArtifact: ArtifactReference
-    ) -> [XcircuiteArtifactDependency] {
+    ) -> [FlowArtifactDependency] {
         artifacts
             .filter { $0.path != summaryArtifact.path }
             .map { artifact in
-                XcircuiteArtifactDependency(
+                FlowArtifactDependency(
                     artifactID: artifact.artifactID,
                     path: artifact.path,
-                    role: artifact.artifactID ?? artifact.kind.rawValue,
+                    role: artifact.artifactID,
                     required: true
                 )
             }
     }
 
-    private func evaluationSpec(domain: String, artifactID: String) -> XcircuiteEvaluationSpec {
-        XcircuiteEvaluationSpec(
+    private func evaluationSpec(domain: String, artifactID: String) -> FlowEvaluationSpec {
+        FlowEvaluationSpec(
             specID: "\(artifactID)-evaluation-spec",
             objective: "Evaluate \(domain.uppercased()) summary evidence for stage readiness.",
             criteria: [
-                XcircuiteEvaluationCriterion(
+                FlowEvaluationCriterion(
                     criterionID: "\(domain)-gate-status",
                     channelID: "\(domain)-gate-status",
                     comparator: .equal,
-                    target: .string(FlowGateStatus.passed.rawValue)
+                    target: .text(FlowGateStatus.passed.rawValue)
                 ),
-                XcircuiteEvaluationCriterion(
+                FlowEvaluationCriterion(
                     criterionID: "\(domain)-tool-evidence",
                     channelID: "\(domain)-tool-evidence-count",
                     comparator: .greaterThanOrEqual,
-                    target: .number(1),
+                    target: .scalar(1),
                     required: false
                 ),
-                XcircuiteEvaluationCriterion(
+                FlowEvaluationCriterion(
                     criterionID: "\(domain)-calibration",
                     channelID: "\(domain)-qualified-calibration",
                     comparator: .equal,
-                    target: .bool(true),
+                    target: .boolean(true),
                     required: false
                 ),
             ],
             requiredArtifactRoles: ["\(domain)-summary"],
-            confidence: XcircuiteEvidenceConfidence(
+            confidence: FlowEvidenceConfidence(
                 value: 0.5,
                 posteriorVariance: 0.5,
                 calibrated: false
@@ -148,36 +138,36 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         toolEvidenceCount: Int,
         hasQualifiedEvidence: Bool
-    ) -> XcircuiteObservationSet {
-        XcircuiteObservationSet(
+    ) -> FlowObservationSet {
+        FlowObservationSet(
             observationSetID: "\(artifactID)-observations",
             specID: "\(artifactID)-evaluation-spec",
             channels: [
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(domain)-gate-status",
                     status: .observed,
-                    value: .string(gateStatus.rawValue),
+                    value: .text(gateStatus.rawValue),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence),
-                    metadata: ["gateID": .string(gateID)]
+                    context: FlowEvaluationContext(gateID: gateID)
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(domain)-diagnostic-count",
                     status: .observed,
-                    value: .number(Double(diagnostics.count)),
+                    value: .scalar(Double(diagnostics.count)),
                     sourceArtifactIDs: [artifactID],
                     confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence)
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(domain)-tool-evidence-count",
                     status: toolEvidenceCount > 0 ? .observed : .missing,
-                    value: .number(Double(toolEvidenceCount)),
+                    value: .scalar(Double(toolEvidenceCount)),
                     confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence)
                 ),
-                XcircuiteObservationChannel(
+                FlowObservationChannel(
                     channelID: "\(domain)-qualified-calibration",
                     status: hasQualifiedEvidence ? .observed : .uncalibrated,
-                    value: .bool(hasQualifiedEvidence),
+                    value: .boolean(hasQualifiedEvidence),
                     confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence)
                 ),
             ],
@@ -191,8 +181,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         gateStatus: FlowGateStatus,
         diagnostics: [FlowDiagnostic],
         hasQualifiedEvidence: Bool
-    ) -> XcircuiteEvaluationResult {
-        XcircuiteEvaluationResult(
+    ) -> FlowEvaluationResult {
+        FlowEvaluationResult(
             evaluationID: "\(artifactID)-evaluation",
             specID: "\(artifactID)-evaluation-spec",
             status: evaluationStatus(from: gateStatus),
@@ -200,11 +190,11 @@ struct StageArtifactEnvelopeBuilder: Sendable {
             residual: residual(from: gateStatus),
             confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence),
             channelResults: [
-                XcircuiteEvaluationChannelResult(
+                FlowEvaluationChannelResult(
                     criterionID: "\(domain)-gate-status",
                     channelID: "\(domain)-gate-status",
                     status: evaluationStatus(from: gateStatus),
-                    observedValue: .string(gateStatus.rawValue),
+                    observedValue: .text(gateStatus.rawValue),
                     residual: residual(from: gateStatus),
                     likelihood: likelihood(from: gateStatus),
                     confidence: confidence(hasQualifiedEvidence: hasQualifiedEvidence),
@@ -226,11 +216,11 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         artifactID: String,
         gateStatus: FlowGateStatus,
         hasQualifiedEvidence: Bool
-    ) -> [XcircuiteFeedbackSignal] {
+    ) -> [FlowFeedbackSignal] {
         switch gateStatus {
         case .passed, .waived:
             return [
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-continue",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "\(domain)-gate-status",
@@ -244,7 +234,7 @@ struct StageArtifactEnvelopeBuilder: Sendable {
             ]
         case .failed, .incomplete, .blocked:
             return [
-                XcircuiteFeedbackSignal(
+                FlowFeedbackSignal(
                     signalID: "\(artifactID)-repair-routing",
                     sourceEvaluationID: "\(artifactID)-evaluation",
                     channelID: "\(domain)-gate-status",
@@ -261,21 +251,22 @@ struct StageArtifactEnvelopeBuilder: Sendable {
     }
 
     private func hasQualifiedEvidence(context: FlowExecutionContext, toolID: String) -> Bool {
-        context.healthResults[toolID]?.evidence.contains { evidence in
-            evidence.qualification?.qualified == true
-        } == true
+        context.healthResults[toolID]?.evidence.contains(where: { evidence in
+            (evidence.kind == .corpus || evidence.kind == .oracle)
+                && evidence.hasVerifiableArtifactBinding
+        }) == true
     }
 
-    private func confidence(hasQualifiedEvidence: Bool) -> XcircuiteEvidenceConfidence {
+    private func confidence(hasQualifiedEvidence: Bool) -> FlowEvidenceConfidence {
         if hasQualifiedEvidence {
-            return XcircuiteEvidenceConfidence(
+            return FlowEvidenceConfidence(
                 value: 0.8,
                 posteriorVariance: 0.2,
                 calibrationCoefficient: 0.7,
                 calibrated: true
             )
         }
-        return XcircuiteEvidenceConfidence(
+        return FlowEvidenceConfidence(
             value: 0.35,
             posteriorVariance: 0.65,
             calibrationCoefficient: 0,
@@ -283,7 +274,7 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         )
     }
 
-    private func evaluationStatus(from status: FlowGateStatus) -> XcircuiteEvaluationStatus {
+    private func evaluationStatus(from status: FlowGateStatus) -> FlowEvaluationStatus {
         switch status {
         case .passed, .waived:
             .accepted
@@ -328,8 +319,8 @@ struct StageArtifactEnvelopeBuilder: Sendable {
         "\(domain.uppercased()) summary evaluation ended with gate status \(gateStatus.rawValue)."
     }
 
-    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> XcircuiteRunActionDiagnostic {
-        XcircuiteRunActionDiagnostic(
+    private func runActionDiagnostic(_ diagnostic: FlowDiagnostic) -> FlowRunDiagnostic {
+        FlowRunDiagnostic(
             severity: runActionSeverity(diagnostic.severity),
             code: diagnostic.code,
             message: diagnostic.message
@@ -338,7 +329,7 @@ struct StageArtifactEnvelopeBuilder: Sendable {
 
     private func runActionSeverity(
         _ severity: FlowDiagnosticSeverity
-    ) -> XcircuiteRunActionDiagnosticSeverity {
+    ) -> FlowRunDiagnosticSeverity {
         switch severity {
         case .info:
             .info

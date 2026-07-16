@@ -102,7 +102,7 @@ public struct XcircuiteSymbolicPlannerSolverCorpusSuiteSpec: Codable, Sendable, 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1,
+            schemaVersion: try container.decode(Int.self, forKey: .schemaVersion),
             suiteID: try container.decode(String.self, forKey: .suiteID),
             toolID: try container.decodeIfPresent(String.self, forKey: .toolID) ?? "external-symbolic-planner",
             executablePath: try container.decode(String.self, forKey: .executablePath),
@@ -117,5 +117,12 @@ public struct XcircuiteSymbolicPlannerSolverCorpusSuiteSpec: Codable, Sendable, 
             proofCheckerWorkingDirectoryPath: try container.decodeIfPresent(String.self, forKey: .proofCheckerWorkingDirectoryPath),
             cases: try container.decode([XcircuiteSymbolicPlannerSolverCorpusCaseRequest].self, forKey: .cases)
         )
+        guard schemaVersion == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported symbolic planner solver corpus suite schema version: \(schemaVersion)."
+            )
+        }
     }
 }

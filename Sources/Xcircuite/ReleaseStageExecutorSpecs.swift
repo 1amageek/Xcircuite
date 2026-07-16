@@ -2,13 +2,13 @@ import Foundation
 import ToolQualification
 
 public extension XcircuiteFlowStageExecutorSpec {
-    struct ReleaseQualification: Sendable, Hashable, Codable {
+    struct ReleaseAuthorization: Sendable, Hashable, Codable {
         public var stageID: String
         public var requestPath: String
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = "release.qualification",
+            stageID: String = "release.authorization",
             requestPath: String,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
@@ -50,19 +50,4 @@ public extension XcircuiteFlowStageExecutorSpec {
         }
     }
 
-    struct ReleaseProfile: Sendable, Hashable, Codable {
-        public var stageID: String
-        public var requestPath: String
-        public var tool: XcircuiteFlowToolSpec
-
-        public init(
-            stageID: String = "release.profile",
-            requestPath: String,
-            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
-        ) {
-            self.stageID = stageID
-            self.requestPath = requestPath
-            self.tool = tool
-        }
-    }
 }

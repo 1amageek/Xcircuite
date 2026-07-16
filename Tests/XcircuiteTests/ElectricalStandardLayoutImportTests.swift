@@ -7,7 +7,6 @@ import LayoutTech
 import PhysicalDesignCore
 import Testing
 import ToolQualification
-import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("Electrical standard layout import")
@@ -31,6 +30,9 @@ struct ElectricalStandardLayoutImportTests {
             at: fixtureRoot.appending(path: "layer-map.json"),
             to: root.appending(path: "layer-map.json")
         )
+        let runID = "electrical-standard-fixture-run"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: store)
 
         let executor = ElectricalStandardLayoutImportFlowStageExecutor(
             layoutInput: .path("layout.def"),
@@ -47,9 +49,9 @@ struct ElectricalStandardLayoutImportTests {
             ),
             context: FlowExecutionContext(
                 projectRoot: root,
-                runID: "electrical-standard-fixture-run",
-                runDirectory: root.appending(path: "run"),
-                storage: XcircuiteWorkspaceStore(),
+                runID: runID,
+                runDirectory: runDirectory,
+                infrastructure: store,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -59,13 +61,9 @@ struct ElectricalStandardLayoutImportTests {
         let manifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-standard-layout-input-manifest"
         })
-        let manifestURL = try XcircuiteWorkspaceStore().url(
-            forProjectRelativePath: manifestReference.path,
-            inProjectAt: root
-        )
         let manifest = try JSONDecoder().decode(
             ElectricalSignoffInputArtifactManifest.self,
-            from: Data(contentsOf: manifestURL)
+            from: try await store.read(from: manifestReference.path)
         )
         try manifest.validate()
         #expect(manifest.inputArtifacts.count == 3)
@@ -76,13 +74,9 @@ struct ElectricalStandardLayoutImportTests {
         let snapshotReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-standard-physical-snapshot"
         })
-        let snapshotURL = try XcircuiteWorkspaceStore().url(
-            forProjectRelativePath: snapshotReference.path,
-            inProjectAt: root
-        )
         let snapshot = try PhysicalDesignJSONCodec().decode(
             PhysicalDesignSnapshot.self,
-            from: Data(contentsOf: snapshotURL)
+            from: try await store.read(from: snapshotReference.path)
         )
         #expect(snapshot.topCell == "top")
         #expect(snapshot.routes.count == 1)
@@ -104,6 +98,9 @@ struct ElectricalStandardLayoutImportTests {
             at: fixtureRoot.appending(path: "technology.lef"),
             to: root.appending(path: "technology.lef")
         )
+        let runID = "electrical-standard-lef-blocked-run"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: store)
 
         let executor = ElectricalStandardLayoutImportFlowStageExecutor(
             layoutInput: .path("layout.def"),
@@ -119,9 +116,9 @@ struct ElectricalStandardLayoutImportTests {
             ),
             context: FlowExecutionContext(
                 projectRoot: root,
-                runID: "electrical-standard-lef-blocked-run",
-                runDirectory: root.appending(path: "run"),
-                storage: XcircuiteWorkspaceStore(),
+                runID: runID,
+                runDirectory: runDirectory,
+                infrastructure: store,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -138,6 +135,8 @@ struct ElectricalStandardLayoutImportTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try Self.routedDEF.write(to: root.appending(path: "layout.def"), atomically: true, encoding: .utf8)
         let runID = "electrical-standard-layout-run"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runDirectory = try await prepareTestRun(runID: runID, store: store)
         let executor = ElectricalStandardLayoutImportFlowStageExecutor(
             layoutInput: .path("layout.def"),
             layoutFormat: .def,
@@ -152,8 +151,8 @@ struct ElectricalStandardLayoutImportTests {
             context: FlowExecutionContext(
                 projectRoot: root,
                 runID: runID,
-                runDirectory: root.appending(path: "run"),
-                storage: XcircuiteWorkspaceStore(),
+                runDirectory: runDirectory,
+                infrastructure: store,
                 toolRegistry: ToolRegistry(),
                 healthResults: [:]
             )
@@ -163,21 +162,19 @@ struct ElectricalStandardLayoutImportTests {
         let manifestReference = try #require(result.artifacts.first {
             $0.artifactID == "electrical-standard-layout-input-manifest"
         })
-        let manifestURL = try XcircuiteWorkspaceStore().url(
-            forProjectRelativePath: manifestReference.path,
-            inProjectAt: root
-        )
         let manifest = try JSONDecoder().decode(
             ElectricalSignoffInputArtifactManifest.self,
-            from: Data(contentsOf: manifestURL)
+            from: try await store.read(from: manifestReference.path)
         )
         try manifest.validate()
         #expect(manifest.inputArtifacts.count == 1)
         let reference = try #require(result.artifacts.first { $0.artifactID == "electrical-standard-physical-snapshot" })
         #expect(reference.sha256.count == 64)
         #expect(reference.byteCount > 0)
-        let url = try XcircuiteWorkspaceStore().url(forProjectRelativePath: reference.path, inProjectAt: root)
-        let snapshot = try PhysicalDesignJSONCodec().decode(PhysicalDesignSnapshot.self, from: Data(contentsOf: url))
+        let snapshot = try PhysicalDesignJSONCodec().decode(
+            PhysicalDesignSnapshot.self,
+            from: try await store.read(from: reference.path)
+        )
         #expect(snapshot.topCell == "top")
         #expect(snapshot.nets.map { $0.id } == ["VDD"])
         #expect(snapshot.routes.count == 1)
@@ -186,7 +183,7 @@ struct ElectricalStandardLayoutImportTests {
     }
 
     @Test("layout geometry without electrical connectivity is blocked", .timeLimit(.minutes(1)))
-    func blocksUnconnectedGeometry() throws {
+    func blocksUnconnectedGeometry() async throws {
         let top = LayoutCell(
             name: "TOP",
             shapes: [LayoutShape(
@@ -243,6 +240,9 @@ struct ElectricalStandardLayoutImportTests {
                 atomically: true,
                 encoding: .utf8
             )
+            let runID = "electrical-standard-\(extensionName)-run"
+            let store = try XcircuiteWorkspaceStore(projectRoot: root)
+            let runDirectory = try await prepareTestRun(runID: runID, store: store)
 
             let executor = ElectricalStandardLayoutImportFlowStageExecutor(
                 layoutInput: .path("layout.\(extensionName)"),
@@ -259,9 +259,9 @@ struct ElectricalStandardLayoutImportTests {
                 ),
                 context: FlowExecutionContext(
                     projectRoot: root,
-                    runID: "electrical-standard-\(extensionName)-run",
-                    runDirectory: root.appending(path: "run"),
-                    storage: XcircuiteWorkspaceStore(),
+                    runID: runID,
+                    runDirectory: runDirectory,
+                    infrastructure: store,
                     toolRegistry: ToolRegistry(),
                     healthResults: [:]
                 )
@@ -271,13 +271,9 @@ struct ElectricalStandardLayoutImportTests {
             let manifestReference = try #require(result.artifacts.first {
                 $0.artifactID == "electrical-standard-layout-input-manifest"
             })
-            let manifestURL = try XcircuiteWorkspaceStore().url(
-                forProjectRelativePath: manifestReference.path,
-                inProjectAt: root
-            )
             let manifest = try JSONDecoder().decode(
                 ElectricalSignoffInputArtifactManifest.self,
-                from: Data(contentsOf: manifestURL)
+                from: try await store.read(from: manifestReference.path)
             )
             try manifest.validate()
             #expect(manifest.inputArtifacts.count == 2)

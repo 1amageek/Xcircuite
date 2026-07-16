@@ -12,7 +12,7 @@ extension XcircuiteCandidatePlanExecutor {
         try ProjectPathBoundary().relativePath(for: url, projectRoot: projectRoot)
     }
 
-    func runActionSeverity(_ severity: String) -> XcircuiteRunActionDiagnosticSeverity {
+    func runActionSeverity(_ severity: String) -> FlowRunDiagnosticSeverity {
         switch severity {
         case "info":
             return .info

@@ -7,7 +7,7 @@ public struct XcircuiteProblemTranslationAuditResult: Codable, Sendable, Hashabl
     public var problemID: String
     public var problemPath: String
     public var audit: XcircuiteProblemTranslationAudit
-    public var auditArtifact: XcircuiteFileReference
+    public var auditArtifact: ArtifactReference
 
     public init(
         schemaVersion: Int = 1,
@@ -16,7 +16,7 @@ public struct XcircuiteProblemTranslationAuditResult: Codable, Sendable, Hashabl
         problemID: String,
         problemPath: String,
         audit: XcircuiteProblemTranslationAudit,
-        auditArtifact: XcircuiteFileReference
+        auditArtifact: ArtifactReference
     ) {
         self.schemaVersion = schemaVersion
         self.status = status

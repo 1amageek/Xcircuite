@@ -34,7 +34,7 @@ extension XcircuiteCandidatePlanVerifier {
         sourceStepIDs: [String],
         plan: XcircuiteCandidatePlan,
         execution: XcircuiteCandidatePlanExecution,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
         guard let problem = try sourcePlanningProblem(
@@ -93,12 +93,12 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         do {
-            let verificationDirectory = try XcircuiteWorkspace(projectRoot: projectRoot)
+            let verificationDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
                 .runDirectoryURL(for: plan.runID)
                 .appending(path: "planning")
                 .appending(path: "verification")
                 .appending(path: "pex-summary")
-            try workspaceStore.ensureDirectory(at: verificationDirectory)
+            try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
             let executionResult = try await DefaultPEXEngine.withDefaults().run(PEXRunRequest(
                 layoutURL: try url(
                     for: layoutRef,
@@ -131,16 +131,13 @@ extension XcircuiteCandidatePlanVerifier {
                 topNets: executionSpec.topNets
             )
             let summaryURL = verificationDirectory.appending(path: "pex-summary.json")
-            try workspaceStore.writeJSON(summary, to: summaryURL, forProjectAt: projectRoot)
-            let artifacts = try pexSummaryArtifactRefs(
+            try await writeWorkspaceJSON(summary, to: summaryURL, projectRoot: projectRoot)
+            let artifacts = try await retainRunArtifacts(pexSummaryArtifactRefs(
                 summaryURL: summaryURL,
                 executionResult: executionResult,
                 runID: plan.runID,
                 projectRoot: projectRoot
-            )
-            for artifact in artifacts {
-                try workspaceStore.upsertRunArtifact(artifact, runID: plan.runID, inProjectAt: projectRoot)
-            }
+            ), runID: plan.runID, projectRoot: projectRoot)
             let status = pexSummaryGateStatus(
                 runStatus: executionResult.status,
                 completenessStatus: completeness.status
@@ -159,7 +156,7 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     diagnostics: diagnostics
                 ),
-                artifactReferences: try foundationArtifactReferences(artifacts, field: "pex-summary")
+                artifactReferences: artifacts
             )
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
@@ -186,7 +183,7 @@ extension XcircuiteCandidatePlanVerifier {
         executionResult: PEXRunResult,
         runID: String,
         projectRoot: URL
-    ) throws -> [XcircuiteFileReference] {
+    ) throws -> [ArtifactReference] {
         let pexRunDirectory = executionResult.manifestURL.deletingLastPathComponent()
         var artifacts = [
             try artifactBuilder.reference(
@@ -194,16 +191,14 @@ extension XcircuiteCandidatePlanVerifier {
                 projectRoot: projectRoot,
                 artifactID: "planning-pex-manifest",
                 kind: .report,
-                format: .json,
-                producedByRunID: runID
+                format: .json
             ),
             try artifactBuilder.reference(
                 for: summaryURL,
                 projectRoot: projectRoot,
                 artifactID: "planning-pex-summary",
                 kind: .report,
-                format: .json,
-                producedByRunID: runID
+                format: .json
             ),
         ]
 
@@ -217,15 +212,10 @@ extension XcircuiteCandidatePlanVerifier {
                 projectRoot: projectRoot,
                 artifactID: planningPEXArtifactID(for: artifact),
                 kind: pexFileKind(for: artifact.kind),
-                format: pexFileFormat(for: artifact, url: url),
-                producedByRunID: runID
+                format: pexFileFormat(for: artifact, url: url)
             ))
         }
-        let foundationArtifacts = try foundationArtifactReferences(
-            artifacts,
-            field: "pex-summary"
-        )
-        return legacyArtifactReferences(uniqueArtifactReferences(foundationArtifacts))
+        return uniqueArtifactReferences(artifacts)
     }
 
     func pexExecutionSpec(
@@ -302,8 +292,22 @@ extension XcircuiteCandidatePlanVerifier {
         var hint = CandidatePlanPEXInputHint()
         for step in plan.steps.sorted(by: { $0.order < $1.order })
             where step.verificationGates.contains("pex-summary-gate") {
-            if let decoded: CandidatePlanPEXInputHint = try decodedHint("pexInputs", from: step) {
-                hint.merge(decoded)
+            if case .pexInputs(let inputs)? = step.parameterHints["pexInputs"] {
+                hint.merge(CandidatePlanPEXInputHint(
+                    layoutRefID: inputs.layoutReferenceID,
+                    sourceNetlistRefID: inputs.sourceNetlistReferenceID,
+                    technologyRefID: inputs.technologyReferenceID,
+                    topCell: inputs.topCell,
+                    layoutFormat: inputs.layoutFormat,
+                    sourceNetlistFormat: inputs.sourceNetlistFormat,
+                    backendID: inputs.backendID,
+                    allowMockBackend: inputs.allowMockBackend,
+                    executablePath: inputs.executablePath,
+                    environmentOverrides: inputs.environmentOverrides,
+                    cornerIDs: inputs.cornerIDs,
+                    options: inputs.options,
+                    topNets: inputs.topNetCount
+                ))
             }
             var stepHint = CandidatePlanPEXInputHint(
                 layoutRef: stringHint("layoutRef", step: step),
@@ -322,10 +326,10 @@ extension XcircuiteCandidatePlanVerifier {
                 cornerIDs: stringArrayHint("cornerIDs", step: step) ?? stringArrayHint("corners", step: step),
                 topNets: intHint("topNets", step: step)
             )
-            if let options: PEXRunOptions = try decodedHint("pexOptions", from: step) {
+            if case .pexOptions(let options)? = step.parameterHints["pexOptions"] {
                 stepHint.options = options
             }
-            if let environmentOverrides: [String: String] = try decodedHint("pexEnvironmentOverrides", from: step) {
+            if case .pexEnvironmentOverrides(let environmentOverrides)? = step.parameterHints["pexEnvironmentOverrides"] {
                 stepHint.environmentOverrides = environmentOverrides
             }
             hint.merge(stepHint)
@@ -473,7 +477,7 @@ extension XcircuiteCandidatePlanVerifier {
         _ key: String,
         reference: XcircuitePlanningReference?
     ) -> String? {
-        guard case .string(let value) = reference?.metadata[key] else {
+        guard case .text(let value) = reference?.metadata[key] else {
             return nil
         }
         return value
@@ -579,7 +583,7 @@ extension XcircuiteCandidatePlanVerifier {
         return parts.joined(separator: " ")
     }
 
-    func pexFileKind(for kind: PEXArtifactKind) -> XcircuiteFileKind {
+    func pexFileKind(for kind: PEXArtifactKind) -> ArtifactKind {
         switch kind {
         case .layoutInput:
             return .layout
@@ -590,14 +594,14 @@ extension XcircuiteCandidatePlanVerifier {
         case .request, .log, .report, .sourceConnectivityReport:
             return .report
         case .rawOutput, .spefRoundTrip, .spiceBackannotation, .parasiticIR:
-            return .parasitic
+            return .parasitics
         }
     }
 
     func pexFileFormat(
         for artifact: PEXArtifactRecord,
         url: URL
-    ) -> XcircuiteFileFormat {
+    ) -> ArtifactFormat {
         switch artifact.kind {
         case .rawOutput, .spefRoundTrip:
             return .spef
@@ -614,7 +618,7 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func layoutFileFormat(from url: URL) -> XcircuiteFileFormat {
+    func layoutFileFormat(from url: URL) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "oas", "oasis":
             return .oasis
@@ -625,7 +629,7 @@ extension XcircuiteCandidatePlanVerifier {
         }
     }
 
-    func netlistFileFormat(from url: URL) -> XcircuiteFileFormat {
+    func netlistFileFormat(from url: URL) -> ArtifactFormat {
         switch url.pathExtension.lowercased() {
         case "sp", "spi", "cir", "net", "spice":
             return .spice

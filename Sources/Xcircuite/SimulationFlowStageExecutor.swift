@@ -55,14 +55,9 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
-            let rawDirectory = context.runDirectory
-                .appending(path: "stages")
-                .appending(path: stage.stageID)
-                .appending(path: "raw")
-            try context.storage.ensureDirectory(at: rawDirectory)
-            try context.checkCancellation()
+            try await context.checkCancellation()
 
             // The run captures its own input: the netlist is copied in
             // so the stage stays reviewable after the source moves.
@@ -71,29 +66,45 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 runDirectory: context.runDirectory
             )
             let source = try String(contentsOf: resolvedNetlistURL, encoding: .utf8)
-            let netlistCopy = rawDirectory.appending(path: "input-netlist.cir")
-            try context.storage.writeText(source, to: netlistCopy)
-            try context.checkCancellation()
+            let netlistReference = try await context.persistArtifact(
+                Data(source.utf8),
+                artifactID: "simulation-input-netlist",
+                stageID: stageID,
+                fileName: "input-netlist.cir",
+                role: .input,
+                kind: .netlist,
+                format: .spice,
+                mode: .immutable
+            )
+            try await context.checkCancellation()
 
             let outcome = try await engine.run(
                 netlistSource: source,
                 fileName: resolvedNetlistURL.lastPathComponent
             )
-            try context.checkCancellation()
+            try await context.checkCancellation()
 
-            let waveformURL = rawDirectory.appending(path: "waveform.csv")
-            try context.storage.writeText(outcome.waveformCSV, to: waveformURL)
-            let measurementsURL = rawDirectory.appending(path: "measurements.json")
-            try context.storage.writeJSON(
+            let waveformReference = try await context.persistArtifact(
+                Data(outcome.waveformCSV.utf8),
+                artifactID: "simulation-waveform",
+                stageID: stageID,
+                fileName: "waveform.csv",
+                kind: .waveform,
+                format: .csv,
+                mode: .replaceable
+            )
+            let measurementsReference = try await context.persistJSONArtifact(
                 outcome.measurements,
-                to: measurementsURL,
-                forProjectAt: context.projectRoot
+                artifactID: "simulation-measurements",
+                stageID: stageID,
+                fileName: "measurements.json",
+                kind: .measurement,
+                mode: .replaceable
             )
 
             let verdicts = expectationVerdicts(outcome: outcome)
             let diagnostics = verdicts.diagnostics
             let gateStatus = verdicts.gateStatus
-            let summaryURL = rawDirectory.appending(path: "simulation-summary.json")
             let summary = SimulationRunSummaryReport.make(
                 stageID: stage.stageID,
                 toolID: toolID,
@@ -102,38 +113,20 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 gateStatus: gateStatus,
                 diagnostics: diagnostics
             )
-            try context.storage.writeJSON(
+            let summaryReference = try await context.persistJSONArtifact(
                 summary,
-                to: summaryURL,
-                forProjectAt: context.projectRoot
+                artifactID: "simulation-summary",
+                stageID: stageID,
+                fileName: "simulation-summary.json",
+                kind: .report,
+                mode: .replaceable
             )
 
             var artifacts = [
-                try artifactBuilder.reference(
-                    for: netlistCopy,
-                    projectRoot: context.projectRoot,
-                    kind: ArtifactKind.netlist,
-                    format: ArtifactFormat.spice
-                ),
-                try artifactBuilder.reference(
-                    for: waveformURL,
-                    projectRoot: context.projectRoot,
-                    kind: ArtifactKind.waveform,
-                    format: ArtifactFormat.csv
-                ),
-                try artifactBuilder.reference(
-                    for: measurementsURL,
-                    projectRoot: context.projectRoot,
-                    kind: ArtifactKind.measurement,
-                    format: ArtifactFormat.json
-                ),
-                try artifactBuilder.reference(
-                    for: summaryURL,
-                    projectRoot: context.projectRoot,
-                    artifactID: "simulation-summary",
-                    kind: ArtifactKind.report,
-                    format: ArtifactFormat.json
-                ),
+                netlistReference,
+                waveformReference,
+                measurementsReference,
+                summaryReference,
             ]
             let preEnvelopeArtifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: artifacts,
@@ -155,7 +148,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                     artifacts: artifacts
                 )
             }
-            let envelopeArtifact = try SimulationSummaryEnvelopeBuilder().envelopeReference(
+            let envelopeArtifact = try await SimulationSummaryEnvelopeBuilder().envelopeReference(
                 summary: summary,
                 summaryArtifactID: "simulation-summary",
                 stageArtifacts: artifacts,
@@ -303,7 +296,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        let validator = XcircuiteIdentifierValidator()
+        let validator = FlowIdentifierValidator()
         try validator.validate(stage.stageID, kind: .stageID)
         try validator.validate(toolID, kind: .toolID)
     }
@@ -337,6 +330,8 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 return "SIMULATION_INPUT_REFERENCE_MISSING"
             case .invalidInputReference:
                 return "SIMULATION_INPUT_REFERENCE_INVALID"
+            case .invalidConfiguration:
+                return "SIMULATION_RUNTIME_CONFIGURATION_INVALID"
             case .stageMismatch:
                 return "SIMULATION_STAGE_MISMATCH"
             }

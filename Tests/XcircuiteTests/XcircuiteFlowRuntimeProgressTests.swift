@@ -15,8 +15,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeProgressFollowStreamsLayoutDRCLVSPEXStages() async throws {
         let root = try makeTemporaryRoot("runtime-progress-signoff-follow")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -45,7 +45,7 @@ extension XcircuiteFlowRuntimeTests {
                                 technologyInput: .path("tech/process.json")
                             ),
                         ],
-                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                        tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                     )
                 ),
                 .nativeDRC(
@@ -60,7 +60,7 @@ extension XcircuiteFlowRuntimeTests {
                             )
                         ),
                         topCell: "top",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                     )
                 ),
                 .nativeLVS(
@@ -78,7 +78,7 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistPath: "circuits/top.spice",
                         topCell: "top",
                         technologyPath: "tech/process.json",
-                        tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                        tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
                 .mockPEX(
@@ -102,10 +102,15 @@ extension XcircuiteFlowRuntimeTests {
                 ),
             ]
         )
-        let runtime = try spec.makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(spec: spec, projectRoot: root)
         let sink = ProgressEventSink()
+        let progressSubscriber = DefaultFlowRunProgressSubscriber(
+            progressStore: FlowRunProgressStore(
+                persistence: try XcircuiteWorkspaceStore(projectRoot: root)
+            )
+        )
 
-        async let followSnapshot = DefaultFlowRunProgressSubscriber().followProgress(
+        async let followSnapshot = progressSubscriber.followProgress(
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-signoff-follow",
@@ -147,7 +152,6 @@ extension XcircuiteFlowRuntimeTests {
         )
         let snapshot = try await followSnapshot
         let events = await sink.events()
-
         #expect(result.status == .succeeded)
         #expect(result.stages.map(\.stageID) == ["006-layout", "007-drc", "008-lvs", "009-pex"])
         #expect(events.map(\.kind) == [
@@ -177,7 +181,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(snapshot.terminalStatus == .succeeded)
         #expect(snapshot.isTerminal)
 
-        let recovered = try DefaultFlowRunProgressSubscriber().snapshot(
+        let recovered = try await progressSubscriber.snapshot(
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-signoff-follow",
@@ -195,12 +199,13 @@ extension XcircuiteFlowRuntimeTests {
         #expect(recovered.events.first?.stageID == "007-drc")
         #expect(recovered.terminalStatus == .succeeded)
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(
-            runID: "run-progress-signoff-follow",
-            projectRoot: root
-        )
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let ledger = try await workspaceStore.loadRunLedger(runID: "run-progress-signoff-follow")
         #expect(ledger.progressEvents.map(\.sequence) == Array(1...10))
-        let bundle = try DefaultFlowRunReviewBundler().makeReviewBundle(
+        let bundle = try await DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        ).makeReviewBundle(
             runID: "run-progress-signoff-follow",
             projectRoot: root
         )
@@ -222,13 +227,19 @@ extension XcircuiteFlowRuntimeTests {
                 topCell: "TOP"
             )
         }
-        let runtime = QualifiedToolFixtures.runtime(
+        let runtime = try QualifiedToolFixtures.runtime(
             executors: executors,
-            descriptors: [SignoffToolDescriptors.nativeDRC(level: .productionEligible)]
+            descriptors: [SignoffToolDescriptors.nativeDRC(level: .corpusChecked)],
+            projectRoot: root
         )
         let sink = ProgressEventSink()
+        let progressSubscriber = DefaultFlowRunProgressSubscriber(
+            progressStore: FlowRunProgressStore(
+                persistence: try XcircuiteWorkspaceStore(projectRoot: root)
+            )
+        )
 
-        async let followSnapshot = DefaultFlowRunProgressSubscriber().followProgress(
+        async let followSnapshot = progressSubscriber.followProgress(
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-drc-stress",
@@ -278,7 +289,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(snapshot.isTerminal)
 
         let tailCursor = expectedKinds.count - 5
-        let recovered = try DefaultFlowRunProgressSubscriber().snapshot(
+        let recovered = try await progressSubscriber.snapshot(
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-drc-stress",
@@ -289,14 +300,12 @@ extension XcircuiteFlowRuntimeTests {
         #expect(recovered.events.last?.kind == .runFinished)
         #expect(recovered.terminalStatus == .succeeded)
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(
-            runID: "run-progress-drc-stress",
-            projectRoot: root
-        )
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let ledger = try await workspaceStore.loadRunLedger(runID: "run-progress-drc-stress")
         #expect(ledger.progressEvents.map(\.sequence) == expectedSequences)
-        let manifest = try XcircuiteWorkspaceStore().readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-progress-drc-stress/manifest.json")
+        let manifest = try await workspaceStore.readJSON(
+            FlowRunManifest.self,
+            from: ".xcircuite/runs/run-progress-drc-stress/manifest.json"
         )
         let progressArtifact = try #require(manifest.artifacts.first { $0.artifactID == "run-progress" })
         #expect(progressArtifact.path == ".xcircuite/runs/run-progress-drc-stress/progress.jsonl")
@@ -306,8 +315,8 @@ extension XcircuiteFlowRuntimeTests {
     @Test func runtimeProgressFollowStreamsMultiFamilyStressStagesWithoutSequenceGaps() async throws {
         let root = try makeTemporaryRoot("runtime-progress-multifamily-stress")
         defer { removeTemporaryRoot(root) }
-        try writeLayoutCommandRequest(root: root)
-        try writeStandardLayoutTechnology(root: root)
+        try await writeLayoutCommandRequest(root: root)
+        try await writeStandardLayoutTechnology(root: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -358,7 +367,7 @@ extension XcircuiteFlowRuntimeTests {
                             technologyInput: .path("tech/process.json")
                         ),
                     ],
-                    tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                    tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "layout-command")
                 )
             ))
             executors.append(.nativeDRC(
@@ -373,7 +382,7 @@ extension XcircuiteFlowRuntimeTests {
                         )
                     ),
                     topCell: "top",
-                    tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                    tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked)
                 )
             ))
             executors.append(.nativeLVS(
@@ -391,7 +400,7 @@ extension XcircuiteFlowRuntimeTests {
                     schematicNetlistPath: "circuits/top.spice",
                     topCell: "top",
                     technologyPath: "tech/process.json",
-                    tool: QualifiedToolFixtures.toolSpec(level: .productionEligible)
+                    tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                 )
             ))
             executors.append(.mockPEX(
@@ -420,7 +429,7 @@ extension XcircuiteFlowRuntimeTests {
                     expectations: [
                         SimulationMeasurementExpectation(name: "vfinal", target: 1.0, tolerance: 0.01),
                     ],
-                    tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked)
+                    tool: QualifiedToolFixtures.toolSpec(level: .smokeChecked, toolID: "corespice")
                 )
             ))
 
@@ -451,9 +460,17 @@ extension XcircuiteFlowRuntimeTests {
             ))
         }
 
-        let runtime = try XcircuiteFlowRuntimeSpec(executors: executors).makeRuntime(projectRoot: root)
+        let runtime = try QualifiedToolFixtures.runtime(
+            spec: XcircuiteFlowRuntimeSpec(executors: executors),
+            projectRoot: root
+        )
         let sink = ProgressEventSink()
-        async let followSnapshot = DefaultFlowRunProgressSubscriber().followProgress(
+        let progressSubscriber = DefaultFlowRunProgressSubscriber(
+            progressStore: FlowRunProgressStore(
+                persistence: try XcircuiteWorkspaceStore(projectRoot: root)
+            )
+        )
+        async let followSnapshot = progressSubscriber.followProgress(
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-multifamily-stress",
@@ -509,7 +526,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(snapshot.isTerminal)
 
         let tailCursor = expectedKinds.count - 7
-        let recovered = try DefaultFlowRunProgressSubscriber().snapshot(
+        let recovered = try await progressSubscriber.snapshot(
             request: FlowRunProgressSubscriptionRequest(
                 projectRoot: root,
                 runID: "run-progress-multifamily-stress",
@@ -520,19 +537,20 @@ extension XcircuiteFlowRuntimeTests {
         #expect(recovered.events.last?.kind == .runFinished)
         #expect(recovered.terminalStatus == .succeeded)
 
-        let ledger = try FlowRunLedgerLoader().loadRunLedger(
-            runID: "run-progress-multifamily-stress",
-            projectRoot: root
-        )
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        let ledger = try await workspaceStore.loadRunLedger(runID: "run-progress-multifamily-stress")
         #expect(ledger.progressEvents.map(\.sequence) == expectedSequences)
-        let manifest = try XcircuiteWorkspaceStore().readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-progress-multifamily-stress/manifest.json")
+        let manifest = try await workspaceStore.readJSON(
+            FlowRunManifest.self,
+            from: ".xcircuite/runs/run-progress-multifamily-stress/manifest.json"
         )
         let progressArtifact = try #require(manifest.artifacts.first { $0.artifactID == "run-progress" })
         #expect(progressArtifact.path == ".xcircuite/runs/run-progress-multifamily-stress/progress.jsonl")
         #expect((progressArtifact.byteCount ?? 0) > 0)
-        try copyProgressStressArtifactIfRequested(root: root, runID: "run-progress-multifamily-stress")
+        try await copyProgressStressArtifactIfRequested(
+            root: root,
+            runID: "run-progress-multifamily-stress"
+        )
     }
 
 }

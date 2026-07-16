@@ -28,7 +28,7 @@ public struct XcircuiteElectricalRepairRevisionResult: Sendable, Hashable, Codab
     public var schemaVersion: Int
     public var runID: String
     public var selectedCandidateID: String
-    public var repairPlanArtifact: XcircuiteFileReference
+    public var repairPlanArtifact: ArtifactReference
     public var physicalDesignResult: PhysicalDesignResult
     public var digestLineage: DigestLineage
     public var rerunRequired: Bool
@@ -36,7 +36,7 @@ public struct XcircuiteElectricalRepairRevisionResult: Sendable, Hashable, Codab
     public init(
         runID: String,
         selectedCandidateID: String,
-        repairPlanArtifact: XcircuiteFileReference,
+        repairPlanArtifact: ArtifactReference,
         physicalDesignResult: PhysicalDesignResult,
         digestLineage: DigestLineage,
         rerunRequired: Bool = true,

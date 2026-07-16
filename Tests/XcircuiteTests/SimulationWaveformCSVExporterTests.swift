@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Simulation waveform CSV exporter")
 struct SimulationWaveformCSVExporterTests {
-    @Test func exporterRejectsMissingWaveformRows() throws {
+    @Test func exporterRejectsMissingWaveformRows() async throws {
         let waveform = WaveformData(
             metadata: SimulationMetadata(
                 title: "Bad waveform",
@@ -27,7 +27,7 @@ struct SimulationWaveformCSVExporterTests {
         }
     }
 
-    @Test func exporterRejectsMissingWaveformColumns() throws {
+    @Test func exporterRejectsMissingWaveformColumns() async throws {
         let waveform = WaveformData(
             metadata: SimulationMetadata(
                 title: "Bad waveform",
@@ -51,7 +51,7 @@ struct SimulationWaveformCSVExporterTests {
         }
     }
 
-    @Test func exporterWritesRectangularWaveformCSV() throws {
+    @Test func exporterWritesRectangularWaveformCSV() async throws {
         let waveform = WaveformData(
             metadata: SimulationMetadata(
                 title: "Good waveform",
@@ -74,7 +74,7 @@ struct SimulationWaveformCSVExporterTests {
         #expect(csv == "time,V(out)\n0.0,1.0\n1.0,2.0\n")
     }
 
-    @Test func parametricExporterPropagatesValidationFailure() throws {
+    @Test func parametricExporterPropagatesValidationFailure() async throws {
         let waveform = WaveformData(
             metadata: SimulationMetadata(
                 title: "Run waveform",

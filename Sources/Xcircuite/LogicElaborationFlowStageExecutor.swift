@@ -31,7 +31,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let sourceURL = try sourceInput.resolveExisting(
                 projectRoot: context.projectRoot,
@@ -58,28 +58,18 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                 sourceProvider: FileSystemSystemVerilogSourceProvider(root: context.projectRoot)
             )
             let envelope = try await engine.execute(request)
-            try context.checkCancellation()
+            try await context.checkCancellation()
 
             var persistedResult = envelope
             var resultArtifacts = [sourceReference]
             if let snapshot = envelope.payload.snapshot {
-                let directory = context.runDirectory
-                    .appending(path: "stages")
-                    .appending(path: stageID)
-                    .appending(path: "raw")
-                try context.storage.ensureDirectory(at: directory)
-                let snapshotURL = directory.appending(path: "logic-design.json")
-                try context.storage.writeJSON(
+                let snapshotReference = try await context.persistJSONArtifact(
                     snapshot,
-                    to: snapshotURL,
-                    forProjectAt: context.projectRoot
-                )
-                let snapshotReference = try support.artifactBuilder.reference(
-                    for: snapshotURL,
-                    projectRoot: context.projectRoot,
                     artifactID: "logic-design",
+                    stageID: stageID,
+                    fileName: "logic-design.json",
                     kind: ArtifactKind.rtl,
-                    format: ArtifactFormat.json
+                    mode: .replaceable
                 )
                 var payload = persistedResult.payload
                 let designDigest: String
@@ -110,7 +100,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                 )
                 resultArtifacts.append(snapshotReference)
             }
-            let resultArtifact = try support.writeResult(
+            let resultArtifact = try await support.writeResult(
                 persistedResult,
                 stageID: stageID,
                 context: context,

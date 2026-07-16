@@ -74,7 +74,7 @@ extension XcircuiteCandidatePlanGenerator {
         }
     }
 
-    func symbolicStateAtoms(from hints: [String: XcircuiteJSONValue]) -> [String] {
+    func symbolicStateAtoms(from hints: [String: PlanningParameterValue]) -> [String] {
         unique(
             stringArrayValue(for: "symbolicStateAtoms", in: hints)
                 + stringArrayValue(for: "satisfiedPreconditions", in: hints)
@@ -104,17 +104,12 @@ extension XcircuiteCandidatePlanGenerator {
 
     func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let items)? = values[key] else {
+        guard case .textList(let items)? = values[key] else {
             return []
         }
-        return items.compactMap { item in
-            guard case .string(let value) = item else {
-                return nil
-            }
-            return value
-        }
+        return items
     }
 
     func weightedPenalty(

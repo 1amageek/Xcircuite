@@ -1,28 +1,29 @@
 import Foundation
+import CircuiteFoundation
 import DesignFlowKernel
 
 public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func exportSymbolicPlannerProblem(
         request: XcircuiteSymbolicPlannerPDDLExportRequest,
         projectRoot: URL
-    ) throws -> XcircuiteSymbolicPlannerPDDLExportResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let problemReference = try requiredProblemReference(
+    ) async throws -> XcircuiteSymbolicPlannerPDDLExportResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let problemReference = try await requiredProblemReference(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
             manifest: manifest,
@@ -30,9 +31,9 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
             projectRoot: projectRoot
         )
         let problemPath = problemReference.path
-        let problem = try workspaceStore.readJSON(
+        let problem = try await workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: problemPath
         )
         guard problem.runID == request.runID else {
             throw XcircuiteSymbolicPlannerPDDLExportError.runMismatch(
@@ -40,12 +41,17 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
                 actual: problem.runID
             )
         }
-        let translationAuditResult = try XcircuiteProblemTranslationAuditGate().requireFreshNonBlockingAudit(
+        let translationAuditResult = try await XcircuiteProblemTranslationAuditGate(
+            auditor: XcircuiteProblemTranslationAuditor(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
+        ).requireFreshNonBlockingAudit(
             runID: request.runID,
             problemPath: problemPath,
             projectRoot: projectRoot
         )
-        let actionDomainContext = try loadOrPersistActionDomainSnapshot(
+        let actionDomainContext = try await loadOrPersistActionDomainSnapshot(
             explicitPath: request.actionDomainPath,
             artifactID: request.actionDomainArtifactID,
             manifest: manifest,
@@ -57,7 +63,7 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
             problem: problem,
             actionDomainSnapshot: actionDomainContext.snapshot
         )
-        let artifacts = try artifactStore.persistSymbolicPlannerPDDLExport(
+        let artifacts = try await artifactStore.persistSymbolicPlannerPDDLExport(
             export,
             runID: request.runID,
             projectRoot: projectRoot
@@ -69,14 +75,8 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
             domainName: export.domainName,
             problemName: export.problemName,
             problemPath: problemPath,
-            problemTranslationAuditArtifact: try requireFoundationArtifactReference(
-                translationAuditResult.auditArtifact,
-                field: "pddl.problemTranslationAuditArtifact"
-            ),
-            actionDomainSnapshotArtifact: try requireFoundationArtifactReference(
-                actionDomainContext.reference,
-                field: "pddl.actionDomainSnapshotArtifact"
-            ),
+            problemTranslationAuditArtifact: translationAuditResult.auditArtifact,
+            actionDomainSnapshotArtifact: actionDomainContext.reference,
             domainArtifact: artifacts.domainArtifact,
             problemArtifact: artifacts.problemArtifact,
             exportArtifact: artifacts.exportArtifact,
@@ -390,9 +390,9 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
         return (Double(max(1, cost)), "planning-cost-model")
     }
 
-    private func explicitActionCost(from hints: [String: XcircuiteJSONValue]) -> Double? {
+    private func explicitActionCost(from hints: [String: PlanningParameterValue]) -> Double? {
         for key in ["plannerActionCost", "symbolicPlannerCost", "pddlActionCost"] {
-            guard case .number(let value)? = hints[key],
+            guard case .scalar(let value)? = hints[key],
                   value.isFinite,
                   value > 0 else {
                 continue
@@ -434,17 +434,12 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
 
     private func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let items)? = values[key] else {
+        guard case .textList(let items)? = values[key] else {
             return []
         }
-        return items.compactMap { item in
-            guard case .string(let value) = item else {
-                return nil
-            }
-            return value
-        }
+        return items
     }
 
     private func pddlNameMap(
@@ -507,20 +502,20 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
         return result
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func loadOrPersistActionDomainSnapshot(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ActionDomainSnapshotContext {
+    ) async throws -> ActionDomainSnapshotContext {
         let resolved: XcircuiteResolvedActionDomainSnapshot
         do {
-            resolved = try XcircuiteActionDomainSnapshotResolver(
+            resolved = try await XcircuiteActionDomainSnapshotResolver(
                 workspaceStore: workspaceStore,
                 artifactStore: artifactStore
             ).loadExplicitOrDefault(
@@ -547,18 +542,16 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
     private func requiredProblemReference(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) async throws -> ArtifactReference {
         if let explicitPath {
-            let reference = try workspaceStore.fileReference(
+            let reference = try await workspaceStore.makeArtifactReference(
                 forProjectRelativePath: explicitPath,
                 artifactID: artifactID,
                 kind: .other,
-                format: .json,
-                inProjectAt: projectRoot,
-                producedByRunID: runID
+                format: .json
             )
             try validateProblemReferenceShape(reference, field: "planning-problem", runID: runID)
             return reference
@@ -587,7 +580,7 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
     }
 
     private func validateProblemReferenceShape(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         field: String,
         runID: String
     ) throws {
@@ -595,38 +588,31 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
             throw XcircuiteSymbolicPlannerPDDLExportError.invalidArtifactReference(
                 field: field,
                 path: reference.path,
-                reason: "expected file kind \(XcircuiteFileKind.other.rawValue), got \(reference.kind.rawValue)"
+                reason: "expected file kind \(ArtifactKind.other.rawValue), got \(reference.kind.rawValue)"
             )
         }
         guard reference.format == .json else {
             throw XcircuiteSymbolicPlannerPDDLExportError.invalidArtifactReference(
                 field: field,
                 path: reference.path,
-                reason: "expected format \(XcircuiteFileFormat.json.rawValue), got \(reference.format.rawValue)"
-            )
-        }
-        guard reference.producedByRunID == runID else {
-            throw XcircuiteSymbolicPlannerPDDLExportError.invalidArtifactReference(
-                field: field,
-                path: reference.path,
-                reason: "expected producer run \(runID), got \(reference.producedByRunID ?? "nil")"
+                reason: "expected format \(ArtifactFormat.json.rawValue), got \(reference.format.rawValue)"
             )
         }
     }
 
     private func validateArtifactIntegrity(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         field: String,
         projectRoot: URL
     ) throws {
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteSymbolicPlannerPDDLExportError.artifactIntegrityFailed(
                 field: field,
                 artifactID: reference.artifactID,
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }
@@ -640,7 +626,7 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
 
     private struct ActionDomainSnapshotContext {
         var snapshot: XcircuitePlanningActionDomainSnapshot
-        var reference: XcircuiteFileReference
+        var reference: ArtifactReference
     }
 
     private struct AtomRoleAccumulator {

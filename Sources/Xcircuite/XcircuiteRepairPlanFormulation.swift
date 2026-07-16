@@ -9,12 +9,12 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
         public var priority: String
         public var sourceRefIDs: [String]
         public var target: String
-        public var currentValue: XcircuiteJSONValue?
-        public var requiredValue: XcircuiteJSONValue?
+        public var currentValue: PlanningParameterValue?
+        public var requiredValue: PlanningParameterValue?
         public var unit: String?
         public var description: String
         public var symbolicGoalAtoms: [String]
-        public var evidence: [String: XcircuiteJSONValue]
+        public var evidence: [String: PlanningParameterValue]
         public var suggestedActions: [String]
 
         public init(
@@ -24,12 +24,12 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
             priority: String,
             sourceRefIDs: [String],
             target: String,
-            currentValue: XcircuiteJSONValue? = nil,
-            requiredValue: XcircuiteJSONValue? = nil,
+            currentValue: PlanningParameterValue? = nil,
+            requiredValue: PlanningParameterValue? = nil,
             unit: String? = nil,
             description: String,
             symbolicGoalAtoms: [String] = [],
-            evidence: [String: XcircuiteJSONValue] = [:],
+            evidence: [String: PlanningParameterValue] = [:],
             suggestedActions: [String] = []
         ) {
             self.goalID = goalID
@@ -57,7 +57,7 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
         public var sourceGoalIDs: [String]
         public var requiredInputRefs: [String]
         public var verificationGates: [String]
-        public var parameterHints: [String: XcircuiteJSONValue]
+        public var parameterHints: [String: PlanningParameterValue]
 
         public init(
             actionID: String,
@@ -68,7 +68,7 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
             sourceGoalIDs: [String],
             requiredInputRefs: [String],
             verificationGates: [String],
-            parameterHints: [String: XcircuiteJSONValue] = [:]
+            parameterHints: [String: PlanningParameterValue] = [:]
         ) {
             self.actionID = actionID
             self.domainID = domainID
@@ -98,7 +98,7 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
     public var costModel: XcircuitePlanningCostModel?
     public var verificationGates: [XcircuitePlanningVerificationGate]
     public var resumeContract: XcircuitePlanningResumeContract?
-    public var metadata: [String: XcircuiteJSONValue]
+    public var metadata: [String: PlanningParameterValue]
 
     public init(
         schemaVersion: Int = 1,
@@ -117,7 +117,7 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
         costModel: XcircuitePlanningCostModel? = nil,
         verificationGates: [XcircuitePlanningVerificationGate] = [],
         resumeContract: XcircuitePlanningResumeContract? = nil,
-        metadata: [String: XcircuiteJSONValue] = [:]
+        metadata: [String: PlanningParameterValue] = [:]
     ) {
         self.schemaVersion = schemaVersion
         self.formulationID = formulationID

@@ -4,28 +4,28 @@ import DesignFlowKernel
 
 struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
-    func runManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    func runManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     func uniqueManifestArtifact(
         artifactID: String,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
-        manifest: XcircuiteRunManifest,
+        expectedFormat: ArtifactFormat,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) async throws -> ArtifactReference {
         let matches = manifest.artifacts.filter { $0.artifactID == artifactID }
         guard !matches.isEmpty else {
             throw XcircuiteSymbolicPlannerSolverError.artifactNotFound(
@@ -55,17 +55,15 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
         path: String,
         artifactID: String? = nil,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
-        let reference = try workspaceStore.fileReference(
+    ) async throws -> ArtifactReference {
+        let reference = try await workspaceStore.makeArtifactReference(
             forProjectRelativePath: path,
             artifactID: artifactID,
             kind: .other,
-            format: expectedFormat,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
+            format: expectedFormat
         )
         try validateArtifactReferenceShape(
             reference,
@@ -81,64 +79,54 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
         path: String,
         artifactID: String? = nil,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference {
-        try requireFoundationArtifactReference(
-            projectFileReference(
-                path: path,
-                artifactID: artifactID,
-                field: field,
-                expectedFormat: expectedFormat,
-                runID: runID,
-                projectRoot: projectRoot
-            ),
-            field: field
+    ) async throws -> ArtifactReference {
+        try await projectFileReference(
+            path: path,
+            artifactID: artifactID,
+            field: field,
+            expectedFormat: expectedFormat,
+            runID: runID,
+            projectRoot: projectRoot
         )
     }
 
     func uniqueManifestArtifactReference(
         artifactID: String,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
-        manifest: XcircuiteRunManifest,
+        expectedFormat: ArtifactFormat,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ArtifactReference {
-        try requireFoundationArtifactReference(
-            uniqueManifestArtifact(
-                artifactID: artifactID,
-                field: field,
-                expectedFormat: expectedFormat,
-                manifest: manifest,
-                runID: runID,
-                projectRoot: projectRoot
-            ),
-            field: field
+    ) async throws -> ArtifactReference {
+        try await uniqueManifestArtifact(
+            artifactID: artifactID,
+            field: field,
+            expectedFormat: expectedFormat,
+            manifest: manifest,
+            runID: runID,
+            projectRoot: projectRoot
         )
     }
 
     func verifiedArtifactReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) async throws -> ArtifactReference {
         try validateArtifactReferenceShape(
             reference,
             field: field,
             expectedFormat: expectedFormat,
             runID: runID
         )
-        guard let artifactID = reference.artifactID else {
-            try validateArtifactIntegrity(reference, field: field, projectRoot: projectRoot)
-            return reference
-        }
-
-        let manifest = try runManifest(runID: runID, projectRoot: projectRoot)
-        let manifestReference = try uniqueManifestArtifact(
+        let artifactID = reference.artifactID
+        let manifest = try await runManifest(runID: runID)
+        let manifestReference = try await uniqueManifestArtifact(
             artifactID: artifactID,
             field: field,
             expectedFormat: expectedFormat,
@@ -168,9 +156,9 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
     }
 
     private func validateArtifactReferenceShape(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         field: String,
-        expectedFormat: XcircuiteFileFormat,
+        expectedFormat: ArtifactFormat,
         runID: String
     ) throws {
         guard reference.format == expectedFormat else {
@@ -184,38 +172,24 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
             throw XcircuiteSymbolicPlannerSolverError.invalidArtifactReference(
                 field: field,
                 path: reference.path,
-                reason: "expected file kind \(XcircuiteFileKind.other.rawValue), got \(reference.kind.rawValue)"
-            )
-        }
-        guard let producedByRunID = reference.producedByRunID else {
-            throw XcircuiteSymbolicPlannerSolverError.artifactProducerRunMismatch(
-                field: field,
-                expected: runID,
-                actual: nil
-            )
-        }
-        guard producedByRunID == runID else {
-            throw XcircuiteSymbolicPlannerSolverError.artifactProducerRunMismatch(
-                field: field,
-                expected: runID,
-                actual: producedByRunID
+                reason: "expected file kind \(ArtifactKind.other.rawValue), got \(reference.kind.rawValue)"
             )
         }
     }
 
     private func validateArtifactIntegrity(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         field: String,
         projectRoot: URL
     ) throws {
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuiteSymbolicPlannerSolverError.artifactIntegrityFailed(
                 field: field,
                 artifactID: reference.artifactID,
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }

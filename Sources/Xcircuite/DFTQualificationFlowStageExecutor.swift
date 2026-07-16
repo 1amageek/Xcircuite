@@ -1,15 +1,16 @@
-import DFTCore
 import CircuiteFoundation
 import DesignFlowKernel
+import DFTCore
 import Foundation
 import ToolQualification
 
+/// Produces DFT oracle-correlation evidence. Tool acceptance remains a
+/// ToolQualification and DesignFlowKernel responsibility.
 public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let corpusInput: XcircuiteFlowInputReference
     private let observationsInput: XcircuiteFlowInputReference
-    private let qualificationEvidenceInput: XcircuiteFlowInputReference?
     private let processQualificationEvidenceBuildInput: XcircuiteFlowInputReference?
     private let processQualificationEvidenceBuilder: any ToolProcessQualificationEvidenceBuilding
     private let support: LogicEngineStageExecutionSupport
@@ -20,7 +21,6 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
         toolID: String = "dft-qualification",
         corpusInput: XcircuiteFlowInputReference,
         observationsInput: XcircuiteFlowInputReference,
-        qualificationEvidenceInput: XcircuiteFlowInputReference? = nil,
         processQualificationEvidenceBuildInput: XcircuiteFlowInputReference? = nil,
         processQualificationEvidenceBuilder: any ToolProcessQualificationEvidenceBuilding = ToolProcessQualificationEvidenceBuilder()
     ) {
@@ -28,7 +28,6 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.corpusInput = corpusInput
         self.observationsInput = observationsInput
-        self.qualificationEvidenceInput = qualificationEvidenceInput
         self.processQualificationEvidenceBuildInput = processQualificationEvidenceBuildInput
         self.processQualificationEvidenceBuilder = processQualificationEvidenceBuilder
         self.support = LogicEngineStageExecutionSupport()
@@ -40,7 +39,7 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
 
             let corpusURL = try corpusInput.resolveExisting(
@@ -53,224 +52,133 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
             )
             let corpus = try decode(corpusURL, as: DFTOracleCorpus.self)
             let observations = try decode(observationsURL, as: [DFTOracleCaseObservation].self)
-            let sourceArtifacts = [
-                try reference(
-                    for: corpusURL,
-                    artifactID: "dft-oracle-corpus",
-                    kind: .report,
-                    context: context
-                ),
-                try reference(
-                    for: observationsURL,
-                    artifactID: "dft-oracle-observations",
-                    kind: .report,
-                    context: context
-                ),
+            var artifacts = [
+                try reference(for: corpusURL, artifactID: "dft-oracle-corpus", kind: .report, context: context),
+                try reference(for: observationsURL, artifactID: "dft-oracle-observations", kind: .report, context: context),
             ]
 
-            let loader = FileSystemDFTOracleArtifactLoader(rootURL: context.projectRoot)
             let correlation = try await DFTOracleCorrelationEngine(
-                artifactLoader: loader
-            ).correlate(
-                corpus: corpus,
-                observations: observations
-            )
-
-            var artifacts = sourceArtifacts
-            var qualificationEvidence: DFTQualificationEvidence?
-            if let qualificationEvidenceInput {
-                let evidenceURL = try qualificationEvidenceInput.resolveExisting(
-                    projectRoot: context.projectRoot,
-                    runDirectory: context.runDirectory
-                )
-                qualificationEvidence = try decode(
-                    evidenceURL,
-                    as: DFTQualificationEvidence.self
-                )
-                artifacts.append(
-                    try reference(
-                        for: evidenceURL,
-                        artifactID: "dft-qualification-evidence",
-                        kind: .release,
-                        context: context
-                    )
-                )
-            }
-
-            let correlationStatus = correlation.status
-            let correlationDiagnostics = correlation.diagnostics.map { message in
-                FlowDiagnostic(
-                    severity: .error,
-                    code: "DFT_ORACLE_CORRELATION_MISMATCH",
-                    message: message
-                )
-            }
-
-            if correlationStatus != .correlated {
-                return try persistBlocked(
-                    correlation: correlation,
-                    diagnostics: correlationDiagnostics + [
-                        FlowDiagnostic(
-                            severity: .error,
-                            code: correlationStatus == .incomplete
-                                ? "DFT_QUALIFICATION_CORRELATION_INCOMPLETE"
-                                : "DFT_QUALIFICATION_CORRELATION_FAILED",
-                            message: correlationStatus == .incomplete
-                                ? "Every retained DFT oracle case must have a native observation."
-                                : "Native DFT results do not match every retained oracle case."
-                        ),
-                    ],
-                    artifacts: artifacts,
-                    context: context
-                )
-            }
-
-            guard let qualificationEvidence else {
-                return try persistBlocked(
-                    correlation: correlation,
-                    diagnostics: [
-                        FlowDiagnostic(
-                            severity: .error,
-                            code: "DFT_QUALIFICATION_APPROVAL_REQUIRED",
-                            message: "Correlated DFT results require process qualification evidence and an approver."
-                        ),
-                    ],
-                    artifacts: artifacts,
-                    context: context
-                )
-            }
-
-            guard qualificationEvidence.oracleEvidenceDigest == correlation.oracleEvidenceDigest else {
-                return try persistBlocked(
-                    correlation: correlation,
-                    diagnostics: [
-                        FlowDiagnostic(
-                            severity: .error,
-                            code: "DFT_QUALIFICATION_EVIDENCE_DIGEST_MISMATCH",
-                            message: "Qualification evidence does not identify the current oracle correlation result."
-                        ),
-                    ],
-                    artifacts: artifacts,
-                    context: context
-                )
-            }
-
-            var provenance = try DFTQualificationGate().evaluate(
-                qualificationEvidence,
-                expectedProcessID: corpus.processID,
-                expectedPDKDigest: corpus.pdkDigest
-            )
-            provenance.requestDigests = corpus.cases.map(\.requestDigest).sorted()
-            let provenanceArtifact = try persist(
-                provenance,
-                fileName: "dft-qualification-provenance.json",
-                artifactID: "dft-qualification-provenance",
-                kind: .release,
+                artifactLoader: FileSystemDFTOracleArtifactLoader(rootURL: context.projectRoot)
+            ).correlate(corpus: corpus, observations: observations)
+            let correlationArtifact = try await persist(
+                correlation,
+                fileName: "dft-oracle-correlation.json",
+                artifactID: "dft-oracle-correlation",
+                kind: .report,
                 context: context
             )
-            artifacts.append(provenanceArtifact)
+            artifacts.append(correlationArtifact)
+
+            guard correlation.status == .correlated else {
+                let diagnostics = correlation.diagnostics.map {
+                    FlowDiagnostic(
+                        severity: .error,
+                        code: "DFT_ORACLE_CORRELATION_MISMATCH",
+                        message: $0
+                    )
+                } + [
+                    FlowDiagnostic(
+                        severity: .error,
+                        code: correlation.status == .incomplete
+                            ? "DFT_QUALIFICATION_CORRELATION_INCOMPLETE"
+                            : "DFT_QUALIFICATION_CORRELATION_FAILED",
+                        message: correlation.status == .incomplete
+                            ? "Every retained DFT oracle case must have a native observation."
+                            : "Native DFT results do not match every retained oracle case."
+                    ),
+                ]
+                return blocked(diagnostics: diagnostics, artifacts: artifacts)
+            }
+
+            let provenance = DFTEvidenceProvenance(
+                status: .oracleCorrelated,
+                corpusRevision: corpus.revision,
+                oracleEvidence: correlation.oracleEvidenceDigest,
+                processID: corpus.processID,
+                pdkDigest: corpus.pdkDigest,
+                requestDigests: corpus.cases.map(\.requestDigest)
+            )
+            artifacts.append(
+                try await persist(
+                    provenance,
+                    fileName: "dft-evidence-provenance.json",
+                    artifactID: "dft-evidence-provenance",
+                    kind: .report,
+                    context: context
+                )
+            )
 
             if let processQualificationEvidenceBuildInput {
                 let buildURL = try processQualificationEvidenceBuildInput.resolveExisting(
                     projectRoot: context.projectRoot,
                     runDirectory: context.runDirectory
                 )
-                let buildRequest = try decode(
-                    buildURL,
-                    as: ToolProcessQualificationEvidenceBuildRequest.self
-                )
-                let buildRequestArtifact = try reference(
-                    for: buildURL,
-                    artifactID: "dft-process-qualification-build-request",
-                    kind: .request,
-                    context: context
-                )
-                let verifier = LocalArtifactVerifier()
-                for artifact in buildRequest.evidenceArtifacts {
-                    let integrity = verifier.verify(
-                        artifact,
-                        relativeTo: context.projectRoot
-                    )
-                    guard integrity.isVerified else {
-                        throw DFTQualificationError.invalidEvidence(
-                            "process evidence artifact \(artifact.path) is not verified: \(integrity.issues)"
-                        )
-                    }
-                }
-                let processEvidence = try processQualificationEvidenceBuilder.build(
+                let buildRequest = try decode(buildURL, as: ToolProcessQualificationEvidenceBuildRequest.self)
+                let reader = LocalToolQualificationArtifactReader(workspaceRoot: context.projectRoot)
+                let processEvidence = try await processQualificationEvidenceBuilder.build(
                     buildRequest,
+                    reading: reader,
                     at: Date()
                 )
-                let processEvidenceArtifact = try persist(
-                    processEvidence,
-                    fileName: "dft-process-qualification-evidence.json",
-                    artifactID: "dft-process-qualification-evidence",
-                    kind: .release,
-                    context: context
+                artifacts.append(
+                    try reference(
+                        for: buildURL,
+                        artifactID: "dft-process-qualification-build-request",
+                        kind: .request,
+                        context: context
+                    )
                 )
-                artifacts.append(buildRequestArtifact)
-                artifacts.append(contentsOf: buildRequest.evidenceArtifacts)
-                artifacts.append(processEvidenceArtifact)
+                artifacts.append(
+                    try await persist(
+                        processEvidence,
+                        fileName: "dft-process-qualification-evidence.json",
+                        artifactID: "dft-process-qualification-evidence",
+                        kind: .release,
+                        context: context
+                    )
+                )
             }
 
-            let resultArtifact = try persist(
-                correlation,
-                fileName: "dft-qualification-result.json",
-                artifactID: "dft-qualification-result",
-                kind: .report,
-                context: context
-            )
             return FlowStageResult(
                 stageID: stageID,
                 status: .succeeded,
-                diagnostics: [],
-                gates: [FlowGateResult(gateID: "dft-qualification", status: .passed, diagnostics: [])],
-                artifacts: artifacts + [resultArtifact]
+                gates: [FlowGateResult(gateID: "dft-oracle-correlation", status: .passed)],
+                artifacts: artifacts
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch let error as DFTOracleCorrelationError {
             return support.failure(
                 stageID: stageID,
-                gateID: "dft-qualification",
+                gateID: "dft-oracle-correlation",
                 code: "DFT_QUALIFICATION_CORPUS_INVALID",
                 message: error.localizedDescription
             )
         } catch let error as DFTOracleArtifactError {
             return support.failure(
                 stageID: stageID,
-                gateID: "dft-qualification",
+                gateID: "dft-oracle-correlation",
                 code: "DFT_QUALIFICATION_ORACLE_ARTIFACT_INVALID",
                 message: error.localizedDescription
             )
         } catch let error as ToolProcessQualificationEvidenceBuildError {
             return support.blocked(
                 stageID: stageID,
-                gateID: "dft-qualification",
+                gateID: "dft-oracle-correlation",
                 code: "DFT_QUALIFICATION_PROCESS_EVIDENCE_INVALID",
-                message: error.localizedDescription
-            )
-        } catch let error as DFTQualificationError {
-            return support.blocked(
-                stageID: stageID,
-                gateID: "dft-qualification",
-                code: "DFT_QUALIFICATION_EVIDENCE_INVALID",
                 message: error.localizedDescription
             )
         } catch {
             return support.failure(
                 stageID: stageID,
-                gateID: "dft-qualification",
+                gateID: "dft-oracle-correlation",
                 code: "DFT_QUALIFICATION_EXECUTION_ERROR",
                 message: error.localizedDescription
             )
         }
     }
 
-    private func decode<Value: Decodable>(
-        _ url: URL,
-        as type: Value.Type
-    ) throws -> Value {
+    private func decode<Value: Decodable>(_ url: URL, as type: Value.Type) throws -> Value {
         try JSONDecoder().decode(Value.self, from: Data(contentsOf: url))
     }
 
@@ -285,7 +193,7 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
             projectRoot: context.projectRoot,
             artifactID: artifactID,
             kind: kind,
-            format: ArtifactFormat.json
+            format: .json
         )
     }
 
@@ -295,41 +203,33 @@ public struct DFTQualificationFlowStageExecutor: FlowStageExecutor {
         artifactID: String,
         kind: ArtifactKind,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let directory = context.runDirectory
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try context.storage.ensureDirectory(at: directory)
-        let url = directory.appending(path: fileName)
-        try context.storage.writeJSON(value, to: url, forProjectAt: context.projectRoot)
-        return try reference(
-            for: url,
+    ) async throws -> ArtifactReference {
+        try await context.persistJSONArtifact(
+            value,
             artifactID: artifactID,
-            kind: kind,
-            context: context
+            stageID: stageID,
+            fileName: fileName,
+            role: .output,
+            kind: kind
         )
     }
 
-    private func persistBlocked(
-        correlation: DFTOracleCorrelationResult,
+    private func blocked(
         diagnostics: [FlowDiagnostic],
-        artifacts: [ArtifactReference],
-        context: FlowExecutionContext
-    ) throws -> FlowStageResult {
-        let resultArtifact = try persist(
-            correlation,
-            fileName: "dft-qualification-result.json",
-            artifactID: "dft-qualification-result",
-            kind: .report,
-            context: context
-        )
-        return FlowStageResult(
+        artifacts: [ArtifactReference]
+    ) -> FlowStageResult {
+        FlowStageResult(
             stageID: stageID,
             status: .blocked,
             diagnostics: diagnostics,
-            gates: [FlowGateResult(gateID: "dft-qualification", status: .blocked, diagnostics: diagnostics)],
-            artifacts: artifacts + [resultArtifact]
+            gates: [
+                FlowGateResult(
+                    gateID: "dft-oracle-correlation",
+                    status: .blocked,
+                    diagnostics: diagnostics
+                ),
+            ],
+            artifacts: artifacts
         )
     }
 }

@@ -5,32 +5,14 @@ import RTLVerificationCore
 import RTLVerificationEngine
 import Testing
 import ToolQualification
-import DesignFlowKernel
 @testable import Xcircuite
 
 @Suite("RTL verification flow stage")
 struct RTLVerificationFlowStageExecutorTests {
     @Test("native lint persists a headless stage artifact", .timeLimit(.minutes(1)))
     func nativeLintStage() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appending(path: "rtl-verification-stage-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
-        let rtlURL = projectRoot.appending(path: "top.sv")
-        let source = "module top(input logic a, output logic q); assign q = a; endmodule"
-        try source.write(to: rtlURL, atomically: true, encoding: .utf8)
-        let runDirectory = projectRoot
-            .appending(path: ".xcircuite")
-            .appending(path: "runs")
-            .appending(path: "rtl-stage-run")
-        try workspaceStore.ensureDirectory(at: runDirectory)
-
-        let context = FlowExecutionContext(
-            projectRoot: projectRoot,
+        let (_, context) = try await makeRTLStageFixture(
             runID: "rtl-stage-run",
-            runDirectory: runDirectory,
-            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -47,32 +29,15 @@ struct RTLVerificationFlowStageExecutorTests {
         #expect(result.status == .succeeded)
         #expect(result.gates.first?.status == .passed)
         #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-result" })
-        #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-report" })
-        #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-qualification" })
+        #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-evidence-assessment" })
         #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-review" })
         #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-audit" })
     }
 
     @Test("same request resumes from an auditable stage result", .timeLimit(.minutes(1)))
     func resumesSameRequest() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appending(path: "rtl-verification-resume-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
-        let rtlURL = projectRoot.appending(path: "top.sv")
-        try "module top(input logic a, output logic q); assign q = a; endmodule"
-            .write(to: rtlURL, atomically: true, encoding: .utf8)
-        let runDirectory = projectRoot
-            .appending(path: ".xcircuite")
-            .appending(path: "runs")
-            .appending(path: "rtl-resume-run")
-        try workspaceStore.ensureDirectory(at: runDirectory)
-        let context = FlowExecutionContext(
-            projectRoot: projectRoot,
+        let (_, context) = try await makeRTLStageFixture(
             runID: "rtl-resume-run",
-            runDirectory: runDirectory,
-            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -96,23 +61,8 @@ struct RTLVerificationFlowStageExecutorTests {
 
     @Test("external tool stages block when qualification evidence is missing", .timeLimit(.minutes(1)))
     func missingExternalQualificationBlocksBeforeExecution() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appending(path: "rtl-verification-tool-gate-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
-        try "module top(input logic a, output logic q); assign q = a; endmodule"
-            .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
-        let runDirectory = projectRoot
-            .appending(path: ".xcircuite")
-            .appending(path: "runs")
-            .appending(path: "rtl-tool-gate-run")
-        try workspaceStore.ensureDirectory(at: runDirectory)
-        let context = FlowExecutionContext(
-            projectRoot: projectRoot,
+        let (_, context) = try await makeRTLStageFixture(
             runID: "rtl-tool-gate-run",
-            runDirectory: runDirectory,
-            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
@@ -137,39 +87,24 @@ struct RTLVerificationFlowStageExecutorTests {
         #expect(await counter.calls() == 0)
     }
 
-    @Test("qualification input is passed into the typed RTL request", .timeLimit(.minutes(1)))
-    func qualificationInputIsPassedIntoRequest() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appending(path: "rtl-verification-qualification-input-(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
-        try "module top(input logic a, output logic q); assign q = a; endmodule"
-            .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
-        let qualificationInput = RTLVerificationQualificationInput()
-        try JSONEncoder().encode(qualificationInput)
-            .write(to: projectRoot.appending(path: "qualification.json"))
-        let runDirectory = projectRoot
-            .appending(path: ".xcircuite")
-            .appending(path: "runs")
-            .appending(path: "rtl-qualification-input-run")
-        try workspaceStore.ensureDirectory(at: runDirectory)
-        let context = FlowExecutionContext(
-            projectRoot: projectRoot,
-            runID: "rtl-qualification-input-run",
-            runDirectory: runDirectory,
-            storage: workspaceStore,
+    @Test("evidence input is passed into the typed RTL request", .timeLimit(.minutes(1)))
+    func evidenceInputIsPassedIntoRequest() async throws {
+        let (projectRoot, context) = try await makeRTLStageFixture(
+            runID: "rtl-evidence-input-run",
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
-        let capture = QualificationRequestCapture()
+        let evidenceInput = RTLVerificationEvidenceInput()
+        try JSONEncoder().encode(evidenceInput)
+            .write(to: projectRoot.appending(path: "evidence.json"))
+        let capture = EvidenceRequestCapture()
         let executor = RTLVerificationFlowStageExecutor(
             stageID: "rtl.lint",
             analysis: .lint,
             rtlInput: .path("top.sv"),
-            qualificationInput: .path("qualification.json"),
+            evidenceInput: .path("evidence.json"),
             topModuleName: "top",
-            engine: QualificationCaptureEngine(capture: capture)
+            engine: EvidenceCaptureEngine(capture: capture)
         )
 
         let result = try await executor.execute(
@@ -179,62 +114,78 @@ struct RTLVerificationFlowStageExecutorTests {
         let request = try #require(await capture.request())
 
         #expect(result.status == .succeeded)
-        #expect(request.qualificationInput == qualificationInput)
-        #expect(request.inputs.contains { $0.artifactID == "rtl-qualification-input" })
+        #expect(request.evidenceInput == evidenceInput)
+        #expect(request.inputs.contains { $0.artifactID == "rtl-evidence-input" })
     }
 
-    @Test("qualification artifact integrity blocks before engine execution", .timeLimit(.minutes(1)))
-    func qualificationArtifactIntegrityBlocksBeforeEngine() async throws {
-        let projectRoot = FileManager.default.temporaryDirectory
-            .appending(path: "rtl-verification-qualification-integrity-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-        let workspaceStore = XcircuiteWorkspaceStore()
-        try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
-        try "module top(input logic a, output logic q); assign q = a; endmodule"
-            .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
-
-        let retainedPath = projectRoot.appending(path: "qualification/process.json")
-        let retainedData = Data("retained-process-evidence".utf8)
-        try FileManager.default.createDirectory(
-            at: retainedPath.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try retainedData.write(to: retainedPath)
-        let retainedArtifact = XcircuiteFileReference(
-            artifactID: "process-artifact",
-            path: "qualification/process.json",
-            kind: .report,
-            format: .json,
-            sha256: XcircuiteHasher().sha256(data: retainedData),
-            byteCount: Int64(retainedData.count)
-        )
-        let qualificationInput = RTLVerificationQualificationInput(
-            processEvidence: [try makeProcessEvidence(artifact: retainedArtifact)]
-        )
-        let qualificationURL = projectRoot.appending(path: "qualification.json")
-        try JSONEncoder().encode(qualificationInput).write(to: qualificationURL)
-        try Data("tampered-process-evidence".utf8).write(to: retainedPath)
-
-        let runID = "rtl-qualification-integrity-run"
-        let runDirectory = projectRoot
-            .appending(path: ".xcircuite")
-            .appending(path: "runs")
-            .appending(path: runID)
-        try workspaceStore.ensureDirectory(at: runDirectory)
-        let context = FlowExecutionContext(
-            projectRoot: projectRoot,
+    @Test("evidence artifact integrity blocks before engine execution", .timeLimit(.minutes(1)))
+    func evidenceArtifactIntegrityBlocksBeforeEngine() async throws {
+        let runID = "rtl-evidence-integrity-run"
+        let (projectRoot, context) = try await makeRTLStageFixture(
             runID: runID,
-            runDirectory: runDirectory,
-            storage: workspaceStore,
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
+        let nativePath = projectRoot.appending(path: "evidence/native.json")
+        let oraclePath = projectRoot.appending(path: "evidence/oracle.json")
+        let nativeData = Data("native-evidence".utf8)
+        let oracleData = Data("oracle-evidence".utf8)
+        try FileManager.default.createDirectory(
+            at: nativePath.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try nativeData.write(to: nativePath)
+        try oracleData.write(to: oraclePath)
+        let nativeArtifact = try fixtureArtifactReference(
+            artifactID: "native-evidence",
+            path: "evidence/native.json",
+            kind: .report,
+            format: .json,
+            sha256: try fixtureSHA256(data: nativeData),
+            byteCount: nativeData.count
+        )
+        let oracleArtifact = try fixtureArtifactReference(
+            artifactID: "oracle-evidence",
+            path: "evidence/oracle.json",
+            kind: .report,
+            format: .json,
+            sha256: try fixtureSHA256(data: oracleData),
+            byteCount: oracleData.count
+        )
+        let requestDigest = String(repeating: "d", count: 64)
+        let report = RTLVerificationOracleCorrelationReport(
+            caseID: "rtl.lint",
+            nativeImplementationID: "native-rtl-verification",
+            oracleImplementationID: "independent-rtl-oracle",
+            nativeImplementationVersion: "1.0.0",
+            oracleImplementationVersion: "1.0.0",
+            independenceVerified: true,
+            matched: true
+        )
+        let evidenceInput = RTLVerificationEvidenceInput(
+            oracleReports: [report],
+            oracleEvidence: [RTLVerificationOracleEvidence(
+                evidenceID: "rtl-oracle-evidence",
+                caseID: "rtl.lint",
+                requestDigest: requestDigest,
+                nativePayloadRequestDigest: requestDigest,
+                oraclePayloadRequestDigest: requestDigest,
+                nativeArtifact: nativeArtifact,
+                oracleArtifact: oracleArtifact,
+                report: report,
+                oracleProvenance: "fixture"
+            )]
+        )
+        try JSONEncoder().encode(evidenceInput)
+            .write(to: projectRoot.appending(path: "evidence.json"))
+        try Data("tampered-native-evidence".utf8).write(to: nativePath)
+
         let counter = ResumeExecutionCounter()
         let executor = RTLVerificationFlowStageExecutor(
             stageID: "rtl.lint",
             analysis: .lint,
             rtlInput: .path("top.sv"),
-            qualificationInput: .path("qualification.json"),
+            evidenceInput: .path("evidence.json"),
             topModuleName: "top",
             engine: ResumeVerificationEngine(counter: counter)
         )
@@ -260,46 +211,47 @@ struct RTLVerificationFlowStageExecutorTests {
             proofView: .rtlToRtlStructural,
             level: .oracleChecked
         )
-        descriptor.trustProfile.evidence = QualifiedToolFixtures.evidenceSupporting(level: .oracleChecked)
-        let toolRegistry = try ToolRegistry(validating: [descriptor])
-        var health = QualifiedToolFixtures.health(
-            toolID: oracleToolID,
-            level: .oracleChecked
+        descriptor.trustProfile.evidence = QualifiedToolFixtures.evidenceSupporting(
+            level: .oracleChecked,
+            toolID: oracleToolID
         )
-        health.evidence.append(ToolEvidence(
-            evidenceID: "health-\(oracleToolID)",
-            kind: .healthCheck,
-            checkedAt: Date()
-        ))
-        let (projectRoot, context) = try makeRTLStageFixture(
+        let toolRegistry = try ToolRegistry(validating: [descriptor])
+        let health = oracleHealthResult(toolID: oracleToolID)
+        let (projectRoot, context) = try await makeRTLStageFixture(
             runID: "rtl-oracle-run",
             toolRegistry: toolRegistry,
-            healthResults: [oracleToolID: health]
+            healthResults: [oracleToolID: health],
+            qualifiedDescriptors: [descriptor]
         )
         let counter = ResumeExecutionCounter()
+        let corpusEvidenceURL = projectRoot.appending(path: "oracle-corpus-evidence.json")
+        try JSONEncoder().encode(RTLVerificationEvidenceInput(
+            corpusEvaluations: [RTLVerificationCorpusEvaluation(
+                caseID: "rtl.lint",
+                matched: true,
+                observedStatus: .completed,
+                observedFindingCodes: [],
+                mismatches: []
+            )]
+        )).write(to: corpusEvidenceURL, options: .atomic)
         let externalDescriptor = RTLExternalToolDescriptor(
             toolID: oracleToolID,
             executablePath: "/tmp/independent-rtl-oracle",
             version: "1.0.0",
             supportedAnalyses: [.lint],
-            supportedProofViews: [.rtlToRtlStructural],
-            qualified: true,
-            qualification: RTLVerificationQualificationReport(
-                implementationID: oracleToolID,
-                implementationVersion: "1.0.0",
-                state: .oracleCorrelated,
-                blockers: []
-            )
+            supportedProofViews: [.rtlToRtlStructural]
         )
         let executor = RTLVerificationFlowStageExecutor(
             stageID: "rtl.lint",
             analysis: .lint,
             rtlInput: .path("top.sv"),
+            evidenceInput: .path("oracle-corpus-evidence.json"),
             topModuleName: "top",
             engine: OracleNativeVerificationEngine(counter: counter),
             oracleToolID: oracleToolID,
             oracleExecutor: ExternalRTLVerificationOracleExecutor(
                 descriptor: externalDescriptor,
+                trustDecision: ToolTrustDecision(toolID: oracleToolID, status: .eligible),
                 runner: FixtureOracleProcessRunner(
                     toolID: oracleToolID,
                     analyzedConstructs: 1
@@ -310,6 +262,8 @@ struct RTLVerificationFlowStageExecutorTests {
 
         let first = try await executor.execute(stage: stage, context: context)
         let second = try await executor.execute(stage: stage, context: context)
+        #expect(first.status == .succeeded, "First execution diagnostics: \(first.diagnostics)")
+        #expect(second.status == .succeeded, "Resume diagnostics: \(second.diagnostics)")
         let resultURL = projectRoot
             .appending(path: ".xcircuite")
             .appending(path: "runs")
@@ -323,12 +277,10 @@ struct RTLVerificationFlowStageExecutorTests {
             from: Data(contentsOf: resultURL)
         )
 
-        #expect(first.status == .succeeded)
-        #expect(second.status == .succeeded)
         #expect(await counter.calls() == 1)
         #expect(envelope.artifacts.contains { $0.artifactID == "oracle-rtl.lint-evidence" })
-        #expect(envelope.payload.qualification.evidence.contains { $0.kind == .oracleCorrelation })
-        #expect(envelope.payload.qualification.blockers.contains("independent_corpus_validation_required"))
+        #expect(envelope.payload.record.evidence.contains { $0.kind == .oracleCorrelation })
+        #expect(envelope.payload.record.maturity == .oracleCorrelated)
     }
 
     @Test("oracle semantic coverage mismatch blocks the stage", .timeLimit(.minutes(1)))
@@ -342,32 +294,24 @@ struct RTLVerificationFlowStageExecutorTests {
             proofView: .rtlToRtlStructural,
             level: .oracleChecked
         )
-        descriptor.trustProfile.evidence = QualifiedToolFixtures.evidenceSupporting(level: .oracleChecked)
-        var health = QualifiedToolFixtures.health(toolID: oracleToolID, level: .oracleChecked)
-        health.evidence.append(ToolEvidence(
-            evidenceID: "health-\(oracleToolID)",
-            kind: .healthCheck,
-            checkedAt: Date()
-        ))
+        descriptor.trustProfile.evidence = QualifiedToolFixtures.evidenceSupporting(
+            level: .oracleChecked,
+            toolID: oracleToolID
+        )
+        let health = oracleHealthResult(toolID: oracleToolID)
         let toolRegistry = try ToolRegistry(validating: [descriptor])
-        let (projectRoot, context) = try makeRTLStageFixture(
+        let (projectRoot, context) = try await makeRTLStageFixture(
             runID: "rtl-oracle-mismatch-run",
             toolRegistry: toolRegistry,
-            healthResults: [oracleToolID: health]
+            healthResults: [oracleToolID: health],
+            qualifiedDescriptors: [descriptor]
         )
         let externalDescriptor = RTLExternalToolDescriptor(
             toolID: oracleToolID,
             executablePath: "/tmp/diverging-rtl-oracle",
             version: "1.0.0",
             supportedAnalyses: [.lint],
-            supportedProofViews: [.rtlToRtlStructural],
-            qualified: true,
-            qualification: RTLVerificationQualificationReport(
-                implementationID: oracleToolID,
-                implementationVersion: "1.0.0",
-                state: .oracleCorrelated,
-                blockers: []
-            )
+            supportedProofViews: [.rtlToRtlStructural]
         )
         let executor = RTLVerificationFlowStageExecutor(
             stageID: "rtl.lint",
@@ -378,6 +322,7 @@ struct RTLVerificationFlowStageExecutorTests {
             oracleToolID: oracleToolID,
             oracleExecutor: ExternalRTLVerificationOracleExecutor(
                 descriptor: externalDescriptor,
+                trustDecision: ToolTrustDecision(toolID: oracleToolID, status: .eligible),
                 runner: FixtureOracleProcessRunner(
                     toolID: oracleToolID,
                     analyzedConstructs: 0
@@ -395,7 +340,7 @@ struct RTLVerificationFlowStageExecutorTests {
             .appending(path: "rtl-oracle-mismatch-run")
             .appending(path: "oracle-rtl.lint-evidence.json")
 
-        #expect(result.status == .blocked)
+        #expect(result.status == .blocked, "Oracle mismatch diagnostics: \(result.diagnostics)")
         #expect(result.diagnostics.contains { $0.code == "RTL_ORACLE_CORRELATION_FAILED" })
         #expect(FileManager.default.fileExists(atPath: evidenceURL.path))
     }
@@ -404,64 +349,37 @@ struct RTLVerificationFlowStageExecutorTests {
 private func makeRTLStageFixture(
     runID: String,
     toolRegistry: ToolRegistry,
-    healthResults: [String: ToolHealthCheckResult]
-) throws -> (projectRoot: URL, context: FlowExecutionContext) {
+    healthResults: [String: ToolHealthCheckResult],
+    qualifiedDescriptors: [ToolDescriptor] = []
+) async throws -> (projectRoot: URL, context: FlowExecutionContext) {
     let projectRoot = FileManager.default.temporaryDirectory
         .appending(path: "rtl-oracle-fixture-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: projectRoot, withIntermediateDirectories: true)
-    let workspaceStore = XcircuiteWorkspaceStore()
-    try workspaceStore.ensureWorkspaceDirectory(forProjectAt: projectRoot)
+    try QualifiedToolFixtures.materializeEvidence(
+        for: qualifiedDescriptors,
+        in: projectRoot
+    )
+    let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
     try "module top(input logic a, output logic q); assign q = a; endmodule"
         .write(to: projectRoot.appending(path: "top.sv"), atomically: true, encoding: .utf8)
-    let runDirectory = projectRoot
-        .appending(path: ".xcircuite")
-        .appending(path: "runs")
-        .appending(path: runID)
-    try workspaceStore.ensureDirectory(at: runDirectory)
+    let runDirectory = try await prepareTestRun(runID: runID, store: workspaceStore)
     return (
         projectRoot,
         FlowExecutionContext(
             projectRoot: projectRoot,
             runID: runID,
             runDirectory: runDirectory,
-            storage: workspaceStore,
+            infrastructure: workspaceStore,
             toolRegistry: toolRegistry,
             healthResults: healthResults
         )
     )
 }
 
-private func makeProcessEvidence(
-    artifact: XcircuiteFileReference
-) throws -> RTLVerificationProcessQualificationEvidence {
-    let recordedAt = Date()
-    let qualification = RTLVerificationProcessQualificationRecord(
-        qualificationID: "qualification-1",
-        scope: RTLVerificationProcessQualificationScope(
-            implementationID: "rtl-tool",
-            binaryDigest: String(repeating: "a", count: 64),
-            algorithmVersion: "1",
-            processProfileID: "profile-1",
-            pdkID: "pdk-1",
-            pdkDigest: String(repeating: "b", count: 64),
-            deckDigest: String(repeating: "c", count: 64),
-            analyses: [.lint]
-        ),
-        status: .qualified,
-        corpusEvidenceIDs: ["corpus-1"],
-        oracleEvidenceIDs: ["oracle-1"],
-        healthEvidenceIDs: ["health-1"],
-        qualifiedAt: recordedAt.addingTimeInterval(-10),
-        expiresAt: recordedAt.addingTimeInterval(3_600)
-    )
-    return RTLVerificationProcessQualificationEvidence(
-        evidenceID: "process-evidence-1",
-        qualificationID: qualification.qualificationID,
-        qualification: qualification,
-        artifactIDs: [artifact.artifactID].compactMap { $0 },
-        artifacts: [try foundationReference(artifact)],
-        provenance: "fixture",
-        recordedAt: recordedAt
+private func oracleHealthResult(toolID: String) -> ToolHealthCheckResult {
+    QualifiedToolFixtures.health(
+        toolID: toolID,
+        level: .oracleChecked
     )
 }
 
@@ -506,7 +424,7 @@ private struct OracleNativeVerificationEngine: RTLVerificationExecuting {
                     analyzedConstructs: 1,
                     proofScope: request.analysis.rawValue
                 ),
-                qualification: RTLVerificationQualificationReport(
+                record: RTLVerificationEvidenceAssessment(
                     implementationID: "native-fixture-engine",
                     implementationVersion: "1.0.0"
                 ),
@@ -525,7 +443,7 @@ private struct FixtureOracleProcessRunner: RTLExternalToolProcessRunning {
         executableURL: URL,
         arguments: [String],
         standardInput: Data
-    ) throws -> Data {
+    ) async throws -> Data {
         let request = try JSONDecoder().decode(RTLVerificationRequest.self, from: standardInput)
         let now = Date()
         let payload = RTLVerificationPayload(
@@ -537,11 +455,10 @@ private struct FixtureOracleProcessRunner: RTLExternalToolProcessRunning {
                 analyzedConstructs: analyzedConstructs,
                 proofScope: request.analysis.rawValue
             ),
-            qualification: RTLVerificationQualificationReport(
+            record: RTLVerificationEvidenceAssessment(
                 implementationID: toolID,
                 implementationVersion: "1.0.0",
-                state: .unassessed,
-                blockers: []
+                maturity: .unassessed
             ),
             proofView: request.proofView,
             assumptions: request.assumptions
@@ -596,7 +513,7 @@ private struct ResumeVerificationEngine: RTLVerificationExecuting {
     }
 }
 
-private actor QualificationRequestCapture {
+private actor EvidenceRequestCapture {
     private var capturedRequest: RTLVerificationRequest?
 
     func store(_ request: RTLVerificationRequest) {
@@ -608,8 +525,8 @@ private actor QualificationRequestCapture {
     }
 }
 
-private struct QualificationCaptureEngine: RTLVerificationExecuting {
-    let capture: QualificationRequestCapture
+private struct EvidenceCaptureEngine: RTLVerificationExecuting {
+    let capture: EvidenceRequestCapture
 
     func execute(
         _ request: RTLVerificationRequest
@@ -622,7 +539,7 @@ private struct QualificationCaptureEngine: RTLVerificationExecuting {
             status: .completed,
             metadata: RTLExecutionMetadata(
                 engineID: request.analysis.stageID,
-                implementationID: "qualification-capture",
+                implementationID: "evidence-capture",
                 implementationVersion: "1",
                 startedAt: now,
                 completedAt: now

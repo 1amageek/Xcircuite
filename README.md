@@ -3,10 +3,14 @@
 ## Storage boundary
 
 `XcircuiteWorkspaceStore` is the concrete filesystem boundary for the
-project-local `.xcircuite` directory. It validates project-relative paths,
-rejects traversal and symlink escapes, and writes immutable JSON or byte
-artifacts atomically. Flow lifecycle and approval semantics belong to
-`DesignFlowKernel`; this store is intentionally limited to local persistence.
+project-local `.xcircuite` directory. Each actor instance is bound to exactly
+one normalized project root; protocol calls carrying another root fail with a
+typed error. Persisted `ArtifactReference` locations use project-relative
+`.xcircuite/...` paths, while DesignFlowKernel remains unaware of the concrete
+directory. The store rejects traversal, absolute artifact locations, workspace
+symlinks and intermediate symlink escapes. Immutable artifacts and revisioned
+run-ledger compare-and-swap updates are serialized by an atomic file lock.
+Flow lifecycle and approval semantics remain in `DesignFlowKernel`.
 
 Xcircuite is the headless core runtime of the LSI semiconductor design
 platform. It provides the project-aware flow, CLI, artifact ledger integration,
@@ -73,7 +77,7 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
 | `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
-| `ElectricalSignoffProcessQualificationFlowStageExecutor` | Re-verifies digest-bound electrical corpus/oracle/health/approval artifacts against project files, promotes them through the typed process-qualification evaluator, persists structured checks and `ToolProcessQualificationEvidence`, and blocks incomplete trust evidence |
+| Electrical corpus stage | Persists raw corpus and independent-oracle observations for ToolQualification without issuing trust |
 | `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, re-hashes reviewed artifacts on resume, and delegates approval validation to `PhysicalDesignReviewGate` |
 
 PDK external inspection is selected by adding `externalProcess` to a tagged
@@ -263,11 +267,14 @@ integration evidence for the current handoff path; mock PEX is contract
 evidence rather than physical signoff and the run does not promote local
 results to external-oracle or foundry/process qualification.
 
-Qualified evidence is passed as `ToolEvidence.qualification`. A run stage can
-require it through `ToolTrustRequirement.requiredQualifiedEvidenceKinds`. When the
-evidence is missing or failed, `DesignFlowKernel` blocks at the `tool-trust` gate
-and persists the rejected decision in `toolchain.json`. When the evidence is
-qualified, the same manifest records the selected tool and the evidence summary.
+Qualified evidence is passed as a `ToolEvidence.artifact` bound to a canonical
+`ToolCorpusQualificationResult`, `ToolOracleQualificationResult`, or
+`ToolHealthQualificationResult`. A run stage can require it through
+`ToolTrustRequirement.requiredQualifiedEvidenceKinds`. `ToolQualification`
+re-hashes the retained artifact, decodes the canonical typed result, and verifies
+its tool identity, issuer, timestamp, scope, and passing cases. Missing, stale,
+non-canonical, or mismatched evidence blocks at the `tool-trust` gate and is
+persisted in `toolchain.json`.
 Runtime configs are validated before runtime construction and evidence
 attachment: the executor list must be non-empty, executor `stageID`s must be valid
 Xcircuite identifiers, duplicate executor stage IDs are rejected, and present
@@ -342,7 +349,7 @@ introducing an Agent wrapper.
 | `import-symbolic-planner-plan` | `planning/symbolic-planner/solver-plan.txt` and risk-projected `planning/candidate-plan.json` from a PDDL-compatible external solver plan |
 | `generate-parameter-candidates` | `planning/parameter-candidates.jsonl` and `planning/parameter-candidate-search-trace.json` from bounded `parameterBounds` hints, including `adaptive-bounded-refinement` and `feedback-aware-bounded-refinement` ordering |
 | `synthesize-parameter-candidate-plan` | risk-projected `planning/candidate-plan.json` from a selected bounded parameter candidate, skipping rejected candidates from `planning/rejected-plans.jsonl` unless explicitly included and returning a `costModel`-weighted feedback selection trace |
-| `approve-candidate-plan-risk` | `.xcircuite/runs/<run-id>/approvals/<approval-id>.json` using the shared `XcircuiteApprovalRecord` schema |
+| `approve-candidate-plan-risk` | `.xcircuite/runs/<run-id>/approvals/<approval-id>.json` using the shared `FlowApprovalRecord` schema |
 | `execute-candidate-plan` | `planning/plan-execution.json`, produced layout/netlist artifacts, `design-diff.json`, and `actions.jsonl`; approval-required risk blocks before design mutation unless the required approval record is approved |
 | `verify-candidate-plan` | `planning/plan-verification.json` with symbolic state, gate results, `riskReviews`, approval review state, `planning/rejected-plans.jsonl` for rejected/blocked plans, plus post-execution DRC/LVS/PEX/simulation metric artifacts when inputs exist |
 | `run-numeric-repair-loop` | `planning/numeric-repair-loop.json` plus per-iteration snapshots under `planning/numeric-repair-loop/iterations/` while generating candidates, synthesizing edits, executing, verifying, and feeding rejected candidates into the next iteration |
@@ -366,7 +373,7 @@ Committed runtime/run spec fixtures live under
 
 | Fixture | Purpose |
 |---|---|
-| `qualified-evidence-runtime.json` | Runtime config with timestamped `ToolEvidence.qualification` for a DRC corpus gate |
+| `qualified-evidence-runtime.json` | Runtime config with a digest-bound canonical DRC corpus result |
 | `qualified-evidence-run.json` | Run spec whose DRC stage requires `requiredQualifiedEvidenceKinds: ["corpus"]` plus `maximumEvidenceAgeSeconds` |
 | `qualified-signoff-runtime.json` | Runtime config for DRC/LVS/PEX signoff stages before evidence attachment |
 | `qualified-signoff-run.json` | Run spec whose DRC/LVS/PEX stages require qualified corpus evidence |
@@ -377,16 +384,12 @@ Committed runtime/run spec fixtures live under
 Regression:
 
 ```bash
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/runCLIAcceptsQualifiedEvidenceFixtureContracts
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/runCLIAcceptsQualifiedSignoffFixtureContracts
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/attachEvidenceCLIProducesRunnableQualifiedRuntimeConfig
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/validateCLIReportsRunRuntimeAndCoverage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeRetriesTransientDRCExecutorFailureAndPersistsAttempts
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecBuildsRuntimeForLayoutCommandExecutor
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeFeedsLayoutCommandDRCExportIntoDRCStage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRoundTripsStageArtifactInputReference
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/stageArtifactInputReferenceRejectsDigestMismatch
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecValidationRejectsDRCWithoutLayoutInput
+xcodebuild -scheme Xcircuite-Package -destination 'platform=macOS' \
+  -only-testing:'XcircuiteTests/XcircuiteFlowRuntimeTests/runCLIAcceptsFoundationArtifactEvidenceFixture()' \
+  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 30 test
+xcodebuild -scheme Xcircuite-Package -destination 'platform=macOS' \
+  -only-testing:XcircuiteTests/XcircuiteFlowScaffoldRunCLITests \
+  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 30 test
 ```
 
 ## Engine seams

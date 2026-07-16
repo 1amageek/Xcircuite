@@ -5,34 +5,34 @@ import DesignFlowKernel
 public struct XcircuitePlanningProblemValidator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let fileReferenceVerifier: XcircuiteFileReferenceVerifier
+    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
 
     public init(
-        workspaceStore: XcircuiteWorkspaceStore = XcircuiteWorkspaceStore(),
-        artifactStore: XcircuitePlanningArtifactStore = XcircuitePlanningArtifactStore(),
-        fileReferenceVerifier: XcircuiteFileReferenceVerifier = XcircuiteFileReferenceVerifier()
+        workspaceStore: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore,
+        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.fileReferenceVerifier = fileReferenceVerifier
+        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
     }
 
     public func validatePlanningProblem(
         request: XcircuitePlanningProblemValidationRequest,
         projectRoot: URL
-    ) throws -> XcircuitePlanningProblemValidationResult {
-        try XcircuiteIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try loadRunManifest(runID: request.runID, projectRoot: projectRoot)
-        let problemPath = try requiredPath(
+    ) async throws -> XcircuitePlanningProblemValidationResult {
+        try FlowIdentifierValidator().validate(request.runID, kind: .runID)
+        let manifest = try await loadRunManifest(runID: request.runID)
+        let problemPath = try await requiredPath(
             explicitPath: request.problemPath,
             artifactID: request.problemArtifactID ?? XcircuitePlanningArtifactStore.problemArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let problem = try workspaceStore.readJSON(
+        let problem = try await workspaceStore.readJSON(
             XcircuiteCircuitPlanningProblem.self,
-            from: workspaceStore.url(forProjectRelativePath: problemPath, inProjectAt: projectRoot)
+            from: problemPath
         )
         guard problem.runID == request.runID else {
             throw XcircuitePlanningProblemValidationError.runMismatch(
@@ -40,12 +40,17 @@ public struct XcircuitePlanningProblemValidator: Sendable {
                 actual: problem.runID
             )
         }
-        let translationAuditResult = try XcircuiteProblemTranslationAuditGate().refreshAudit(
+        let translationAuditResult = try await XcircuiteProblemTranslationAuditGate(
+            auditor: XcircuiteProblemTranslationAuditor(
+                workspaceStore: workspaceStore,
+                artifactStore: artifactStore
+            )
+        ).refreshAudit(
             runID: request.runID,
             problemPath: problemPath,
             projectRoot: projectRoot
         )
-        let actionDomainContext = try loadOrPersistActionDomainSnapshot(
+        let actionDomainContext = try await loadOrPersistActionDomainSnapshot(
             explicitPath: request.actionDomainPath,
             artifactID: request.actionDomainArtifactID,
             manifest: manifest,
@@ -60,7 +65,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
             problemTranslationAudit: translationAuditResult.audit,
             problemTranslationAuditRef: translationAuditResult.auditArtifact
         )
-        let validationRef = try artifactStore.persistPlanningProblemValidation(
+        let validationRef = try await artifactStore.persistPlanningProblemValidation(
             validation,
             runID: request.runID,
             projectRoot: projectRoot
@@ -71,18 +76,9 @@ public struct XcircuitePlanningProblemValidator: Sendable {
             problemID: problem.problemID,
             problemPath: problemPath,
             validation: validation,
-            validationArtifact: try requireFoundationArtifactReference(
-                validationRef,
-                field: "planning-problem-validation"
-            ),
-            problemTranslationAuditArtifact: try requireFoundationArtifactReference(
-                translationAuditResult.auditArtifact,
-                field: "problem-translation-audit"
-            ),
-            actionDomainSnapshotArtifact: try requireFoundationArtifactReference(
-                actionDomainContext.reference,
-                field: "action-domain-snapshot"
-            )
+            validationArtifact: validationRef,
+            problemTranslationAuditArtifact: translationAuditResult.auditArtifact,
+            actionDomainSnapshotArtifact: actionDomainContext.reference
         )
     }
 
@@ -90,13 +86,13 @@ public struct XcircuitePlanningProblemValidator: Sendable {
         problem: XcircuiteCircuitPlanningProblem,
         problemPath: String,
         actionDomainSnapshot: XcircuitePlanningActionDomainSnapshot,
-        actionDomainSnapshotRef: XcircuiteFileReference? = nil,
+        actionDomainSnapshotRef: ArtifactReference? = nil,
         problemTranslationAudit: XcircuiteProblemTranslationAudit? = nil,
-        problemTranslationAuditRef: XcircuiteFileReference? = nil
+        problemTranslationAuditRef: ArtifactReference? = nil
     ) -> XcircuitePlanningProblemValidation {
         var diagnostics: [XcircuitePlanningProblemValidationDiagnostic] = []
         if let problemTranslationAudit {
-            diagnostics.append(contentsOf: XcircuiteProblemTranslationAuditGate().validationDiagnostics(
+            diagnostics.append(contentsOf: XcircuiteProblemTranslationAuditGate.validationDiagnostics(
                 for: problemTranslationAudit
             ))
         }
@@ -549,7 +545,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
         riskID: String? = nil
     ) -> [XcircuitePlanningProblemValidationDiagnostic] {
         do {
-            try XcircuiteIdentifierValidator().validate(value, kind: .artifactID)
+            try FlowIdentifierValidator().validate(value, kind: .artifactID)
             return []
         } catch {
             return [
@@ -601,17 +597,12 @@ public struct XcircuitePlanningProblemValidator: Sendable {
 
     private func stringArrayValue(
         for key: String,
-        in values: [String: XcircuiteJSONValue]
+        in values: [String: PlanningParameterValue]
     ) -> [String] {
-        guard case .array(let array)? = values[key] else {
+        guard case .textList(let array)? = values[key] else {
             return []
         }
-        return array.compactMap { value in
-            guard case .string(let string) = value else {
-                return nil
-            }
-            return string
-        }
+        return array
     }
 
     private func diagnostic(
@@ -648,20 +639,20 @@ public struct XcircuitePlanningProblemValidator: Sendable {
         return result
     }
 
-    private func loadRunManifest(runID: String, projectRoot: URL) throws -> XcircuiteRunManifest {
-        try workspaceStore.loadRunManifest(runID: runID, inProjectAt: projectRoot)
+    private func loadRunManifest(runID: String) async throws -> FlowRunManifest {
+        return try await workspaceStore.loadRunManifest(runID: runID)
     }
 
     private func loadOrPersistActionDomainSnapshot(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> ActionDomainSnapshotContext {
+    ) async throws -> ActionDomainSnapshotContext {
         let resolved: XcircuiteResolvedActionDomainSnapshot
         do {
-            resolved = try XcircuiteActionDomainSnapshotResolver(
+            resolved = try await XcircuiteActionDomainSnapshotResolver(
                 workspaceStore: workspaceStore,
                 artifactStore: artifactStore
             ).loadExplicitOrDefault(
@@ -708,12 +699,12 @@ public struct XcircuitePlanningProblemValidator: Sendable {
     private func requiredPath(
         explicitPath: String?,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> String {
+    ) async throws -> String {
         if let explicitPath {
-            return try verifiedExplicitProblemPath(
+            return try await verifiedExplicitProblemPath(
                 explicitPath,
                 artifactID: artifactID,
                 manifest: manifest,
@@ -741,10 +732,10 @@ public struct XcircuitePlanningProblemValidator: Sendable {
     private func verifiedExplicitProblemPath(
         _ explicitPath: String,
         artifactID: String?,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference {
+    ) async throws -> ArtifactReference {
         let matches = manifest.artifacts.filter { $0.path == explicitPath }
         guard matches.count <= 1 else {
             throw XcircuitePlanningProblemValidationError.invalidArtifactReference(
@@ -752,14 +743,17 @@ public struct XcircuitePlanningProblemValidator: Sendable {
                 reason: "multiple manifest artifacts reference the same explicit path."
             )
         }
-        let reference = try matches.first ?? workspaceStore.fileReference(
-            forProjectRelativePath: explicitPath,
-            artifactID: artifactID,
-            kind: .other,
-            format: .json,
-            inProjectAt: projectRoot,
-            producedByRunID: runID
-        )
+        let reference: ArtifactReference
+        if let existing = matches.first {
+            reference = existing
+        } else {
+            reference = try await workspaceStore.makeArtifactReference(
+                forProjectRelativePath: explicitPath,
+                artifactID: artifactID,
+                kind: .other,
+                format: .json
+            )
+        }
         try validateProblemReference(
             reference,
             expectedArtifactID: artifactID,
@@ -771,10 +765,10 @@ public struct XcircuitePlanningProblemValidator: Sendable {
 
     private func verifiedManifestProblemReference(
         artifactID: String,
-        manifest: XcircuiteRunManifest,
+        manifest: FlowRunManifest,
         runID: String,
         projectRoot: URL
-    ) throws -> XcircuiteFileReference? {
+    ) throws -> ArtifactReference? {
         let matches = manifest.artifacts.filter { $0.artifactID == artifactID }
         guard !matches.isEmpty else {
             return nil
@@ -796,7 +790,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
     }
 
     private func validateProblemReference(
-        _ reference: XcircuiteFileReference,
+        _ reference: ArtifactReference,
         expectedArtifactID: String?,
         runID: String,
         projectRoot: URL
@@ -813,24 +807,18 @@ public struct XcircuitePlanningProblemValidator: Sendable {
                 reason: "planning problems must be JSON artifacts."
             )
         }
-        guard reference.producedByRunID == runID else {
-            throw XcircuitePlanningProblemValidationError.artifactProducerRunMismatch(
-                expected: runID,
-                actual: reference.producedByRunID
-            )
-        }
-        let integrity = fileReferenceVerifier.verify(reference, projectRoot: projectRoot)
-        guard integrity.status == .verified else {
+        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        guard integrity.isVerified else {
             throw XcircuitePlanningProblemValidationError.artifactIntegrityFailed(
                 path: reference.path,
-                status: integrity.status,
-                message: integrity.message
+                status: integrity.flowVerificationStatus,
+                message: integrity.diagnosticMessage
             )
         }
     }
 
     private struct ActionDomainSnapshotContext {
         var snapshot: XcircuitePlanningActionDomainSnapshot
-        var reference: XcircuiteFileReference
+        var reference: ArtifactReference
     }
 }

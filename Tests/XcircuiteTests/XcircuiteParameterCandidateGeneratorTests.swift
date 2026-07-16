@@ -1,18 +1,18 @@
+import CircuiteFoundation
 import Foundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 @Suite("Xcircuite parameter candidate generator")
 struct XcircuiteParameterCandidateGeneratorTests {
     @Test func generateParameterCandidatesCLIWritesJSONLAndRunArtifact() async throws {
         let root = try makeTemporaryRoot("parameter-candidates-cli")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-1", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-1", store: store)
+        _ = try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-1", withBounds: true),
             runID: "run-1",
             projectRoot: root
@@ -39,14 +39,15 @@ struct XcircuiteParameterCandidateGeneratorTests {
         let searchTraceArtifact = try #require(result.searchTraceArtifact)
         #expect(artifact.artifactID == XcircuitePlanningArtifactStore.parameterCandidatesArtifactID)
         #expect(artifact.path == ".xcircuite/runs/run-1/planning/parameter-candidates.jsonl")
-        #expect(artifact.sha256 != nil)
-        #expect(artifact.byteCount != nil)
+        #expect(!artifact.sha256.isEmpty)
+        #expect(artifact.byteCount > 0)
         #expect(searchTraceArtifact.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSearchTraceArtifactID)
         #expect(searchTraceArtifact.path == ".xcircuite/runs/run-1/planning/parameter-candidate-search-trace.json")
 
-        let candidates = try readJSONLines(
+        let candidates = try await readJSONLines(
             XcircuiteParameterCandidate.self,
-            from: root.appending(path: artifact.path)
+            from: artifact.path,
+            store: store
         )
         #expect(candidates.map(\.rank) == [1, 2, 3])
         #expect(candidates.allSatisfy { $0.sourceActionID == "metric-search-1" })
@@ -58,35 +59,35 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(values.contains(500))
         #expect(values.contains(1500))
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
-        )
-        #expect(manifest.artifacts.contains {
+        let ledger = try await store.loadRunLedger(runID: "run-1")
+        #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidatesArtifactID
                 && $0.sha256 == artifact.sha256
-                && artifact.byteCount == UInt64($0.byteCount ?? 0)
+                && artifact.byteCount == $0.byteCount
         })
-        #expect(manifest.artifacts.contains {
+        #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSearchTraceArtifactID
                 && $0.sha256 == searchTraceArtifact.sha256
-                && searchTraceArtifact.byteCount == UInt64($0.byteCount ?? 0)
+                && searchTraceArtifact.byteCount == $0.byteCount
         })
     }
 
-    @Test func adaptiveBoundedRefinementUsesPreferredDirectionAndWritesSearchTrace() throws {
+    @Test func adaptiveBoundedRefinementUsesPreferredDirectionAndWritesSearchTrace() async throws {
         let root = try makeTemporaryRoot("adaptive-parameter-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-3", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-3", store: store)
+        _ = try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-3", withBounds: true, preferredDirection: "increase"),
             runID: "run-3",
             projectRoot: root
         )
 
-        let result = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let result = try await XcircuiteParameterCandidateGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(
                 runID: "run-3",
                 strategy: "adaptive-bounded-refinement",
@@ -98,9 +99,10 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(result.status == "generated")
         #expect(result.candidateCount == 5)
         let artifact = try #require(result.parameterCandidatesArtifact)
-        let candidates = try readJSONLines(
+        let candidates = try await readJSONLines(
             XcircuiteParameterCandidate.self,
-            from: root.appending(path: artifact.path)
+            from: artifact.path,
+            store: store
         )
         let values = candidates.compactMap { candidate in
             candidate.assignments.first { $0.name == "R1" }?.value
@@ -108,9 +110,9 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(values == [1000, 1250, 750, 1500, 500])
 
         let traceRef = try #require(result.searchTraceArtifact)
-        let trace = try store.readJSON(
+        let trace = try await store.readJSON(
             XcircuiteParameterCandidateSearchTrace.self,
-            from: root.appending(path: traceRef.path)
+            from: traceRef.path
         )
         #expect(trace.strategy == "adaptive-bounded-refinement")
         #expect(trace.problemPath == ".xcircuite/runs/run-3/planning/problem.json")
@@ -121,19 +123,23 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(parameterTrace.generatedValues.map(\.value) == [1000, 1250, 750, 1500, 500])
     }
 
-    @Test func feedbackAwareRefinementDemotesRejectedAssignmentsAndRecordsLearningTrace() throws {
+    @Test func feedbackAwareRefinementDemotesRejectedAssignmentsAndRecordsLearningTrace() async throws {
         let root = try makeTemporaryRoot("feedback-aware-parameter-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-4", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-4", store: store)
+        _ = try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-4", withBounds: true, preferredDirection: "increase"),
             runID: "run-4",
             projectRoot: root
         )
 
-        let initialResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let generator = XcircuiteParameterCandidateGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        )
+        let initialResult = try await generator.generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(
                 runID: "run-4",
                 strategy: "adaptive-bounded-refinement",
@@ -142,15 +148,16 @@ struct XcircuiteParameterCandidateGeneratorTests {
             projectRoot: root
         )
         let initialArtifact = try #require(initialResult.parameterCandidatesArtifact)
-        let initialCandidates = try readJSONLines(
+        let initialCandidates = try await readJSONLines(
             XcircuiteParameterCandidate.self,
-            from: root.appending(path: initialArtifact.path)
+            from: initialArtifact.path,
+            store: store
         )
         let rejectedCandidate = try #require(initialCandidates.first {
             $0.assignments.first { $0.name == "R1" }?.value == 1000
         })
-        try XcircuitePlanningArtifactStore().appendRejectedPlan(
-            rejectedPlanRecord(
+        _ = try await artifactStore.appendRejectedPlan(
+            try rejectedPlanRecord(
                 runID: "run-4",
                 problemID: rejectedCandidate.problemID,
                 planID: "run-4-rejected-plan",
@@ -161,7 +168,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
             projectRoot: root
         )
 
-        let learnedResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let learnedResult = try await generator.generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(
                 runID: "run-4",
                 strategy: "feedback-aware-bounded-refinement",
@@ -170,9 +177,10 @@ struct XcircuiteParameterCandidateGeneratorTests {
             projectRoot: root
         )
         let learnedArtifact = try #require(learnedResult.parameterCandidatesArtifact)
-        let learnedCandidates = try readJSONLines(
+        let learnedCandidates = try await readJSONLines(
             XcircuiteParameterCandidate.self,
-            from: root.appending(path: learnedArtifact.path)
+            from: learnedArtifact.path,
+            store: store
         )
         let values = learnedCandidates.compactMap { candidate in
             candidate.assignments.first { $0.name == "R1" }?.value
@@ -184,9 +192,9 @@ struct XcircuiteParameterCandidateGeneratorTests {
         } == true)
 
         let traceRef = try #require(learnedResult.searchTraceArtifact)
-        let trace = try store.readJSON(
+        let trace = try await store.readJSON(
             XcircuiteParameterCandidateSearchTrace.self,
-            from: root.appending(path: traceRef.path)
+            from: traceRef.path
         )
         let feedbackTrace = try #require(trace.feedbackTrace)
         #expect(feedbackTrace.strategy == "feedback-aware-bounded-refinement")
@@ -202,16 +210,16 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect((nominalTrace.feedbackPenalty ?? 0) > 0)
     }
 
-    @Test func rejectedPlanLedgerRejectsCorruptedExistingJSONL() throws {
+    @Test func rejectedPlanLedgerRejectsCorruptedExistingJSONL() async throws {
         let root = try makeTemporaryRoot("rejected-plan-ledger-corruption")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-ledger-corrupt", inProjectAt: root)
-        let ledgerURL = root.appending(path: ".xcircuite/runs/run-ledger-corrupt/planning/rejected-plans.jsonl")
-        try store.writeText("{not-json}\n", to: ledgerURL)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-ledger-corrupt", store: store)
+        let ledgerPath = ".xcircuite/runs/run-ledger-corrupt/planning/rejected-plans.jsonl"
+        try await store.writeWorkspaceText("{not-json}\n", to: ledgerPath)
 
-        let record = rejectedPlanRecord(
+        let record = try rejectedPlanRecord(
             runID: "run-ledger-corrupt",
             problemID: "problem-ledger-corrupt",
             planID: "plan-ledger-corrupt",
@@ -219,7 +227,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
             candidateID: "candidate-ledger-corrupt"
         )
         do {
-            try XcircuitePlanningArtifactStore().appendRejectedPlan(
+            _ = try await artifactStore.appendRejectedPlan(
                 record,
                 runID: "run-ledger-corrupt",
                 projectRoot: root
@@ -230,35 +238,34 @@ struct XcircuiteParameterCandidateGeneratorTests {
                 Issue.record("Unexpected planning artifact error: \(error)")
                 return
             }
-            #expect(path == ledgerURL.path(percentEncoded: false))
+            #expect(path == ledgerPath)
             #expect(line == 1)
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
     }
 
-    @Test func rejectedPlanLedgerRejectsDuplicateRejectionID() throws {
+    @Test func rejectedPlanLedgerRejectsDuplicateRejectionID() async throws {
         let root = try makeTemporaryRoot("rejected-plan-ledger-duplicate")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-ledger-duplicate", inProjectAt: root)
-        let artifactStore = XcircuitePlanningArtifactStore()
-        let record = rejectedPlanRecord(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-ledger-duplicate", store: store)
+        let record = try rejectedPlanRecord(
             runID: "run-ledger-duplicate",
             problemID: "problem-ledger-duplicate",
             planID: "plan-ledger-duplicate",
             status: "rejected",
             candidateID: "candidate-ledger-duplicate"
         )
-        try artifactStore.appendRejectedPlan(
+        _ = try await artifactStore.appendRejectedPlan(
             record,
             runID: "run-ledger-duplicate",
             projectRoot: root
         )
 
         do {
-            try artifactStore.appendRejectedPlan(
+            _ = try await artifactStore.appendRejectedPlan(
                 record,
                 runID: "run-ledger-duplicate",
                 projectRoot: root
@@ -274,14 +281,17 @@ struct XcircuiteParameterCandidateGeneratorTests {
     @Test func calibratedFeedbackAwareRefinementDemotesParetoFailedCandidates() async throws {
         let root = try makeTemporaryRoot("calibrated-feedback-aware-parameter-candidates")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        let artifactStore = XcircuitePlanningArtifactStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-5", inProjectAt: root)
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-5", store: store)
         let problem = makeMetricPlanningProblem(runID: "run-5", withBounds: true, preferredDirection: "increase")
-        try artifactStore.persistPlanningProblem(problem, runID: "run-5", projectRoot: root)
+        _ = try await artifactStore.persistPlanningProblem(problem, runID: "run-5", projectRoot: root)
 
-        let initialResult = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let generator = XcircuiteParameterCandidateGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        )
+        let initialResult = try await generator.generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(
                 runID: "run-5",
                 strategy: "adaptive-bounded-refinement",
@@ -290,9 +300,10 @@ struct XcircuiteParameterCandidateGeneratorTests {
             projectRoot: root
         )
         let initialArtifact = try #require(initialResult.parameterCandidatesArtifact)
-        let initialCandidates = try readJSONLines(
+        let initialCandidates = try await readJSONLines(
             XcircuiteParameterCandidate.self,
-            from: root.appending(path: initialArtifact.path)
+            from: initialArtifact.path,
+            store: store
         )
         let nominalCandidate = try #require(initialCandidates.first {
             $0.assignments.first { $0.name == "R1" }?.value == 1000
@@ -301,7 +312,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
             $0.assignments.first { $0.name == "R1" }?.value == 1250
         })
 
-        try artifactStore.persistMetricThresholdProfile(
+        _ = try await artifactStore.persistMetricThresholdProfile(
             XcircuiteMetricThresholdProfile(
                 runID: "run-5",
                 problemID: problem.problemID,
@@ -323,7 +334,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
             runID: "run-5",
             projectRoot: root
         )
-        try artifactStore.persistCostCalibrationReport(
+        _ = try await artifactStore.persistCostCalibrationReport(
             XcircuiteCostCalibrationReport(
                 runID: "run-5",
                 problemID: problem.problemID,
@@ -361,7 +372,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
             runID: "run-5",
             projectRoot: root
         )
-        try artifactStore.persistParetoCandidates(
+        _ = try await artifactStore.persistParetoCandidates(
             XcircuiteParetoCandidateSet(
                 runID: "run-5",
                 problemID: problem.problemID,
@@ -419,9 +430,10 @@ struct XcircuiteParameterCandidateGeneratorTests {
 
         #expect(result.status == "generated")
         let calibratedArtifact = try #require(result.parameterCandidatesArtifact)
-        let calibratedCandidates = try readJSONLines(
+        let calibratedCandidates = try await readJSONLines(
             XcircuiteParameterCandidate.self,
-            from: root.appending(path: calibratedArtifact.path)
+            from: calibratedArtifact.path,
+            store: store
         )
         let values = calibratedCandidates.compactMap { candidate in
             candidate.assignments.first { $0.name == "R1" }?.value
@@ -433,9 +445,9 @@ struct XcircuiteParameterCandidateGeneratorTests {
         } == true)
 
         let traceRef = try #require(result.searchTraceArtifact)
-        let trace = try store.readJSON(
+        let trace = try await store.readJSON(
             XcircuiteParameterCandidateSearchTrace.self,
-            from: root.appending(path: traceRef.path)
+            from: traceRef.path
         )
         let calibrationTrace = try #require(trace.calibrationTrace)
         #expect(calibrationTrace.strategy == "calibrated-feedback-aware-bounded-refinement")
@@ -448,19 +460,22 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(calibrationTrace.matchedGateIDs == ["simulation-metric-gate"])
     }
 
-    @Test func missingBoundsBlocksGenerationWithoutCandidateArtifact() throws {
+    @Test func missingBoundsBlocksGenerationWithoutCandidateArtifact() async throws {
         let root = try makeTemporaryRoot("parameter-candidates-missing-bounds")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-2", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-2", store: store)
+        _ = try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-2", withBounds: false),
             runID: "run-2",
             projectRoot: root
         )
 
-        let result = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+        let result = try await XcircuiteParameterCandidateGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateParameterCandidates(
             request: XcircuiteParameterCandidateGenerationRequest(runID: "run-2"),
             projectRoot: root
         )
@@ -470,9 +485,9 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(result.parameterCandidatesArtifact == nil)
         let traceRef = try #require(result.searchTraceArtifact)
         #expect(traceRef.artifactID == XcircuitePlanningArtifactStore.parameterCandidateSearchTraceArtifactID)
-        let trace = try store.readJSON(
+        let trace = try await store.readJSON(
             XcircuiteParameterCandidateSearchTrace.self,
-            from: root.appending(path: traceRef.path)
+            from: traceRef.path
         )
         #expect(trace.generatedCandidateCount == 0)
         #expect(trace.generatedCandidateIDs.isEmpty)
@@ -480,24 +495,24 @@ struct XcircuiteParameterCandidateGeneratorTests {
         #expect(result.diagnostics.contains { $0.code == "no-bounded-parameter-actions" })
     }
 
-    @Test func generateParameterCandidatesRejectsTamperedPlanningProblemManifestArtifactBeforeUse() throws {
+    @Test func generateParameterCandidatesRejectsTamperedPlanningProblemManifestArtifactBeforeUse() async throws {
         let root = try makeTemporaryRoot("parameter-candidates-tampered-problem")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-tampered-problem", inProjectAt: root)
-        let problemReference = try XcircuitePlanningArtifactStore().persistPlanningProblem(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareTestRun(runID: "run-tampered-problem", store: store)
+        let problemReference = try await artifactStore.persistPlanningProblem(
             makeMetricPlanningProblem(runID: "run-tampered-problem", withBounds: true),
             runID: "run-tampered-problem",
             projectRoot: root
         )
-        try Data(#"{"tampered":true}"#.utf8).write(
-            to: root.appending(path: problemReference.path),
-            options: [.atomic]
-        )
+        try await store.write(Data(#"{"tampered":true}"#.utf8), to: problemReference.path)
 
         do {
-            _ = try XcircuiteParameterCandidateGenerator().generateParameterCandidates(
+            _ = try await XcircuiteParameterCandidateGenerator(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).generateParameterCandidates(
                 request: XcircuiteParameterCandidateGenerationRequest(runID: "run-tampered-problem"),
                 projectRoot: root
             )
@@ -517,21 +532,20 @@ struct XcircuiteParameterCandidateGeneratorTests {
         withBounds: Bool,
         preferredDirection: String? = nil
     ) -> XcircuiteCircuitPlanningProblem {
-        var parameterHints: [String: XcircuiteJSONValue] = [
-            "metric": .string("vfinal"),
+        var parameterHints: [String: PlanningParameterValue] = [
+            "metric": .text("vfinal"),
         ]
         if withBounds {
-            parameterHints["parameterBounds"] = .array([
-                .object([
-                    "name": .string("R1"),
-                    "lowerBound": .number(500),
-                    "upperBound": .number(1500),
-                    "nominalValue": .number(1000),
-                    "step": .number(250),
-                    "unit": .string("ohm"),
-                ].merging(preferredDirection.map {
-                    ["preferredDirection": XcircuiteJSONValue.string($0)]
-                } ?? [:]) { current, _ in current }),
+            parameterHints["parameterBounds"] = .parameterBounds([
+                XcircuiteParameterBound(
+                    name: "R1",
+                    lowerBound: 500,
+                    upperBound: 1500,
+                    nominalValue: 1000,
+                    step: 250,
+                    unit: "ohm",
+                    preferredDirection: preferredDirection
+                ),
             ])
         }
         return XcircuiteCircuitPlanningProblem(
@@ -560,8 +574,8 @@ struct XcircuiteParameterCandidateGeneratorTests {
                     priority: "error",
                     sourceRefIDs: ["simulation-summary"],
                     target: "measurement-within-tolerance",
-                    currentValue: .number(0.5),
-                    requiredValue: .number(1.0),
+                    currentValue: .scalar(0.5),
+                    requiredValue: .scalar(1.0),
                     description: "Recover simulation metric by bounded parameter search."
                 ),
             ],
@@ -621,7 +635,7 @@ struct XcircuiteParameterCandidateGeneratorTests {
         planID: String,
         status: String,
         candidateID: String
-    ) -> XcircuiteRejectedPlanRecord {
+    ) throws -> XcircuiteRejectedPlanRecord {
         XcircuiteRejectedPlanRecord(
             rejectionID: "\(planID)-\(status)",
             runID: runID,
@@ -632,13 +646,13 @@ struct XcircuiteParameterCandidateGeneratorTests {
             sourceParameterCandidateIDs: [candidateID],
             failedStepIDs: [],
             failedGateIDs: ["simulation-metric-gate"],
-            candidatePlanRef: XcircuiteFileReference(
+            candidatePlanRef: try fixtureArtifactReference(
                 artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                 path: ".xcircuite/runs/\(runID)/planning/candidate-plan.json",
                 kind: .other,
                 format: .json
             ),
-            planVerificationRef: XcircuiteFileReference(
+            planVerificationRef: try fixtureArtifactReference(
                 artifactID: XcircuitePlanningArtifactStore.planVerificationArtifactID,
                 path: ".xcircuite/runs/\(runID)/planning/plan-verification.json",
                 kind: .other,
@@ -659,9 +673,11 @@ struct XcircuiteParameterCandidateGeneratorTests {
 
     private func readJSONLines<T: Decodable>(
         _ type: T.Type,
-        from url: URL
-    ) throws -> [T] {
-        let text = try String(contentsOf: url, encoding: .utf8)
+        from relativePath: String,
+        store: XcircuiteWorkspaceStore
+    ) async throws -> [T] {
+        let data = try await store.read(from: relativePath)
+        let text = try #require(String(data: data, encoding: .utf8))
         return try text.split(separator: "\n").map { line in
             try JSONDecoder().decode(T.self, from: Data(String(line).utf8))
         }

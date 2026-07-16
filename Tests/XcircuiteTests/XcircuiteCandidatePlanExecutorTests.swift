@@ -9,7 +9,7 @@ import DesignFlowKernel
 
 @Suite("Xcircuite candidate plan executor")
 struct XcircuiteCandidatePlanExecutorTests {
-    @Test func candidatePlanExecutionStepEncodesCanonicalArtifactReferences() throws {
+    @Test func candidatePlanExecutionStepEncodesCanonicalArtifactReferences() async throws {
         let artifact = ArtifactReference(
             id: try ArtifactID(rawValue: "step-report"),
             locator: ArtifactLocator(
@@ -59,7 +59,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(reencodedObject["artifactRefs"] == nil)
     }
 
-    @Test func candidatePlanExecutionStepRejectsUnsupportedSchemaVersion() throws {
+    @Test func candidatePlanExecutionStepRejectsUnsupportedSchemaVersion() async throws {
         let payload = Data("""
         {
           "schemaVersion": 1,
@@ -79,7 +79,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         }
     }
 
-    @Test func candidatePlanExecutionEncodesCanonicalArtifactReferences() throws {
+    @Test func candidatePlanExecutionEncodesCanonicalArtifactReferences() async throws {
         let artifact = ArtifactReference(
             id: try ArtifactID(rawValue: "execution-report"),
             locator: ArtifactLocator(
@@ -99,7 +99,7 @@ struct XcircuiteCandidatePlanExecutorTests {
             problemID: "problem-artifact",
             planID: "plan-artifact",
             status: "executed",
-            candidatePlanRef: XcircuiteFileReference(
+            candidatePlanRef: try fixtureArtifactReference(
                 artifactID: "candidate-plan",
                 path: ".xcircuite/runs/run-artifact/planning/candidate-plan.json",
                 kind: .other,
@@ -134,7 +134,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(decoded.artifactReferences[0].byteCount == 7)
     }
 
-    @Test func candidatePlanExecutionRejectsUnsupportedSchemaVersion() throws {
+    @Test func candidatePlanExecutionRejectsUnsupportedSchemaVersion() async throws {
         let payload = Data("""
         {
           "schemaVersion": 1,
@@ -171,8 +171,13 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executeCandidatePlanCLIRunsLayoutAddRectAndWritesArtifacts() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-cli")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        _ = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        _ = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
             projectRoot: root
         )
@@ -199,14 +204,13 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.nextActions.contains("run-verification-gate:native-drc"))
         #expect(result.nextActions.contains("run-verification-gate:native-lvs"))
 
-        let store = XcircuiteWorkspaceStore()
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.status == "executed")
         #expect(execution.stepResults.map(\.status) == ["executed"])
-        #expect(execution.designDiffRef?.artifactID == nil)
+        #expect(execution.designDiffRef?.artifactID == "design-diff")
         let layoutDocument = try #require(execution.artifactReferences.first {
             $0.id.rawValue == "candidate-step-1-layout-document"
         })
@@ -214,14 +218,14 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(!layoutDocument.digest.hexadecimalValue.isEmpty)
         #expect(layoutDocument.byteCount > 0)
 
-        let diff = try store.loadDesignDiff(runID: "run-1", inProjectAt: root)
+        let diff = try await store.loadDesignDiff(runID: "run-1")
         #expect(diff.title == "Candidate plan run-1-drc-repair-problem-candidate-plan-1 execution")
         #expect(diff.changes.count == 1)
         #expect(diff.changes.first?.domain == .layout)
         #expect(diff.changes.first?.operation == .add)
         #expect(diff.changes.first?.artifacts.contains { $0.artifactID == "candidate-step-1-layout-document" } == true)
 
-        let actions = try store.loadRunActions(runID: "run-1", inProjectAt: root)
+        let actions = try await store.loadRunActions(runID: "run-1")
         let action = try #require(actions.last)
         #expect(action.actionKind == "planning.execute-candidate-plan")
         #expect(action.status == .succeeded)
@@ -229,9 +233,9 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(action.outputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.planExecutionArtifactID))
         #expect(action.outputs.map(\.artifactID).contains("candidate-step-1-layout-document"))
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-1/manifest.json")
+        let manifest = try await store.readJSON(
+            FlowRunManifest.self,
+            from: ".xcircuite/runs/run-1/manifest.json"
         )
         #expect(manifest.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.planExecutionArtifactID
@@ -244,8 +248,13 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executeCandidatePlanCLIRejectsTamperedCandidatePlanBeforeUse() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-cli-tampered-plan")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
-        let generation = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        let generation = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
             projectRoot: root
         )
@@ -276,13 +285,21 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func lvsPolicyRepairExecutionIsBlockedWithoutApprovalAndDesignDiff() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-blocked")
         defer { removeTemporaryRoot(root) }
-        try prepareRun(root: root, runID: "run-2", problem: makeLVSPlanningProblem())
-        _ = try XcircuiteCandidatePlanGenerator().generateCandidatePlan(
+        try await prepareRun(root: root, runID: "run-2", problem: makeLVSPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        _ = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
             request: XcircuiteCandidatePlanGenerationRequest(runID: "run-2"),
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-2"),
             projectRoot: root
         )
@@ -290,9 +307,9 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.status == "blocked")
         #expect(result.designDiffArtifact == nil)
         #expect(result.nextActions.contains("request-human-approval:policy-repair-approval"))
-        let execution = try XcircuiteWorkspaceStore().readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.stepResults.first?.status == "blocked")
         #expect(execution.diagnostics.contains { $0.code == "risk-approval-required" })
@@ -301,16 +318,20 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorBlocksApprovalRequiredRiskBeforeDesignMutation() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-approval-risk")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-risk", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-risk", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeApprovalRequiredLayoutPlan(),
             runID: "run-risk",
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-risk"),
             projectRoot: root
         )
@@ -320,9 +341,9 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.producedArtifacts.isEmpty)
         #expect(result.nextActions == ["request-human-approval:policy-repair-approval"])
 
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.status == "blocked")
         #expect(execution.stepResults.map(\.status) == ["blocked"])
@@ -331,7 +352,7 @@ struct XcircuiteCandidatePlanExecutorTests {
             $0.code == "risk-approval-required" && $0.stepID == "step-1"
         } == true)
 
-        let action = try #require(store.loadRunActions(runID: "run-risk", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-risk")).last)
         #expect(action.status == .blocked)
         #expect(action.outputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.planExecutionArtifactID))
         #expect(action.outputs.contains { $0.artifactID == "candidate-step-1-layout-document" } == false)
@@ -340,10 +361,11 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func approveCandidatePlanRiskCLIAllowsExecutionAfterReview() async throws {
         let root = try makeTemporaryRoot("candidate-plan-execute-approved-risk")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-risk", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-risk", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeApprovalRequiredLayoutPlan(),
             runID: "run-risk",
             projectRoot: root
@@ -373,23 +395,28 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(approvalResult.approvalPath == ".xcircuite/runs/run-risk/approvals/policy-repair-approval.json")
         #expect(approvalResult.approval.reviewerKind == .agent)
 
-        let verification = XcircuiteCandidatePlanVerifier().makePlanVerification(
+        let verification = XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).makePlanVerification(
             plan: makeApprovalRequiredLayoutPlan(),
-            candidatePlanRef: XcircuiteFileReference(
+            candidatePlanRef: try fixtureArtifactReference(
                 artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
                 path: ".xcircuite/runs/run-risk/planning/candidate-plan.json",
                 kind: .other,
                 format: .json,
-                sha256: "abc",
+                sha256: String(repeating: "a", count: 64),
                 byteCount: 12,
-                producedByRunID: "run-risk"
             ),
-            approvals: try store.loadApprovals(runID: "run-risk", inProjectAt: root)
+            approvals: try await store.loadRunLedger(runID: "run-risk").approvals
         )
         #expect(verification.riskReviews.first?.status == "approved")
         #expect(verification.gateResults.contains { $0.gateID == "approval-gate" && $0.status == "passed" })
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-risk"),
             projectRoot: root
         )
@@ -398,7 +425,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.designDiffArtifact != nil)
         #expect(result.producedArtifacts.contains { $0.artifactID == "candidate-step-1-layout-document" })
 
-        let actions = try store.loadRunActions(runID: "run-risk", inProjectAt: root)
+        let actions = try await store.loadRunActions(runID: "run-risk")
         #expect(actions.contains { $0.actionKind == "planning.approve-candidate-plan-risk" })
         let approvalAction = try #require(actions.first { $0.actionKind == "planning.approve-candidate-plan-risk" })
         #expect(approvalAction.actor.kind == .agent)
@@ -410,16 +437,20 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorChainsImplementedLayoutCommandsAcrossSteps() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-chain")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-3", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-3", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeChainedLayoutPlan(),
             runID: "run-3",
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-3"),
             projectRoot: root
         )
@@ -427,9 +458,9 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.status == "executed")
         #expect(result.producedArtifacts.contains { $0.artifactID == "candidate-step-10-layout-document" })
 
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.stepResults.map(\.operationID) == [
             "layout.create-cell",
@@ -448,14 +479,15 @@ struct XcircuiteCandidatePlanExecutorTests {
         let stepDocuments = try execution.stepResults.map { result in
             try #require(result.artifactReferences.first { $0.id.rawValue == "candidate-step-\(result.order)-layout-document" })
         }
-        let stepRequests = try execution.stepResults.map { result in
+        var stepRequests: [DecodedLayoutCommandRequest] = []
+        for result in execution.stepResults {
             let reference = try #require(result.artifactReferences.first {
                 $0.id.rawValue == "candidate-step-\(result.order)-layout-request"
             })
-            return try store.readJSON(
+            stepRequests.append(try await store.readJSON(
                 DecodedLayoutCommandRequest.self,
-                from: root.appending(path: reference.locator.location.value)
-            )
+                from: reference.locator.location.value
+            ))
         }
         #expect(stepRequests[0].inputDocumentPath == nil)
         for index in 1..<stepRequests.count {
@@ -463,9 +495,9 @@ struct XcircuiteCandidatePlanExecutorTests {
         }
 
         let finalDocumentRef = try #require(stepDocuments.last)
-        let finalDocument = try store.readJSON(
+        let finalDocument = try await store.readJSON(
             DecodedLayoutDocument.self,
-            from: root.appending(path: finalDocumentRef.path)
+            from: finalDocumentRef.path
         )
         let cell = try #require(finalDocument.cells.first)
         #expect(cell.nets.map(\.name) == ["out"])
@@ -473,7 +505,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(cell.labels.count == 1)
         #expect(cell.vias.count == 1)
 
-        let diff = try store.loadDesignDiff(runID: "run-3", inProjectAt: root)
+        let diff = try await store.loadDesignDiff(runID: "run-3")
         #expect(diff.changes.first { $0.path == "/planning/candidate-plan/steps/step-4" }?.operation == .move)
         #expect(diff.changes.first { $0.path == "/planning/candidate-plan/steps/step-5" }?.operation == .replace)
         #expect(diff.changes.first { $0.path == "/planning/candidate-plan/steps/step-6" }?.operation == .replace)
@@ -483,17 +515,21 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorExportsStandardLayoutArtifactsFromLayoutStepHint() async throws {
         let root = try makeTemporaryRoot("candidate-plan-standard-layout-export")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-5", inProjectAt: root)
-        try writeStandardLayoutTechnology(root: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-5", store: store)
+        try await writeStandardLayoutTechnology(root: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeStandardLayoutExportPlan(),
             runID: "run-5",
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-5"),
             projectRoot: root
         )
@@ -509,23 +545,23 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(layoutGDS.byteCount > 0)
         #expect(fileExists(layoutGDS.locator.location.value, in: root))
 
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.locator.location.value)
+            from: result.planExecutionArtifact.locator.location.value
         )
         #expect(execution.stepResults.first?.artifactReferences.contains {
             $0.id.rawValue == "candidate-layout-gds"
         } == true)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-5/manifest.json")
+        let manifest = try await store.readJSON(
+            FlowRunManifest.self,
+            from: ".xcircuite/runs/run-5/manifest.json"
         )
         #expect(manifest.artifacts.contains {
             $0.artifactID == "candidate-layout-gds" && $0.format == .gdsii
         })
 
-        let diff = try store.loadDesignDiff(runID: "run-5", inProjectAt: root)
+        let diff = try await store.loadDesignDiff(runID: "run-5")
         #expect(diff.changes.first?.artifacts.contains {
             $0.artifactID == "candidate-layout-gds"
         } == true)
@@ -534,25 +570,29 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorRecordsMultiFamilyCoverageAndNetlistArtifactHandoff() async throws {
         let root = try makeTemporaryRoot("candidate-plan-multi-family-coverage")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-coverage", inProjectAt: root)
-        try writeSPICENetlist(root: root, path: "circuits/input.spice")
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-coverage", store: store)
+        try await writeSPICENetlist(root: root, path: "circuits/input.spice")
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeMultiFamilyCoveragePlan(),
             runID: "run-coverage",
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-coverage"),
             projectRoot: root
         )
 
         #expect(result.status == "executed")
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.stepResults.map(\.status) == ["executed", "executed", "executed", "executed"])
         #expect(execution.executionCoverage.status == "covered")
@@ -584,34 +624,34 @@ struct XcircuiteCandidatePlanExecutorTests {
         let firstEditReportRef = try #require(execution.stepResults[1].artifactReferences.first {
             $0.id.rawValue == "candidate-step-2-netlist-parameter-edit-report"
         })
-        let firstEditReport = try store.readJSON(
+        let firstEditReport = try await store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: root.appending(path: firstEditReportRef.locator.location.value)
+            from: firstEditReportRef.locator.location.value
         )
         let secondEditReportRef = try #require(execution.stepResults[2].artifactReferences.first {
             $0.id.rawValue == "candidate-step-3-netlist-parameter-edit-report"
         })
-        let secondEditReport = try store.readJSON(
+        let secondEditReport = try await store.readJSON(
             XcircuiteNetlistParameterEditReport.self,
-            from: root.appending(path: secondEditReportRef.locator.location.value)
+            from: secondEditReportRef.locator.location.value
         )
         #expect(firstEditReport.outputNetlistPath == secondEditReport.sourceNetlistPath)
 
-        let diff = try store.loadDesignDiff(runID: "run-coverage", inProjectAt: root)
+        let diff = try await store.loadDesignDiff(runID: "run-coverage")
         #expect(diff.changes.first { $0.path == "/planning/candidate-plan/steps/step-2" }?.domain == .netlist)
         #expect(diff.changes.first { $0.path == "/planning/candidate-plan/steps/step-3" }?.domain == .netlist)
         #expect(diff.changes.first { $0.path == "/planning/candidate-plan/steps/step-4" }?.domain == .verification)
 
-        let manifest = try store.readJSON(
-            XcircuiteRunManifest.self,
-            from: root.appending(path: ".xcircuite/runs/run-coverage/manifest.json")
+        let manifest = try await store.readJSON(
+            FlowRunManifest.self,
+            from: ".xcircuite/runs/run-coverage/manifest.json"
         )
         for artifactID in execution.executionCoverage.producedArtifactIDs {
             #expect(manifest.artifacts.contains { $0.artifactID == artifactID })
         }
     }
 
-    @Test func candidatePlanExecutionRejectsMissingExecutionCoverage() throws {
+    @Test func candidatePlanExecutionRejectsMissingExecutionCoverage() async throws {
         let payload = Data("""
         {
           "schemaVersion": 2,
@@ -640,16 +680,20 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorPersistsLayoutCommandFailureAsPlanExecutionDiagnostic() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-failure")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-4", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-4", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeFailingLayoutPlan(),
             runID: "run-4",
             projectRoot: root
         )
 
-        let result = try await XcircuiteCandidatePlanExecutor().executeCandidatePlan(
+        let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-4"),
             projectRoot: root
         )
@@ -658,14 +702,14 @@ struct XcircuiteCandidatePlanExecutorTests {
         #expect(result.designDiffArtifact == nil)
         #expect(result.nextActions.contains("inspect-execution-diagnostic:step-1"))
 
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.stepResults.first?.status == "failed")
         #expect(execution.diagnostics.contains { $0.code == "execution-failed" })
 
-        let action = try #require(store.loadRunActions(runID: "run-4", inProjectAt: root).last)
+        let action = try #require((try await store.loadRunActions(runID: "run-4")).last)
         #expect(action.status == .failed)
         #expect(action.diagnostics.contains { $0.code == "execution-failed" })
     }
@@ -673,16 +717,19 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorRejectsLayoutCommandOutputPathMismatchBeforeArtifactPromotion() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-output-path-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-layout-path-mismatch", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-layout-path-mismatch", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeSingleLayoutPlan(runID: "run-layout-path-mismatch"),
             runID: "run-layout-path-mismatch",
             projectRoot: root
         )
 
         let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore,
             layoutRunner: TamperingLayoutCommandRunner(mode: .outputPathMismatch)
         ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-layout-path-mismatch"),
@@ -691,9 +738,9 @@ struct XcircuiteCandidatePlanExecutorTests {
 
         #expect(result.status == "failed")
         #expect(result.producedArtifacts.isEmpty)
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.stepResults.first?.status == "failed")
         #expect(execution.diagnostics.contains { $0.code == "layout-command-result-path-mismatch" })
@@ -703,16 +750,19 @@ struct XcircuiteCandidatePlanExecutorTests {
     @Test func executorRejectsLayoutCommandDigestMismatchBeforeArtifactPromotion() async throws {
         let root = try makeTemporaryRoot("candidate-plan-layout-digest-mismatch")
         defer { removeTemporaryRoot(root) }
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: "run-layout-digest-mismatch", inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistCandidatePlan(
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: "run-layout-digest-mismatch", store: store)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await artifactStore.persistCandidatePlan(
             makeSingleLayoutPlan(runID: "run-layout-digest-mismatch"),
             runID: "run-layout-digest-mismatch",
             projectRoot: root
         )
 
         let result = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore,
             layoutRunner: TamperingLayoutCommandRunner(mode: .digestMismatch)
         ).executeCandidatePlan(
             request: XcircuiteCandidatePlanExecutionRequest(runID: "run-layout-digest-mismatch"),
@@ -721,9 +771,9 @@ struct XcircuiteCandidatePlanExecutorTests {
 
         #expect(result.status == "failed")
         #expect(result.producedArtifacts.isEmpty)
-        let execution = try store.readJSON(
+        let execution = try await store.readJSON(
             XcircuiteCandidatePlanExecution.self,
-            from: root.appending(path: result.planExecutionArtifact.path)
+            from: result.planExecutionArtifact.path
         )
         #expect(execution.stepResults.first?.status == "failed")
         #expect(execution.diagnostics.contains { $0.code == "layout-command-output-digest-mismatch" })
@@ -735,11 +785,11 @@ struct XcircuiteCandidatePlanExecutorTests {
         root: URL,
         runID: String,
         problem: XcircuiteCircuitPlanningProblem
-    ) throws {
-        let store = XcircuiteWorkspaceStore()
-        try store.createWorkspace(at: root)
-        try store.createRunDirectory(for: runID, inProjectAt: root)
-        try XcircuitePlanningArtifactStore().persistPlanningProblem(
+    ) async throws {
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await XcircuitePlanningArtifactStore(workspaceStore: store).persistPlanningProblem(
             problem,
             runID: runID,
             projectRoot: root
@@ -764,9 +814,9 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 1,
                     operationID: "layout.create-cell",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "cellName": .string("top"),
-                        "makeTop": .bool(true),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "cellName": .text("top"),
+                        "makeTop": .boolean(true),
                     ],
                     gates: ["artifact-integrity"]
                 ),
@@ -774,9 +824,9 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 2,
                     operationID: "layout.add-net",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "netID": .string("10000000-0000-0000-0000-000000000032"),
-                        "netName": .string("out"),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "netID": .text("10000000-0000-0000-0000-000000000032"),
+                        "netName": .text("out"),
                     ],
                     gates: ["artifact-integrity"]
                 ),
@@ -784,14 +834,14 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 3,
                     operationID: "layout.add-rect",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "netID": .string("10000000-0000-0000-0000-000000000032"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000033"),
-                        "layer": .string("M1"),
-                        "originX": .number(0),
-                        "originY": .number(0),
-                        "width": .number(2),
-                        "height": .number(1),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "netID": .text("10000000-0000-0000-0000-000000000032"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000033"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(0),
+                        "originY": .scalar(0),
+                        "width": .scalar(2),
+                        "height": .scalar(1),
                     ],
                     gates: ["artifact-integrity", "native-drc"]
                 ),
@@ -799,10 +849,10 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 4,
                     operationID: "layout.translate-shape",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000033"),
-                        "deltaX": .number(1),
-                        "deltaY": .number(0),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000033"),
+                        "deltaX": .scalar(1),
+                        "deltaY": .scalar(0),
                     ],
                     gates: ["artifact-integrity", "native-drc"]
                 ),
@@ -810,11 +860,11 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 5,
                     operationID: "layout.resize-shape",
                     hints: [
-                        "shapeID": .string("10000000-0000-0000-0000-000000000033"),
-                        "deltaMinX": .number(0),
-                        "deltaMinY": .number(0),
-                        "deltaMaxX": .number(1),
-                        "deltaMaxY": .number(1),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000033"),
+                        "deltaMinX": .scalar(0),
+                        "deltaMinY": .scalar(0),
+                        "deltaMaxX": .scalar(1),
+                        "deltaMaxY": .scalar(1),
                     ],
                     gates: ["artifact-integrity", "native-drc", "native-lvs"]
                 ),
@@ -822,10 +872,10 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 6,
                     operationID: "layout.split-shape",
                     hints: [
-                        "shapeID": .string("10000000-0000-0000-0000-000000000033"),
-                        "firstShapeID": .string("10000000-0000-0000-0000-000000000037"),
-                        "secondShapeID": .string("10000000-0000-0000-0000-000000000038"),
-                        "axis": .string("vertical"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000033"),
+                        "firstShapeID": .text("10000000-0000-0000-0000-000000000037"),
+                        "secondShapeID": .text("10000000-0000-0000-0000-000000000038"),
+                        "axis": .text("vertical"),
                     ],
                     gates: ["artifact-integrity", "native-drc", "native-lvs"]
                 ),
@@ -833,13 +883,13 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 7,
                     operationID: "layout.add-label",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "netID": .string("10000000-0000-0000-0000-000000000032"),
-                        "labelID": .string("10000000-0000-0000-0000-000000000034"),
-                        "text": .string("out"),
-                        "layer": .string("M1"),
-                        "positionX": .number(1),
-                        "positionY": .number(0),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "netID": .text("10000000-0000-0000-0000-000000000032"),
+                        "labelID": .text("10000000-0000-0000-0000-000000000034"),
+                        "text": .text("out"),
+                        "layer": .text("M1"),
+                        "positionX": .scalar(1),
+                        "positionY": .scalar(0),
                     ],
                     gates: ["artifact-integrity", "native-lvs"]
                 ),
@@ -847,12 +897,12 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 8,
                     operationID: "layout.add-via",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "netID": .string("10000000-0000-0000-0000-000000000032"),
-                        "viaID": .string("10000000-0000-0000-0000-000000000035"),
-                        "viaDefinitionID": .string("VIA1"),
-                        "positionX": .number(1),
-                        "positionY": .number(0),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "netID": .text("10000000-0000-0000-0000-000000000032"),
+                        "viaID": .text("10000000-0000-0000-0000-000000000035"),
+                        "viaDefinitionID": .text("VIA1"),
+                        "positionX": .scalar(1),
+                        "positionY": .scalar(0),
                     ],
                     gates: ["artifact-integrity", "native-drc", "native-lvs"]
                 ),
@@ -860,14 +910,14 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 9,
                     operationID: "layout.add-rect",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000031"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000036"),
-                        "layer": .string("M1"),
-                        "originX": .number(20),
-                        "originY": .number(20),
-                        "width": .number(1),
-                        "height": .number(1),
-                        "role": .string("temporary-fill"),
+                        "cellID": .text("10000000-0000-0000-0000-000000000031"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000036"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(20),
+                        "originY": .scalar(20),
+                        "width": .scalar(1),
+                        "height": .scalar(1),
+                        "role": .text("temporary-fill"),
                     ],
                     gates: ["artifact-integrity", "native-drc"]
                 ),
@@ -875,7 +925,7 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 10,
                     operationID: "layout.delete-shape",
                     hints: [
-                        "shapeID": .string("10000000-0000-0000-0000-000000000036"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000036"),
                     ],
                     gates: ["artifact-integrity", "native-drc", "native-lvs"]
                 ),
@@ -916,9 +966,9 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 1,
                     operationID: "layout.create-cell",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000701"),
-                        "cellName": .string("top"),
-                        "makeTop": .bool(true),
+                        "cellID": .text("10000000-0000-0000-0000-000000000701"),
+                        "cellName": .text("top"),
+                        "makeTop": .boolean(true),
                     ],
                     gates: ["artifact-integrity"]
                 ),
@@ -968,9 +1018,9 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 1,
                     operationID: "layout.create-cell",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000091"),
-                        "cellName": .string("top"),
-                        "makeTop": .bool(true),
+                        "cellID": .text("10000000-0000-0000-0000-000000000091"),
+                        "cellName": .text("top"),
+                        "makeTop": .boolean(true),
                     ],
                     gates: ["artifact-integrity"]
                 ),
@@ -1006,9 +1056,9 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 1,
                     operationID: "layout.translate-shape",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000041"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000043"),
-                        "deltaX": .number(1),
+                        "cellID": .text("10000000-0000-0000-0000-000000000041"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000043"),
+                        "deltaX": .scalar(1),
                     ],
                     gates: ["artifact-integrity", "native-drc"]
                 ),
@@ -1038,23 +1088,20 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 1,
                     operationID: "layout.add-rect",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000501"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000502"),
-                        "cellName": .string("top"),
-                        "layer": .string("M1"),
-                        "originX": .number(0),
-                        "originY": .number(0),
-                        "width": .number(2),
-                        "height": .number(1),
-                        "standardLayoutExports": .array([
-                            .object([
-                                "artifactID": .string("candidate-layout-gds"),
-                                "format": .string("gds"),
-                                "technologyInput": .object([
-                                    "kind": .string("path"),
-                                    "value": .string("tech/layout-tech.json"),
-                                ]),
-                            ]),
+                        "cellID": .text("10000000-0000-0000-0000-000000000501"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000502"),
+                        "cellName": .text("top"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(0),
+                        "originY": .scalar(0),
+                        "width": .scalar(2),
+                        "height": .scalar(1),
+                        "standardLayoutExports": .standardLayoutExports([
+                            LayoutCommandStandardLayoutExportSpec(
+                                artifactID: "candidate-layout-gds",
+                                format: .gds,
+                                technologyInput: .path("tech/layout-tech.json")
+                            ),
                         ]),
                     ],
                     gates: ["artifact-integrity"]
@@ -1085,14 +1132,14 @@ struct XcircuiteCandidatePlanExecutorTests {
                     order: 1,
                     operationID: "layout.add-rect",
                     hints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000601"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000602"),
-                        "cellName": .string("top"),
-                        "layer": .string("M1"),
-                        "originX": .number(0),
-                        "originY": .number(0),
-                        "width": .number(2),
-                        "height": .number(1),
+                        "cellID": .text("10000000-0000-0000-0000-000000000601"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000602"),
+                        "cellName": .text("top"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(0),
+                        "originY": .scalar(0),
+                        "width": .scalar(2),
+                        "height": .scalar(1),
                     ],
                     gates: ["artifact-integrity", "native-drc"]
                 ),
@@ -1102,13 +1149,9 @@ struct XcircuiteCandidatePlanExecutorTests {
                     domainID: "simulation-and-pex-improvement",
                     operationID: "simulation.set-netlist-parameters",
                     hints: [
-                        "netlistPath": .string("circuits/input.spice"),
-                        "assignments": .array([
-                            .object([
-                                "name": .string("M1.w"),
-                                "value": .number(2),
-                                "unit": .string("u"),
-                            ]),
+                        "netlistPath": .text("circuits/input.spice"),
+                        "assignments": .parameterAssignments([
+                            XcircuiteParameterAssignment(name: "M1.w", value: 2, unit: "u"),
                         ]),
                     ],
                     gates: ["artifact-integrity", "simulation-metric-gate"]
@@ -1119,12 +1162,8 @@ struct XcircuiteCandidatePlanExecutorTests {
                     domainID: "simulation-and-pex-improvement",
                     operationID: "simulation.set-netlist-parameters",
                     hints: [
-                        "assignments": .array([
-                            .object([
-                                "name": .string("M1.l"),
-                                "value": .number(0.18),
-                                "unit": .string("u"),
-                            ]),
+                        "assignments": .parameterAssignments([
+                            XcircuiteParameterAssignment(name: "M1.l", value: 0.18, unit: "u"),
                         ]),
                     ],
                     gates: ["artifact-integrity", "simulation-metric-gate"]
@@ -1135,11 +1174,11 @@ struct XcircuiteCandidatePlanExecutorTests {
                     domainID: "lvs-signoff",
                     operationID: "lvs.policy-repair",
                     hints: [
-                        "policyKind": .string("model-equivalence"),
-                        "schematicModel": .string("nfet"),
-                        "layoutModel": .string("sky130_fd_pr__nfet_01v8"),
-                        "canonicalModel": .string("nfet"),
-                        "ruleID": .string("model-equivalence:nfet"),
+                        "policyKind": .text("model-equivalence"),
+                        "schematicModel": .text("nfet"),
+                        "layoutModel": .text("sky130_fd_pr__nfet_01v8"),
+                        "canonicalModel": .text("nfet"),
+                        "ruleID": .text("model-equivalence:nfet"),
                     ],
                     gates: ["artifact-integrity", "native-lvs"]
                 ),
@@ -1170,7 +1209,7 @@ struct XcircuiteCandidatePlanExecutorTests {
     private func layoutPlanStep(
         order: Int,
         operationID: String,
-        hints: [String: XcircuiteJSONValue],
+        hints: [String: PlanningParameterValue],
         gates: [String]
     ) -> XcircuiteCandidatePlanStep {
         XcircuiteCandidatePlanStep(
@@ -1196,7 +1235,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         actionID: String,
         domainID: String,
         operationID: String,
-        hints: [String: XcircuiteJSONValue],
+        hints: [String: PlanningParameterValue],
         gates: [String]
     ) -> XcircuiteCandidatePlanStep {
         XcircuiteCandidatePlanStep(
@@ -1244,8 +1283,8 @@ struct XcircuiteCandidatePlanExecutorTests {
                     priority: "error",
                     sourceRefIDs: ["drc-summary"],
                     target: "no-active-violations-for-bucket",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair M1 width violation."
                 ),
             ],
@@ -1270,14 +1309,14 @@ struct XcircuiteCandidatePlanExecutorTests {
                     requiredInputRefs: ["layout-ref"],
                     verificationGates: ["artifact-integrity", "native-drc", "native-lvs"],
                     parameterHints: [
-                        "cellID": .string("10000000-0000-0000-0000-000000000001"),
-                        "shapeID": .string("10000000-0000-0000-0000-000000000003"),
-                        "layer": .string("M1"),
-                        "originX": .number(0),
-                        "originY": .number(0),
-                        "width": .number(2),
-                        "height": .number(1),
-                        "ruleID": .string("M1.width"),
+                        "cellID": .text("10000000-0000-0000-0000-000000000001"),
+                        "shapeID": .text("10000000-0000-0000-0000-000000000003"),
+                        "layer": .text("M1"),
+                        "originX": .scalar(0),
+                        "originY": .scalar(0),
+                        "width": .scalar(2),
+                        "height": .scalar(1),
+                        "ruleID": .text("M1.width"),
                     ]
                 ),
             ],
@@ -1336,8 +1375,8 @@ struct XcircuiteCandidatePlanExecutorTests {
                     priority: "error",
                     sourceRefIDs: ["lvs-summary"],
                     target: "layout-and-schematic-equivalent-for-bucket",
-                    currentValue: .number(1),
-                    requiredValue: .number(0),
+                    currentValue: .scalar(1),
+                    requiredValue: .scalar(0),
                     description: "Repair model policy mismatch."
                 ),
             ],
@@ -1408,7 +1447,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         FileManager.default.fileExists(atPath: root.appending(path: path).path(percentEncoded: false))
     }
 
-    private func writeStandardLayoutTechnology(root: URL) throws {
+    private func writeStandardLayoutTechnology(root: URL) async throws {
         let url = root.appending(path: "tech/layout-tech.json")
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -1418,7 +1457,7 @@ struct XcircuiteCandidatePlanExecutorTests {
         try data.write(to: url, options: [.atomic])
     }
 
-    private func writeSPICENetlist(root: URL, path: String) throws {
+    private func writeSPICENetlist(root: URL, path: String) async throws {
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),

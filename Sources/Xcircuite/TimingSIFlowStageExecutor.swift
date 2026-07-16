@@ -32,7 +32,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) async throws -> FlowStageResult {
         do {
-            try context.checkCancellation()
+            try await context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
             let executingEngine: any SignalIntegrityFoundationEngine = engine ?? NativeSignalIntegrityEngine(
@@ -40,8 +40,8 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
                 artifactStore: nil
             )
             let result = try await executingEngine.execute(request)
-            try context.checkCancellation()
-            let resultArtifact = try persistResult(result, context: context)
+            try await context.checkCancellation()
+            let resultArtifact = try await persistResult(result, context: context)
             return makeStageResult(result: result, resultArtifact: resultArtifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -64,8 +64,8 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         guard stage.stageID == stageID else {
             throw XcircuiteRuntimeError.stageMismatch(expected: stageID, actual: stage.stageID)
         }
-        try XcircuiteIdentifierValidator().validate(stageID, kind: .stageID)
-        try XcircuiteIdentifierValidator().validate(toolID, kind: .toolID)
+        try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
     private func makeRequest(context: FlowExecutionContext) throws -> SignalIntegrityFoundationRequest {
@@ -115,19 +115,16 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
     private func persistResult(
         _ result: SignalIntegrityExecutionResult,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let directory = context.runDirectory.appending(path: "stages").appending(path: stageID).appending(path: "raw")
-        try context.storage.ensureDirectory(at: directory)
-        let url = directory.appending(path: "timing-signal-integrity-result.json")
+    ) async throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(result).write(to: url, options: .atomic)
-        return try artifactBuilder.reference(
-            for: url,
-            projectRoot: context.projectRoot,
+        return try await context.persistArtifact(
+            encoder.encode(result),
             artifactID: "timing-signal-integrity-result",
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            stageID: stageID,
+            fileName: "timing-signal-integrity-result.json",
+            kind: .report,
+            format: .json
         )
     }
 
