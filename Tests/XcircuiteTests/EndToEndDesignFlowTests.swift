@@ -153,13 +153,13 @@ struct EndToEndDesignFlowTests {
             root: root,
             kind: .technology
         )
-        let constraintsLegacyReference = try await XcircuiteWorkspaceStore(projectRoot: root).makeArtifactReference(
+        let storedConstraintsReference = try await XcircuiteWorkspaceStore(projectRoot: root).makeArtifactReference(
             forProjectRelativePath: "constraints.sdc",
             artifactID: "e2e-constraints",
             kind: .constraint,
             format: .sdc,
         )
-        let constraintsReference = try foundationReference(constraintsLegacyReference)
+        let constraintsReference = try artifactReference(storedConstraintsReference)
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [logicDesignReference, constraintsReference, pdkReference],

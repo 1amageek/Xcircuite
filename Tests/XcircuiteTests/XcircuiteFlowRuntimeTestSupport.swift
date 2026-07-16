@@ -10,10 +10,9 @@ import Testing
 import ToolQualification
 @testable import Xcircuite
 import XcircuiteFlowCLISupport
-import DesignFlowKernel
 
 /// Applies the requested role while preserving canonical artifact identity.
-func foundationReference(
+func artifactReference(
     _ reference: ArtifactReference,
     role: ArtifactRole = .input
 ) throws -> ArtifactReference {
@@ -134,7 +133,7 @@ extension XcircuiteFlowRuntimeTests {
                 gates: [
                     FlowGateResult(gateID: "waveform-artifact", status: .passed),
                 ],
-                artifacts: [try foundationReference(reference)]
+                artifacts: [try artifactReference(reference)]
             )
         }
     }

@@ -442,7 +442,7 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-failed",
                     kind: .corpus,
-                    artifact: try foundationReference(try fixtureArtifactReference(
+                    artifact: try artifactReference(try fixtureArtifactReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,
@@ -507,7 +507,7 @@ extension XcircuiteFlowRuntimeTests {
                 toolEvidence: ToolEvidence(
                     evidenceID: "drc-corpus-mismatch",
                     kind: .corpus,
-                    artifact: try foundationReference(try fixtureArtifactReference(
+                    artifact: try artifactReference(try fixtureArtifactReference(
                         path: "qualification/drc-corpus-report.json",
                         kind: .report,
                         format: .json,

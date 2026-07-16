@@ -375,7 +375,7 @@ struct SimulationFlowStageExecutorTests {
                 stageID: "005-netlist",
                 status: .succeeded,
                 artifacts: [
-                    try foundationReference(try fixtureArtifactReference(
+                    try artifactReference(try fixtureArtifactReference(
                         artifactID: "source-netlist",
                         path: netlistPath,
                         kind: .netlist,

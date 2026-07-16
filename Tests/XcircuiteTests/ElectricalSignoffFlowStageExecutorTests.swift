@@ -32,13 +32,13 @@ struct ElectricalSignoffFlowStageExecutorTests {
         #expect(result.status == FlowStageStatus.succeeded)
         #expect(result.gates.map(\.status) == [FlowGateStatus.passed, .passed, .passed])
         #expect(result.gates.map(\.gateID) == ["erc", "esd", "artifact-integrity"])
-        let foundationReference = try #require(
+        let evidenceReference = try #require(
             result.artifacts.first { $0.artifactID == "electrical-signoff-foundation-evidence" }
         )
-        #expect(foundationReference.sha256.count == 64)
+        #expect(evidenceReference.sha256.count == 64)
         let foundationEvidence = try JSONDecoder().decode(
             ElectricalSignoffFoundationEvidence.self,
-            from: try await store.read(from: foundationReference.path)
+            from: try await store.read(from: evidenceReference.path)
         )
         #expect(foundationEvidence.evidence.provenance.inputs.count == 3)
     }

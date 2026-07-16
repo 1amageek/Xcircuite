@@ -121,7 +121,7 @@ struct XcircuiteAgentLoopCLITests {
         let envelope = FlowArtifactEnvelope(
             artifactID: "simulation-summary",
             role: "simulation-summary",
-            reference: try foundationReference(reference),
+            reference: try artifactReference(reference),
             evaluationResult: FlowEvaluationResult(
                 evaluationID: "simulation-evaluation",
                 specID: "opamp-spec",
