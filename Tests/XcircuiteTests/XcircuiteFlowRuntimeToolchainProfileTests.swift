@@ -200,11 +200,11 @@ extension XcircuiteFlowRuntimeTests {
             runID: "run-1",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains {
-            $0.role == "toolchain-profile"
-                && $0.artifactID == "flow-toolchain-profile"
-                && $0.path == ".xcircuite/runs/run-1/toolchain-profile.json"
-        })
+        #expect(bundle.artifacts.first(where: {
+            $0.purpose == .toolchainProfile
+                && $0.reference.artifactID == "flow-toolchain-profile"
+                && $0.reference.path == ".xcircuite/runs/run-1/toolchain-profile.json"
+        }) != nil)
     }
 
     @Test func runtimeSpecRoundTripsToolchainProfile() async throws {

@@ -266,7 +266,7 @@ struct SimulationFlowStageExecutorTests {
             runID: "run-sim-retry",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains { $0.role == "stage-attempts" })
+        #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
 
     @Test func waveformArtifactPreservesSemanticNodeAndBranchNames() async throws {

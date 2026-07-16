@@ -209,10 +209,10 @@ extension XcircuiteFlowRuntimeTests {
             runID: "run-progress-signoff-follow",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains {
-            $0.role == "run-progress"
-                && $0.path == ".xcircuite/runs/run-progress-signoff-follow/progress.jsonl"
-        })
+        #expect(bundle.artifacts.first(where: {
+            $0.purpose == .runProgress
+                && $0.reference.path == ".xcircuite/runs/run-progress-signoff-follow/progress.jsonl"
+        }) != nil)
     }
 
     @Test func runtimeProgressFollowStreamsNativeDRCStressStagesWithoutSequenceGaps() async throws {

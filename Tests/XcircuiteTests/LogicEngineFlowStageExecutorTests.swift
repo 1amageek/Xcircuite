@@ -14,11 +14,11 @@ import TimingCore
 import ToolQualification
 @testable import Xcircuite
 
-@Suite("LogicEngine flow stage adapters")
+@Suite("LogicEngine flow stage executors")
 struct LogicEngineFlowStageExecutorTests {
-    @Test("qualification adapter blocks release without process evidence", .timeLimit(.minutes(1)))
-    func qualificationAdapterRequiresProcessEvidence() async throws {
-        let root = try makeRoot(name: "logic-qualification-adapter")
+    @Test("qualification stage blocks release without process evidence", .timeLimit(.minutes(1)))
+    func qualificationStageRequiresProcessEvidence() async throws {
+        let root = try makeRoot(name: "logic-qualification-stage")
         defer { removeRoot(root) }
         let report = LogicEvidenceReport(
             suiteID: "qualification-suite",
@@ -46,7 +46,7 @@ struct LogicEngineFlowStageExecutorTests {
             root: root,
             kind: .report
         )
-        let context = try await makeContext(root: root, runID: "logic-qualification-adapter")
+        let context = try await makeContext(root: root, runID: "logic-qualification-stage")
         let result = try await LogicQualificationFlowStageExecutor(
             reportInput: .path(reportReference.locator.location.value)
         ).execute(
@@ -62,8 +62,8 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "logic-qualification-result" })
     }
 
-    @Test("qualification adapter rejects a forged release report", .timeLimit(.minutes(1)))
-    func qualificationAdapterRejectsForgedReleaseReport() async throws {
+    @Test("qualification stage rejects a forged release report", .timeLimit(.minutes(1)))
+    func qualificationStageRejectsForgedReleaseReport() async throws {
         let root = try makeRoot(name: "logic-qualification-forged-report")
         defer { removeRoot(root) }
         let report = LogicEvidenceReport(
@@ -97,16 +97,16 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.diagnostics.contains { $0.code == "LOGIC_QUALIFICATION_ARTIFACT_INVALID" })
     }
 
-    @Test("lowering adapter converts a canonical RTL snapshot into an execution artifact", .timeLimit(.minutes(1)))
-    func loweringAdapter() async throws {
-        let root = try makeRoot(name: "logic-lowering-adapter")
+    @Test("lowering stage converts a canonical RTL snapshot into an execution artifact", .timeLimit(.minutes(1)))
+    func loweringStageExecutor() async throws {
+        let root = try makeRoot(name: "logic-lowering-stage")
         defer { removeRoot(root) }
         let snapshot = try LogicDesignSnapshotCodec.finalized(LogicDesignSnapshot(
             rtl: RTLDesign(
-                topModuleName: "adapter_top",
+                topModuleName: "flow_top",
                 modules: [RTLModule(
                     id: "module-top",
-                    name: "adapter_top",
+                    name: "flow_top",
                     ports: [
                         RTLPort(id: "a", name: "a", direction: .input),
                         RTLPort(id: "y", name: "y", direction: .output),
@@ -127,11 +127,11 @@ struct LogicEngineFlowStageExecutorTests {
             snapshotRevision = nil
         }
         let request = LogicLoweringRequest(
-            runID: "logic-lowering-adapter",
+            runID: "logic-lowering-stage",
             inputs: [snapshotReference],
             design: LogicFoundationDesignReference(
                 artifact: snapshotReference,
-                topDesignName: "adapter_top",
+                topDesignName: "flow_top",
                 designRevision: snapshotRevision
             )
         )
@@ -149,14 +149,14 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "logic-lowering-result" })
     }
 
-    @Test("simulation adapter executes the native engine and persists artifacts", .timeLimit(.minutes(1)))
-    func simulationAdapter() async throws {
-        let root = try makeRoot(name: "logic-simulation-adapter")
+    @Test("simulation stage executes the native engine and persists artifacts", .timeLimit(.minutes(1)))
+    func simulationStageExecutor() async throws {
+        let root = try makeRoot(name: "logic-simulation-stage")
         defer { removeRoot(root) }
         let designReference = try writeDesign(to: root)
         let stimulusReference = try writeStimulus(to: root)
         let request = LogicSimulationRequest(
-            runID: "logic-simulation-adapter",
+            runID: "logic-simulation-stage",
             inputs: [designReference.artifact, stimulusReference],
             design: designReference,
             stimulus: stimulusReference
@@ -176,12 +176,12 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "logic-simulation-result" })
     }
 
-    @Test("simulation adapter preserves signed arithmetic semantics", .timeLimit(.minutes(1)))
-    func signedSimulationAdapter() async throws {
-        let root = try makeRoot(name: "logic-signed-simulation-adapter")
+    @Test("simulation stage preserves signed arithmetic semantics", .timeLimit(.minutes(1)))
+    func signedSimulationStageExecutor() async throws {
+        let root = try makeRoot(name: "logic-signed-simulation-stage")
         defer { removeRoot(root) }
         let document = LogicDesignDocument(
-            topDesignName: "signed_adapter_top",
+            topDesignName: "signed_flow_top",
             ports: [
                 LogicPort(name: "a", direction: .input, width: 4),
                 LogicPort(name: "b", direction: .input, width: 2),
@@ -220,7 +220,7 @@ struct LogicEngineFlowStageExecutorTests {
         )
         let stimulusReference = try writeJSON(stimulus, name: "signed-stimulus.json", root: root, kind: .testPattern)
         let request = LogicSimulationRequest(
-            runID: "logic-signed-simulation-adapter",
+            runID: "logic-signed-simulation-stage",
             inputs: [designReference, stimulusReference],
             design: design,
             stimulus: stimulusReference
@@ -239,13 +239,13 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "logic-simulation-result" })
     }
 
-    @Test("synthesis adapter preserves equivalence-required provenance", .timeLimit(.minutes(1)))
-    func synthesisAdapter() async throws {
-        let root = try makeRoot(name: "logic-synthesis-adapter")
+    @Test("synthesis stage preserves equivalence-required provenance", .timeLimit(.minutes(1)))
+    func synthesisStageExecutor() async throws {
+        let root = try makeRoot(name: "logic-synthesis-stage")
         defer { removeRoot(root) }
         let designReference = try writeDesign(to: root)
         let library = try writeTextJSON(
-            "{\"schemaVersion\":1,\"libraryName\":\"adapter\",\"cells\":[{\"name\":\"AND2_X1\",\"kind\":\"and\",\"inputCount\":2,\"area\":1.0,\"power\":0.1,\"driveStrength\":1,\"qualified\":true}]}",
+            "{\"schemaVersion\":1,\"libraryName\":\"flow-stage\",\"cells\":[{\"name\":\"AND2_X1\",\"kind\":\"and\",\"inputCount\":2,\"area\":1.0,\"power\":0.1,\"driveStrength\":1}]}",
             name: "logic-cells.json",
             root: root,
             kind: .timingLibrary
@@ -257,19 +257,19 @@ struct LogicEngineFlowStageExecutorTests {
             kind: .constraint
         )
         let pdk = try writeTextJSON(
-            "{\"processID\":\"adapter\",\"version\":\"1\"}",
+            "{\"processID\":\"fixture\",\"version\":\"1\"}",
             name: "pdk.json",
             root: root,
             kind: .technology
         )
         let pdkDigest = pdk.digest.hexadecimalValue
         let request = LogicSynthesisRequest(
-            runID: "logic-synthesis-adapter",
+            runID: "logic-synthesis-stage",
             inputs: [designReference.artifact, library, constraints, pdk],
             design: designReference,
             libraries: [TimingLibraryReference(artifact: library, cornerIDs: ["typical"])],
             constraints: TimingConstraintReference(artifact: constraints, modeIDs: ["default"]),
-            pdk: PDKReference(manifest: pdk, processID: "adapter", version: "1", digest: pdkDigest)
+            pdk: PDKReference(manifest: pdk, processID: "fixture", version: "1", digest: pdkDigest)
         )
         let requestPath = try writeRequest(request, name: "synthesis-request.json", root: root)
         let context = try await makeContext(root: root, runID: request.runID)
@@ -287,13 +287,13 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(result.artifacts.contains { $0.artifactID == "logic-synthesis-result" })
     }
 
-    @Test("equivalence adapter proves mapped synthesis and emits acceptance evidence", .timeLimit(.minutes(1)))
-    func equivalenceAdapter() async throws {
-        let root = try makeRoot(name: "logic-equivalence-adapter")
+    @Test("equivalence stage proves mapped synthesis and emits acceptance evidence", .timeLimit(.minutes(1)))
+    func equivalenceStageExecutor() async throws {
+        let root = try makeRoot(name: "logic-equivalence-stage")
         defer { removeRoot(root) }
         let designReference = try writeDesign(to: root)
         let library = try writeTextJSON(
-            "{\"schemaVersion\":1,\"libraryName\":\"adapter\",\"cells\":[{\"name\":\"AND2_X1\",\"kind\":\"and\",\"inputCount\":2,\"area\":1.0,\"power\":0.1,\"driveStrength\":1,\"qualified\":true}]}",
+            "{\"schemaVersion\":1,\"libraryName\":\"flow-stage\",\"cells\":[{\"name\":\"AND2_X1\",\"kind\":\"and\",\"inputCount\":2,\"area\":1.0,\"power\":0.1,\"driveStrength\":1}]}",
             name: "equivalence-cells.json",
             root: root,
             kind: .timingLibrary
@@ -305,19 +305,19 @@ struct LogicEngineFlowStageExecutorTests {
             kind: .constraint
         )
         let pdk = try writeTextJSON(
-            "{\"processID\":\"adapter\",\"version\":\"1\"}",
+            "{\"processID\":\"fixture\",\"version\":\"1\"}",
             name: "equivalence-pdk.json",
             root: root,
             kind: .technology
         )
         let pdkDigest = pdk.digest.hexadecimalValue
         let synthesisRequest = LogicSynthesisRequest(
-            runID: "logic-equivalence-adapter",
+            runID: "logic-equivalence-stage",
             inputs: [designReference.artifact, library, constraints, pdk],
             design: designReference,
             libraries: [TimingLibraryReference(artifact: library, cornerIDs: ["typical"])],
             constraints: TimingConstraintReference(artifact: constraints, modeIDs: ["default"]),
-            pdk: PDKReference(manifest: pdk, processID: "adapter", version: "1", digest: pdkDigest)
+            pdk: PDKReference(manifest: pdk, processID: "fixture", version: "1", digest: pdkDigest)
         )
         let synthesisRequestPath = try writeRequest(
             synthesisRequest,
@@ -365,7 +365,7 @@ struct LogicEngineFlowStageExecutorTests {
 
     private func writeDesign(to root: URL) throws -> LogicFoundationDesignReference {
         let document = LogicDesignDocument(
-            topDesignName: "adapter_top",
+            topDesignName: "flow_top",
             ports: [
                 LogicPort(name: "a", direction: .input),
                 LogicPort(name: "b", direction: .input),

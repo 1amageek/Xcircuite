@@ -185,7 +185,7 @@ and `SimulationFlowStageExecutorTests/simulationExecutorRetriesTransientFailureA
 | `requiredInputFormats` | array of string | no | Format raw values such as `JSON`, `GDSII`, `OASIS`, `SPICE`, `SPEF`, `CSV` |
 | `requiredOutputFormats` | array of string | no | Required output formats |
 | `requiredEvidenceKinds` | array of string | no | Evidence kinds that must be present |
-| `requiredQualifiedEvidenceKinds` | array of string | no | Evidence kinds that must have `qualification.qualified == true` |
+| `requiredQualifiedEvidenceKinds` | array of string | no | Evidence kinds whose retained canonical result must pass ToolQualification integrity, identity, scope, timestamp, and result-derivation checks |
 | `maximumEvidenceAgeSeconds` | number or null | no | Maximum age for required evidence; evidence without `checkedAt` is stale when this is set |
 | `requirePassingHealthCheck` | boolean | no | Defaults to true when omitted |
 

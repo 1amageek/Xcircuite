@@ -73,7 +73,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
     /// Loads run manifest metadata without attesting every retained artifact.
     ///
     /// Consumers must verify each artifact reference before reading its content.
-    /// Use `loadRunLedger(runID:)` when full retained-artifact attestation is
+    /// Use `loadAttestedRunLedger(runID:)` when full retained-artifact attestation is
     /// required, such as resume and human review.
     public func loadRunManifest(runID: String) throws -> FlowRunManifest {
         try loadRunLedgerMetadata(runID: runID).runManifest

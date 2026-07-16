@@ -338,17 +338,23 @@ struct EndToEndDesignFlowTests {
             runID: runID,
             projectRoot: root
         )
-        #expect(reviewBundle.artifacts.contains { $0.stageID == "logic.lower" })
-        #expect(reviewBundle.artifacts.contains { $0.stageID == "logic.simulate" })
-        #expect(reviewBundle.artifacts.contains { $0.stageID == "timing.sta" })
-        #expect(reviewBundle.artifacts.contains { $0.stageID == "signoff.drc" && $0.artifactID == "drc-summary" })
-        #expect(reviewBundle.artifacts.contains { $0.stageID == "signoff.lvs" && $0.artifactID == "lvs-summary" })
-        #expect(reviewBundle.artifacts.contains { $0.stageID == "signoff.pex" && $0.artifactID == "pex-summary" })
-        #expect(reviewBundle.artifacts.contains {
+        #expect(reviewBundle.artifacts.first(where: { $0.stageID == "logic.lower" }) != nil)
+        #expect(reviewBundle.artifacts.first(where: { $0.stageID == "logic.simulate" }) != nil)
+        #expect(reviewBundle.artifacts.first(where: { $0.stageID == "timing.sta" }) != nil)
+        #expect(reviewBundle.artifacts.first(where: {
+            $0.stageID == "signoff.drc" && $0.reference.artifactID == "drc-summary"
+        }) != nil)
+        #expect(reviewBundle.artifacts.first(where: {
+            $0.stageID == "signoff.lvs" && $0.reference.artifactID == "lvs-summary"
+        }) != nil)
+        #expect(reviewBundle.artifacts.first(where: {
+            $0.stageID == "signoff.pex" && $0.reference.artifactID == "pex-summary"
+        }) != nil)
+        #expect(reviewBundle.artifacts.first(where: {
             $0.stageID == "physical.review"
-                && $0.artifactID == "physical-design-review-packet"
+                && $0.reference.artifactID == "physical-design-review-packet"
                 && $0.integrity?.status == .verified
-        })
+        }) != nil)
         #expect((reviewBundle.coverageRefs ?? []).contains {
             $0.domain == "approval" && $0.stageID == "physical.review"
         } == false)
@@ -391,16 +397,16 @@ struct EndToEndDesignFlowTests {
         )
         #expect(retainedBundle.status == .succeeded)
         #expect(retainedBundle.approvals.count == 1)
-        #expect(retainedBundle.artifacts.contains {
-            $0.role == "approval"
+        #expect(retainedBundle.artifacts.first(where: {
+            $0.purpose == .approval
                 && $0.stageID == "physical.review"
                 && $0.integrity?.status == .verified
-        })
-        #expect(retainedBundle.artifacts.contains {
+        }) != nil)
+        #expect(retainedBundle.artifacts.first(where: {
             $0.stageID == "physical.review"
-                && $0.artifactID == "physical-design-review-packet"
+                && $0.reference.artifactID == "physical-design-review-packet"
                 && $0.integrity?.status == .verified
-        })
+        }) != nil)
     }
 
     private func writeSTAInputs(to root: URL) async throws {

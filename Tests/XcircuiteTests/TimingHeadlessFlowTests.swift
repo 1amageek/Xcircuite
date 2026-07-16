@@ -87,11 +87,11 @@ struct TimingHeadlessFlowTests {
         )
         let timingArtifact = try #require(bundle.artifacts.first {
             $0.stageID == "timing.sta"
-                && $0.path.hasSuffix("stages/timing.sta/raw/timing-sta-result.json")
+                && $0.reference.path.hasSuffix("stages/timing.sta/raw/timing-sta-result.json")
         })
         #expect(timingArtifact.integrity?.status == .verified)
-        #expect(timingArtifact.sha256 != nil)
-        #expect((timingArtifact.byteCount ?? 0) > 0)
+        #expect(!timingArtifact.reference.sha256.isEmpty)
+        #expect(timingArtifact.reference.byteCount > 0)
 
         let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
         let approval = try await DefaultFlowGateApprovalRecorder(
@@ -123,11 +123,11 @@ struct TimingHeadlessFlowTests {
             runID: runID,
             projectRoot: projectRoot
         )
-        #expect(resumedBundle.artifacts.contains {
+        #expect(resumedBundle.artifacts.first(where: {
             $0.stageID == "timing.sta"
-                && $0.path.hasSuffix("stages/timing.sta/raw/timing-sta-result.json")
+                && $0.reference.path.hasSuffix("stages/timing.sta/raw/timing-sta-result.json")
                 && $0.integrity?.status == .verified
-        })
+        }) != nil)
     }
 
     @Test("SI stage persists a reviewable result and fails its gate on violations", .timeLimit(.minutes(1)))

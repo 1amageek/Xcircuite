@@ -249,17 +249,17 @@ struct PEXFlowStageExecutorTests {
             runID: "run-pex-postlayout-review",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains {
+        #expect(bundle.artifacts.first(where: {
             $0.stageID == "009-pex"
-                && $0.artifactID == "pex-summary"
-                && $0.path == pexSummary.path
-        })
-        #expect(bundle.artifacts.contains {
+                && $0.reference.artifactID == "pex-summary"
+                && $0.reference.path == pexSummary.path
+        }) != nil)
+        #expect(bundle.artifacts.first(where: {
             $0.stageID == "010-post-layout-comparison"
-                && $0.artifactID == "post-layout-comparison"
-                && $0.role == "post-layout-comparison"
-                && $0.path == comparison.path
-        })
+                && $0.reference.artifactID == "post-layout-comparison"
+                && $0.purpose == .postLayoutComparison
+                && $0.reference.path == comparison.path
+        }) != nil)
         #expect(bundle.coverageRefs?.contains {
             $0.domain == "pex"
                 && $0.stageID == "009-pex"
@@ -449,7 +449,7 @@ struct PEXFlowStageExecutorTests {
             runID: "run-pex-retry",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains { $0.role == "stage-attempts" })
+        #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
 
     @Test func pexExecutorForcesFlowManagedWorkingDirectory() async throws {

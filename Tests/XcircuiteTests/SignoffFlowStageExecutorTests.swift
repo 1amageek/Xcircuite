@@ -570,11 +570,11 @@ struct SignoffFlowStageExecutorTests {
             runID: "run-drc-minimum-cut",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains {
+        #expect(bundle.artifacts.first(where: {
             $0.stageID == "007-drc"
-                && $0.artifactID == "drc-repair-hints"
-                && $0.path == repairHintsArtifact.path
-        })
+                && $0.reference.artifactID == "drc-repair-hints"
+                && $0.reference.path == repairHintsArtifact.path
+        }) != nil)
         #expect(bundle.coverageRefs?.contains {
             $0.domain == "drc"
                 && $0.stageID == "007-drc"
@@ -781,11 +781,11 @@ struct SignoffFlowStageExecutorTests {
             runID: "run-lvs-policy-report",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains {
+        #expect(bundle.artifacts.first(where: {
             $0.stageID == "008-lvs"
-                && $0.artifactID == "lvs-device-policy-application-report"
-                && $0.path == policyArtifact.path
-        })
+                && $0.reference.artifactID == "lvs-device-policy-application-report"
+                && $0.reference.path == policyArtifact.path
+        }) != nil)
         #expect(bundle.coverageRefs?.contains {
             $0.domain == "lvs"
                 && $0.stageID == "008-lvs"
@@ -928,7 +928,7 @@ struct SignoffFlowStageExecutorTests {
         #expect(summary.stages.first?.attemptCount == 2)
         #expect(summary.stages.first?.retryCount == 1)
 
-        #expect(bundle.artifacts.contains { $0.role == "stage-attempts" })
+        #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
 
     @Test func lvsExecutorCooperativelyCancelsAfterEngineCheckpoint() async throws {

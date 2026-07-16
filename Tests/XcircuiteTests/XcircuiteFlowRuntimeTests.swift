@@ -226,7 +226,7 @@ extension XcircuiteFlowRuntimeTests {
             runID: "run-drc-retry",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains { $0.role == "stage-attempts" })
+        #expect(bundle.artifacts.first(where: { $0.purpose == .stageAttempts }) != nil)
     }
 
     @Test func runtimePersistsPlanningActionDomainSnapshot() async throws {
@@ -368,11 +368,11 @@ extension XcircuiteFlowRuntimeTests {
             runID: "run-1",
             projectRoot: root
         )
-        #expect(bundle.artifacts.contains {
-            $0.role == "planning-action-domain"
-                && $0.path == snapshotPath
+        #expect(bundle.artifacts.first(where: {
+            $0.purpose == .planningActionDomain
+                && $0.reference.path == snapshotPath
                 && $0.integrity?.status == .verified
-        })
+        }) != nil)
     }
 
     @Test func runtimeResumesPersistedPlanAfterApproval() async throws {

@@ -35,7 +35,9 @@ struct XcircuiteFlowLifecycleCLITests {
             runID: runID
         )
         #expect(review.runID == runID)
-        #expect(review.artifacts.contains { $0.artifactID == "analysis-summary" })
+        #expect(review.artifacts.first(where: {
+            $0.reference.artifactID == "analysis-summary"
+        }) != nil)
 
         let ladder: FlowRunStageArtifactLadderBuildResult = try await runCLI(
             "build-stage-artifact-ladder",
