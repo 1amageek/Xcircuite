@@ -8,9 +8,12 @@ import DesignFlowKernel
 @Suite("Simulation golden corpus", .timeLimit(.minutes(1)))
 struct SimulationGoldenCorpusTests {
     @Test func runnerExecutesCheckedInGoldenCorpusAndPersistsCaseArtifacts() async throws {
-        let packageRoot = packageRoot()
+        let packageRoot = try materializeGoldenCorpusProject()
         let artifactDirectory = try makeTemporaryRoot("simulation-golden-corpus-runner")
-        defer { removeTemporaryRoot(artifactDirectory) }
+        defer {
+            removeTemporaryRoot(packageRoot)
+            removeTemporaryRoot(artifactDirectory)
+        }
         let suite = try SimulationGoldenCorpusSuiteSpec.load(from: suiteURL(packageRoot: packageRoot))
 
         let report = try await SimulationGoldenCorpusRunner().run(
@@ -264,10 +267,11 @@ struct SimulationGoldenCorpusTests {
     }
 
     @Test func cliQualifiesCheckedInGoldenCorpusAndWritesReport() async throws {
-        let packageRoot = packageRoot()
+        let packageRoot = try materializeGoldenCorpusProject()
         let artifactDirectory = try makeTemporaryRoot("simulation-golden-corpus-cli-artifacts")
         let outputRoot = try makeTemporaryRoot("simulation-golden-corpus-cli-report")
         defer {
+            removeTemporaryRoot(packageRoot)
             removeTemporaryRoot(artifactDirectory)
             removeTemporaryRoot(outputRoot)
         }
@@ -447,18 +451,25 @@ struct SimulationGoldenCorpusTests {
             .appending(path: "simulation-golden-suite.json")
     }
 
-    private func packageRoot() -> URL {
-        var current = URL(filePath: #filePath).deletingLastPathComponent()
-        while current.path(percentEncoded: false) != "/" {
-            let packageManifest = current.appending(path: "Package.swift")
-            let sources = current.appending(path: "Sources").appending(path: "Xcircuite")
-            if FileManager.default.fileExists(atPath: packageManifest.path(percentEncoded: false)),
-               FileManager.default.fileExists(atPath: sources.path(percentEncoded: false)) {
-                return current
-            }
-            current.deleteLastPathComponent()
+    private func materializeGoldenCorpusProject() throws -> URL {
+        let root = try makeTemporaryRoot("simulation-golden-corpus-project")
+        try materializeGoldenCorpusResources(in: root)
+        return root
+    }
+
+    private func materializeGoldenCorpusResources(in root: URL) throws {
+        let resourceRoot = try #require(Bundle.module.url(
+            forResource: "SimulationGoldenCorpus",
+            withExtension: nil,
+            subdirectory: "Fixtures"
+        ))
+        let destination = root
+            .appending(path: "Tests/XcircuiteTests/Fixtures/SimulationGoldenCorpus")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        for fileName in Self.goldenCorpusResourceNames {
+            let data = try Data(contentsOf: resourceRoot.appending(path: fileName))
+            try data.write(to: destination.appending(path: fileName), options: .atomic)
         }
-        return URL(filePath: "/Users/1amageek/Desktop/LSI/Xcircuite")
     }
 
     private func sourcePreservingEditPlan(sourceNetlistPath: String) -> XcircuiteCandidatePlan {
@@ -503,6 +514,19 @@ struct SimulationGoldenCorpusTests {
             blockers: []
         )
     }
+
+    private static let goldenCorpusResourceNames = [
+        "ac-rc-low-pass-golden.csv",
+        "ac-rc-low-pass.cir",
+        "dc-resistor-golden.csv",
+        "dc-resistor.cir",
+        "failure-dummy-golden.csv",
+        "model-missing-subcircuit.cir",
+        "parser-undefined-parameter.cir",
+        "simulation-golden-suite.json",
+        "tran-rc-step-golden.csv",
+        "tran-rc-step.cir",
+    ]
 
     private func writeText(
         _ text: String,
