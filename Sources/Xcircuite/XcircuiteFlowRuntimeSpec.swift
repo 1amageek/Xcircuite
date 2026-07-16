@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import ToolQualification
