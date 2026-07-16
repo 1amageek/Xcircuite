@@ -690,14 +690,55 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliValidation.status == .passed)
         #expect(cliValidation.validationArtifact?.artifactID == "generated-layout-signoff-corpus-validation")
 
-        let retainedSignoffReportURL = workspaceRoot()
-            .appending(path: "docs/contract-fixtures/signoff-retained-report-v2.json")
-        #expect(FileManager.default.fileExists(atPath: retainedSignoffReportURL.path(percentEncoded: false)))
-        let retainedSignoffReportData = try Data(contentsOf: retainedSignoffReportURL)
-        let retainedSignoffReport = try JSONDecoder().decode(
-            XcircuiteRetainedSignoffReport.self,
-            from: retainedSignoffReportData
+        func retainedLaneReport(_ domain: String) throws -> ArtifactReference {
+            ArtifactReference(
+                id: try ArtifactID(rawValue: "retained-\(domain)-oracle-report"),
+                locator: ArtifactLocator(
+                    location: try ArtifactLocation(
+                        workspaceRelativePath: "qualification/\(domain)-oracle-report.json"
+                    ),
+                    role: .output,
+                    kind: .report,
+                    format: .json
+                ),
+                digest: try SHA256ContentDigester().digest(data: Data(domain.utf8)),
+                byteCount: 128
+            )
+        }
+        let retainedSignoffReport = XcircuiteRetainedSignoffReport(
+            schemaVersion: 2,
+            kind: "retained-signoff-report",
+            suiteID: "retained-signoff-test-suite",
+            status: "passed",
+            summary: XcircuiteRetainedSignoffReport.Summary(
+                dashboardStatus: "passed",
+                externalOracleStatus: "passed",
+                externalOracleQualificationStatus: "passed",
+                externalOracleLaneCount: 3,
+                passedExternalOracleLaneCount: 3,
+                blockedExternalOracleLaneCount: 0,
+                failedExternalOracleLaneCount: 0
+            ),
+            externalOracleResults: try ["drc", "lvs", "pex"].map { domain in
+                XcircuiteRetainedSignoffReport.ExternalOracleResult(
+                    domain: domain,
+                    status: "passed",
+                    oracleBackendID: "\(domain)-oracle",
+                    qualified: true,
+                    caseCount: 1,
+                    passedCaseCount: 1,
+                    failedCaseCount: 0,
+                    passRate: 1,
+                    oracleAgreementRate: 1,
+                    readinessFailureCount: 0,
+                    requiredProbeIDs: [],
+                    report: try retainedLaneReport(domain)
+                )
+            },
+            failures: []
         )
+        let retainedSignoffReportURL = root.appending(path: "retained-signoff-report-v2.json")
+        try await writeJSON(retainedSignoffReport, to: retainedSignoffReportURL)
         var readyWithoutEvidenceReport = report
         readyWithoutEvidenceReport.caseResults = report.caseResults.map { caseResult in
             var updatedCaseResult = caseResult

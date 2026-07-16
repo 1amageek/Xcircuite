@@ -590,14 +590,6 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    func workspaceRoot() -> URL {
-        URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-    }
-
     func makeTemporaryRoot(_ name: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "XcircuiteFlowRuntimeTests-\(name)-\(UUID().uuidString)")
