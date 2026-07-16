@@ -15,20 +15,9 @@ struct ElectricalStandardLayoutImportTests {
     func importsCheckedInStandardFixtures() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-standard-fixture-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let fixtureRoot = URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .appending(path: "Fixtures/ElectricalSignoff/StandardLayout")
-        try FileManager.default.copyItem(
-            at: fixtureRoot.appending(path: "layout.def"),
-            to: root.appending(path: "layout.def")
-        )
-        try FileManager.default.copyItem(
-            at: fixtureRoot.appending(path: "technology.lef"),
-            to: root.appending(path: "technology.lef")
-        )
-        try FileManager.default.copyItem(
-            at: fixtureRoot.appending(path: "layer-map.json"),
-            to: root.appending(path: "layer-map.json")
+        try materializeStandardLayoutFixtures(
+            named: ["layout.def", "technology.lef", "layer-map.json"],
+            in: root
         )
         let runID = "electrical-standard-fixture-run"
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -84,16 +73,9 @@ struct ElectricalStandardLayoutImportTests {
     func blocksLEFWithoutLayerMapping() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: "electrical-standard-lef-blocked-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let fixtureRoot = URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .appending(path: "Fixtures/ElectricalSignoff/StandardLayout")
-        try FileManager.default.copyItem(
-            at: fixtureRoot.appending(path: "layout.def"),
-            to: root.appending(path: "layout.def")
-        )
-        try FileManager.default.copyItem(
-            at: fixtureRoot.appending(path: "technology.lef"),
-            to: root.appending(path: "technology.lef")
+        try materializeStandardLayoutFixtures(
+            named: ["layout.def", "technology.lef"],
+            in: root
         )
         let runID = "electrical-standard-lef-blocked-run"
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -271,6 +253,21 @@ struct ElectricalStandardLayoutImportTests {
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
+    }
+
+    private func materializeStandardLayoutFixtures(
+        named fileNames: [String],
+        in destination: URL
+    ) throws {
+        let fixtureRoot = try #require(Bundle.module.url(
+            forResource: "StandardLayout",
+            withExtension: nil,
+            subdirectory: "Fixtures/ElectricalSignoff"
+        ))
+        for fileName in fileNames {
+            let data = try Data(contentsOf: fixtureRoot.appending(path: fileName))
+            try data.write(to: destination.appending(path: fileName), options: .atomic)
+        }
     }
 
     private static let routedDEF = """

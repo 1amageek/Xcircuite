@@ -126,8 +126,8 @@ let package = Package(
                 .product(name: "SignoffEngine", package: "ReleaseEngine"),
                 .product(name: "TapeoutEngine", package: "ReleaseEngine"),
             ],
-            exclude: [
-                "Fixtures",
+            resources: [
+                .copy("Fixtures"),
             ]
         ),
     ]
