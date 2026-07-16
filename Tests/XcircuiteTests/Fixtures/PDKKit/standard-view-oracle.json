@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "oracleID": "fixture-standard-view-oracle",
+  "processID": "fixture-180nm",
+  "version": "2026.1",
+  "pdkDigest": "87db1866aa73ed22c4dc89d69e5bce1a4841c252c59d9fe8a9e86e79cf7543e4",
+  "views": [
+    {
+      "assetID": "cells",
+      "format": "lef",
+      "expectedLibraryName": "LEF",
+      "expectedLayerNames": ["M1"],
+      "expectedCellNames": ["nmos"],
+      "expectedElementCount": 2,
+      "expectedMetadata": { "lef.version": "5.8", "dbuPerMicron": "1000.0" }
+    },
+    {
+      "assetID": "liberty-view",
+      "format": "liberty",
+      "expectedLibraryName": "tt",
+      "expectedCellNames": ["nmos"],
+      "expectedPinNames": ["D"],
+      "expectedCornerNames": ["tt"],
+      "expectedTimingRelatedPinNames": ["G"],
+      "expectedTimingArcCount": 1,
+      "expectedTimingTableValueCount": 1,
+      "expectedLibertyCells": [
+        { "name": "nmos", "pinNames": ["D"], "area": 1.0 }
+      ],
+      "expectedLibertyTimingArcs": [
+        {
+          "cellName": "nmos",
+          "pinName": "D",
+          "relatedPinName": "G",
+          "timingType": "combinational",
+          "tables": [
+            {
+              "cellName": "nmos",
+              "pinName": "D",
+              "relatedPinName": "G",
+              "kind": "cell_rise",
+              "index1": [],
+              "index2": [],
+              "index3": [],
+              "values": [0.1],
+              "rawIndex1": [],
+              "rawIndex2": [],
+              "rawIndex3": [],
+              "rawValues": ["0.1"]
+            }
+          ]
+        }
+      ],
+      "expectedLibertyTimingTables": [
+        {
+          "cellName": "nmos",
+          "pinName": "D",
+          "relatedPinName": "G",
+          "kind": "cell_rise",
+          "index1": [],
+          "index2": [],
+          "index3": [],
+          "values": [0.1],
+          "rawIndex1": [],
+          "rawIndex2": [],
+          "rawIndex3": [],
+          "rawValues": ["0.1"]
+        }
+      ],
+      "expectedUnitDeclarations": { "time_unit": "1ns", "voltage_unit": "1V" },
+      "expectedElementCount": 18
+    },
+    {
+      "assetID": "spice-view",
+      "format": "spice",
+      "expectedLibraryName": "SPICE",
+      "expectedModelNames": ["nmos_180n"],
+      "expectedModelTypes": ["nmos"],
+      "expectedModelParameterNames": ["level"],
+      "expectedSpiceModels": [
+        {
+          "name": "nmos_180n",
+          "type": "nmos",
+          "parameters": [
+            {
+              "name": "level",
+              "rawValue": "1",
+              "numericValue": 1.0,
+              "isExpression": false
+            }
+          ]
+        }
+      ],
+      "expectedCornerNames": ["tt"],
+      "expectedElementCount": 4,
+      "expectedMetadata": { "spice.modelCount": "1", "spice.endSeen": "true" }
+    }
+  ],
+  "metadata": {
+    "purpose": "retained structural oracle correlation",
+    "qualification": "unverified"
+  }
+}

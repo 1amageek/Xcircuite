@@ -15,6 +15,7 @@ struct PDKExternalInspectionProcessProviderTests {
     func standardViewProcessProviderPreservesArtifacts() async throws {
         let root = try makeRoot(name: "pdk-external-standard-view")
         defer { removeRoot(root) }
+        _ = try await makeContext(root: root, runID: "pdk-external-standard-view")
         let fixtureRoot = try makeFixtureProject(root: root)
         let manifestURL = fixtureRoot.appending(path: "valid-pdk/pdk.json")
         let manifest = try PDKManifestCodec.decode(contentsOf: manifestURL)
@@ -71,6 +72,7 @@ struct PDKExternalInspectionProcessProviderTests {
     func ruleDeckProcessFailurePreservesArtifacts() async throws {
         let root = try makeRoot(name: "pdk-external-rule-deck-failure")
         defer { removeRoot(root) }
+        _ = try await makeContext(root: root, runID: "pdk-external-rule-deck-failure")
         let fixtureRoot = try makeFixtureProject(root: root)
         let manifestURL = fixtureRoot.appending(path: "valid-pdk/pdk.json")
         let pdk = try PDKManifestReferenceBuilder().makeReference(for: manifestURL)
@@ -249,16 +251,8 @@ struct PDKExternalInspectionProcessProviderTests {
     }
 
     private func makeFixtureProject(root: URL) throws -> URL {
-        let workspaceRoot = URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let source = workspaceRoot
-            .appending(path: "PDKKit")
-            .appending(path: "Tests/PDKKitTests/Fixtures")
         let destination = root.appending(path: "fixtures")
-        try FileManager.default.copyItem(at: source, to: destination)
+        try PDKFixtureMaterializer.materialize(in: destination)
         return destination
     }
 

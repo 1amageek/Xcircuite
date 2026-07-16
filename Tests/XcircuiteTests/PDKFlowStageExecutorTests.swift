@@ -212,16 +212,8 @@ struct PDKFlowStageExecutorTests {
     }
 
     private func makeFixtureProject(root: URL) throws -> URL {
-        let workspaceRoot = URL(filePath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let source = workspaceRoot
-            .appending(path: "PDKKit")
-            .appending(path: "Tests/PDKKitTests/Fixtures")
         let destination = root.appending(path: "fixtures")
-        try FileManager.default.copyItem(at: source, to: destination)
+        try PDKFixtureMaterializer.materialize(in: destination)
         return destination
     }
 

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "processID": "fixture-180nm",
+  "version": "2026.1",
+  "displayName": "PDKKit retained fixture",
+  "assets": [
+    { "assetID": "layer-map", "role": "layerMap", "path": "layer-map.json", "kind": "technology", "format": "JSON", "required": true, "cornerIDs": [], "metadata": {} },
+    { "assetID": "models", "role": "model", "path": "models.spice", "kind": "model", "format": "SPICE", "required": true, "cornerIDs": ["tt-1v8-25c"], "metadata": {} },
+    { "assetID": "cells", "role": "cell", "path": "cells.lef", "kind": "technology", "format": "LEF", "required": true, "cornerIDs": [], "metadata": {} },
+    { "assetID": "rules", "role": "ruleDeck", "path": "rules.deck", "kind": "ruleDeck", "format": "TEXT", "required": true, "cornerIDs": [], "metadata": {} },
+    { "assetID": "layout", "role": "gdsii", "path": "layout.gds", "kind": "layout", "format": "GDSII", "required": true, "cornerIDs": [], "metadata": {} },
+    { "assetID": "spice-view", "role": "spice", "path": "models.spice", "kind": "model", "format": "SPICE", "required": true, "cornerIDs": ["tt-1v8-25c"], "metadata": {} },
+    { "assetID": "liberty-view", "role": "liberty", "path": "timing.lib", "kind": "model", "format": "LIBERTY", "required": true, "cornerIDs": ["tt-1v8-25c"], "metadata": {} }
+  ],
+  "layers": [
+    { "layerID": "active", "name": "ACTIVE", "number": 1, "purpose": "diffusion", "isRoutingLayer": false, "aliases": [] },
+    { "layerID": "metal1", "name": "M1", "number": 10, "purpose": "metal", "isRoutingLayer": true, "aliases": [], "minimumWidth": 0.2, "minimumSpacing": 0.2 }
+  ],
+  "devices": [
+    {
+      "deviceID": "nmos",
+      "modelName": "nmos_180n",
+      "terminals": [
+        { "name": "D", "role": "output", "order": 0 },
+        { "name": "G", "role": "input", "order": 1 },
+        { "name": "S", "role": "output", "order": 2 },
+        { "name": "B", "role": "bulk", "order": 3 }
+      ],
+      "extractionRecognition": { "layerIDs": ["active"], "markerNames": ["nmos"], "extractorKeys": ["mos.nmos"] },
+      "parameterNames": [],
+      "aliases": []
+    }
+  ],
+  "corners": [
+    {
+      "cornerID": "tt-1v8-25c",
+      "pvt": { "process": { "name": "tt", "nominal": true }, "voltage": 1.8, "temperatureCelsius": 25.0 },
+      "assetIDs": ["models", "spice-view"],
+      "viewMappings": { "spice": "spice-view" }
+    }
+  ],
+  "crossViewMappings": [
+    { "mappingID": "layer-map-view", "view": "layerMap", "assetID": "layer-map", "logicalNames": [], "physicalNames": [], "layerIDs": ["active", "metal1"], "deviceIDs": [], "cornerIDs": [] },
+    { "mappingID": "spice-device-view", "view": "spice", "assetID": "spice-view", "logicalNames": [], "physicalNames": [], "layerIDs": [], "deviceIDs": ["nmos"], "cornerIDs": ["tt-1v8-25c"] },
+    { "mappingID": "lef-cell-view", "view": "lef", "assetID": "cells", "logicalNames": [], "physicalNames": [], "layerIDs": [], "deviceIDs": ["nmos"], "cornerIDs": [] },
+    { "mappingID": "gds-layout-view", "view": "gdsii", "assetID": "layout", "logicalNames": [], "physicalNames": [], "layerIDs": ["active", "metal1"], "deviceIDs": [], "cornerIDs": [] },
+    { "mappingID": "liberty-device-view", "view": "liberty", "assetID": "liberty-view", "logicalNames": [], "physicalNames": [], "layerIDs": [], "deviceIDs": ["nmos"], "cornerIDs": ["tt-1v8-25c"] },
+    { "mappingID": "rule-deck-view", "view": "ruleDeck", "assetID": "rules", "logicalNames": [], "physicalNames": [], "layerIDs": ["active", "metal1"], "deviceIDs": [], "cornerIDs": [] }
+  ],
+  "metadata": { "units": "micron", "source": "retained-fixture" }
+}

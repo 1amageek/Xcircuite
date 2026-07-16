@@ -1,0 +1,51 @@
+{
+  "cases": [
+    {
+      "caseID": "invalid-manifest-is-failed",
+      "expectedFindingCodes": ["pdk.corpus.reference-build-failed"],
+      "expectedOutcome": "failed",
+      "manifestPath": "invalid-pdk/pdk.json",
+      "requiredAssetRoles": [],
+      "validateCrossViews": true,
+      "standardViewChecks": [],
+      "ruleDeckChecks": [],
+      "metadata": {}
+    },
+    {
+      "caseID": "missing-manifest-is-blocked",
+      "expectedFindingCodes": ["pdk.corpus.manifest-missing"],
+      "expectedOutcome": "blocked",
+      "manifestPath": "missing-pdk/pdk.json",
+      "requiredAssetRoles": [],
+      "validateCrossViews": true,
+      "standardViewChecks": [],
+      "ruleDeckChecks": [],
+      "metadata": {}
+    },
+    {
+      "caseID": "retained-fixture-is-valid",
+      "expectedFindingCodes": [],
+      "expectedOutcome": "valid",
+      "manifestPath": "valid-pdk/pdk.json",
+      "requiredAssetRoles": ["cell", "layerMap", "model", "ruleDeck"],
+      "validateCrossViews": true,
+      "standardViewChecks": [
+        { "assetID": "cells", "format": "lef", "expectedOutcome": "valid", "expectedFindingCodes": [] },
+        { "assetID": "liberty-view", "format": "liberty", "expectedOutcome": "valid", "expectedFindingCodes": [] },
+        { "assetID": "spice-view", "format": "spice", "expectedOutcome": "valid", "expectedFindingCodes": [] }
+      ],
+      "ruleDeckChecks": [
+        { "assetID": "rules", "expectedOutcome": "valid", "expectedFindingCodes": [] }
+      ],
+      "metadata": {}
+    }
+  ],
+  "metadata": {
+    "purpose": "PDKKit contract corpus",
+    "qualification": "unverified"
+  },
+  "processID": "fixture-180nm",
+  "schemaVersion": 2,
+  "suiteID": "pdkkit-fixture-suite",
+  "version": "2026.1"
+}

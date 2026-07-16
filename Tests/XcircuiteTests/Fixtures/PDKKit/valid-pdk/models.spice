@@ -1,0 +1,4 @@
+.lib tt
+.model nmos_180n nmos level=1
+.endl tt
+.end
