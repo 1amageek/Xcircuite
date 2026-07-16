@@ -1012,7 +1012,7 @@ extension XcircuiteFlowRuntimeTests {
                         layoutFormat: .oasis,
                         topCell: "TOP",
                         technologyInput: .path("tech/process.json"),
-                        tool: XcircuiteFlowToolSpec(qualificationLevel: .productionEligible)
+                        tool: XcircuiteFlowToolSpec()
                     )
                 ),
                 .nativeLVS(
@@ -1023,7 +1023,7 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistInput: .path("circuits/top.spice"),
                         topCell: "TOP",
                         technologyInput: .path("tech/process.json"),
-                        tool: XcircuiteFlowToolSpec(qualificationLevel: .productionEligible)
+                        tool: XcircuiteFlowToolSpec()
                     )
                 ),
                 .postLayoutComparison(
@@ -1040,7 +1040,7 @@ extension XcircuiteFlowRuntimeTests {
                                 ),
                             ]
                         ),
-                        tool: XcircuiteFlowToolSpec(qualificationLevel: .smokeChecked)
+                        tool: XcircuiteFlowToolSpec()
                     )
                 ),
             ]
@@ -1145,108 +1145,6 @@ extension XcircuiteFlowRuntimeTests {
         #expect(runtime.toolRegistry.descriptor(toolID: "corespice") == nil)
         #expect(runtime.healthResults["post-layout-comparison"]?.status == .passed)
         #expect(runtime.healthResults["corespice"] == nil)
-    }
-
-    @Test func runtimeSpecRejectsSmokeQualificationWithoutEvidence() async throws {
-        let spec = XcircuiteFlowRuntimeSpec(
-            executors: [
-                .nativeDRC(
-                    XcircuiteFlowStageExecutorSpec.NativeDRC(
-                        stageID: "007-drc",
-                        layoutInput: .path("layout.json"),
-                        topCell: "TOP",
-                        tool: XcircuiteFlowToolSpec(
-                            qualificationLevel: .smokeChecked,
-                            healthStatus: .passed
-                        )
-                    )
-                ),
-            ]
-        )
-
-        do {
-            try spec.validate()
-            Issue.record("Expected missing smoke evidence error")
-        } catch let error as XcircuiteFlowRuntimeSpecError {
-            #expect(error == .missingToolQualificationEvidence(
-                stageID: "007-drc",
-                kind: "smoke",
-                level: "smokeChecked"
-            ))
-        } catch {
-            throw error
-        }
-    }
-
-    @Test func runtimeSpecRejectsConflictingDescriptorForRepeatedToolID() async throws {
-        let spec = XcircuiteFlowRuntimeSpec(
-            executors: [
-                .nativeDRC(
-                    XcircuiteFlowStageExecutorSpec.NativeDRC(
-                        stageID: "007-drc-a",
-                        layoutInput: .path("layout-a.json"),
-                        topCell: "TOP"
-                    )
-                ),
-                .nativeDRC(
-                    XcircuiteFlowStageExecutorSpec.NativeDRC(
-                        stageID: "007-drc-b",
-                        layoutInput: .path("layout-b.json"),
-                        topCell: "TOP",
-                        tool: qualifiedToolSpec(level: .smokeChecked)
-                    )
-                ),
-            ]
-        )
-
-        do {
-            try spec.validate()
-            Issue.record("Expected conflicting runtime tool descriptor error")
-        } catch let error as XcircuiteFlowRuntimeSpecError {
-            #expect(error == .conflictingRuntimeToolDescriptor(
-                toolID: "native-drc",
-                stageIDs: ["007-drc-a", "007-drc-b"]
-            ))
-        } catch {
-            throw error
-        }
-    }
-
-    @Test func runtimeSpecRejectsConflictingHealthForRepeatedToolID() async throws {
-        let spec = XcircuiteFlowRuntimeSpec(
-            executors: [
-                .nativeDRC(
-                    XcircuiteFlowStageExecutorSpec.NativeDRC(
-                        stageID: "007-drc-a",
-                        layoutInput: .path("layout-a.json"),
-                        topCell: "TOP"
-                    )
-                ),
-                .nativeDRC(
-                    XcircuiteFlowStageExecutorSpec.NativeDRC(
-                        stageID: "007-drc-b",
-                        layoutInput: .path("layout-b.json"),
-                        topCell: "TOP",
-                        tool: XcircuiteFlowToolSpec(
-                            qualificationLevel: .unknown,
-                            healthStatus: .failed
-                        )
-                    )
-                ),
-            ]
-        )
-
-        do {
-            try spec.validate()
-            Issue.record("Expected conflicting runtime tool health error")
-        } catch let error as XcircuiteFlowRuntimeSpecError {
-            #expect(error == .conflictingRuntimeToolHealth(
-                toolID: "native-drc",
-                stageIDs: ["007-drc-a", "007-drc-b"]
-            ))
-        } catch {
-            throw error
-        }
     }
 
     @Test func runtimeSpecAllowsRepeatedToolIDWithIdenticalToolDeclaration() async throws {

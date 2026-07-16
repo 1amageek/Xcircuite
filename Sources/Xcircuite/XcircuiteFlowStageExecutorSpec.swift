@@ -1171,75 +1171,73 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     public func makeDescriptor() -> ToolDescriptor {
         switch self {
         case .layoutCommand(let spec):
-            SignoffToolDescriptors.layoutCommand(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.layoutCommand()
         case .nativeDRC(let spec):
-            SignoffToolDescriptors.nativeDRC(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.nativeDRC()
         case .nativeLVS(let spec):
-            SignoffToolDescriptors.nativeLVS(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.nativeLVS()
         case .pex(let spec):
             SignoffToolDescriptors.pexBackend(
-                backendID: spec.backendSelection.backendID,
-                level: spec.tool.qualificationLevel
+                backendID: spec.backendSelection.backendID
             )
         case .coreSpiceSimulation(let spec):
-            SignoffToolDescriptors.coreSpiceSimulation(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.coreSpiceSimulation()
         case .postLayoutComparison(let spec):
-            SignoffToolDescriptors.postLayoutComparison(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.postLayoutComparison()
         case .rtlVerification(let spec):
-            RTLToolDescriptors.native(level: spec.tool.qualificationLevel)
+            RTLToolDescriptors.native()
         case .logicSynthesis(let spec):
-            LogicToolDescriptors.synthesis(level: spec.tool.qualificationLevel)
+            LogicToolDescriptors.synthesis()
         case .logicEquivalence(let spec):
-            LogicToolDescriptors.equivalence(level: spec.tool.qualificationLevel)
+            LogicToolDescriptors.equivalence()
         case .logicQualification(let spec):
-            LogicToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+            LogicToolDescriptors.qualification()
         case .dft(let spec):
             if spec.releaseEvidenceSources != nil {
-                DFTToolDescriptors.release(level: spec.tool.qualificationLevel)
+                DFTToolDescriptors.release()
             } else if spec.qualificationCorpusPath != nil || spec.qualificationObservationsPath != nil {
-                DFTToolDescriptors.qualification(level: spec.tool.qualificationLevel)
+                DFTToolDescriptors.qualification()
             } else if spec.releaseResultPath != nil {
-                DFTToolDescriptors.release(level: spec.tool.qualificationLevel)
+                DFTToolDescriptors.release()
             } else {
-                DFTToolDescriptors.engine(level: spec.tool.qualificationLevel)
+                DFTToolDescriptors.engine()
             }
         case .physicalReview(let spec):
-            PhysicalDesignToolDescriptors.review(level: spec.tool.qualificationLevel)
+            PhysicalDesignToolDescriptors.review()
         case .pdkDiscovery(let spec):
-            PDKToolDescriptors.discovery(level: spec.tool.qualificationLevel)
+            PDKToolDescriptors.discovery()
         case .pdkValidation(let spec):
-            PDKToolDescriptors.validation(level: spec.tool.qualificationLevel)
+            PDKToolDescriptors.validation()
         case .pdkCorpus(let spec):
-            PDKToolDescriptors.corpus(level: spec.tool.qualificationLevel)
+            PDKToolDescriptors.corpus()
         case .pdkStandardView(let spec):
-            PDKToolDescriptors.standardView(level: spec.tool.qualificationLevel)
+            PDKToolDescriptors.standardView()
         case .pdkRuleDeck(let spec):
-            PDKToolDescriptors.ruleDeck(level: spec.tool.qualificationLevel)
+            PDKToolDescriptors.ruleDeck()
         case .pdkOracle(let spec):
-            PDKToolDescriptors.oracle(level: spec.tool.qualificationLevel)
+            PDKToolDescriptors.oracle()
         case .releaseAuthorization(let spec):
-            ReleaseToolDescriptors.authorization(level: spec.tool.qualificationLevel)
+            ReleaseToolDescriptors.authorization()
         case .releaseSignoff(let spec):
-            ReleaseToolDescriptors.signoff(level: spec.tool.qualificationLevel)
+            ReleaseToolDescriptors.signoff()
         case .releaseTapeout(let spec):
-            ReleaseToolDescriptors.tapeout(level: spec.tool.qualificationLevel)
+            ReleaseToolDescriptors.tapeout()
         case .electricalStandardLayoutImport(let spec):
-            SignoffToolDescriptors.nativeElectricalStandardLayoutImport(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.nativeElectricalStandardLayoutImport()
         case .electricalSignoff(let spec):
-            SignoffToolDescriptors.nativeElectricalSignoff(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.nativeElectricalSignoff()
         case .electricalSignoffCorpus(let spec):
-            SignoffToolDescriptors.nativeElectricalCorpus(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.nativeElectricalCorpus()
         case .electricalRepairRevision(let spec):
-            SignoffToolDescriptors.nativeElectricalRepairRevision(level: spec.tool.qualificationLevel)
+            SignoffToolDescriptors.nativeElectricalRepairRevision()
         }
     }
 
-    func makeHealthResult() -> ToolHealthCheckResult {
+    func makeUnqualifiedHealthResult() -> ToolHealthCheckResult {
         let descriptor = makeDescriptor()
         return ToolHealthCheckResult(
             toolID: descriptor.toolID,
-            status: toolSpec.healthStatus,
-            evidence: toolSpec.evidence
+            status: .notChecked
         )
     }
 
@@ -1256,11 +1254,20 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
               let oracleTool = spec.oracleTool else {
             return []
         }
-        return [ToolHealthCheckResult(
-            toolID: oracleTool.toolID,
-            status: oracleTool.tool.healthStatus,
-            evidence: oracleTool.tool.evidence
-        )]
+        return [ToolHealthCheckResult(toolID: oracleTool.toolID, status: .notChecked)]
+    }
+
+    func qualificationRecordReferences() -> [String: ArtifactReference] {
+        var references: [String: ArtifactReference] = [:]
+        if let qualificationRecord = toolSpec.qualificationRecord {
+            references[makeDescriptor().toolID] = qualificationRecord
+        }
+        if case .rtlVerification(let spec) = self,
+           let oracleTool = spec.oracleTool,
+           let qualificationRecord = oracleTool.tool.qualificationRecord {
+            references[oracleTool.toolID] = qualificationRecord
+        }
+        return references
     }
 
     private var toolSpec: XcircuiteFlowToolSpec {

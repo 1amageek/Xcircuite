@@ -7,7 +7,7 @@ public enum SignoffToolDescriptors {
         "pex-\(backendID.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
-    public static func nativeDRC(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeDRC() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-drc",
             displayName: "Native DRC",
@@ -20,7 +20,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json, .text]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -28,7 +28,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func nativeLVS(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeLVS() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-lvs",
             displayName: "Native LVS",
@@ -41,7 +41,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json, .text]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -50,8 +50,7 @@ public enum SignoffToolDescriptors {
     }
 
     public static func pexBackend(
-        backendID: String,
-        level: ToolQualificationLevel = .unknown
+        backendID: String
     ) -> ToolDescriptor {
         let normalizedBackendID = backendID.trimmingCharacters(in: .whitespacesAndNewlines)
         return ToolDescriptor(
@@ -66,7 +65,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.spef, .json, .text]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: normalizedBackendID,
                 platform: "macOS"
@@ -74,7 +73,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func coreSpiceSimulation(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func coreSpiceSimulation() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "corespice",
             displayName: "CoreSpice Simulation",
@@ -92,7 +91,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -100,7 +99,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func postLayoutComparison(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func postLayoutComparison() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "post-layout-comparison",
             displayName: "Post-layout Waveform Comparison",
@@ -113,7 +112,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -121,7 +120,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func layoutCommand(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func layoutCommand() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "layout-command",
             displayName: "Layout Command Runner",
@@ -134,7 +133,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json, .gdsii, .oasis, .raw]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -142,7 +141,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func nativeElectricalStandardLayoutImport(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeElectricalStandardLayoutImport() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-electrical-standard-layout-import",
             displayName: "Native Electrical Standard Layout Import",
@@ -155,7 +154,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -163,7 +162,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func nativeElectricalSignoff(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeElectricalSignoff() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-electrical-signoff",
             displayName: "Native Electrical Signoff",
@@ -176,7 +175,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -184,7 +183,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func nativeElectricalCorpus(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeElectricalCorpus() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-electrical-signoff-corpus",
             displayName: "Native Electrical Signoff Corpus",
@@ -197,7 +196,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -205,7 +204,7 @@ public enum SignoffToolDescriptors {
         )
     }
 
-    public static func nativeElectricalRepairRevision(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func nativeElectricalRepairRevision() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-electrical-signoff-repair-revision",
             displayName: "Native Electrical Signoff Repair Revision",
@@ -218,7 +217,7 @@ public enum SignoffToolDescriptors {
                     outputFormats: [.json, .def]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"

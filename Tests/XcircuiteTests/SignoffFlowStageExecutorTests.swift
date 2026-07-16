@@ -1382,7 +1382,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct StandardDRCStubEngine: Xcircuite.DRCExecuting {
+    private struct StandardDRCStubEngine: DRCEngine.DRCExecuting {
         let expectedTechnologyURL: URL
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -1468,7 +1468,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct CancellingDRCStubEngine: Xcircuite.DRCExecuting {
+    private struct CancellingDRCStubEngine: DRCEngine.DRCExecuting {
         let cancellationRecorder: DefaultFlowRunCancellationRecorder
         let workspaceID: FlowWorkspaceID
         let runID: String
@@ -1537,7 +1537,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct UnindexedManifestOutputDRCStubEngine: Xcircuite.DRCExecuting {
+    private struct UnindexedManifestOutputDRCStubEngine: DRCEngine.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let reportURL = workingDirectory.appending(path: "drc-report.json")
@@ -1605,7 +1605,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct DuplicateArtifactPathDRCStubEngine: Xcircuite.DRCExecuting {
+    private struct DuplicateArtifactPathDRCStubEngine: DRCEngine.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let manifestURL = workingDirectory.appending(path: "drc-artifact-manifest.json")
@@ -1655,7 +1655,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct EscapingArtifactDRCStubEngine: Xcircuite.DRCExecuting {
+    private struct EscapingArtifactDRCStubEngine: DRCEngine.DRCExecuting {
         let externalManifestURL: URL
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -1685,7 +1685,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct ExternalManifestDRCStubEngine: Xcircuite.DRCExecuting {
+    private struct ExternalManifestDRCStubEngine: DRCEngine.DRCExecuting {
         let externalManifestURL: URL
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -1710,7 +1710,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct StandardLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct StandardLVSStubEngine: LVSEngine.LVSExecuting {
         let expectedTechnologyURL: URL
         let expectedTerminalEquivalenceURL: URL?
 
@@ -1823,7 +1823,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct DevicePolicyReportLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct DevicePolicyReportLVSStubEngine: LVSEngine.LVSExecuting {
         let devicePolicyReport: LVSDevicePolicyApplicationReport
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
@@ -1912,7 +1912,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct CancellingLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct CancellingLVSStubEngine: LVSEngine.LVSExecuting {
         let cancellationRecorder: DefaultFlowRunCancellationRecorder
         let workspaceID: FlowWorkspaceID
         let runID: String
@@ -1984,7 +1984,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct FlakyLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct FlakyLVSStubEngine: LVSEngine.LVSExecuting {
         let state: FlakyLVSStubEngineState
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
@@ -2008,7 +2008,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct UnindexedManifestOutputLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct UnindexedManifestOutputLVSStubEngine: LVSEngine.LVSExecuting {
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let reportURL = workingDirectory.appending(path: "lvs-report.json")
@@ -2079,7 +2079,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct DuplicateArtifactPathLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct DuplicateArtifactPathLVSStubEngine: LVSEngine.LVSExecuting {
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
             let workingDirectory = try #require(request.workingDirectory)
             let manifestURL = workingDirectory.appending(path: "lvs-artifact-manifest.json")
@@ -2132,7 +2132,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct EscapingArtifactLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct EscapingArtifactLVSStubEngine: LVSEngine.LVSExecuting {
         let externalManifestURL: URL
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {
@@ -2163,7 +2163,7 @@ struct SignoffFlowStageExecutorTests {
         }
     }
 
-    private struct ExternalManifestLVSStubEngine: Xcircuite.LVSExecuting {
+    private struct ExternalManifestLVSStubEngine: LVSEngine.LVSExecuting {
         let externalManifestURL: URL
 
         func run(_ request: LVSRequest) async throws -> LVSExecutionResult {

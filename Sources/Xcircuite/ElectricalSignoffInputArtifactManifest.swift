@@ -72,7 +72,7 @@ public struct ElectricalSignoffInputArtifactManifest: Sendable, Hashable, Codabl
                     artifact.path,
                     artifact.kind.rawValue,
                     artifact.format.rawValue,
-                    artifact.sha256,
+                    artifact.digest.hexadecimalValue,
                     String(artifact.byteCount),
                 ].joined(separator: "|")
             }

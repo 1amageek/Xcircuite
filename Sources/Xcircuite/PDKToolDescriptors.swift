@@ -4,63 +4,57 @@ import DesignFlowKernel
 import CircuiteFoundation
 
 public enum PDKToolDescriptors {
-    public static func discovery(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func discovery() -> ToolDescriptor {
         descriptor(
             toolID: "pdk-discovery",
             displayName: "PDK discovery",
             operationID: "pdk-discover",
-            inputFormats: [.json, .text],
-            level: level
+            inputFormats: [.json, .text]
         )
     }
 
-    public static func validation(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func validation() -> ToolDescriptor {
         descriptor(
             toolID: "pdk-validation",
             displayName: "PDK validation",
             operationID: "pdk-validate",
-            inputFormats: [.json, .text],
-            level: level
+            inputFormats: [.json, .text]
         )
     }
 
-    public static func corpus(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func corpus() -> ToolDescriptor {
         descriptor(
             toolID: "pdk-corpus-validation",
             displayName: "PDK retained corpus validation",
             operationID: "pdk-validate-corpus",
-            inputFormats: [.json, .text],
-            level: level
+            inputFormats: [.json, .text]
         )
     }
 
-    public static func standardView(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func standardView() -> ToolDescriptor {
         descriptor(
             toolID: "pdk-standard-view-inspection",
             displayName: "PDK standard-view inspection",
             operationID: "pdk-inspect-standard-view",
-            inputFormats: [.json, .lef, .gdsii, .oasis, .spice, .liberty],
-            level: level
+            inputFormats: [.json, .lef, .gdsii, .oasis, .spice, .liberty]
         )
     }
 
-    public static func ruleDeck(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func ruleDeck() -> ToolDescriptor {
         descriptor(
             toolID: "pdk-rule-deck-inspection",
             displayName: "PDK rule-deck inspection",
             operationID: "pdk-inspect-rule-deck",
-            inputFormats: [.json, .text],
-            level: level
+            inputFormats: [.json, .text]
         )
     }
 
-    public static func oracle(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func oracle() -> ToolDescriptor {
         descriptor(
             toolID: "pdk-oracle-comparison",
             displayName: "PDK immutable oracle comparison",
             operationID: "pdk-compare-oracle",
-            inputFormats: [.json, .lef, .gdsii, .oasis, .spice, .liberty],
-            level: level
+            inputFormats: [.json, .lef, .gdsii, .oasis, .spice, .liberty]
         )
     }
 
@@ -68,8 +62,7 @@ public enum PDKToolDescriptors {
         toolID: String,
         displayName: String,
         operationID: String,
-        inputFormats: [ArtifactFormat],
-        level: ToolQualificationLevel
+        inputFormats: [ArtifactFormat]
     ) -> ToolDescriptor {
         ToolDescriptor(
             toolID: toolID,
@@ -83,7 +76,7 @@ public enum PDKToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"

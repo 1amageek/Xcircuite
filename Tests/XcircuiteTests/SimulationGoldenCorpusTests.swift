@@ -67,8 +67,8 @@ struct SimulationGoldenCorpusTests {
                 #expect(caseResult.comparison?.gateStatus == "passed")
                 let waveformArtifact = try #require(caseResult.candidateWaveformArtifact)
                 let comparisonArtifact = try #require(caseResult.comparisonArtifact)
-                #expect(waveformArtifact.sha256.count == 64)
-                #expect(comparisonArtifact.sha256.count == 64)
+                #expect(waveformArtifact.digest.hexadecimalValue.count == 64)
+                #expect(comparisonArtifact.digest.hexadecimalValue.count == 64)
                 #expect(waveformArtifact.byteCount > 0)
                 #expect(comparisonArtifact.byteCount > 0)
                 #expect(FileManager.default.fileExists(atPath: waveformArtifact.path))
@@ -299,7 +299,8 @@ struct SimulationGoldenCorpusTests {
         #expect(stdoutReport.coverageTags.contains("simulation.waveform.semantic-node"))
         #expect(stdoutReport.cases.allSatisfy { $0.status == "passed" })
         #expect(stdoutReport.cases.filter { $0.expectedGateStatus == "passed" }.allSatisfy {
-            $0.comparison?.gateStatus == "passed" && $0.candidateWaveformArtifact?.sha256.count == 64
+            $0.comparison?.gateStatus == "passed"
+                && $0.candidateWaveformArtifact?.digest.hexadecimalValue.count == 64
         })
         #expect(stdoutReport.cases.filter { $0.expectedGateStatus == "failed" }.allSatisfy {
             $0.observedGateStatus == "failed" && !$0.diagnostics.isEmpty
@@ -417,8 +418,8 @@ struct SimulationGoldenCorpusTests {
         let caseResult = try #require(report.cases.first)
         #expect(caseResult.caseID == "edited-resistor-dc")
         #expect(caseResult.comparison?.gateStatus == "passed")
-        #expect(caseResult.candidateWaveformArtifact?.sha256.count == 64)
-        #expect(caseResult.comparisonArtifact?.sha256.count == 64)
+        #expect(caseResult.candidateWaveformArtifact?.digest.hexadecimalValue.count == 64)
+        #expect(caseResult.comparisonArtifact?.digest.hexadecimalValue.count == 64)
     }
 
     @Test func actionDomainSnapshotIncludesGoldenCorpusQualificationOperation() async throws {

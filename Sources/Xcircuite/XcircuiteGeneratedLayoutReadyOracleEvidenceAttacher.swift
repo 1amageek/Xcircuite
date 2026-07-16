@@ -212,7 +212,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
             path: report.path,
             kind: report.kind.rawValue,
             format: report.format.rawValue,
-            sha256: report.sha256,
+            sha256: report.digest.hexadecimalValue,
             byteCount: Int64(report.byteCount)
         )
     }
@@ -249,7 +249,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/validation/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func diagnostic(

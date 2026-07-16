@@ -1,18 +1,13 @@
+import CircuiteFoundation
 import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowToolSpec: Sendable, Hashable, Codable {
-    public var qualificationLevel: ToolQualificationLevel
-    public var healthStatus: ToolHealthStatus
-    public var evidence: [ToolEvidence]
+    public var qualificationRecord: ArtifactReference?
 
     public init(
-        qualificationLevel: ToolQualificationLevel = .unknown,
-        healthStatus: ToolHealthStatus = .notChecked,
-        evidence: [ToolEvidence] = []
+        qualificationRecord: ArtifactReference? = nil
     ) {
-        self.qualificationLevel = qualificationLevel
-        self.healthStatus = healthStatus
-        self.evidence = evidence
+        self.qualificationRecord = qualificationRecord
     }
 }

@@ -19,13 +19,13 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
 
     public func assess(
         request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportURL: URL? = nil
     ) async throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
         try validate(
             request: request,
-            qualification: qualification,
+            validation: validation,
             retainedSignoffReport: retainedSignoffReport,
             retainedSignoffReportURL: retainedSignoffReportURL
         )
@@ -35,24 +35,24 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             request: normalizedRequest,
             retainedSignoffReport: retainedSignoffReport
         )
-        let generatedOracleReady = generatedLayoutOracleReady(qualification)
+        let generatedOracleReady = generatedLayoutOracleReady(validation)
         let blockers = makeBlockers(
             request: normalizedRequest,
-            qualification: qualification,
+            validation: validation,
             retainedSignoffReport: retainedSignoffReport,
             retainedSignoffReportURL: retainedSignoffReportURL,
             externalSummary: externalSummary,
             generatedOracleReady: generatedOracleReady
         )
         let status = assessmentStatus(
-            qualification: qualification,
+            validation: validation,
             generatedOracleReady: generatedOracleReady,
             externalOracleInfrastructureReady: externalSummary.ready,
             blockers: blockers
         )
         return try makeAssessment(
             request: normalizedRequest,
-            qualification: qualification,
+            validation: validation,
             retainedSignoffReport: retainedSignoffReport,
             retainedSignoffReportArtifact: retainedArtifact,
             externalSummary: externalSummary,
@@ -65,19 +65,19 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
 
     public func assessAndPersist(
         request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportURL: URL?,
         projectRoot: URL
     ) async throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
         let assessmentWithoutSelfRef = try await assess(
             request: request,
-            qualification: qualification,
+            validation: validation,
             retainedSignoffReport: retainedSignoffReport,
             retainedSignoffReportURL: retainedSignoffReportURL
         )
         let assessmentPath = suiteProjectRelativePath(
-            suiteID: qualification.suiteID,
+            suiteID: validation.suiteID,
             fileName: "promotion-assessment.json"
         )
         let encoder = JSONEncoder()
@@ -101,7 +101,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
 
     private func validate(
         request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportURL: URL?
     ) throws {
@@ -110,9 +110,9 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
                 request.schemaVersion
             )
         }
-        guard qualification.schemaVersion == 1 else {
-            throw XcircuiteGeneratedLayoutSignoffPromotionAssessmentError.unsupportedQualificationSchemaVersion(
-                qualification.schemaVersion
+        guard validation.schemaVersion == 1 else {
+            throw XcircuiteGeneratedLayoutSignoffPromotionAssessmentError.unsupportedValidationSchemaVersion(
+                validation.schemaVersion
             )
         }
         if let retainedSignoffReport {
@@ -135,7 +135,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             throw XcircuiteGeneratedLayoutSignoffPromotionAssessmentError.retainedSignoffReportArtifactMissing
         }
         try identifierValidator.validate(request.promotionID, kind: .artifactID)
-        try identifierValidator.validate(qualification.suiteID, kind: .artifactID)
+        try identifierValidator.validate(validation.suiteID, kind: .artifactID)
         try validateRequiredExternalOracleDomains(request.requiredExternalOracleDomains)
     }
 
@@ -172,7 +172,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
 
     private func makeAssessment(
         request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportArtifact: XcircuiteGeneratedLayoutSignoffPromotionAssessment.ArtifactFingerprint?,
         externalSummary: ExternalOracleSummary,
@@ -183,10 +183,10 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
     ) throws -> XcircuiteGeneratedLayoutSignoffPromotionAssessment {
         XcircuiteGeneratedLayoutSignoffPromotionAssessment(
             promotionID: request.promotionID,
-            suiteID: qualification.suiteID,
+            suiteID: validation.suiteID,
             status: status,
             summary: XcircuiteGeneratedLayoutSignoffPromotionAssessment.Summary(
-                qualificationStatus: qualification.status,
+                validationStatus: validation.status,
                 generatedLayoutOracleReady: generatedOracleReady,
                 externalOracleInfrastructureReady: externalSummary.ready,
                 retainedSignoffReportStatus: retainedSignoffReport?.status,
@@ -198,16 +198,16 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
                 passedExternalOracleLaneCount: externalSummary.passedLaneCount,
                 blockedExternalOracleLaneCount: externalSummary.blockedLaneCount,
                 failedExternalOracleLaneCount: externalSummary.failedLaneCount,
-                generatedLayoutAcceptedOracleStatuses: qualification.summary.acceptedOracleReadinessStatuses,
+                generatedLayoutAcceptedOracleStatuses: validation.summary.acceptedOracleReadinessStatuses,
                 blockerCount: blockers.filter { $0.severity == .error }.count
             ),
             blockers: blockers,
             suggestedActions: suggestedActions(
-                qualification: qualification,
+                validation: validation,
                 generatedOracleReady: generatedOracleReady,
                 externalSummary: externalSummary
             ),
-            qualificationArtifact: try qualification.qualificationArtifact.map(artifactFingerprint),
+            validationArtifact: try validation.validationArtifact.map(artifactFingerprint),
             retainedSignoffReportArtifact: retainedSignoffReportArtifact,
             assessmentArtifact: try assessmentArtifact.map(artifactFingerprint)
         )
@@ -215,21 +215,21 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
 
     private func makeBlockers(
         request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         retainedSignoffReport: XcircuiteRetainedSignoffReport?,
         retainedSignoffReportURL: URL?,
         externalSummary: ExternalOracleSummary,
         generatedOracleReady: Bool
     ) -> [XcircuiteGeneratedLayoutSignoffPromotionAssessment.Blocker] {
         var blockers: [XcircuiteGeneratedLayoutSignoffPromotionAssessment.Blocker] = []
-        if qualification.status != .qualified {
+        if validation.status != .passed {
             blockers.append(
                 blocker(
-                    code: "generated-layout-corpus-not-qualified",
-                    message: "Generated-layout signoff corpus qualification status is \(qualification.status.rawValue)."
+                    code: "generated-layout-corpus-validation-failed",
+                    message: "Generated-layout signoff corpus validation status is \(validation.status.rawValue)."
                 )
             )
-            for failure in qualification.failures where failure.severity == .error {
+            for failure in validation.failures where failure.severity == .error {
                 blockers.append(
                     blocker(
                         code: "generated-layout-corpus-\(failure.code)",
@@ -342,12 +342,12 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
     }
 
     private func assessmentStatus(
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         generatedOracleReady: Bool,
         externalOracleInfrastructureReady: Bool,
         blockers: [XcircuiteGeneratedLayoutSignoffPromotionAssessment.Blocker]
     ) -> XcircuiteGeneratedLayoutSignoffPromotionAssessment.Status {
-        guard qualification.status == .qualified else {
+        guard validation.status == .passed else {
             return .blocked
         }
         guard blockers.contains(where: { $0.severity == .error }) else {
@@ -360,28 +360,28 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
     }
 
     private func generatedLayoutOracleReady(
-        _ qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult
+        _ validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult
     ) -> Bool {
-        let statuses = Set(qualification.summary.acceptedOracleReadinessStatuses)
+        let statuses = Set(validation.summary.acceptedOracleReadinessStatuses)
         return statuses == [.ready]
-            && qualification.summary.acceptedOracleReadinessCaseCount == qualification.summary.caseCount
-            && qualification.summary.readyOracleReadinessWithoutEvidenceCount == 0
-            && qualification.summary.readyOracleEvidenceWithoutHashCount == 0
-            && qualification.summary.readyOracleEvidenceWithoutByteCount == 0
-            && qualification.summary.readyOracleEvidenceRefCount > 0
+            && validation.summary.acceptedOracleReadinessCaseCount == validation.summary.caseCount
+            && validation.summary.readyOracleReadinessWithoutEvidenceCount == 0
+            && validation.summary.readyOracleEvidenceWithoutHashCount == 0
+            && validation.summary.readyOracleEvidenceWithoutByteCount == 0
+            && validation.summary.readyOracleEvidenceRefCount > 0
     }
 
     private func suggestedActions(
-        qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult,
+        validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult,
         generatedOracleReady: Bool,
         externalSummary: ExternalOracleSummary
     ) -> [XcircuiteGeneratedLayoutSignoffPromotionAssessment.SuggestedAction] {
         var actions: [XcircuiteGeneratedLayoutSignoffPromotionAssessment.SuggestedAction] = []
-        if qualification.status != .qualified {
+        if validation.status != .passed {
             actions.append(
                 XcircuiteGeneratedLayoutSignoffPromotionAssessment.SuggestedAction(
                     actionKind: "repair-generated-layout-corpus",
-                    reason: "The generated-layout corpus qualification did not pass."
+                    reason: "The generated-layout corpus validation did not pass."
                 )
             )
         }
@@ -464,7 +464,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/validation/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func blocker(

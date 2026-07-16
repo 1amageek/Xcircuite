@@ -9,7 +9,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
     public var summary: Summary
     public var blockers: [Blocker]
     public var suggestedActions: [SuggestedAction]
-    public var qualificationArtifact: ArtifactFingerprint?
+    public var validationArtifact: ArtifactFingerprint?
     public var retainedSignoffReportArtifact: ArtifactFingerprint?
     public var assessmentArtifact: ArtifactFingerprint?
 
@@ -21,7 +21,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
         summary: Summary,
         blockers: [Blocker],
         suggestedActions: [SuggestedAction],
-        qualificationArtifact: ArtifactFingerprint? = nil,
+        validationArtifact: ArtifactFingerprint? = nil,
         retainedSignoffReportArtifact: ArtifactFingerprint? = nil,
         assessmentArtifact: ArtifactFingerprint? = nil
     ) {
@@ -32,7 +32,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
         self.summary = summary
         self.blockers = blockers
         self.suggestedActions = suggestedActions
-        self.qualificationArtifact = qualificationArtifact
+        self.validationArtifact = validationArtifact
         self.retainedSignoffReportArtifact = retainedSignoffReportArtifact
         self.assessmentArtifact = assessmentArtifact
     }
@@ -50,7 +50,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
     }
 
     public struct Summary: Codable, Sendable, Hashable {
-        public var qualificationStatus: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Status
+        public var validationStatus: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Status
         public var generatedLayoutOracleReady: Bool
         public var externalOracleInfrastructureReady: Bool
         public var retainedSignoffReportStatus: String?
@@ -66,7 +66,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
         public var blockerCount: Int
 
         public init(
-            qualificationStatus: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Status,
+            validationStatus: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Status,
             generatedLayoutOracleReady: Bool,
             externalOracleInfrastructureReady: Bool,
             retainedSignoffReportStatus: String?,
@@ -81,7 +81,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessment: Codable, Senda
             generatedLayoutAcceptedOracleStatuses: [XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleReadinessStatus],
             blockerCount: Int
         ) {
-            self.qualificationStatus = qualificationStatus
+            self.validationStatus = validationStatus
             self.generatedLayoutOracleReady = generatedLayoutOracleReady
             self.externalOracleInfrastructureReady = externalOracleInfrastructureReady
             self.retainedSignoffReportStatus = retainedSignoffReportStatus

@@ -17,14 +17,14 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
     private let processProfile: PEXProcessProfileReference?
     private let backendSelection: PEXBackendSelection
     private let options: PEXRunOptions
-    private let engine: any PEXExecuting
+    private let engine: any PEXEngine.PEXRunning
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
         stageID: String,
         toolID: String,
         request: PEXRunRequest,
-        engine: any PEXExecuting
+        engine: any PEXEngine.PEXRunning
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -91,7 +91,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         processProfile: PEXProcessProfileReference? = nil,
         backendSelection: PEXBackendSelection,
         options: PEXRunOptions = .default,
-        engine: any PEXExecuting
+        engine: any PEXEngine.PEXRunning
     ) {
         self.stageID = stageID
         self.toolID = toolID

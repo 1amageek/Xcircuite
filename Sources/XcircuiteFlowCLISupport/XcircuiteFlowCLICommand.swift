@@ -13,8 +13,8 @@ public enum XcircuiteFlowCLICommand {
             return try await runFlow(arguments: Array(arguments.dropFirst()))
         case "resume-run":
             return try await resumeRun(arguments: Array(arguments.dropFirst()))
-        case "attach-evidence":
-            return try attachEvidence(arguments: Array(arguments.dropFirst()))
+        case "attach-qualification-record":
+            return try await attachQualificationRecord(arguments: Array(arguments.dropFirst()))
         case "scaffold-run":
             return try scaffoldRun(arguments: Array(arguments.dropFirst()))
         case "validate":
@@ -37,8 +37,8 @@ public enum XcircuiteFlowCLICommand {
             return try await formulateSignoffRepairPlanningProblem(arguments: Array(arguments.dropFirst()))
         case "collect-generated-layout-signoff-corpus":
             return try await collectGeneratedLayoutSignoffCorpus(arguments: Array(arguments.dropFirst()))
-        case "qualify-generated-layout-signoff-corpus":
-            return try await qualifyGeneratedLayoutSignoffCorpus(arguments: Array(arguments.dropFirst()))
+        case "validate-generated-layout-signoff-corpus":
+            return try await validateGeneratedLayoutSignoffCorpus(arguments: Array(arguments.dropFirst()))
         case "attach-generated-layout-ready-oracle-evidence":
             return try await attachGeneratedLayoutReadyOracleEvidence(arguments: Array(arguments.dropFirst()))
         case "audit-generated-layout-signoff-corpus-coverage":

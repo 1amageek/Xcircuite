@@ -138,8 +138,7 @@ struct XcircuiteFlowScaffoldRunCLITests {
             return
         }
         #expect(pexSpec.backendSelection.backendID == "magic")
-        #expect(pexSpec.tool.qualificationLevel == .unknown)
-        #expect(pexSpec.tool.evidence.isEmpty)
+        #expect(pexSpec.tool.qualificationRecord == nil)
     }
 
     @Test

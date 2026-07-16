@@ -90,22 +90,23 @@ xcircuite-flow resume-run \
   --run-id <run-id> \
   --runtime-config <runtime.json>
 
-xcircuite-flow attach-evidence \
+xcircuite-flow attach-qualification-record \
+  --project-root <project-root> \
   --runtime-config <runtime.json> \
   --stage-id <stage-id> \
-  --evidence <tool-evidence-export.json> \
-  --out <runtime-with-evidence.json>
+  --record-reference <qualification-record-reference.json> \
+  --out <runtime-with-record.json>
 
 xcircuite-flow validate \
   --run-spec <run.json> \
   --runtime-config <runtime.json>
 ```
 
-`attach-evidence` attaches a `ToolEvidence`-compatible export to the selected
-executor's `tool.evidence`. Without `--out`, the updated runtime config is
-written to stdout. The command does not run a design flow and does not decide
-whether the evidence is sufficient; that verdict remains in `ToolQualification`
-when `run` or `resume-run` evaluates the stage tool requirement.
+`attach-qualification-record` attaches an `ArtifactReference` for a canonical
+`ToolQualificationRecord`. It verifies the record bytes, issuer identity, tool
+identity, artifact integrity, and retained ToolQualification decisions before
+emitting the runtime config. Xcircuite never derives trust from caller-provided
+levels, health strings, or pass/fail labels.
 
 `validate` checks a run spec, runtime config, or both. When both are provided, it
 also checks that every run stage has a runtime executor before any run artifacts
@@ -199,10 +200,10 @@ Top-level fields:
 | `toolchainProfile` | object or null | no | Shared signoff technology/catalog defaults used by DRC/LVS/PEX stages when a stage does not declare its own technology input |
 | `executors` | array of executor specs | yes | Stage executor configurations |
 
-Runtime configs are validated before runtime construction and before evidence
+Runtime configs are validated before runtime construction and before record
 attachment. The executor list must be non-empty, each executor `stageID` must be a
 valid Xcircuite stage identifier, and executor stage IDs must be unique. Duplicate
-stage IDs are rejected before `attach-evidence` so evidence cannot be attached to
+stage IDs are rejected before attachment so a record cannot be attached to
 an ambiguous stage.
 
 ### DFT qualification and release executor
@@ -686,38 +687,12 @@ not proof of foundry qualification.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `qualificationLevel` | string | yes | Tool qualification level |
-| `healthStatus` | string | yes | `passed`, `failed`, `blocked`, or `notChecked` |
-| `evidence` | array of `ToolEvidence` | no | Trust evidence passed into `ToolQualification` |
+| `qualificationRecord` | `ArtifactReference` or null | no | ToolQualification-issued canonical record reference |
 
-`ToolEvidence` fields:
-
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `evidenceID` | string | yes | Stable evidence identifier |
-| `kind` | string | yes | `smoke`, `corpus`, `oracle`, or `healthCheck` |
-| `artifact` | `ArtifactReference` or null | qualified evidence: yes | Digest-bound canonical qualification result |
-| `checkedAt` | ISO 8601 date string | qualified evidence: yes | Must exactly match the retained result timestamp |
-
-Corpus, oracle, and health-check evidence is not qualified by an embedded
-boolean summary. The artifact must be workspace-relative, SHA-256 bound,
-non-empty, and produced by the same engine issuer recorded in the canonical
-typed result. The trust evaluator verifies the bytes before deriving eligibility.
-
-## XcircuiteFlowEvidenceExport v1
-
-`attach-evidence` consumes the `XcircuiteFlowEvidenceExport` shape emitted by
-standalone engine qualification exporters.
-
-Top-level fields:
-
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `schemaVersion` | integer | yes | Export schema version |
-| `status` | string or null | no | Export producer status such as `passed` or `failed` |
-| `reportPath` | string or null | no | Source qualification report path |
-| `reportSHA256` | string or null | no | Source qualification report digest |
-| `toolEvidence` | `ToolEvidence` | yes | Evidence object copied into `XcircuiteFlowToolSpec.evidence` |
+When the field is absent, Xcircuite constructs the tool binding with level
+`unknown` and health `notChecked`. When present, ToolQualification validates the
+record and returns its descriptor and health. Xcircuite only orchestrates that
+issued result and cannot manufacture a trust decision.
 
 ## Qualified Evidence Gate
 
@@ -772,9 +747,6 @@ Committed fixtures:
 | `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-evidence-run.json` | Run spec requiring qualified corpus evidence within a maximum age |
 | `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-signoff-runtime.json` | DRC/LVS/PEX runtime config before evidence attachment |
 | `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-signoff-run.json` | DRC/LVS/PEX run spec requiring qualified corpus evidence |
-| `Tests/XcircuiteTests/Fixtures/FlowRuntime/drc-tool-evidence-export.json` | DRC corpus evidence export for `attach-evidence` |
-| `Tests/XcircuiteTests/Fixtures/FlowRuntime/lvs-tool-evidence-export.json` | LVS corpus evidence export for `attach-evidence` |
-| `Tests/XcircuiteTests/Fixtures/FlowRuntime/pex-tool-evidence-export.json` | PEX SPEF corpus evidence export for `attach-evidence` |
 
 Regression:
 

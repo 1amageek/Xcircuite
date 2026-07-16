@@ -52,13 +52,13 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
         return try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
     }
 
-    public func makeRuntime(projectRoot: URL) throws -> XcircuiteFlowRuntime {
-        try validate(projectRoot: projectRoot, requireCompleteToolEvidence: false)
+    public func makeRuntime(projectRoot: URL) async throws -> XcircuiteFlowRuntime {
+        try validate(projectRoot: projectRoot)
 
         let executors = try executors.map {
             try $0.makeExecutor(projectRoot: projectRoot, toolchainProfile: toolchainProfile)
         }
-        let toolBindings = try makeToolBindings()
+        let toolBindings = try await makeToolBindings(projectRoot: projectRoot)
 
         return try XcircuiteFlowRuntime(
             toolRegistry: try ToolRegistry(validating: toolBindings.descriptors),
@@ -85,7 +85,7 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
         return projectRoot.appending(path: rawPath)
     }
 
-    func makeToolBindings() throws -> XcircuiteFlowRuntimeToolBindings {
+    func makeUnqualifiedToolBindings() throws -> XcircuiteFlowRuntimeToolBindings {
         var descriptors: [String: (descriptor: ToolDescriptor, stageIDs: [String])] = [:]
         var healthResults: [String: (health: ToolHealthCheckResult, stageIDs: [String])] = [:]
 
@@ -106,7 +106,7 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
                 }
             }
 
-            for health in [spec.makeHealthResult()] + spec.additionalToolHealthResults() {
+            for health in [spec.makeUnqualifiedHealthResult()] + spec.additionalToolHealthResults() {
                 if var existing = healthResults[health.toolID] {
                     guard existing.health == health else {
                         throw XcircuiteFlowRuntimeSpecError.conflictingRuntimeToolHealth(
@@ -132,6 +132,78 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
             descriptors: orderedDescriptors,
             healthResults: orderedHealthResults
         )
+    }
+
+    func makeToolBindings(projectRoot: URL) async throws -> XcircuiteFlowRuntimeToolBindings {
+        let unqualified = try makeUnqualifiedToolBindings()
+        let references = try qualificationRecordReferences()
+        guard !references.isEmpty else {
+            return unqualified
+        }
+
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
+        let validator = ToolQualificationRecordValidator()
+        var descriptors: [ToolDescriptor] = []
+        var healthResults: [String: ToolHealthCheckResult] = [:]
+
+        for baseDescriptor in unqualified.descriptors {
+            guard let reference = references[baseDescriptor.toolID] else {
+                descriptors.append(baseDescriptor)
+                if let health = unqualified.healthResults[baseDescriptor.toolID] {
+                    healthResults[baseDescriptor.toolID] = health
+                }
+                continue
+            }
+            let record: ToolQualificationRecord
+            do {
+                record = try await validator.validatedRecord(
+                    referencedBy: reference,
+                    expectedToolID: baseDescriptor.toolID,
+                    reading: workspaceStore
+                )
+            } catch {
+                throw XcircuiteFlowRuntimeSpecError.invalidQualificationRecord(
+                    toolID: baseDescriptor.toolID,
+                    reason: error.localizedDescription
+                )
+            }
+            guard executionIdentityMatches(record.descriptor, baseDescriptor) else {
+                throw XcircuiteFlowRuntimeSpecError.qualificationRecordExecutionIdentityMismatch(
+                    toolID: baseDescriptor.toolID
+                )
+            }
+            descriptors.append(record.descriptor)
+            healthResults[record.descriptor.toolID] = record.health
+        }
+        return XcircuiteFlowRuntimeToolBindings(
+            descriptors: descriptors.sorted { $0.toolID < $1.toolID },
+            healthResults: healthResults
+        )
+    }
+
+    private func qualificationRecordReferences() throws -> [String: ArtifactReference] {
+        var references: [String: ArtifactReference] = [:]
+        for spec in executors {
+            for (toolID, reference) in spec.qualificationRecordReferences() {
+                if let existing = references[toolID], existing != reference {
+                    throw XcircuiteFlowRuntimeSpecError.conflictingQualificationRecord(toolID: toolID)
+                }
+                references[toolID] = reference
+            }
+        }
+        return references
+    }
+
+    private func executionIdentityMatches(
+        _ qualified: ToolDescriptor,
+        _ base: ToolDescriptor
+    ) -> Bool {
+        qualified.toolID == base.toolID
+            && qualified.displayName == base.displayName
+            && qualified.kind == base.kind
+            && qualified.version == base.version
+            && qualified.capabilities == base.capabilities
+            && qualified.environment == base.environment
     }
 }
 

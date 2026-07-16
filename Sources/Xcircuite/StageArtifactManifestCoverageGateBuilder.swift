@@ -183,11 +183,13 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
                     message: "Artifact byte count differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestByteCount=\(byteCount) flowByteCount=\(artifact.byteCount)"
                 )
             }
-            if let sha256 = output.sha256, artifact.sha256 != sha256 {
+            if let sha256 = output.sha256,
+               artifact.digest.algorithm != .sha256
+                || artifact.digest.hexadecimalValue != sha256 {
                 return FlowDiagnostic(
                     severity: .error,
                     code: "ARTIFACT_MANIFEST_SHA256_MISMATCH",
-                    message: "Artifact SHA-256 differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestSHA256=\(sha256) flowSHA256=\(artifact.sha256)"
+                    message: "Artifact SHA-256 differs from the engine manifest. id=\(output.id) path=\(expectedPath) manifestSHA256=\(sha256) flowSHA256=\(artifact.digest.hexadecimalValue)"
                 )
             }
             return nil

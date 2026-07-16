@@ -108,8 +108,7 @@ public struct XcircuiteSymbolicPlannerInstalledSolverLaneResolver: Sendable {
                 toolID: candidate.toolID,
                 displayName: candidate.displayName,
                 version: "installed",
-                executablePath: resolution.executablePath ?? "",
-                level: .unknown
+                executablePath: resolution.executablePath ?? ""
             )
             : nil
         return XcircuiteSymbolicPlannerInstalledSolverCandidateResult(

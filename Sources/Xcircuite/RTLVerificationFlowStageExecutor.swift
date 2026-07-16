@@ -148,7 +148,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 referenceDesign = LogicDesignReference(
                     artifact: reference,
                     topDesignName: topModuleName,
-                    designDigest: reference.sha256
+                    designDigest: reference.digest.hexadecimalValue
                 )
             } else {
                 referenceDesign = nil
@@ -236,7 +236,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 design: LogicDesignReference(
                     artifact: rtlReference,
                     topDesignName: topModuleName,
-                    designDigest: rtlReference.sha256
+                    designDigest: rtlReference.digest.hexadecimalValue
                 ),
                 referenceDesign: referenceDesign,
                 referenceInputs: additionalReferenceReferences,

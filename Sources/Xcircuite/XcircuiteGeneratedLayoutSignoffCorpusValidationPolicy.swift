@@ -1,6 +1,6 @@
 import Foundation
 
-public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy: Codable, Sendable, Hashable {
+public struct XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy: Codable, Sendable, Hashable {
     public var schemaVersion: Int
     public var policyID: String
     public var minimumCaseCount: Int
@@ -59,8 +59,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy: Codable,
 
     public static func defaultPolicy(
         requiredCoverageTags: [String]
-    ) -> XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy {
-        XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy(
+    ) -> XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy {
+        XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy(
             requiredCoverageTags: requiredCoverageTags
         )
     }
@@ -92,7 +92,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy: Codable,
             throw DecodingError.dataCorruptedError(
                 forKey: .schemaVersion,
                 in: container,
-                debugDescription: "Unsupported generated-layout signoff corpus qualification policy schema version: \(schemaVersion)."
+                debugDescription: "Unsupported generated-layout signoff corpus validation policy schema version: \(schemaVersion)."
             )
         }
         self.policyID = try container.decodeIfPresent(

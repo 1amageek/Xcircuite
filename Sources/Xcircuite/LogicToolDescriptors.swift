@@ -2,7 +2,7 @@ import ToolQualification
 import DesignFlowKernel
 
 public enum LogicToolDescriptors {
-    public static func synthesis(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func synthesis() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "logic-synthesis",
             displayName: "Native Logic Synthesis",
@@ -15,7 +15,7 @@ public enum LogicToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -23,7 +23,7 @@ public enum LogicToolDescriptors {
         )
     }
 
-    public static func equivalence(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func equivalence() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-rtl-verification",
             displayName: "Native RTL-to-Mapped Equivalence",
@@ -36,7 +36,7 @@ public enum LogicToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -44,7 +44,7 @@ public enum LogicToolDescriptors {
         )
     }
 
-    public static func qualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func qualification() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "logic-qualification",
             displayName: "Logic Qualification Promotion Gate",
@@ -57,7 +57,7 @@ public enum LogicToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"

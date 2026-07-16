@@ -1,6 +1,6 @@
 import Foundation
 
-public enum XcircuiteGeneratedLayoutSignoffCorpusQualificationError: Error, LocalizedError, Equatable {
+public enum XcircuiteGeneratedLayoutSignoffCorpusValidationError: Error, LocalizedError, Equatable {
     case unsupportedReportSchemaVersion(Int)
     case unsupportedPolicySchemaVersion(Int)
     case invalidMinimumCaseCount(Int)
@@ -12,13 +12,13 @@ public enum XcircuiteGeneratedLayoutSignoffCorpusQualificationError: Error, Loca
         case .unsupportedReportSchemaVersion(let version):
             return "Generated layout signoff corpus report schema version \(version) is not supported."
         case .unsupportedPolicySchemaVersion(let version):
-            return "Generated layout signoff corpus qualification policy schema version \(version) is not supported."
+            return "Generated layout signoff corpus validation policy schema version \(version) is not supported."
         case .invalidMinimumCaseCount(let count):
-            return "Generated layout signoff corpus qualification minimum case count \(count) is invalid."
+            return "Generated layout signoff corpus validation minimum case count \(count) is invalid."
         case .invalidMinimumSourceArtifactCount(let count):
-            return "Generated layout signoff corpus qualification minimum source artifact count \(count) is invalid."
+            return "Generated layout signoff corpus validation minimum source artifact count \(count) is invalid."
         case .invalidMinimumSignoffArtifactCount(let count):
-            return "Generated layout signoff corpus qualification minimum signoff artifact count \(count) is invalid."
+            return "Generated layout signoff corpus validation minimum signoff artifact count \(count) is invalid."
         }
     }
 }

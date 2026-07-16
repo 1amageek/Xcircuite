@@ -481,7 +481,7 @@ public struct XcircuiteSymbolicPlannerPlanImporter: Sendable {
                 reason: "Explicit path does not match the run manifest artifact path."
             )
         }
-        if explicitReference.sha256 != manifestReference.sha256 {
+        if explicitReference.digest != manifestReference.digest {
             throw manifestReferenceMismatch(
                 field: field,
                 artifactID: artifactID,

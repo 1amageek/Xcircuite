@@ -542,8 +542,8 @@ extension XcircuiteFlowRuntimeTests {
         #expect(report.summary.stageFamilyCounts["drc"] == 2)
         #expect(report.summary.stageFamilyCounts["lvs"] == 2)
         #expect(report.summary.stageFamilyCounts["pex"] == 2)
-        #expect(report.suiteSpecArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-suite.json")
-        #expect(report.reportArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report.json")
+        #expect(report.suiteSpecArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-suite.json")
+        #expect(report.reportArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report.json")
         #expect((report.reportArtifact?.byteCount ?? 0) > 0)
 
         let gdsCaseResult = try #require(report.caseResults.first {
@@ -634,45 +634,45 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliReport.status == .passed)
         #expect(cliReport.reportArtifact?.artifactID == "generated-layout-signoff-corpus-report")
 
-        let qualifier = XcircuiteGeneratedLayoutSignoffCorpusQualifier(
+        let validator = XcircuiteGeneratedLayoutSignoffCorpusValidator(
             workspaceStore: workspaceStore
         )
-        let strictQualification = try await qualifier.qualify(
+        let strictValidation = try await validator.validate(
             report: report,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
-        #expect(strictQualification.status == .failed)
-        #expect(strictQualification.failures.contains {
+        #expect(strictValidation.status == .failed)
+        #expect(strictValidation.failures.contains {
             $0.code == "oracle-readiness-not-accepted"
                 && $0.family == .drc
                 && $0.caseID == "standard-gds-drc-lvs-pex-pass"
         })
 
-        let localQualificationPolicy = XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy(
+        let localValidationPolicy = XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy(
             policyID: "local-generated-layout-signoff-corpus-policy",
             requiredCoverageTags: request.requiredCoverageTags,
             acceptedOracleReadinessStatuses: [.ready, .blocked]
         )
-        let qualification = try await qualifier.qualifyAndPersist(
+        let validation = try await validator.validateAndPersist(
             report: report,
-            policy: localQualificationPolicy,
+            policy: localValidationPolicy,
             projectRoot: root
         )
-        #expect(qualification.status == .qualified)
-        #expect(qualification.summary.missingCoverageTags.isEmpty)
-        #expect(qualification.summary.missingStageFamilies.isEmpty)
-        #expect(qualification.summary.artifactWithoutHashCount == 0)
-        #expect(qualification.summary.artifactWithoutByteCount == 0)
-        #expect(qualification.summary.acceptedOracleReadinessCaseCount == 2)
-        #expect(qualification.policyArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-qualification-policy.json")
-        #expect(qualification.qualificationArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-qualification.json")
+        #expect(validation.status == .passed)
+        #expect(validation.summary.missingCoverageTags.isEmpty)
+        #expect(validation.summary.missingStageFamilies.isEmpty)
+        #expect(validation.summary.artifactWithoutHashCount == 0)
+        #expect(validation.summary.artifactWithoutByteCount == 0)
+        #expect(validation.summary.acceptedOracleReadinessCaseCount == 2)
+        #expect(validation.policyArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-validation-policy.json")
+        #expect(validation.validationArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-validation.json")
 
         let policyURL = root.appending(path: "generated-layout-signoff-corpus-policy.json")
-        try await writeJSON(localQualificationPolicy, to: policyURL)
+        try await writeJSON(localValidationPolicy, to: policyURL)
         let reportPath = try #require(report.reportArtifact?.path)
         let reportURL = root.appending(path: reportPath)
-        let cliQualificationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
-            "qualify-generated-layout-signoff-corpus",
+        let cliValidationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
+            "validate-generated-layout-signoff-corpus",
             "--project-root",
             root.path(percentEncoded: false),
             "--report",
@@ -682,13 +682,13 @@ extension XcircuiteFlowRuntimeTests {
             "--persist",
             "--pretty",
         ])
-        let cliQualificationData = try #require(cliQualificationJSON.data(using: .utf8))
-        let cliQualification = try JSONDecoder().decode(
-            XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.self,
-            from: cliQualificationData
+        let cliValidationData = try #require(cliValidationJSON.data(using: .utf8))
+        let cliValidation = try JSONDecoder().decode(
+            XcircuiteGeneratedLayoutSignoffCorpusValidationResult.self,
+            from: cliValidationData
         )
-        #expect(cliQualification.status == .qualified)
-        #expect(cliQualification.qualificationArtifact?.artifactID == "generated-layout-signoff-corpus-qualification")
+        #expect(cliValidation.status == .passed)
+        #expect(cliValidation.validationArtifact?.artifactID == "generated-layout-signoff-corpus-validation")
 
         let retainedSignoffReportURL = workspaceRoot()
             .appending(path: "docs/contract-fixtures/signoff-retained-report-v2.json")
@@ -710,12 +710,12 @@ extension XcircuiteFlowRuntimeTests {
             }
             return updatedCaseResult
         }
-        let readyWithoutEvidenceQualification = try await qualifier.qualify(
+        let readyWithoutEvidenceValidation = try await validator.validate(
             report: readyWithoutEvidenceReport,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
-        #expect(readyWithoutEvidenceQualification.status == .failed)
-        #expect(readyWithoutEvidenceQualification.failures.contains {
+        #expect(readyWithoutEvidenceValidation.status == .failed)
+        #expect(readyWithoutEvidenceValidation.failures.contains {
             $0.code == "ready-oracle-evidence-missing"
                 && $0.family == .drc
                 && $0.caseID == "standard-gds-drc-lvs-pex-pass"
@@ -734,83 +734,83 @@ extension XcircuiteFlowRuntimeTests {
         #expect(readyAttachment.summary.evidenceRefCount == 12)
         #expect(readyAttachment.summary.missingDomains.isEmpty)
         let readyWithEvidenceReport = readyAttachment.updatedReport
-        let readyWithEvidenceQualification = try await qualifier.qualify(
+        let readyWithEvidenceValidation = try await validator.validate(
             report: readyWithEvidenceReport,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
-        #expect(readyWithEvidenceQualification.status == .qualified)
-        #expect(readyWithEvidenceQualification.summary.caseCount == 2)
-        #expect(readyWithEvidenceQualification.summary.reportedCaseCount == 2)
-        #expect(readyWithEvidenceQualification.summary.uniqueCaseCount == 2)
-        #expect(readyWithEvidenceQualification.summary.duplicateCaseCount == 0)
-        #expect(readyWithEvidenceQualification.summary.sourceArtifactCount == report.summary.standardLayoutArtifactCount)
+        #expect(readyWithEvidenceValidation.status == .passed)
+        #expect(readyWithEvidenceValidation.summary.caseCount == 2)
+        #expect(readyWithEvidenceValidation.summary.reportedCaseCount == 2)
+        #expect(readyWithEvidenceValidation.summary.uniqueCaseCount == 2)
+        #expect(readyWithEvidenceValidation.summary.duplicateCaseCount == 0)
+        #expect(readyWithEvidenceValidation.summary.sourceArtifactCount == report.summary.standardLayoutArtifactCount)
         #expect(
-            readyWithEvidenceQualification.summary.reportedSourceArtifactCount ==
+            readyWithEvidenceValidation.summary.reportedSourceArtifactCount ==
                 report.summary.standardLayoutArtifactCount
         )
-        #expect(readyWithEvidenceQualification.summary.signoffArtifactCount == report.summary.signoffArtifactCount)
+        #expect(readyWithEvidenceValidation.summary.signoffArtifactCount == report.summary.signoffArtifactCount)
         #expect(
-            readyWithEvidenceQualification.summary.reportedSignoffArtifactCount ==
+            readyWithEvidenceValidation.summary.reportedSignoffArtifactCount ==
                 report.summary.signoffArtifactCount
         )
-        #expect(readyWithEvidenceQualification.summary.readyOracleEvidenceRefCount == 12)
-        #expect(readyWithEvidenceQualification.summary.readyOracleReadinessWithoutEvidenceCount == 0)
-        var staleQualificationReport = readyWithEvidenceReport
-        let staleQualificationCase = try #require(readyWithEvidenceReport.caseResults.first {
+        #expect(readyWithEvidenceValidation.summary.readyOracleEvidenceRefCount == 12)
+        #expect(readyWithEvidenceValidation.summary.readyOracleReadinessWithoutEvidenceCount == 0)
+        var staleValidationReport = readyWithEvidenceReport
+        let staleValidationCase = try #require(readyWithEvidenceReport.caseResults.first {
             $0.caseID == "standard-gds-drc-lvs-pex-pass"
         })
-        staleQualificationReport.caseResults = [staleQualificationCase]
-        staleQualificationReport.summary.caseCount = 2
-        staleQualificationReport.summary.passedCaseCount = 2
-        staleQualificationReport.summary.failedCaseCount = 0
-        staleQualificationReport.summary.coveredCoverageTags = request.requiredCoverageTags
-        staleQualificationReport.summary.missingCoverageTags = []
-        staleQualificationReport.summary.standardLayoutArtifactCount = 999
-        staleQualificationReport.summary.signoffArtifactCount = 999
-        let staleQualification = try await qualifier.qualify(
-            report: staleQualificationReport,
+        staleValidationReport.caseResults = [staleValidationCase]
+        staleValidationReport.summary.caseCount = 2
+        staleValidationReport.summary.passedCaseCount = 2
+        staleValidationReport.summary.failedCaseCount = 0
+        staleValidationReport.summary.coveredCoverageTags = request.requiredCoverageTags
+        staleValidationReport.summary.missingCoverageTags = []
+        staleValidationReport.summary.standardLayoutArtifactCount = 999
+        staleValidationReport.summary.signoffArtifactCount = 999
+        let staleValidation = try await validator.validate(
+            report: staleValidationReport,
             policy: .defaultPolicy(requiredCoverageTags: request.requiredCoverageTags)
         )
-        #expect(staleQualification.status == .failed)
-        #expect(staleQualification.summary.caseCount == 1)
-        #expect(staleQualification.summary.reportedCaseCount == 2)
-        #expect(staleQualification.summary.uniqueCaseCount == 1)
-        #expect(staleQualification.summary.duplicateCaseCount == 0)
-        #expect(staleQualification.summary.sourceArtifactCount < staleQualification.summary.reportedSourceArtifactCount)
-        #expect(staleQualification.summary.signoffArtifactCount < staleQualification.summary.reportedSignoffArtifactCount)
-        #expect(staleQualification.failures.contains {
+        #expect(staleValidation.status == .failed)
+        #expect(staleValidation.summary.caseCount == 1)
+        #expect(staleValidation.summary.reportedCaseCount == 2)
+        #expect(staleValidation.summary.uniqueCaseCount == 1)
+        #expect(staleValidation.summary.duplicateCaseCount == 0)
+        #expect(staleValidation.summary.sourceArtifactCount < staleValidation.summary.reportedSourceArtifactCount)
+        #expect(staleValidation.summary.signoffArtifactCount < staleValidation.summary.reportedSignoffArtifactCount)
+        #expect(staleValidation.failures.contains {
             $0.code == "case-count-mismatch"
         })
-        #expect(staleQualification.failures.contains {
+        #expect(staleValidation.failures.contains {
             $0.code == "missing-coverage-tag"
                 && $0.coverageTag == "generated-layout.standard-oasis.drc-lvs-pex"
         })
-        #expect(staleQualification.failures.contains {
+        #expect(staleValidation.failures.contains {
             $0.code == "source-artifact-count-mismatch"
         })
-        #expect(staleQualification.failures.contains {
+        #expect(staleValidation.failures.contains {
             $0.code == "signoff-artifact-count-mismatch"
         })
-        var duplicateQualificationReport = readyWithEvidenceReport
-        duplicateQualificationReport.caseResults.append(staleQualificationCase)
-        duplicateQualificationReport.summary.caseCount = duplicateQualificationReport.caseResults.count
-        let duplicateQualificationPolicy = XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy(
+        var duplicateValidationReport = readyWithEvidenceReport
+        duplicateValidationReport.caseResults.append(staleValidationCase)
+        duplicateValidationReport.summary.caseCount = duplicateValidationReport.caseResults.count
+        let duplicateValidationPolicy = XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy(
             minimumCaseCount: 3,
             requiredCoverageTags: request.requiredCoverageTags
         )
-        let duplicateQualification = try await qualifier.qualify(
-            report: duplicateQualificationReport,
-            policy: duplicateQualificationPolicy
+        let duplicateValidation = try await validator.validate(
+            report: duplicateValidationReport,
+            policy: duplicateValidationPolicy
         )
-        #expect(duplicateQualification.status == .failed)
-        #expect(duplicateQualification.summary.caseCount == 3)
-        #expect(duplicateQualification.summary.reportedCaseCount == 3)
-        #expect(duplicateQualification.summary.uniqueCaseCount == 2)
-        #expect(duplicateQualification.summary.duplicateCaseCount == 1)
-        #expect(duplicateQualification.failures.contains {
+        #expect(duplicateValidation.status == .failed)
+        #expect(duplicateValidation.summary.caseCount == 3)
+        #expect(duplicateValidation.summary.reportedCaseCount == 3)
+        #expect(duplicateValidation.summary.uniqueCaseCount == 2)
+        #expect(duplicateValidation.summary.duplicateCaseCount == 1)
+        #expect(duplicateValidation.failures.contains {
             $0.code == "duplicate-case" && $0.caseID == "standard-gds-drc-lvs-pex-pass"
         })
-        #expect(duplicateQualification.failures.contains {
+        #expect(duplicateValidation.failures.contains {
             $0.code == "minimum-case-count-not-met"
         })
         let promotionAssessor = XcircuiteGeneratedLayoutSignoffPromotionAssessor(
@@ -821,7 +821,7 @@ extension XcircuiteFlowRuntimeTests {
                 request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                     promotionID: "generated-layout-signoff-promotion-assessment"
                 ),
-                qualification: readyWithEvidenceQualification,
+                validation: readyWithEvidenceValidation,
                 retainedSignoffReport: retainedSignoffReport,
                 retainedSignoffReportURL: retainedSignoffReportURL
         )
@@ -829,7 +829,7 @@ extension XcircuiteFlowRuntimeTests {
 
         func expectPromotionAssessmentFailure(
             _ invalidRequest: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest,
-            qualification: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult = readyWithEvidenceQualification,
+            validation: XcircuiteGeneratedLayoutSignoffCorpusValidationResult = readyWithEvidenceValidation,
             retainedReport: XcircuiteRetainedSignoffReport? = nil,
             retainedReportURL: URL? = nil,
             expectedError: XcircuiteGeneratedLayoutSignoffPromotionAssessmentError
@@ -838,7 +838,7 @@ extension XcircuiteFlowRuntimeTests {
                 _ = try await promotionAssessor
                     .assess(
                         request: invalidRequest,
-                        qualification: qualification,
+                        validation: validation,
                         retainedSignoffReport: retainedReport,
                         retainedSignoffReportURL: retainedReportURL
                     )
@@ -953,24 +953,24 @@ extension XcircuiteFlowRuntimeTests {
 
         let readyWithoutEvidenceReportURL = root.appending(path: "ready-without-evidence-report.json")
         try await writeJSON(readyWithoutEvidenceReport, to: readyWithoutEvidenceReportURL)
-        let staleQualificationReportURL = root.appending(path: "stale-qualification-report.json")
-        try await writeJSON(staleQualificationReport, to: staleQualificationReportURL)
-        let cliStaleQualificationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
-            "qualify-generated-layout-signoff-corpus",
+        let staleValidationReportURL = root.appending(path: "stale-validation-report.json")
+        try await writeJSON(staleValidationReport, to: staleValidationReportURL)
+        let cliStaleValidationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
+            "validate-generated-layout-signoff-corpus",
             "--project-root",
             root.path(percentEncoded: false),
             "--report",
-            staleQualificationReportURL.path(percentEncoded: false),
+            staleValidationReportURL.path(percentEncoded: false),
             "--pretty",
         ])
-        let cliStaleQualificationData = try #require(cliStaleQualificationJSON.data(using: .utf8))
-        let cliStaleQualification = try JSONDecoder().decode(
-            XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.self,
-            from: cliStaleQualificationData
+        let cliStaleValidationData = try #require(cliStaleValidationJSON.data(using: .utf8))
+        let cliStaleValidation = try JSONDecoder().decode(
+            XcircuiteGeneratedLayoutSignoffCorpusValidationResult.self,
+            from: cliStaleValidationData
         )
-        #expect(cliStaleQualification.status == .failed)
-        #expect(cliStaleQualification.failures.contains { $0.code == "case-count-mismatch" })
-        #expect(cliStaleQualification.failures.contains { $0.code == "missing-coverage-tag" })
+        #expect(cliStaleValidation.status == .failed)
+        #expect(cliStaleValidation.failures.contains { $0.code == "case-count-mismatch" })
+        #expect(cliStaleValidation.failures.contains { $0.code == "missing-coverage-tag" })
         let cliReadyAttachmentJSON = try await XcircuiteFlowCLICommand.run(arguments: [
             "attach-generated-layout-ready-oracle-evidence",
             "--project-root",
@@ -988,25 +988,25 @@ extension XcircuiteFlowRuntimeTests {
             from: cliReadyAttachmentData
         )
         #expect(cliReadyAttachment.status == .attached)
-        #expect(cliReadyAttachment.reportArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report-ready-oracle-evidence.json")
+        #expect(cliReadyAttachment.reportArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report-ready-oracle-evidence.json")
         #expect(cliReadyAttachment.summary.evidenceRefCount == 12)
         let cliReadyReportPath = try #require(cliReadyAttachment.reportArtifact?.path)
         let cliReadyReportURL = root.appending(path: cliReadyReportPath)
-        let cliReadyQualificationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
-            "qualify-generated-layout-signoff-corpus",
+        let cliReadyValidationJSON = try await XcircuiteFlowCLICommand.run(arguments: [
+            "validate-generated-layout-signoff-corpus",
             "--project-root",
             root.path(percentEncoded: false),
             "--report",
             cliReadyReportURL.path(percentEncoded: false),
             "--pretty",
         ])
-        let cliReadyQualificationData = try #require(cliReadyQualificationJSON.data(using: .utf8))
-        let cliReadyQualification = try JSONDecoder().decode(
-            XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.self,
-            from: cliReadyQualificationData
+        let cliReadyValidationData = try #require(cliReadyValidationJSON.data(using: .utf8))
+        let cliReadyValidation = try JSONDecoder().decode(
+            XcircuiteGeneratedLayoutSignoffCorpusValidationResult.self,
+            from: cliReadyValidationData
         )
-        #expect(cliReadyQualification.status == .qualified)
-        #expect(cliReadyQualification.summary.readyOracleEvidenceRefCount == 12)
+        #expect(cliReadyValidation.status == .passed)
+        #expect(cliReadyValidation.summary.readyOracleEvidenceRefCount == 12)
 
         let expansionAuditPolicy = XcircuiteGeneratedLayoutSignoffCorpusCoverageAuditPolicy(
             policyID: "generated-layout-standard-format-expansion-policy",
@@ -1147,14 +1147,14 @@ extension XcircuiteFlowRuntimeTests {
             $0.kind == "ready-oracle-evidence"
         })
         #expect(cliCoverageAudit.suggestedActions.isEmpty)
-        #expect(cliCoverageAudit.auditArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit.json")
+        #expect(cliCoverageAudit.auditArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit.json")
 
         let promotionAssessment = try await promotionAssessor
             .assessAndPersist(
                 request: XcircuiteGeneratedLayoutSignoffPromotionAssessmentRequest(
                     promotionID: "generated-layout-signoff-promotion-assessment"
                 ),
-                qualification: qualification,
+                validation: validation,
                 retainedSignoffReport: retainedSignoffReport,
                 retainedSignoffReportURL: retainedSignoffReportURL,
                 projectRoot: root
@@ -1169,16 +1169,16 @@ extension XcircuiteFlowRuntimeTests {
         #expect(promotionAssessment.suggestedActions.contains {
             $0.actionKind == "run-generated-layout-external-oracle-cases"
         })
-        #expect(promotionAssessment.assessmentArtifact?.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json")
+        #expect(promotionAssessment.assessmentArtifact?.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json")
 
-        let qualificationPath = try #require(qualification.qualificationArtifact?.path)
-        let qualificationURL = root.appending(path: qualificationPath)
+        let validationPath = try #require(validation.validationArtifact?.path)
+        let validationURL = root.appending(path: validationPath)
         let cliAssessmentJSON = try await XcircuiteFlowCLICommand.run(arguments: [
             "assess-generated-layout-signoff-promotion",
             "--project-root",
             root.path(percentEncoded: false),
-            "--qualification",
-            qualificationURL.path(percentEncoded: false),
+            "--validation",
+            validationURL.path(percentEncoded: false),
             "--retained-signoff-report",
             retainedSignoffReportURL.path(percentEncoded: false),
             "--promotion-id",
@@ -1194,41 +1194,41 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliAssessment.status == .readyForExternalCaseExpansion)
         #expect(
             cliAssessment.assessmentArtifact?.path ==
-                ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json"
+                ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json"
         )
 
         let manifest = try await workspaceStore.loadManifest()
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-corpus-suite"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-suite.json"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-suite.json"
         })
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-corpus-report"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report.json"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report.json"
         })
         #expect(manifest.files.contains {
-            $0.artifactID == "generated-layout-signoff-corpus-qualification-policy"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-qualification-policy.json"
+            $0.artifactID == "generated-layout-signoff-corpus-validation-policy"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-validation-policy.json"
         })
         #expect(manifest.files.contains {
-            $0.artifactID == "generated-layout-signoff-corpus-qualification"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-qualification.json"
+            $0.artifactID == "generated-layout-signoff-corpus-validation"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-validation.json"
         })
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-ready-oracle-corpus-report"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report-ready-oracle-evidence.json"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-report-ready-oracle-evidence.json"
         })
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-corpus-coverage-audit-policy"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit-policy.json"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit-policy.json"
         })
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-corpus-coverage-audit"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit.json"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/corpus-coverage-audit.json"
         })
         #expect(manifest.files.contains {
             $0.artifactID == "generated-layout-signoff-promotion-assessment"
-                && $0.path == ".xcircuite/qualification/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json"
+                && $0.path == ".xcircuite/validation/generated-layout-signoff/generated-layout-signoff-ladder/promotion-assessment.json"
         })
     }
 

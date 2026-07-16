@@ -31,13 +31,9 @@ public extension XcircuiteFlowRunSpec {
 public extension XcircuiteFlowRuntimeSpec {
     func validateCoverage(
         for runSpec: XcircuiteFlowRunSpec,
-        projectRoot: URL? = nil,
-        requireCompleteToolEvidence: Bool = true
+        projectRoot: URL? = nil
     ) throws {
-        try validate(
-            projectRoot: projectRoot,
-            requireCompleteToolEvidence: requireCompleteToolEvidence
-        )
+        try validate(projectRoot: projectRoot)
         try runSpec.validate()
 
         let executorStageIDs = Set(executors.map(\.stageID))

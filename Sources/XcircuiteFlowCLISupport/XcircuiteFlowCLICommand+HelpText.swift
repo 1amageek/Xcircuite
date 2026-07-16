@@ -1,11 +1,10 @@
-import DesignFlowKernel
 import Foundation
 import Xcircuite
 import DesignFlowKernel
 
 extension XcircuiteFlowCLICommand {
     public static var usageText: String {
-        "Usage: xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path>] [--pretty] | xcircuite-flow run --project-root <path> --run-spec <path> --runtime-config <path> [--pretty] | xcircuite-flow resume-run --project-root <path> --run-id <id> --runtime-config <path> [--pretty] | xcircuite-flow attach-evidence --runtime-config <path> --stage-id <id> --evidence <path> [--out <path>] [--pretty] | xcircuite-flow generate-planning-problem --project-root <path> --run-id <id> --source <drc-summary|lvs-summary|pex-summary> [--pretty] | xcircuite-flow formulate-repair-planning-problem --project-root <path> --run-id <id> --formulation-path <path> [--pretty] | xcircuite-flow formulate-signoff-repair-planning-problem --project-root <path> --run-id <id> [--drc-repair-hints <path>] [--lvs-repair-hints <path>] [--pretty] | xcircuite-flow collect-generated-layout-signoff-corpus --project-root <path> --request <path> [--persist] [--pretty] | xcircuite-flow qualify-generated-layout-signoff-corpus --project-root <path> --report <path> [--policy <path>] [--persist] [--pretty] | xcircuite-flow attach-generated-layout-ready-oracle-evidence --project-root <path> --report <path> --retained-signoff-report <path> [--persist] [--pretty] | xcircuite-flow audit-generated-layout-signoff-corpus-coverage --project-root <path> --report <path> --policy <path> [--persist] [--pretty] | xcircuite-flow assess-generated-layout-signoff-promotion --project-root <path> --qualification <path> [--retained-signoff-report <path>] [--promotion-id <id>] [--persist] [--pretty] | xcircuite-flow collect-generated-layout-failure-ladder --project-root <path> --run-id <id> [--ladder-id <id>] [--persist] [--pretty] | xcircuite-flow audit-generated-layout-failure-ladder-coverage --project-root <path> --policy <path> --report <path> [--report <path> ...] [--persist] [--pretty] | xcircuite-flow audit-problem-translation --project-root <path> --run-id <id> [--pretty] | xcircuite-flow validate-planning-problem --project-root <path> --run-id <id> [--pretty] | xcircuite-flow generate-candidate-plan --project-root <path> --run-id <id> [--strategy <name>] [--calibration-policy <disabled|cp7-feedback>] [--cost-calibration-path <path>] [--pareto-candidates-path <path>] [--pretty] | xcircuite-flow run-symbolic-planner-family --project-root <path> --run-id <id> [--strategy <name> ...] [--calibration-policy <disabled|cp7-feedback>] [--pretty] | xcircuite-flow export-symbolic-planner-problem --project-root <path> --run-id <id> [--pretty] | xcircuite-flow run-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--arg <value> ...] [--pretty] | xcircuite-flow qualify-symbolic-planner-solver --project-root <path> --run-id <id> --executable-path <path> [--expected-action-id <id> ...] [--require-optimality] [--max-solver-cost <number>] [--require-native-certificate --certificate-path <path>] [--require-proof-validation --proof-path <path> --proof-checker-executable-path <path>] [--pretty] | xcircuite-flow discover-installed-symbolic-planner-solvers --project-root <path> --run-id <id> [--search-path <path> ...] [--batch-spec-output-path <path>] [--pretty] | xcircuite-flow run-symbolic-planner-solver-family --project-root <path> --spec <path> [--comparison-id <id>] [--no-promote] [--pretty] | xcircuite-flow compare-symbolic-planner-solver-family --project-root <path> --run-id <id> (--qualification-artifact-id <id> | --qualification-path <path>) [--comparison-id <id>] [--pretty] | xcircuite-flow promote-symbolic-planner-solver-family-selection --project-root <path> --run-id <id> [--comparison-id <id>] [--pretty] | xcircuite-flow qualify-symbolic-planner-solver-corpus --project-root <path> (--suite-spec <path> | --suite-id <id> --executable-path <path> --case <run-id:expected-action-ids> [--case <...>]) [--require-optimality] [--max-solver-cost <number>] [--require-proof-validation --proof-checker-executable-path <path> --case-proof <case-id:path>] [--pretty] | xcircuite-flow symbolic-planner-feature-matrix [--pretty] | xcircuite-flow import-symbolic-planner-plan --project-root <path> --run-id <id> --solver-plan-path <path> [--pretty] | xcircuite-flow generate-parameter-candidates --project-root <path> --run-id <id> [--strategy <name>] [--cost-calibration-path <path>] [--pareto-candidates-path <path>] [--pretty] | xcircuite-flow synthesize-parameter-candidate-plan --project-root <path> --run-id <id> [--rank <n>] [--candidate-id <id>] [--include-rejected-candidates] [--pretty] | xcircuite-flow approve-candidate-plan-risk --project-root <path> --run-id <id> --approval-id <id> --reviewer <name> [--reviewer-kind agent|human|cli|system] [--decision approved|rejected] [--pretty] | xcircuite-flow verify-candidate-plan --project-root <path> --run-id <id> [--mode <name>] [--pretty] | xcircuite-flow execute-candidate-plan --project-root <path> --run-id <id> [--pretty] | xcircuite-flow run-numeric-repair-loop --project-root <path> --run-id <id> [--max-iterations <count>] [--calibration-policy <disabled|cp7-feedback>] [--pretty] | xcircuite-flow generate-improvement-artifacts --project-root <path> --run-id <id> [--pretty] | xcircuite-flow qualify-verified-improvement-corpus --project-root <path> --suite-spec <path> [--persist] [--pretty] | xcircuite-flow run-selected-suggested-command --project-root <path> --run-id <id> [--command-id <id>] | xcircuite-flow summarize-loop --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty] | xcircuite-flow evaluate-run-guard --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty] | xcircuite-flow compare-artifacts --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty] | xcircuite-flow write-opamp-evaluation-profile --out <path> [--profile-id <id>] [--pretty] | xcircuite-flow write-opamp-spec --out <path> [--spec-id <id>] [--supply-v <number>] [--load-cap-f <number>] [--gain-db <number>] [--ugb-hz <number>] [--phase-margin-deg <number>] [--slew-rate-v-per-s <number>] [--pretty] | xcircuite-flow list-opamp-topologies --spec <path> [--pretty] | xcircuite-flow size-opamp --spec <path> [--technology <path>] [--topology <twoStageMiller|foldedCascode|telescopicCascode>] [--project-root <path> --run-id <id>] [--no-persist] [--pretty] | xcircuite-flow validate-opamp-simulation-decks --deck-set <path> [--mode <parseOnly|executeCoreSpice>|--execute] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty] | xcircuite-flow run-opamp-simulation-decks --deck-set <path> [--output-variable <name>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty] | xcircuite-flow extract-opamp-waveform-metrics --analysis <ac-open-loop|tran-positive-step|tran-negative-step|noise-input-referred> --waveform <path> [--output-variable <name>] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty] | xcircuite-flow merge-opamp-metric-extractions --extraction <path> [--extraction <path> ...] [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty] | xcircuite-flow evaluate-opamp --spec <path> (--cross-artifact-evaluation <path> | --sizing-result <path> | --simulation-metric-report <path> | --simulation-run-summary <path> | --simulation-measurements <path> | --opamp-metric-extraction <path>) [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty] | xcircuite-flow compare-opamp-post-layout --spec <path> --pre-report <path> --post-report <path> [--out <path>] [--project-root <path> --run-id <id> --persist] [--pretty] | xcircuite-flow inspect-toolchain-profile --runtime-config <path> [--project-root <path>] [--pretty] | xcircuite-flow inspect-technology-catalog (--catalog-path <path> | --runtime-config <path> | --pdk-root <path>) [--catalog-path <path> ...] [--pdk-root <path> ...] [--project-root <path>] [--pretty] | xcircuite-flow scaffold-run --project-root <path> --run-id <id> --out-run-spec <path> --out-runtime-config <path> [--stage <kind>[,<kind>...]] [--pretty] | xcircuite-flow validate [--project-root <path>] [--run-spec <path>] [--runtime-config <path>] [--pretty]"
+        helpText
     }
 
     public static var helpText: String {
@@ -16,15 +15,15 @@ extension XcircuiteFlowCLICommand {
           xcircuite-flow qualify-simulation-golden-corpus --project-root <path> --suite <path> [--artifact-dir <path>] [--out <path>] [--pretty]
           xcircuite-flow run --project-root <path> --run-spec <path> --runtime-config <path> [--pretty]
           xcircuite-flow resume-run --project-root <path> --run-id <id> --runtime-config <path> [--pretty]
-          xcircuite-flow attach-evidence --runtime-config <path> --stage-id <id> --evidence <path> [--out <path>] [--pretty]
+          xcircuite-flow attach-qualification-record --project-root <path> --runtime-config <path> --stage-id <id> --record-reference <path> [--out <path>] [--pretty]
           xcircuite-flow generate-planning-problem --project-root <path> --run-id <id> --source <drc-summary|lvs-summary|pex-summary> [--summary-artifact-id <id>] [--summary-path <path>] [--layout-artifact-id <id>] [--layout-path <path>] [--layout-netlist-path <path>] [--schematic-netlist-path <path>] [--source-netlist-path <path>] [--technology-artifact-id <id>] [--technology-path <path>] [--metric-report-path <path>] [--repair-hint-artifact-id <id>] [--repair-hint-path <path>] [--action-domain-artifact-id <id>] [--action-domain-path <path>] [--pretty]
           xcircuite-flow formulate-repair-planning-problem --project-root <path> --run-id <id> --formulation-path <path> [--problem-id <id>] [--pretty]
           xcircuite-flow formulate-signoff-repair-planning-problem --project-root <path> --run-id <id> [--drc-repair-hints <path>] [--lvs-repair-hints <path>] [--formulation-id <id>] [--intent-id <id>] [--intent <text>] [--problem-id <id>] [--pretty]
           xcircuite-flow collect-generated-layout-signoff-corpus --project-root <path> --request <path> [--persist] [--pretty]
-          xcircuite-flow qualify-generated-layout-signoff-corpus --project-root <path> --report <path> [--policy <path>] [--persist] [--pretty]
+          xcircuite-flow validate-generated-layout-signoff-corpus --project-root <path> --report <path> [--policy <path>] [--persist] [--pretty]
           xcircuite-flow attach-generated-layout-ready-oracle-evidence --project-root <path> --report <path> --retained-signoff-report <path> [--persist] [--pretty]
           xcircuite-flow audit-generated-layout-signoff-corpus-coverage --project-root <path> --report <path> --policy <path> [--persist] [--pretty]
-          xcircuite-flow assess-generated-layout-signoff-promotion --project-root <path> --qualification <path> [--retained-signoff-report <path>] [--promotion-id <id>] [--persist] [--pretty]
+          xcircuite-flow assess-generated-layout-signoff-promotion --project-root <path> --validation <path> [--retained-signoff-report <path>] [--promotion-id <id>] [--persist] [--pretty]
           xcircuite-flow collect-generated-layout-failure-ladder --project-root <path> --run-id <id> [--ladder-id <id>] [--persist] [--pretty]
           xcircuite-flow audit-generated-layout-failure-ladder-coverage --project-root <path> --policy <path> --report <path> [--report <path> ...] [--persist] [--pretty]
           xcircuite-flow audit-problem-translation --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--pretty]
@@ -234,14 +233,14 @@ extension XcircuiteFlowCLICommand {
         """
     }
 
-    public static var attachEvidenceHelpText: String {
+    public static var attachQualificationRecordHelpText: String {
         """
         Usage:
-          xcircuite-flow attach-evidence --runtime-config <path> --stage-id <id> --evidence <path> [--out <path>] [--pretty]
+          xcircuite-flow attach-qualification-record --project-root <path> --runtime-config <path> --stage-id <id> --record-reference <path> [--out <path>] [--pretty]
 
-        Loads a runtime config and a ToolEvidence-compatible export, then attaches
-        the evidence to the selected stage executor. Without --out, the updated
-        runtime config is written to stdout.
+        Attaches a ToolQualification-issued record reference to one runtime stage,
+        verifies the referenced canonical record and its artifact integrity, then
+        emits the updated runtime configuration.
         """
     }
 
@@ -322,16 +321,16 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow collect-generated-layout-signoff-corpus --project-root <path> --request <path> [--persist] [--pretty]
 
-        Loads a generated-layout signoff corpus request, collects run-ledger and review-bundle artifact refs for layout, DRC, LVS, PEX, simulation, and post-layout stages, and returns a corpus report with expected verdicts, coverage tags, oracle readiness, and SHA-256 / byte-count artifact refs. With --persist, the suite spec and report are written under .xcircuite/qualification/generated-layout-signoff/<suite-id>/.
+        Loads a generated-layout signoff corpus request, collects run-ledger and review-bundle artifact refs for layout, DRC, LVS, PEX, simulation, and post-layout stages, and returns a corpus report with expected verdicts, coverage tags, oracle readiness, and SHA-256 / byte-count artifact refs. With --persist, the suite spec and report are written under .xcircuite/validation/generated-layout-signoff/<suite-id>/.
         """
     }
 
-    public static var qualifyGeneratedLayoutSignoffCorpusHelpText: String {
+    public static var validateGeneratedLayoutSignoffCorpusHelpText: String {
         """
         Usage:
-          xcircuite-flow qualify-generated-layout-signoff-corpus --project-root <path> --report <path> [--policy <path>] [--persist] [--pretty]
+          xcircuite-flow validate-generated-layout-signoff-corpus --project-root <path> --report <path> [--policy <path>] [--persist] [--pretty]
 
-        Loads a generated-layout signoff corpus report and applies a qualification policy for case count, coverage, required stage families, oracle readiness, artifact hashes, byte counts, and integrity status. With --persist, the policy and qualification result are written under .xcircuite/qualification/generated-layout-signoff/<suite-id>/.
+        Loads a generated-layout signoff corpus report and applies a validation policy for case count, coverage, required stage families, oracle readiness, artifact hashes, byte counts, and integrity status. With --persist, the policy and validation result are written under .xcircuite/validation/generated-layout-signoff/<suite-id>/.
         """
     }
 
@@ -340,7 +339,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow attach-generated-layout-ready-oracle-evidence --project-root <path> --report <path> --retained-signoff-report <path> [--persist] [--pretty]
 
-        Loads a generated-layout signoff corpus report plus a retained signoff report, then attaches DRC/LVS/PEX ready-oracle evidence refs from passing retained external-oracle lanes. With --persist, the evidence-backed corpus report is written under .xcircuite/qualification/generated-layout-signoff/<suite-id>/corpus-report-ready-oracle-evidence.json.
+        Loads a generated-layout signoff corpus report plus a retained signoff report, then attaches DRC/LVS/PEX ready-oracle evidence refs from passing retained external-oracle lanes. With --persist, the evidence-backed corpus report is written under .xcircuite/validation/generated-layout-signoff/<suite-id>/corpus-report-ready-oracle-evidence.json.
         """
     }
 
@@ -349,16 +348,16 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow audit-generated-layout-signoff-corpus-coverage --project-root <path> --report <path> --policy <path> [--persist] [--pretty]
 
-        Loads a generated-layout signoff corpus report and an explicit coverage audit policy, then returns missing coverage tags, source artifact formats, signoff artifacts, stage families, and ready-oracle evidence requirements. With --persist, the policy and audit are written under .xcircuite/qualification/generated-layout-signoff/<suite-id>/.
+        Loads a generated-layout signoff corpus report and an explicit coverage audit policy, then returns missing coverage tags, source artifact formats, signoff artifacts, stage families, and ready-oracle evidence requirements. With --persist, the policy and audit are written under .xcircuite/validation/generated-layout-signoff/<suite-id>/.
         """
     }
 
     public static var assessGeneratedLayoutSignoffPromotionHelpText: String {
         """
         Usage:
-          xcircuite-flow assess-generated-layout-signoff-promotion --project-root <path> --qualification <path> [--retained-signoff-report <path>] [--promotion-id <id>] [--persist] [--pretty]
+          xcircuite-flow assess-generated-layout-signoff-promotion --project-root <path> --validation <path> [--retained-signoff-report <path>] [--promotion-id <id>] [--persist] [--pretty]
 
-        Loads a generated-layout corpus qualification result and an optional retained signoff report, then emits a promotion assessment that separates local generated-layout corpus qualification, case-level oracle readiness, retained DRC/LVS/PEX external-oracle infrastructure readiness, production blockers, and suggested next actions. With --persist, the assessment is written under .xcircuite/qualification/generated-layout-signoff/<suite-id>/promotion-assessment.json.
+        Loads a generated-layout corpus validation result and an optional retained signoff report, then emits a promotion assessment that separates local generated-layout corpus validation, case-level oracle readiness, retained DRC/LVS/PEX external-oracle infrastructure readiness, production blockers, and suggested next actions. With --persist, the assessment is written under .xcircuite/validation/generated-layout-signoff/<suite-id>/promotion-assessment.json.
         """
     }
 

@@ -3,7 +3,7 @@ import ToolQualification
 import DesignFlowKernel
 
 public enum PhysicalDesignToolDescriptors {
-    public static func review(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func review() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "physical-design-review",
             displayName: "Physical Design Review Gate",
@@ -17,7 +17,7 @@ public enum PhysicalDesignToolDescriptors {
                 )
             ],
             trustProfile: ToolTrustProfile(
-                level: level,
+                level: .unknown,
                 knownLimitations: [
                     "The gate validates immutable local artifacts and approval identity; it does not replace DRC, LVS, PEX or timing signoff."
                 ]
@@ -29,7 +29,7 @@ public enum PhysicalDesignToolDescriptors {
         )
     }
 
-    public static func engine(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func engine() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "physical-design",
             displayName: "Physical Design Engine",
@@ -43,7 +43,7 @@ public enum PhysicalDesignToolDescriptors {
                 )
             ],
             trustProfile: ToolTrustProfile(
-                level: level,
+                level: .unknown,
                 knownLimitations: [
                     "Native execution is deterministic over the canonical PhysicalDesignSnapshot JSON model.",
                     "DRC, LVS, PEX and timing remain independent verification oracles.",

@@ -1,7 +1,7 @@
 import Foundation
 import DesignFlowKernel
 
-public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
+public struct XcircuiteGeneratedLayoutSignoffCorpusValidator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let identifierValidator: FlowIdentifierValidator
 
@@ -13,11 +13,11 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
         self.identifierValidator = identifierValidator
     }
 
-    public func qualify(
+    public func validate(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
-    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusQualificationResult {
-        try validate(report: report, policy: policy)
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusValidationResult {
+        try validateInputs(report: report, policy: policy)
 
         let normalizedPolicy = normalize(policy)
         let projectRoot = workspaceStore.projectRoot
@@ -26,8 +26,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
             policy: normalizedPolicy,
             projectRoot: projectRoot
         )
-        let status: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Status = failures
-            .contains { $0.severity == .error } ? .failed : .qualified
+        let status: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Status = failures
+            .contains { $0.severity == .error } ? .failed : .passed
         return makeResult(
             report: report,
             policy: normalizedPolicy,
@@ -35,24 +35,24 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
             failures: failures,
             projectRoot: projectRoot,
             policyArtifact: nil,
-            qualificationArtifact: nil
+            validationArtifact: nil
         )
     }
 
-    public func qualifyAndPersist(
+    public func validateAndPersist(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy,
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy,
         projectRoot: URL
-    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusQualificationResult {
-        try validate(report: report, policy: policy)
+    ) async throws -> XcircuiteGeneratedLayoutSignoffCorpusValidationResult {
+        try validateInputs(report: report, policy: policy)
         let normalizedPolicy = normalize(policy)
         let policyPath = suiteProjectRelativePath(
             suiteID: report.suiteID,
-            fileName: "corpus-qualification-policy.json"
+            fileName: "corpus-validation-policy.json"
         )
         let policyArtifact = try await workspaceStore.persistProjectJSON(
             normalizedPolicy,
-            id: "generated-layout-signoff-corpus-qualification-policy",
+            id: "generated-layout-signoff-corpus-validation-policy",
             path: policyPath
         )
 
@@ -61,8 +61,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
             policy: normalizedPolicy,
             projectRoot: projectRoot
         )
-        let status: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Status = failures
-            .contains { $0.severity == .error } ? .failed : .qualified
+        let status: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Status = failures
+            .contains { $0.severity == .error } ? .failed : .passed
         let resultWithoutSelfRef = makeResult(
             report: report,
             policy: normalizedPolicy,
@@ -70,50 +70,50 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
             failures: failures,
             projectRoot: projectRoot,
             policyArtifact: policyArtifact,
-            qualificationArtifact: nil
+            validationArtifact: nil
         )
 
-        let qualificationPath = suiteProjectRelativePath(
+        let validationPath = suiteProjectRelativePath(
             suiteID: report.suiteID,
-            fileName: "corpus-qualification.json"
+            fileName: "corpus-validation.json"
         )
-        let qualificationArtifact = try await workspaceStore.persistProjectJSON(
+        let validationArtifact = try await workspaceStore.persistProjectJSON(
             resultWithoutSelfRef,
-            id: "generated-layout-signoff-corpus-qualification",
-            path: qualificationPath
+            id: "generated-layout-signoff-corpus-validation",
+            path: validationPath
         )
 
         var result = resultWithoutSelfRef
-        result.qualificationArtifact = qualificationArtifact
+        result.validationArtifact = validationArtifact
         return result
     }
 
-    private func validate(
+    private func validateInputs(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
     ) throws {
         guard report.schemaVersion == 1 else {
-            throw XcircuiteGeneratedLayoutSignoffCorpusQualificationError.unsupportedReportSchemaVersion(
+            throw XcircuiteGeneratedLayoutSignoffCorpusValidationError.unsupportedReportSchemaVersion(
                 report.schemaVersion
             )
         }
         guard policy.schemaVersion == 1 else {
-            throw XcircuiteGeneratedLayoutSignoffCorpusQualificationError.unsupportedPolicySchemaVersion(
+            throw XcircuiteGeneratedLayoutSignoffCorpusValidationError.unsupportedPolicySchemaVersion(
                 policy.schemaVersion
             )
         }
         guard policy.minimumCaseCount >= 1 else {
-            throw XcircuiteGeneratedLayoutSignoffCorpusQualificationError.invalidMinimumCaseCount(
+            throw XcircuiteGeneratedLayoutSignoffCorpusValidationError.invalidMinimumCaseCount(
                 policy.minimumCaseCount
             )
         }
         guard policy.minimumSourceArtifactCount >= 0 else {
-            throw XcircuiteGeneratedLayoutSignoffCorpusQualificationError.invalidMinimumSourceArtifactCount(
+            throw XcircuiteGeneratedLayoutSignoffCorpusValidationError.invalidMinimumSourceArtifactCount(
                 policy.minimumSourceArtifactCount
             )
         }
         guard policy.minimumSignoffArtifactCount >= 0 else {
-            throw XcircuiteGeneratedLayoutSignoffCorpusQualificationError.invalidMinimumSignoffArtifactCount(
+            throw XcircuiteGeneratedLayoutSignoffCorpusValidationError.invalidMinimumSignoffArtifactCount(
                 policy.minimumSignoffArtifactCount
             )
         }
@@ -136,10 +136,10 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func collectFailures(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy,
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy,
         projectRoot: URL
-    ) -> [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] {
-        var failures: [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] = []
+    ) -> [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] {
+        var failures: [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] = []
         if policy.requireReportPassed && report.status != .passed {
             failures.append(
                 failure(
@@ -170,7 +170,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
             failures.append(
                 failure(
                     code: "duplicate-case",
-                    message: "Generated-layout corpus case \(duplicateCaseID) appears more than once and cannot increase qualification coverage breadth.",
+                    message: "Generated-layout corpus case \(duplicateCaseID) appears more than once and cannot increase validation coverage breadth.",
                     caseID: duplicateCaseID
                 )
             )
@@ -248,9 +248,9 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func oracleReadinessFailures(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
-    ) -> [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] {
-        var failures: [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] = []
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
+    ) -> [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] {
+        var failures: [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] = []
         let acceptedStatuses = Set(policy.acceptedOracleReadinessStatuses)
         for caseResult in report.caseResults {
             let readinessByFamily = Dictionary(
@@ -296,9 +296,9 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
     private func readyOracleEvidenceFailures(
         _ readiness: XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleReadiness,
         caseResult: XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
-    ) -> [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] {
-        var failures: [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] = []
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
+    ) -> [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] {
+        var failures: [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] = []
         if policy.requireReadyOracleEvidenceRefs && readiness.evidenceRefs.isEmpty {
             failures.append(
                 failure(
@@ -338,10 +338,10 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func artifactFailures(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy,
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy,
         projectRoot: URL
-    ) -> [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] {
-        var failures: [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure] = []
+    ) -> [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] {
+        var failures: [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure] = []
         for artifact in uniqueArtifacts(report) {
             if policy.requireArtifactHashes && artifact.digest.hexadecimalValue.isEmpty {
                 failures.append(
@@ -383,13 +383,13 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func makeResult(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy,
-        status: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Status,
-        failures: [XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure],
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy,
+        status: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Status,
+        failures: [XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure],
         projectRoot: URL,
         policyArtifact: ArtifactReference?,
-        qualificationArtifact: ArtifactReference?
-    ) -> XcircuiteGeneratedLayoutSignoffCorpusQualificationResult {
+        validationArtifact: ArtifactReference?
+    ) -> XcircuiteGeneratedLayoutSignoffCorpusValidationResult {
         let artifacts = uniqueArtifacts(report)
         let sourceArtifactCount = sourceArtifactRefCount(report)
         let signoffArtifactCount = signoffArtifactRefCount(report)
@@ -406,11 +406,11 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
         let caseIDs = report.caseResults.map(\.caseID)
         let uniqueCaseCount = unique(caseIDs).count
 
-        return XcircuiteGeneratedLayoutSignoffCorpusQualificationResult(
+        return XcircuiteGeneratedLayoutSignoffCorpusValidationResult(
             suiteID: report.suiteID,
             policyID: policy.policyID,
             status: status,
-            summary: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Summary(
+            summary: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Summary(
                 reportStatus: report.status,
                 caseCount: report.caseResults.count,
                 reportedCaseCount: report.summary.caseCount,
@@ -449,13 +449,13 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
             ),
             failures: failures,
             policyArtifact: policyArtifact,
-            qualificationArtifact: qualificationArtifact
+            validationArtifact: validationArtifact
         )
     }
 
     private func normalize(
-        _ policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
-    ) -> XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy {
+        _ policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
+    ) -> XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy {
         var normalized = policy
         normalized.requiredCoverageTags = unique(policy.requiredCoverageTags)
         normalized.requiredStageFamilies = sortedStageFamilies(unique(policy.requiredStageFamilies))
@@ -468,7 +468,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func missingCoverageTags(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
     ) -> [String] {
         let covered = Set(coveredCoverageTags(report))
         return unique(policy.requiredCoverageTags).filter { !covered.contains($0) }
@@ -482,14 +482,14 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func missingStageFamilies(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
     ) -> [XcircuiteGeneratedLayoutSignoffStageFamily] {
         missingStageFamilies(observedStageFamilies: observedStageFamilies(report), policy: policy)
     }
 
     private func missingStageFamilies(
         observedStageFamilies: [XcircuiteGeneratedLayoutSignoffStageFamily],
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
     ) -> [XcircuiteGeneratedLayoutSignoffStageFamily] {
         let observed = Set(observedStageFamilies)
         return sortedStageFamilies(unique(policy.requiredStageFamilies).filter { !observed.contains($0) })
@@ -503,7 +503,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func oracleReadinessAccepted(
         caseResult: XcircuiteGeneratedLayoutSignoffCorpusReport.CaseResult,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
     ) -> Bool {
         let acceptedStatuses = Set(policy.acceptedOracleReadinessStatuses)
         let readinessByFamily = Dictionary(
@@ -521,7 +521,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
 
     private func readyOracleEvidenceStats(
         report: XcircuiteGeneratedLayoutSignoffCorpusReport,
-        policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
     ) -> ReadyOracleEvidenceStats {
         let requiredFamilies = Set(policy.requiredOracleReadinessFamilies)
         var refCount = 0
@@ -604,7 +604,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/validation/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func failure(
@@ -616,8 +616,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
         path: String? = nil,
         coverageTag: String? = nil,
         family: XcircuiteGeneratedLayoutSignoffStageFamily? = nil
-    ) -> XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure {
-        XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure(
+    ) -> XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure {
+        XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure(
             code: code,
             message: message,
             caseID: caseID,
@@ -643,8 +643,8 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualifier: Sendable {
     }
 
     private func failureSortOrder(
-        _ left: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure,
-        _ right: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Failure
+        _ left: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure,
+        _ right: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Failure
     ) -> Bool {
         if left.code != right.code {
             return left.code < right.code

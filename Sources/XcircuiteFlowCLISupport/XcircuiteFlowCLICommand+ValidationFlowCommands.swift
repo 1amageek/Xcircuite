@@ -1,4 +1,4 @@
-import DesignFlowKernel
+import CircuiteFoundation
 import Foundation
 import Xcircuite
 import DesignFlowKernel
@@ -270,20 +270,23 @@ extension XcircuiteFlowCLICommand {
         return try encode(inventory, pretty: pretty)
     }
 
-    static func attachEvidence(arguments: [String]) throws -> String {
+    static func attachQualificationRecord(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
+        var projectRoot: URL?
         var runtimeConfig: URL?
-        var evidenceURL: URL?
+        var referenceURL: URL?
         var stageID: String?
         var outputURL: URL?
         var pretty = false
 
         while let argument = parser.next() {
             switch argument {
+            case "--project-root":
+                projectRoot = URL(filePath: try parser.requiredValue(after: argument))
             case "--runtime-config":
                 runtimeConfig = URL(filePath: try parser.requiredValue(after: argument))
-            case "--evidence":
-                evidenceURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--record-reference":
+                referenceURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--stage-id":
                 stageID = try parser.requiredValue(after: argument)
             case "--out":
@@ -291,49 +294,52 @@ extension XcircuiteFlowCLICommand {
             case "--pretty":
                 pretty = true
             case "--help", "-h":
-                return attachEvidenceHelpText
+                return attachQualificationRecordHelpText
             default:
                 throw XcircuiteFlowCLIError.unknownOption(argument)
             }
         }
 
+        guard let projectRoot else {
+            throw XcircuiteFlowCLIError.missingOption("--project-root")
+        }
         guard let runtimeConfig else {
             throw XcircuiteFlowCLIError.missingOption("--runtime-config")
         }
-        guard let evidenceURL else {
-            throw XcircuiteFlowCLIError.missingOption("--evidence")
+        guard let referenceURL else {
+            throw XcircuiteFlowCLIError.missingOption("--record-reference")
         }
         guard let stageID else {
             throw XcircuiteFlowCLIError.missingOption("--stage-id")
         }
 
-        let evidenceExport = try loadValidatedJSONFile(
-            from: evidenceURL,
-            option: "--evidence",
-            loader: XcircuiteFlowEvidenceExport.load(from:)
+        let reference = try decodeJSONFile(
+            ArtifactReference.self,
+            from: referenceURL,
+            option: "--record-reference"
         )
         let runtimeSpec = try decodeJSONFile(
             XcircuiteFlowRuntimeSpec.self,
             from: runtimeConfig,
             option: "--runtime-config"
         )
-        let updatedRuntimeSpec = try runtimeSpec
-            .attachingEvidence(from: evidenceExport, toStageID: stageID)
+        let updatedRuntimeSpec = try runtimeSpec.attachingQualificationRecord(
+            reference,
+            toStageID: stageID
+        )
+        _ = try await updatedRuntimeSpec.makeRuntime(projectRoot: projectRoot)
 
         if let outputURL {
             try write(updatedRuntimeSpec, to: outputURL, pretty: pretty)
             return try encode(
-                EvidenceAttachmentOutput(
-                    status: "attached",
+                QualificationRecordAttachmentOutput(
                     stageID: stageID,
-                    evidenceID: evidenceExport.toolEvidence.evidenceID,
-                    evidenceKind: evidenceExport.toolEvidence.kind.rawValue,
+                    recordArtifactID: reference.id.rawValue,
                     outputPath: outputURL.path(percentEncoded: false)
                 ),
                 pretty: pretty
             )
         }
-
         return try encode(updatedRuntimeSpec, pretty: pretty)
     }
 
@@ -376,10 +382,9 @@ extension XcircuiteFlowCLICommand {
             from: runtimeConfig,
             option: "--runtime-config"
         )
-        let runtime = try runtimeSpec
-            .makeRuntime(projectRoot: projectRoot)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
         try await workspaceStore.createWorkspace()
+        let runtime = try await runtimeSpec.makeRuntime(projectRoot: projectRoot)
         let projectManifest = try await workspaceStore.loadManifest()
         let workspaceID = try FlowWorkspaceID(rawValue: projectManifest.identity.projectID)
         let result = try await runtime.resume(
@@ -434,12 +439,11 @@ extension XcircuiteFlowCLICommand {
         )
         try runtimeSpec.validateCoverage(
             for: loadedRunSpec,
-            projectRoot: projectRoot,
-            requireCompleteToolEvidence: false
+            projectRoot: projectRoot
         )
-        let runtime = try runtimeSpec.makeRuntime(projectRoot: projectRoot)
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
         try await workspaceStore.createWorkspace()
+        let runtime = try await runtimeSpec.makeRuntime(projectRoot: projectRoot)
         let projectManifest = try await workspaceStore.loadManifest()
         let workspaceID = try FlowWorkspaceID(rawValue: projectManifest.identity.projectID)
         let request = try loadedRunSpec.makeRequest(workspaceID: workspaceID)

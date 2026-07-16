@@ -992,7 +992,7 @@ struct PEXFlowStageExecutorTests {
         func cleanup(_ context: PEXExecutionContext) async {}
     }
 
-    private struct IncompleteArtifactPEXEngine: Xcircuite.PEXExecuting {
+    private struct IncompleteArtifactPEXEngine: PEXEngine.PEXRunning {
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
             guard let workingDirectory = request.workingDirectory else {
                 throw PEXError.invalidInput("Expected working directory")
@@ -1091,7 +1091,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct CancellingPEXEngine: Xcircuite.PEXExecuting {
+    private struct CancellingPEXEngine: PEXEngine.PEXRunning {
         let projectRoot: URL
         let runID: String
 
@@ -1111,7 +1111,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct FlakyPEXEngine: Xcircuite.PEXExecuting {
+    private struct FlakyPEXEngine: PEXEngine.PEXRunning {
         let state: FlakyPEXEngineState
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
@@ -1141,7 +1141,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct DivergentManifestPEXEngine: Xcircuite.PEXExecuting {
+    private struct DivergentManifestPEXEngine: PEXEngine.PEXRunning {
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
             guard let workingDirectory = request.workingDirectory else {
                 throw PEXError.invalidInput("Expected working directory")
@@ -1286,7 +1286,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct EscapingArtifactPEXEngine: Xcircuite.PEXExecuting {
+    private struct EscapingArtifactPEXEngine: PEXEngine.PEXRunning {
         let externalArtifactURL: URL
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {
@@ -1397,7 +1397,7 @@ struct PEXFlowStageExecutorTests {
         }
     }
 
-    private struct ExternalManifestPEXEngine: Xcircuite.PEXExecuting {
+    private struct ExternalManifestPEXEngine: PEXEngine.PEXRunning {
         let externalManifestURL: URL
 
         func run(_ request: PEXRunRequest) async throws -> PEXRunResult {

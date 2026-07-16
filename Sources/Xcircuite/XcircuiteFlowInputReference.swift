@@ -126,7 +126,7 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
             case .digestMismatch:
                 throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
                     path: reference.path,
-                    expected: reference.sha256,
+                    expected: reference.digest.hexadecimalValue,
                     actual: issue.actualDigest?.hexadecimalValue ?? "unknown"
                 )
             default:

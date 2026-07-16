@@ -142,7 +142,7 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
                 manifestPath: manifestReference.path
             )
         }
-        guard manifestReference.sha256 == reference.sha256,
+        guard manifestReference.digest == reference.digest,
               manifestReference.byteCount == reference.byteCount else {
             throw XcircuiteSymbolicPlannerSolverError.artifactIntegrityFailed(
                 field: field,

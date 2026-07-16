@@ -1,7 +1,7 @@
 import Foundation
 import DesignFlowKernel
 
-public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable, Sendable, Hashable {
+public struct XcircuiteGeneratedLayoutSignoffCorpusValidationResult: Codable, Sendable, Hashable {
     public var schemaVersion: Int
     public var suiteID: String
     public var policyID: String
@@ -9,7 +9,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
     public var summary: Summary
     public var failures: [Failure]
     public var policyArtifact: ArtifactReference?
-    public var qualificationArtifact: ArtifactReference?
+    public var validationArtifact: ArtifactReference?
 
     public init(
         schemaVersion: Int = 1,
@@ -19,7 +19,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
         summary: Summary,
         failures: [Failure],
         policyArtifact: ArtifactReference? = nil,
-        qualificationArtifact: ArtifactReference? = nil
+        validationArtifact: ArtifactReference? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suiteID = suiteID
@@ -28,11 +28,11 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusQualificationResult: Codable,
         self.summary = summary
         self.failures = failures
         self.policyArtifact = policyArtifact
-        self.qualificationArtifact = qualificationArtifact
+        self.validationArtifact = validationArtifact
     }
 
     public enum Status: String, Codable, Sendable, Hashable {
-        case qualified
+        case passed
         case failed
     }
 

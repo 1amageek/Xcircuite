@@ -2,7 +2,7 @@ import DesignFlowKernel
 import Foundation
 import Testing
 import ToolQualification
-import Xcircuite
+@testable import Xcircuite
 
 @Suite("Timing headless flow")
 struct TimingHeadlessFlowTests {
@@ -92,7 +92,7 @@ struct TimingHeadlessFlowTests {
                 && $0.reference.path.hasSuffix("stages/timing.sta/raw/timing-sta-result.json")
         })
         #expect(timingArtifact.integrity?.status == .verified)
-        #expect(!timingArtifact.reference.sha256.isEmpty)
+        #expect(!timingArtifact.reference.digest.hexadecimalValue.isEmpty)
         #expect(timingArtifact.reference.byteCount > 0)
 
         let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)

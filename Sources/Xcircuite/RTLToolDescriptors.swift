@@ -3,7 +3,7 @@ import DesignFlowKernel
 import RTLVerificationCore
 
 public enum RTLToolDescriptors {
-    public static func native(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func native() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "native-rtl-verification",
             displayName: "Native RTL Verification",
@@ -36,7 +36,7 @@ public enum RTLToolDescriptors {
                     outputFormats: [.json]
                 )
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"
@@ -49,8 +49,7 @@ public enum RTLToolDescriptors {
         executablePath: String,
         version: String,
         analysis: RTLVerificationAnalysis,
-        proofView: RTLVerificationProofView,
-        level: ToolQualificationLevel = .unknown
+        proofView: RTLVerificationProofView
     ) -> ToolDescriptor {
         let operationID = analysis == .formalEquivalence
             ? "\(analysis.stageID).\(proofView.rawValue)"
@@ -67,7 +66,7 @@ public enum RTLToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: executablePath,
                 platform: "macOS"

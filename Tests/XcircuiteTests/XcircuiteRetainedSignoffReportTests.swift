@@ -48,7 +48,7 @@ struct XcircuiteRetainedSignoffReportTests {
                 requiredExternalOracleDomains: [.drc],
                 requireGeneratedLayoutOracleReady: false
             ),
-            qualification: makeQualifiedGeneratedLayoutQualification(),
+            validation: makePassedGeneratedLayoutValidation(),
             retainedSignoffReport: retainedReport,
             retainedSignoffReportURL: retainedReportURL
         )
@@ -118,14 +118,14 @@ struct XcircuiteRetainedSignoffReportTests {
         )
     }
 
-    private func makeQualifiedGeneratedLayoutQualification()
-        -> XcircuiteGeneratedLayoutSignoffCorpusQualificationResult
+    private func makePassedGeneratedLayoutValidation()
+        -> XcircuiteGeneratedLayoutSignoffCorpusValidationResult
     {
-        XcircuiteGeneratedLayoutSignoffCorpusQualificationResult(
+        XcircuiteGeneratedLayoutSignoffCorpusValidationResult(
             suiteID: "generated-layout-signoff-suite",
             policyID: "test-policy",
-            status: .qualified,
-            summary: XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.Summary(
+            status: .passed,
+            summary: XcircuiteGeneratedLayoutSignoffCorpusValidationResult.Summary(
                 reportStatus: .passed,
                 caseCount: 1,
                 minimumCaseCount: 1,

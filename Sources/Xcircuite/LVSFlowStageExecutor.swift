@@ -19,14 +19,14 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
     private let terminalEquivalenceInput: XcircuiteFlowInputReference?
     private let backendSelection: LVSBackendSelection
     private let options: LVSOptions
-    private let engine: any LVSExecuting
+    private let engine: any LVSEngine.LVSExecuting
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
         stageID: String,
         toolID: String,
         request: LVSRequest,
-        engine: any LVSExecuting
+        engine: any LVSEngine.LVSExecuting
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -63,7 +63,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         terminalEquivalenceInput: XcircuiteFlowInputReference? = nil,
         backendSelection: LVSBackendSelection = LVSBackendSelection(backendID: "netgen"),
         options: LVSOptions = LVSOptions(),
-        engine: any LVSExecuting
+        engine: any LVSEngine.LVSExecuting
     ) {
         self.stageID = stageID
         self.toolID = toolID

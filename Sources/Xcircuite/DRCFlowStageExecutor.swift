@@ -12,14 +12,14 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
     private let technologyInput: XcircuiteFlowInputReference?
     private let backendSelection: DRCBackendSelection
     private let options: DRCOptions
-    private let engine: any DRCExecuting
+    private let engine: any DRCEngine.DRCExecuting
     private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
         stageID: String,
         toolID: String,
         request: DRCRequest,
-        engine: any DRCExecuting
+        engine: any DRCEngine.DRCExecuting
     ) {
         self.stageID = stageID
         self.toolID = toolID
@@ -42,7 +42,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         technologyInput: XcircuiteFlowInputReference? = nil,
         backendSelection: DRCBackendSelection = DRCBackendSelection(backendID: "magic"),
         options: DRCOptions = DRCOptions(),
-        engine: any DRCExecuting
+        engine: any DRCEngine.DRCExecuting
     ) {
         self.stageID = stageID
         self.toolID = toolID

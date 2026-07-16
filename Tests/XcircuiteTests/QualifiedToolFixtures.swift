@@ -16,8 +16,16 @@ enum QualifiedToolFixtures {
         spec: XcircuiteFlowRuntimeSpec,
         projectRoot: URL
     ) throws -> XcircuiteFlowRuntime {
-        try materializeEvidence(for: spec.makeToolBindings().descriptors, in: projectRoot)
-        return try spec.makeRuntime(projectRoot: projectRoot)
+        let bindings = try spec.makeUnqualifiedToolBindings()
+        return try XcircuiteFlowRuntime(
+            descriptors: bindings.descriptors,
+            healthResults: bindings.healthResults,
+            executors: try spec.executors.map {
+                try $0.makeExecutor(projectRoot: projectRoot, toolchainProfile: spec.toolchainProfile)
+            },
+            workspaceStore: XcircuiteWorkspaceStore(projectRoot: projectRoot),
+            toolchainProfile: spec.toolchainProfile
+        )
     }
 
     static func runtime(
@@ -43,11 +51,11 @@ enum QualifiedToolFixtures {
                 )
             }
         )
-        return try XcircuiteFlowRuntimeFactory.make(
+        return try XcircuiteFlowRuntime(
             descriptors: qualifiedDescriptors,
             healthResults: healthResults,
             executors: executors,
-            projectRoot: projectRoot,
+            workspaceStore: XcircuiteWorkspaceStore(projectRoot: projectRoot),
             toolchainProfile: toolchainProfile
         )
     }
@@ -60,11 +68,8 @@ enum QualifiedToolFixtures {
             level != .productionEligible,
             "Production-eligible fixtures require retained process qualification evidence."
         )
-        return XcircuiteFlowToolSpec(
-            qualificationLevel: level,
-            healthStatus: .passed,
-            evidence: evidenceSupporting(level: level, toolID: toolID)
-        )
+        _ = toolID
+        return XcircuiteFlowToolSpec()
     }
 
     static func health(

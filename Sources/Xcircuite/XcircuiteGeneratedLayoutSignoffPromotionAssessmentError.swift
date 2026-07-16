@@ -2,7 +2,7 @@ import Foundation
 
 public enum XcircuiteGeneratedLayoutSignoffPromotionAssessmentError: Error, LocalizedError, Equatable {
     case unsupportedRequestSchemaVersion(Int)
-    case unsupportedQualificationSchemaVersion(Int)
+    case unsupportedValidationSchemaVersion(Int)
     case unsupportedRetainedSignoffReportSchemaVersion(Int)
     case invalidRetainedSignoffReportKind(String)
     case emptyRequiredExternalOracleDomains
@@ -18,8 +18,8 @@ public enum XcircuiteGeneratedLayoutSignoffPromotionAssessmentError: Error, Loca
         switch self {
         case .unsupportedRequestSchemaVersion(let version):
             return "Generated layout signoff promotion assessment request schema version \(version) is not supported."
-        case .unsupportedQualificationSchemaVersion(let version):
-            return "Generated layout signoff corpus qualification schema version \(version) is not supported."
+        case .unsupportedValidationSchemaVersion(let version):
+            return "Generated layout signoff corpus validation schema version \(version) is not supported."
         case .unsupportedRetainedSignoffReportSchemaVersion(let version):
             return "Retained signoff report schema version \(version) is not supported."
         case .invalidRetainedSignoffReportKind(let kind):

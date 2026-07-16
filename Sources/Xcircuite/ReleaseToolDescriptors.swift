@@ -3,38 +3,34 @@ import ToolQualification
 import DesignFlowKernel
 
 public enum ReleaseToolDescriptors {
-    public static func authorization(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func authorization() -> ToolDescriptor {
         descriptor(
             toolID: "native-release-authorization",
             displayName: "Release authorization",
-            operationID: "release-authorize",
-            level: level
+            operationID: "release-authorize"
         )
     }
 
-    public static func signoff(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func signoff() -> ToolDescriptor {
         descriptor(
             toolID: "native-release-signoff",
             displayName: "Release signoff",
-            operationID: "release-signoff",
-            level: level
+            operationID: "release-signoff"
         )
     }
 
-    public static func tapeout(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func tapeout() -> ToolDescriptor {
         descriptor(
             toolID: "native-release-tapeout",
             displayName: "Release tapeout",
-            operationID: "release-tapeout",
-            level: level
+            operationID: "release-tapeout"
         )
     }
 
     private static func descriptor(
         toolID: String,
         displayName: String,
-        operationID: String,
-        level: ToolQualificationLevel
+        operationID: String
     ) -> ToolDescriptor {
         ToolDescriptor(
             toolID: toolID,
@@ -48,7 +44,7 @@ public enum ReleaseToolDescriptors {
                     outputFormats: [.json]
                 ),
             ],
-            trustProfile: ToolTrustProfile(level: level),
+            trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
                 executablePath: "in-process",
                 platform: "macOS"

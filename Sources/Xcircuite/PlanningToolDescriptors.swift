@@ -7,8 +7,7 @@ public enum PlanningToolDescriptors {
         toolID: String = "external-symbolic-planner",
         displayName: String = "External Symbolic Planner",
         version: String = "external",
-        executablePath: String,
-        level: ToolQualificationLevel = .unknown
+        executablePath: String
     ) -> ToolDescriptor {
         ToolDescriptor(
             toolID: toolID,
@@ -26,7 +25,7 @@ public enum PlanningToolDescriptors {
                 ),
             ],
             trustProfile: ToolTrustProfile(
-                level: level,
+                level: .unknown,
                 knownLimitations: [
                     "External solver acceptance still requires typed candidate-plan verification.",
                 ]

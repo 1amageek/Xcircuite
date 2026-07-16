@@ -176,10 +176,7 @@ struct XcircuiteFlowRunScaffolder: Sendable {
                 corners: [PEXCorner(id: "tt_25c_1v0")],
                 technology: .jsonFile(path: Self.placeholderPEXTechnologyPath),
                 backendSelection: PEXBackendSelection(backendID: "magic"),
-                tool: XcircuiteFlowToolSpec(
-                    qualificationLevel: .unknown,
-                    healthStatus: .notChecked
-                )
+                tool: XcircuiteFlowToolSpec()
             ))
         case .postLayoutComparison:
             return .postLayoutComparison(XcircuiteFlowStageExecutorSpec.PostLayoutComparison(

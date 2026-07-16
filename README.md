@@ -320,11 +320,12 @@ xcircuite-flow resume-run \
   --run-id <run-id> \
   --runtime-config <runtime.json>
 
-xcircuite-flow attach-evidence \
+xcircuite-flow attach-qualification-record \
+  --project-root <project-root> \
   --runtime-config <runtime.json> \
   --stage-id <stage-id> \
-  --evidence <tool-evidence-export.json> \
-  --out <runtime-with-evidence.json>
+  --record-reference <qualification-record-reference.json> \
+  --out <runtime-with-record.json>
 
 xcircuite-flow validate \
   --run-spec <run.json> \
@@ -383,9 +384,6 @@ Committed runtime/run spec fixtures live under
 | `qualified-evidence-run.json` | Run spec whose DRC stage requires `requiredQualifiedEvidenceKinds: ["corpus"]` plus `maximumEvidenceAgeSeconds` |
 | `qualified-signoff-runtime.json` | Runtime config for DRC/LVS/PEX signoff stages before evidence attachment |
 | `qualified-signoff-run.json` | Run spec whose DRC/LVS/PEX stages require qualified corpus evidence |
-| `drc-tool-evidence-export.json` | DRC corpus evidence export consumed by `xcircuite-flow attach-evidence` |
-| `lvs-tool-evidence-export.json` | LVS corpus evidence export consumed by `xcircuite-flow attach-evidence` |
-| `pex-tool-evidence-export.json` | PEX SPEF corpus evidence export consumed by `xcircuite-flow attach-evidence` |
 
 Regression:
 

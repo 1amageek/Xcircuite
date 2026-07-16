@@ -52,7 +52,7 @@ extension XcircuiteFlowCLICommand {
         return try encode(report, pretty: pretty)
     }
 
-    static func qualifyGeneratedLayoutSignoffCorpus(arguments: [String]) async throws -> String {
+    static func validateGeneratedLayoutSignoffCorpus(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var reportURL: URL?
@@ -73,7 +73,7 @@ extension XcircuiteFlowCLICommand {
             case "--pretty":
                 pretty = true
             case "--help", "-h":
-                return qualifyGeneratedLayoutSignoffCorpusHelpText
+                return validateGeneratedLayoutSignoffCorpusHelpText
             default:
                 throw XcircuiteFlowCLIError.unknownOption(argument)
             }
@@ -91,10 +91,10 @@ extension XcircuiteFlowCLICommand {
             from: reportURL,
             option: "--report"
         )
-        let policy: XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy
+        let policy: XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy
         if let policyURL {
             policy = try decodeJSONFile(
-                XcircuiteGeneratedLayoutSignoffCorpusQualificationPolicy.self,
+                XcircuiteGeneratedLayoutSignoffCorpusValidationPolicy.self,
                 from: policyURL,
                 option: "--policy"
             )
@@ -103,10 +103,10 @@ extension XcircuiteFlowCLICommand {
         }
 
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        let qualifier = XcircuiteGeneratedLayoutSignoffCorpusQualifier(workspaceStore: workspaceStore)
+        let validator = XcircuiteGeneratedLayoutSignoffCorpusValidator(workspaceStore: workspaceStore)
         let result = try await persist
-            ? qualifier.qualifyAndPersist(report: report, policy: policy, projectRoot: projectRoot)
-            : qualifier.qualify(report: report, policy: policy)
+            ? validator.validateAndPersist(report: report, policy: policy, projectRoot: projectRoot)
+            : validator.validate(report: report, policy: policy)
         return try encode(result, pretty: pretty)
     }
 
@@ -232,7 +232,7 @@ extension XcircuiteFlowCLICommand {
     static func assessGeneratedLayoutSignoffPromotion(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
-        var qualificationURL: URL?
+        var validationURL: URL?
         var retainedSignoffReportURL: URL?
         var promotionID: String?
         var persist = false
@@ -242,8 +242,8 @@ extension XcircuiteFlowCLICommand {
             switch argument {
             case "--project-root":
                 projectRoot = URL(filePath: try parser.requiredValue(after: argument))
-            case "--qualification":
-                qualificationURL = URL(filePath: try parser.requiredValue(after: argument))
+            case "--validation":
+                validationURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--retained-signoff-report":
                 retainedSignoffReportURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--promotion-id":
@@ -262,14 +262,14 @@ extension XcircuiteFlowCLICommand {
         guard let projectRoot else {
             throw XcircuiteFlowCLIError.missingOption("--project-root")
         }
-        guard let qualificationURL else {
-            throw XcircuiteFlowCLIError.missingOption("--qualification")
+        guard let validationURL else {
+            throw XcircuiteFlowCLIError.missingOption("--validation")
         }
 
-        let qualification = try decodeJSONFile(
-            XcircuiteGeneratedLayoutSignoffCorpusQualificationResult.self,
-            from: qualificationURL,
-            option: "--qualification"
+        let validation = try decodeJSONFile(
+            XcircuiteGeneratedLayoutSignoffCorpusValidationResult.self,
+            from: validationURL,
+            option: "--validation"
         )
         let retainedReport: XcircuiteRetainedSignoffReport?
         if let retainedSignoffReportURL {
@@ -289,14 +289,14 @@ extension XcircuiteFlowCLICommand {
         let assessment = try await persist
             ? assessor.assessAndPersist(
                 request: request,
-                qualification: qualification,
+                validation: validation,
                 retainedSignoffReport: retainedReport,
                 retainedSignoffReportURL: retainedSignoffReportURL,
                 projectRoot: projectRoot
             )
             : assessor.assess(
                 request: request,
-                qualification: qualification,
+                validation: validation,
                 retainedSignoffReport: retainedReport,
                 retainedSignoffReportURL: retainedSignoffReportURL
             )

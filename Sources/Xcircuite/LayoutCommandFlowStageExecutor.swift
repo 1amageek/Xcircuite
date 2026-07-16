@@ -247,7 +247,8 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         if issue.code == .digestMismatch {
             throw LayoutCommandFlowStageExecutorError.outputDocumentDigestMismatch(
                 path: canonicalPath(expectedOutputURL),
-                expected: issue.expectedDigest?.hexadecimalValue ?? result.outputArtifact.sha256,
+                expected: issue.expectedDigest?.hexadecimalValue
+                    ?? result.outputArtifact.digest.hexadecimalValue,
                 actual: issue.actualDigest?.hexadecimalValue ?? "unavailable"
             )
         }

@@ -30,16 +30,13 @@ public struct RTLVerificationOracleToolSpec: Sendable, Hashable, Codable {
         analysis: RTLVerificationAnalysis,
         proofView: RTLVerificationProofView
     ) -> ToolDescriptor {
-        var descriptor = RTLToolDescriptors.oracle(
+        RTLToolDescriptors.oracle(
             toolID: toolID,
             executablePath: executablePath,
             version: version,
             analysis: analysis,
-            proofView: proofView,
-            level: tool.qualificationLevel
+            proofView: proofView
         )
-        descriptor.trustProfile.evidence = tool.evidence
-        return descriptor
     }
 
     public func resolvedExecutablePath(projectRoot: URL) throws -> String {

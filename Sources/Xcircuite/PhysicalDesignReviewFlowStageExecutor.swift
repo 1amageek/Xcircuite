@@ -166,7 +166,9 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
             let manifestDigest = try digester
                 .digest(data: manifestData, using: .sha256)
                 .hexadecimalValue
-            if manifestDigest != packet.manifestDigest || packet.manifestReference.sha256 != manifestDigest {
+            if manifestDigest != packet.manifestDigest
+                || packet.manifestReference.digest.algorithm != .sha256
+                || packet.manifestReference.digest.hexadecimalValue != manifestDigest {
                 diagnostics.append(diagnostic(
                     code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_TAMPERED",
                     message: "The reviewed physical-design manifest changed after packet creation.",

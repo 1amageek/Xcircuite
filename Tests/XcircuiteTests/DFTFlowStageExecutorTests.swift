@@ -383,7 +383,7 @@ struct DFTFlowStageExecutorTests {
             root: root,
             runID: "dft-release-run",
             designArtifact: designArtifact,
-            designDigest: designArtifact.sha256,
+            designDigest: designArtifact.digest.hexadecimalValue,
             pdkArtifact: buildRequest.identityArtifacts.pdk,
             pdkDigest: buildRequest.scope.pdkDigest ?? ""
         )
@@ -549,17 +549,17 @@ struct DFTFlowStageExecutorTests {
         let scope = ToolQualificationScope(
             implementationID: implementationID,
             toolVersion: "1.0.0",
-            binaryDigest: tool.sha256,
+            binaryDigest: tool.digest.hexadecimalValue,
             algorithmVersion: "dft-v1",
             processProfileID: processID,
-            processProfileDigest: processProfile.sha256,
-            deckDigest: ruleDeck.sha256,
+            processProfileDigest: processProfile.digest.hexadecimalValue,
+            deckDigest: ruleDeck.digest.hexadecimalValue,
             pdkID: "fixture-pdk",
-            pdkDigest: pdk.sha256,
+            pdkDigest: pdk.digest.hexadecimalValue,
             oracle: ToolOracleQualificationScope(
                 implementationID: "independent-dft-oracle",
                 version: "2.0.0",
-                binaryDigest: oracleTool.sha256
+                binaryDigest: oracleTool.digest.hexadecimalValue
             )
         )
         let input = try writeQualificationArtifact(root: root, name: "input")
@@ -704,7 +704,7 @@ struct DFTFlowStageExecutorTests {
                 manifest: pdk,
                 processID: "fixture-process",
                 version: "1",
-                digest: pdkDigest ?? pdk.sha256
+                digest: pdkDigest ?? pdk.digest.hexadecimalValue
             ),
             cellLibrary: cellLibraryReference,
             operation: .scanInsertion,

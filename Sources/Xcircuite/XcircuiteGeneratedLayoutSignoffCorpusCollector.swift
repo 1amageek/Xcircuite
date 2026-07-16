@@ -522,7 +522,7 @@ public struct XcircuiteGeneratedLayoutSignoffCorpusCollector: Sendable {
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-signoff/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/validation/generated-layout-signoff/\(suiteID)/\(fileName)"
     }
 
     private func artifactReferenceSortOrder(

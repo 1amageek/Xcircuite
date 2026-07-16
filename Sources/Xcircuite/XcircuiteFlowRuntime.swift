@@ -4,8 +4,8 @@ import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowRuntime: Sendable {
-    public var toolRegistry: ToolRegistry
-    public var healthResults: [String: ToolHealthCheckResult]
+    public let toolRegistry: ToolRegistry
+    public let healthResults: [String: ToolHealthCheckResult]
     private let executors: [any FlowStageExecutor]
     private let toolchainProfile: XcircuiteFlowToolchainProfile?
     private let orchestrator: DefaultFlowOrchestrator
@@ -14,7 +14,7 @@ public struct XcircuiteFlowRuntime: Sendable {
     private let toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore
     private let workspaceStore: XcircuiteWorkspaceStore
 
-    public init(
+    init(
         toolRegistry: ToolRegistry,
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],
@@ -64,7 +64,7 @@ public struct XcircuiteFlowRuntime: Sendable {
         self.workspaceStore = workspaceStore
     }
 
-    public init(
+    init(
         descriptors: [ToolDescriptor],
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],

@@ -322,7 +322,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 hintCount: report.hintCount,
                 unsupportedDiagnosticCount: report.unsupportedDiagnosticIndexes.count,
                 artifactID: loadedReports.drcReference?.artifactID,
-                sha256: loadedReports.drcReference?.sha256,
+                sha256: loadedReports.drcReference?.digest.hexadecimalValue,
                 byteCount: loadedReports.drcReference.flatMap { Int64(exactly: $0.byteCount) },
                 integrityStatus: FlowArtifactVerificationStatus.verified.rawValue
             ))
@@ -338,7 +338,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 hintCount: report.hintCount,
                 unsupportedDiagnosticCount: report.unsupportedDiagnosticIndexes.count,
                 artifactID: loadedReports.lvsReference?.artifactID,
-                sha256: loadedReports.lvsReference?.sha256,
+                sha256: loadedReports.lvsReference?.digest.hexadecimalValue,
                 byteCount: loadedReports.lvsReference.flatMap { Int64(exactly: $0.byteCount) },
                 integrityStatus: FlowArtifactVerificationStatus.verified.rawValue
             ))
@@ -455,7 +455,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         if let reference {
             metadata["artifactID"] = .text(reference.artifactID)
             metadata["artifactPath"] = .text(reference.path)
-            metadata["artifactSHA256"] = .text(reference.sha256)
+            metadata["artifactSHA256"] = .text(reference.digest.hexadecimalValue)
             metadata["artifactByteCount"] = .scalar(Double(reference.byteCount))
             metadata["artifactIntegrityStatus"] = .text(FlowArtifactVerificationStatus.verified.rawValue)
         }

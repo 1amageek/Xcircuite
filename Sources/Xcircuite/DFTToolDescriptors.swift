@@ -3,7 +3,7 @@ import ToolQualification
 import DesignFlowKernel
 
 public enum DFTToolDescriptors {
-    public static func engine(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func engine() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "dft-engine",
             displayName: "DFT Engine",
@@ -17,7 +17,7 @@ public enum DFTToolDescriptors {
                 )
             ],
             trustProfile: ToolTrustProfile(
-                level: level,
+                level: .unknown,
                 knownLimitations: [
                     "Native DFT backends are smoke-checked and do not claim process qualification."
                 ]
@@ -29,7 +29,7 @@ public enum DFTToolDescriptors {
         )
     }
 
-    public static func qualification(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func qualification() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "dft-qualification",
             displayName: "DFT Qualification",
@@ -43,7 +43,7 @@ public enum DFTToolDescriptors {
                 )
             ],
             trustProfile: ToolTrustProfile(
-                level: level,
+                level: .unknown,
                 knownLimitations: [
                     "Process qualification requires retained oracle artifacts and explicit approval evidence."
                 ]
@@ -55,7 +55,7 @@ public enum DFTToolDescriptors {
         )
     }
 
-    public static func release(level: ToolQualificationLevel = .unknown) -> ToolDescriptor {
+    public static func release() -> ToolDescriptor {
         ToolDescriptor(
             toolID: "dft-release-gate",
             displayName: "DFT Release Gate",
@@ -69,7 +69,7 @@ public enum DFTToolDescriptors {
                 )
             ],
             trustProfile: ToolTrustProfile(
-                level: level,
+                level: .unknown,
                 knownLimitations: [
                     "Release requires independently validated process qualification evidence, process-qualified DFT provenance, downstream signoff artifacts and explicit review approval."
                 ]

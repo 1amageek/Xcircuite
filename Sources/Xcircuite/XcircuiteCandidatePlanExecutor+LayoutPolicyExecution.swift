@@ -308,7 +308,8 @@ extension XcircuiteCandidatePlanExecutor {
             throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputDigestMismatch(
                 stepID: stepID,
                 path: canonicalPath(outputURL),
-                expected: issue.expectedDigest?.hexadecimalValue ?? result.outputArtifact.sha256,
+                expected: issue.expectedDigest?.hexadecimalValue
+                    ?? result.outputArtifact.digest.hexadecimalValue,
                 actual: issue.actualDigest?.hexadecimalValue ?? "unavailable"
             )
         }

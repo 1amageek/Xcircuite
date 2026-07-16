@@ -88,11 +88,9 @@ extension XcircuiteFlowCLICommand {
         }
     }
 
-    struct EvidenceAttachmentOutput: Sendable, Hashable, Codable {
-        var status: String
+    struct QualificationRecordAttachmentOutput: Sendable, Hashable, Codable {
         var stageID: String
-        var evidenceID: String
-        var evidenceKind: String
+        var recordArtifactID: String
         var outputPath: String?
     }
 

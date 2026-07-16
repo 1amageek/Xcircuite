@@ -4,8 +4,7 @@ import DesignFlowKernel
 
 public extension XcircuiteFlowRuntimeSpec {
     func validate(
-        projectRoot: URL? = nil,
-        requireCompleteToolEvidence: Bool = true
+        projectRoot: URL? = nil
     ) throws {
         guard schemaVersion == 1 else {
             throw XcircuiteFlowRuntimeSpecError.unsupportedSchemaVersion(schemaVersion)
@@ -25,12 +24,12 @@ public extension XcircuiteFlowRuntimeSpec {
         for executor in executors {
             try validator.validate(executor.stageID, kind: .stageID)
             try executor.validateRequiredInputs(toolchainProfile: toolchainProfile)
-            try executor.validateToolSpec(requireCompleteEvidence: requireCompleteToolEvidence)
+            try executor.validateToolSpec()
             guard stageIDs.insert(executor.stageID).inserted else {
                 throw XcircuiteFlowRuntimeSpecError.duplicateExecutorStageID(executor.stageID)
             }
         }
-        _ = try makeToolBindings()
+        _ = try makeUnqualifiedToolBindings()
     }
 }
 
@@ -89,8 +88,7 @@ private extension XcircuiteFlowStageExecutorSpec {
             if let oracleTool = spec.oracleTool {
                 try validateOracleTool(
                     oracleTool,
-                    stageID: spec.stageID,
-                    requireCompleteEvidence: false
+                    stageID: spec.stageID
                 )
             }
         case .logicSynthesis(let spec):
@@ -414,41 +412,17 @@ private extension XcircuiteFlowStageExecutorSpec {
         }
     }
 
-    func validateToolSpec(requireCompleteEvidence: Bool) throws {
-        let toolSpec = toolSpec
+    func validateToolSpec() throws {
+        try validateQualificationRecord(toolSpec.qualificationRecord, stageID: stageID)
         if case .rtlVerification(let spec) = self,
            let oracleTool = spec.oracleTool {
-            try validateOracleTool(
-                oracleTool,
-                stageID: spec.stageID,
-                requireCompleteEvidence: requireCompleteEvidence
-            )
-        }
-        for evidence in toolSpec.evidence {
-            try evidence.validateForRuntimeToolSpec(stageID: stageID)
-        }
-
-        guard requireCompleteEvidence else {
-            return
-        }
-
-        for requiredKind in requiredQualifiedEvidenceKinds(for: toolSpec.qualificationLevel) {
-            guard toolSpec.evidence.contains(where: { evidence in
-                evidence.kind == requiredKind && evidence.hasVerifiableArtifactBinding
-            }) else {
-                throw XcircuiteFlowRuntimeSpecError.missingToolQualificationEvidence(
-                    stageID: stageID,
-                    kind: requiredKind.rawValue,
-                    level: toolSpec.qualificationLevel.rawValue
-                )
-            }
+            try validateOracleTool(oracleTool, stageID: spec.stageID)
         }
     }
 
     func validateOracleTool(
         _ oracleTool: RTLVerificationOracleToolSpec,
         stageID: String,
-        requireCompleteEvidence: Bool
     ) throws {
         try FlowIdentifierValidator().validate(oracleTool.toolID, kind: .toolID)
         guard !oracleTool.executablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -469,23 +443,10 @@ private extension XcircuiteFlowStageExecutorSpec {
                 field: "oracleTool.timeoutSeconds"
             )
         }
-        for evidence in oracleTool.tool.evidence {
-            try evidence.validateForRuntimeToolSpec(stageID: "\(stageID).oracle")
-        }
-        guard requireCompleteEvidence else {
-            return
-        }
-        for requiredKind in requiredQualifiedEvidenceKinds(for: oracleTool.tool.qualificationLevel) {
-            guard oracleTool.tool.evidence.contains(where: { evidence in
-                evidence.kind == requiredKind && evidence.hasVerifiableArtifactBinding
-            }) else {
-                throw XcircuiteFlowRuntimeSpecError.missingToolQualificationEvidence(
-                    stageID: stageID,
-                    kind: requiredKind.rawValue,
-                    level: oracleTool.tool.qualificationLevel.rawValue
-                )
-            }
-        }
+        try validateQualificationRecord(
+            oracleTool.tool.qualificationRecord,
+            stageID: "\(stageID).oracle"
+        )
     }
 
     var toolSpec: XcircuiteFlowToolSpec {
@@ -543,18 +504,18 @@ private extension XcircuiteFlowStageExecutorSpec {
         }
     }
 
-    func requiredQualifiedEvidenceKinds(for level: ToolQualificationLevel) -> [ToolEvidenceKind] {
-        switch level {
-        case .unknown:
-            []
-        case .smokeChecked:
-            [.smoke]
-        case .corpusChecked:
-            [.corpus]
-        case .oracleChecked:
-            [.corpus, .oracle]
-        case .productionEligible:
-            [.corpus, .oracle, .healthCheck]
+    func validateQualificationRecord(
+        _ record: ArtifactReference?,
+        stageID: String
+    ) throws {
+        guard let record else { return }
+        guard record.format == .json,
+              record.locator.location.storage == .workspaceRelative,
+              record.producer != nil else {
+            throw XcircuiteFlowRuntimeSpecError.invalidQualificationRecord(
+                toolID: stageID,
+                reason: "record must be a producer-bound workspace-relative JSON artifact"
+            )
         }
     }
 }

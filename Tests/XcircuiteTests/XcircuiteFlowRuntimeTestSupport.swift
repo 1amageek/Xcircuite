@@ -32,7 +32,7 @@ func artifactReference(
 }
 
 extension XcircuiteFlowRuntimeTests {
-    struct NoopDRCEngine: Xcircuite.DRCExecuting {
+    struct NoopDRCEngine: DRCEngine.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             DRCExecutionResult(
                 request: request,
@@ -47,7 +47,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    struct FlakyDRCEngine: Xcircuite.DRCExecuting {
+    struct FlakyDRCEngine: DRCEngine.DRCExecuting {
         let state: FlakyDRCEngineState
 
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
@@ -55,7 +55,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    struct AlwaysFailingDRCEngine: Xcircuite.DRCExecuting {
+    struct AlwaysFailingDRCEngine: DRCEngine.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
             throw DRCError.backendUnavailable("Persistent native DRC startup failure.")
         }
