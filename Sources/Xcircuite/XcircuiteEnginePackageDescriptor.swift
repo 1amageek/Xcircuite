@@ -1,18 +1,19 @@
 import Foundation
+import CircuiteFoundation
 
 public struct XcircuiteEnginePackageDescriptor: Sendable, Hashable, Codable {
     public var packageID: String
     public var products: [String]
     public var stageIDs: [String]
-    public var inputArtifactRoles: [String]
-    public var outputArtifactRoles: [String]
+    public var inputArtifactRoles: [ArtifactRole]
+    public var outputArtifactRoles: [ArtifactRole]
 
     public init(
         packageID: String,
         products: [String],
         stageIDs: [String],
-        inputArtifactRoles: [String],
-        outputArtifactRoles: [String]
+        inputArtifactRoles: [ArtifactRole],
+        outputArtifactRoles: [ArtifactRole]
     ) {
         self.packageID = packageID
         self.products = products

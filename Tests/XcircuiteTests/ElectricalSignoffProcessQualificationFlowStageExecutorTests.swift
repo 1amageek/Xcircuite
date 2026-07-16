@@ -10,7 +10,7 @@ struct ElectricalSignoffPackageAuthorityBoundaryTests {
         )
 
         #expect(descriptor.stageIDs.contains("electrical-signoff.corpus"))
-        #expect(descriptor.outputArtifactRoles.contains("electrical-corpus-report"))
+        #expect(descriptor.outputArtifactRoles.contains { $0.rawValue == "electrical-corpus-report" })
     }
 
     @Test("electrical package does not own qualification or release stages")
@@ -30,7 +30,7 @@ struct ElectricalSignoffPackageAuthorityBoundaryTests {
         )
 
         #expect(descriptor.stageIDs == ["release.authorization", "release.signoff", "release.tapeout"])
-        #expect(descriptor.outputArtifactRoles.contains("release-authorization-decision"))
+        #expect(descriptor.outputArtifactRoles.contains { $0.rawValue == "release-authorization-decision" })
     }
 
     @Test("electrical corpus tool reports observations without trust authority")

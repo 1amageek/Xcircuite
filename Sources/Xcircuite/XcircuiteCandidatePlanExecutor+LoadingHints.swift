@@ -113,7 +113,7 @@ extension XcircuiteCandidatePlanExecutor {
                 reason: "candidate plans must be JSON artifacts."
             )
         }
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuiteCandidatePlanExecutionError.artifactIntegrityFailed(
                 path: reference.path,

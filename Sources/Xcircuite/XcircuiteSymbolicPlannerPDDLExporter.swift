@@ -5,16 +5,16 @@ import DesignFlowKernel
 public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func exportSymbolicPlannerProblem(
@@ -605,7 +605,7 @@ public struct XcircuiteSymbolicPlannerPDDLExporter: Sendable {
         field: String,
         projectRoot: URL
     ) throws {
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuiteSymbolicPlannerPDDLExportError.artifactIntegrityFailed(
                 field: field,

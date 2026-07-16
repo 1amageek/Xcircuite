@@ -3,9 +3,9 @@ import Foundation
 import Testing
 import Xcircuite
 
-@Suite("Timing STA flow adapter")
+@Suite("Timing STA flow executor")
 struct TimingSTAFlowStageExecutorTests {
-    @Test("adapter configuration is Codable and targets the timing stage")
+    @Test("executor configuration is Codable and targets the timing stage")
     func configurationRoundTrip() async throws {
         let inputs = TimingSTAFlowInputs(
             design: .path("design.json"),

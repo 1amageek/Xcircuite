@@ -5,16 +5,16 @@ import DesignFlowKernel
 public struct XcircuitePlanningProblemValidator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func validatePlanningProblem(
@@ -807,7 +807,7 @@ public struct XcircuitePlanningProblemValidator: Sendable {
                 reason: "planning problems must be JSON artifacts."
             )
         }
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuitePlanningProblemValidationError.artifactIntegrityFailed(
                 path: reference.path,

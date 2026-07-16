@@ -94,8 +94,8 @@ public struct SimulationGoldenCorpusRunner: Sendable {
                     outcome.waveformCSV,
                     to: $0.appending(path: "candidate-waveform.csv"),
                     artifactID: "\(corpusCase.caseID)-candidate-waveform",
-                    kind: "waveform",
-                    format: "csv"
+                    kind: .waveform,
+                    format: .csv
                 )
             }
             let comparisonArtifact = try caseDirectory.map {
@@ -103,8 +103,8 @@ public struct SimulationGoldenCorpusRunner: Sendable {
                     comparison,
                     to: $0.appending(path: "simulation-golden-comparison.json"),
                     artifactID: "\(corpusCase.caseID)-simulation-golden-comparison",
-                    kind: "report",
-                    format: "json"
+                    kind: .report,
+                    format: .json
                 )
             }
             let status = comparison.gateStatus == corpusCase.expectedGateStatus
@@ -268,9 +268,9 @@ public struct SimulationGoldenCorpusRunner: Sendable {
         _ text: String,
         to url: URL,
         artifactID: String,
-        kind: String,
-        format: String
-    ) throws -> SimulationGoldenCorpusArtifactReference {
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
         try text.write(to: url, atomically: true, encoding: .utf8)
         return try artifactReference(for: url, artifactID: artifactID, kind: kind, format: format)
     }
@@ -279,9 +279,9 @@ public struct SimulationGoldenCorpusRunner: Sendable {
         _ value: T,
         to url: URL,
         artifactID: String,
-        kind: String,
-        format: String
-    ) throws -> SimulationGoldenCorpusArtifactReference {
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
@@ -292,19 +292,20 @@ public struct SimulationGoldenCorpusRunner: Sendable {
     private func artifactReference(
         for url: URL,
         artifactID: String,
-        kind: String,
-        format: String
-    ) throws -> SimulationGoldenCorpusArtifactReference {
+        kind: ArtifactKind,
+        format: ArtifactFormat
+    ) throws -> ArtifactReference {
         let data = try Data(contentsOf: url)
-        return SimulationGoldenCorpusArtifactReference(
-            artifactID: artifactID,
-            path: url.path(percentEncoded: false),
-            kind: kind,
-            format: format,
-            sha256: try SHA256ContentDigester()
-                .digest(data: data, using: .sha256)
-                .hexadecimalValue,
-            byteCount: Int64(data.count)
+        return ArtifactReference(
+            id: try ArtifactID(rawValue: artifactID),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(fileURL: url),
+                role: .output,
+                kind: kind,
+                format: format
+            ),
+            digest: try SHA256ContentDigester().digest(data: data, using: .sha256),
+            byteCount: UInt64(data.count)
         )
     }
 

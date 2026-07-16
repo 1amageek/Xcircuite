@@ -13,19 +13,19 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
     let artifactBuilder: StageArtifactReferenceBuilder
     let layoutDocumentSerializer: LayoutDocumentSerializer
     let symbolicPlannerContract: XcircuiteSymbolicPlannerContract
-    let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactBuilder = StageArtifactReferenceBuilder()
         self.layoutDocumentSerializer = LayoutDocumentSerializer()
         self.symbolicPlannerContract = XcircuiteSymbolicPlannerContract()
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func verifyCandidatePlan(

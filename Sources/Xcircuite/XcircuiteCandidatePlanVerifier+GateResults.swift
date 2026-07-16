@@ -215,7 +215,7 @@ extension XcircuiteCandidatePlanVerifier {
         }
 
         let diagnostics = artifactRefs.compactMap { artifact -> XcircuitePlanVerificationDiagnostic? in
-            let integrity = makeArtifactReferenceVerifier.verify(artifact, relativeTo: projectRoot)
+            let integrity = artifactVerifier.verify(artifact, relativeTo: projectRoot)
             guard !integrity.isVerified else {
                 return nil
             }

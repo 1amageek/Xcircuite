@@ -22,7 +22,7 @@ struct XcircuiteEnginePackageCatalogTests {
         #expect(descriptor.stageIDs.contains("electrical-signoff.corpus"))
         #expect(descriptor.stageIDs.contains { $0.contains("qualification") } == false)
         #expect(descriptor.stageIDs.contains { $0.contains("release") } == false)
-        #expect(descriptor.inputArtifactRoles.contains("electrical-process-approval") == false)
-        #expect(descriptor.outputArtifactRoles.contains("electrical-process-qualification-evidence") == false)
+        #expect(descriptor.inputArtifactRoles.contains { $0.rawValue == "electrical-process-approval" } == false)
+        #expect(descriptor.outputArtifactRoles.contains { $0.rawValue == "electrical-process-qualification-evidence" } == false)
     }
 }

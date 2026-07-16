@@ -67,10 +67,14 @@ extension XcircuiteCandidatePlanExecutor {
             return "layout-command-status-failed"
         case .layoutCommandResultPathMismatch:
             return "layout-command-result-path-mismatch"
+        case .layoutCommandOutputReferenceInvalid:
+            return "layout-command-output-reference-invalid"
         case .layoutCommandOutputByteCountMismatch:
             return "layout-command-output-byte-count-mismatch"
         case .layoutCommandOutputDigestMismatch:
             return "layout-command-output-digest-mismatch"
+        case .layoutCommandOutputIntegrityFailed:
+            return "layout-command-output-integrity-failed"
         default:
             return "execution-failed"
         }

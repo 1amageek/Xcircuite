@@ -1490,13 +1490,12 @@ struct XcircuiteCandidatePlanExecutorTests {
                     status: result.status,
                     commandCount: result.commandCount,
                     appliedCommands: result.appliedCommands,
-                    outputDocumentPath: baseURL
-                        .deletingLastPathComponent()
-                        .appending(path: "outside-layout.json")
-                        .path(percentEncoded: false),
-                    outputDocumentSHA256: result.outputDocumentSHA256,
-                    outputDocumentByteCount: result.outputDocumentByteCount,
-                    artifactManifestPath: result.artifactManifestPath,
+                    outputArtifact: try XcircuiteCandidatePlanExecutorTests.replacingArtifactLocation(
+                        result.outputArtifact,
+                        with: baseURL
+                            .deletingLastPathComponent()
+                            .appending(path: "outside-layout.json")
+                    ),
                     cellCount: result.cellCount,
                     shapeCount: result.shapeCount,
                     viaCount: result.viaCount,
@@ -1509,10 +1508,10 @@ struct XcircuiteCandidatePlanExecutorTests {
                     status: result.status,
                     commandCount: result.commandCount,
                     appliedCommands: result.appliedCommands,
-                    outputDocumentPath: result.outputDocumentPath,
-                    outputDocumentSHA256: String(repeating: "0", count: 64),
-                    outputDocumentByteCount: result.outputDocumentByteCount,
-                    artifactManifestPath: result.artifactManifestPath,
+                    outputArtifact: try XcircuiteCandidatePlanExecutorTests.replacingArtifactDigest(
+                        result.outputArtifact,
+                        with: String(repeating: "0", count: 64)
+                    ),
                     cellCount: result.cellCount,
                     shapeCount: result.shapeCount,
                     viaCount: result.viaCount,
@@ -1521,6 +1520,37 @@ struct XcircuiteCandidatePlanExecutorTests {
                 )
             }
         }
+    }
+
+    private static func replacingArtifactLocation(
+        _ reference: ArtifactReference,
+        with url: URL
+    ) throws -> ArtifactReference {
+        ArtifactReference(
+            id: reference.id,
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(fileURL: url),
+                role: reference.locator.role,
+                kind: reference.kind,
+                format: reference.format
+            ),
+            digest: reference.digest,
+            byteCount: reference.byteCount,
+            producer: reference.producer
+        )
+    }
+
+    private static func replacingArtifactDigest(
+        _ reference: ArtifactReference,
+        with sha256: String
+    ) throws -> ArtifactReference {
+        ArtifactReference(
+            id: reference.id,
+            locator: reference.locator,
+            digest: try ContentDigest(algorithm: .sha256, hexadecimalValue: sha256),
+            byteCount: reference.byteCount,
+            producer: reference.producer
+        )
     }
 
     private func makeTemporaryRoot(_ name: String) throws -> URL {

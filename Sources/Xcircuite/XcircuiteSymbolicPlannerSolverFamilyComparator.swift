@@ -11,13 +11,13 @@ public struct XcircuiteSymbolicPlannerSolverFamilyComparator: Sendable {
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
             workspaceStore: workspaceStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
     }
 

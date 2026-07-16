@@ -1,3 +1,5 @@
+import CircuiteFoundation
+
 public struct SimulationGoldenCorpusReport: Codable, Sendable, Hashable {
     public struct Summary: Codable, Sendable, Hashable {
         public var caseCount: Int
@@ -26,8 +28,8 @@ public struct SimulationGoldenCorpusReport: Codable, Sendable, Hashable {
         public var analysisLabel: String?
         public var coverageTags: [String]
         public var comparison: SimulationGoldenComparisonReport?
-        public var candidateWaveformArtifact: SimulationGoldenCorpusArtifactReference?
-        public var comparisonArtifact: SimulationGoldenCorpusArtifactReference?
+        public var candidateWaveformArtifact: ArtifactReference?
+        public var comparisonArtifact: ArtifactReference?
         public var diagnostics: [String]
 
         public init(
@@ -38,8 +40,8 @@ public struct SimulationGoldenCorpusReport: Codable, Sendable, Hashable {
             analysisLabel: String?,
             coverageTags: [String],
             comparison: SimulationGoldenComparisonReport?,
-            candidateWaveformArtifact: SimulationGoldenCorpusArtifactReference?,
-            comparisonArtifact: SimulationGoldenCorpusArtifactReference?,
+            candidateWaveformArtifact: ArtifactReference?,
+            comparisonArtifact: ArtifactReference?,
             diagnostics: [String]
         ) {
             self.caseID = caseID
@@ -64,7 +66,7 @@ public struct SimulationGoldenCorpusReport: Codable, Sendable, Hashable {
     public var diagnostics: [String]
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         suiteID: String,
         status: String,
         summary: Summary,

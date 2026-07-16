@@ -1,4 +1,3 @@
-import CryptoKit
 import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
@@ -177,6 +176,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
 
 private struct ProjectSITimingArtifactReader: TimingArtifactReading {
     let projectRoot: URL
+    let artifactVerifier = LocalArtifactVerifier()
 
     func read(_ reference: ArtifactReference) async throws -> Data {
         let url: URL
@@ -188,23 +188,28 @@ private struct ProjectSITimingArtifactReader: TimingArtifactReading {
                 message: error.localizedDescription
             )
         }
-        let data: Data
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
+        if let issue = integrity.issues.first {
+            switch issue.code {
+            case .byteCountMismatch:
+                throw TimingError.artifactSizeMismatch(
+                    path: reference.path,
+                    expected: Int64(clamping: issue.expectedByteCount ?? reference.byteCount),
+                    actual: Int64(clamping: issue.actualByteCount ?? 0)
+                )
+            case .digestMismatch:
+                throw TimingError.artifactDigestMismatch(path: reference.path)
+            default:
+                throw TimingError.artifactReadFailed(
+                    path: reference.path,
+                    message: issue.detail ?? issue.location ?? issue.code.rawValue
+                )
+            }
+        }
         do {
-            data = try Data(contentsOf: url)
+            return try Data(contentsOf: url)
         } catch {
             throw TimingError.artifactReadFailed(path: reference.path, message: error.localizedDescription)
         }
-        if reference.byteCount != UInt64(data.count) {
-            throw TimingError.artifactSizeMismatch(
-                path: reference.path,
-                expected: Int64(reference.byteCount),
-                actual: Int64(data.count)
-            )
-        }
-        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        guard actual.caseInsensitiveCompare(reference.sha256) == .orderedSame else {
-            throw TimingError.artifactDigestMismatch(path: reference.path)
-        }
-        return data
     }
 }

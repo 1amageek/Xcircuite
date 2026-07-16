@@ -454,6 +454,12 @@ through `layoutGDSInput.stageArtifact`; PEX consumption is implemented for
 GDSII/OASIS standard layout exports through `layoutInput.stageArtifact`, with
 GDSII/OASIS/CIF/DXF generation delegated to `LayoutIO.MaskDataFormatConverter`.
 
+`LayoutCommandResult` schema version 2 carries its output document as
+`outputArtifact: ArtifactReference`. Xcircuite verifies its location, semantic
+role, kind, format, byte count, and digest through `LocalArtifactVerifier`.
+The removed scalar output path, SHA-256, byte-count, and manifest-path result
+fields are not accepted.
+
 Downstream stages should reference these run-scoped files through
 `XcircuiteFlowInputReference.stageArtifact`, which reads the producing stage's
 `result.json`, selects a single artifact by stable `artifactID` plus optional
@@ -811,7 +817,21 @@ then inspects `toolchain.json` for the selected tool and evidence verdict.
 
 ## Versioning Rule
 
-Schema version `1` is the only accepted version today. New incompatible fields or
-meaning changes must introduce a new `schemaVersion` and keep fixture coverage
-for old accepted versions. Additive optional fields may remain in version `1`
-when old fixtures continue to decode and run.
+Each persisted contract owns its schema version. Flow runtime contracts use
+version `1`; retained signoff reports and simulation golden corpus reports use
+version `2`. Incompatible changes
+must increment the owning contract's `schemaVersion`. This development package
+does not retain obsolete decoders after fixtures and callers migrate.
+
+### Retained signoff report v2
+
+`XcircuiteRetainedSignoffReport` version 2 stores each external oracle lane's
+report as a CircuiteFoundation `ArtifactReference`. The reference identifies a
+non-empty JSON report with a SHA-256 digest. Version 1's local
+`status` / `path` / `sha256` / `byteCount` object has been removed; producers
+emit the canonical artifact identity, locator, semantic role, kind, format,
+digest, and byte count directly.
+
+Timing STA and signal-integrity readers pass canonical input references to
+`LocalArtifactVerifier`. Invalid locations, missing files, byte-count
+mismatches, and digest mismatches fail before TimingEngine receives bytes.

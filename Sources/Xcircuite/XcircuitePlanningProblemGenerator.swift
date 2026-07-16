@@ -9,18 +9,18 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let builder: XcircuiteDiagnosticPlanningProblemBuilder
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
         builder: XcircuiteDiagnosticPlanningProblemBuilder = XcircuiteDiagnosticPlanningProblemBuilder(),
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.builder = builder
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func generateRepairProblem(
@@ -295,7 +295,7 @@ public struct XcircuitePlanningProblemGenerator: Sendable {
         _ reference: ArtifactReference,
         projectRoot: URL
     ) throws {
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuitePlanningProblemGenerationError.artifactIntegrityFailed(
                 artifactID: reference.artifactID,

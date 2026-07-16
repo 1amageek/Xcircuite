@@ -15,8 +15,10 @@ public enum XcircuiteCandidatePlanExecutionError: Error, LocalizedError, Equatab
     case missingLayoutCommandArtifactPath(stepID: String, field: String)
     case layoutCommandStatusFailed(stepID: String, status: String)
     case layoutCommandResultPathMismatch(stepID: String, field: String, expected: String, actual: String)
+    case layoutCommandOutputReferenceInvalid(stepID: String, path: String)
     case layoutCommandOutputByteCountMismatch(stepID: String, path: String, expected: Int64, actual: Int64)
     case layoutCommandOutputDigestMismatch(stepID: String, path: String, expected: String, actual: String)
+    case layoutCommandOutputIntegrityFailed(stepID: String, path: String, issue: String)
 
     public var errorDescription: String? {
         switch self {
@@ -46,10 +48,14 @@ public enum XcircuiteCandidatePlanExecutionError: Error, LocalizedError, Equatab
             "Candidate plan step \(stepID) layout command returned status \(status)."
         case .layoutCommandResultPathMismatch(let stepID, let field, let expected, let actual):
             "Candidate plan step \(stepID) layout command returned \(field) \(actual), expected \(expected)."
+        case .layoutCommandOutputReferenceInvalid(let stepID, let path):
+            "Candidate plan step \(stepID) layout command output reference is invalid for \(path)."
         case .layoutCommandOutputByteCountMismatch(let stepID, let path, let expected, let actual):
             "Candidate plan step \(stepID) layout command output \(path) byte count mismatch: expected \(expected), actual \(actual)."
         case .layoutCommandOutputDigestMismatch(let stepID, let path, let expected, let actual):
             "Candidate plan step \(stepID) layout command output \(path) digest mismatch: expected \(expected), actual \(actual)."
+        case .layoutCommandOutputIntegrityFailed(let stepID, let path, let issue):
+            "Candidate plan step \(stepID) layout command output \(path) failed integrity verification: \(issue)."
         }
     }
 }

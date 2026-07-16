@@ -155,7 +155,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(result.status == .failed)
         #expect(result.diagnostics.contains {
             $0.code == "LAYOUT_COMMAND_RESULT_PATH_MISMATCH"
-                && $0.message.contains("outputDocumentPath")
+                && $0.message.contains("outputArtifact.path")
         })
     }
 
@@ -833,12 +833,12 @@ extension XcircuiteFlowRuntimeTests {
                 status: "passed",
                 commandCount: request.commands.count,
                 appliedCommands: [],
-                outputDocumentPath: FileManager.default.temporaryDirectory
-                    .appending(path: "external-layout-document.json")
-                    .path(percentEncoded: false),
-                outputDocumentSHA256: String(repeating: "0", count: 64),
-                outputDocumentByteCount: 0,
-                artifactManifestPath: request.artifactManifestPath ?? "",
+                outputArtifact: try XcircuiteFlowRuntimeTests.outputArtifact(
+                    at: FileManager.default.temporaryDirectory
+                        .appending(path: "external-layout-document.json"),
+                    sha256: String(repeating: "0", count: 64),
+                    byteCount: 0
+                ),
                 cellCount: 0,
                 shapeCount: 0,
                 viaCount: 0,
@@ -861,10 +861,11 @@ extension XcircuiteFlowRuntimeTests {
                 status: "passed",
                 commandCount: request.commands.count,
                 appliedCommands: [],
-                outputDocumentPath: request.outputDocumentPath,
-                outputDocumentSHA256: String(repeating: "0", count: 64),
-                outputDocumentByteCount: outputData.count,
-                artifactManifestPath: request.artifactManifestPath ?? "",
+                outputArtifact: try XcircuiteFlowRuntimeTests.outputArtifact(
+                    at: outputURL,
+                    sha256: String(repeating: "0", count: 64),
+                    byteCount: UInt64(outputData.count)
+                ),
                 cellCount: 0,
                 shapeCount: 0,
                 viaCount: 0,
@@ -881,10 +882,7 @@ extension XcircuiteFlowRuntimeTests {
                 status: "failed",
                 commandCount: result.commandCount,
                 appliedCommands: result.appliedCommands,
-                outputDocumentPath: result.outputDocumentPath,
-                outputDocumentSHA256: result.outputDocumentSHA256,
-                outputDocumentByteCount: result.outputDocumentByteCount,
-                artifactManifestPath: result.artifactManifestPath,
+                outputArtifact: result.outputArtifact,
                 cellCount: result.cellCount,
                 shapeCount: result.shapeCount,
                 viaCount: result.viaCount,
@@ -892,6 +890,24 @@ extension XcircuiteFlowRuntimeTests {
                 netCount: result.netCount
             )
         }
+    }
+
+    private static func outputArtifact(
+        at url: URL,
+        sha256: String,
+        byteCount: UInt64
+    ) throws -> ArtifactReference {
+        ArtifactReference(
+            id: try ArtifactID(rawValue: "layout-command-output"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(fileURL: url),
+                role: try ArtifactRole(validatingRawValue: "output-layout-document"),
+                kind: .layout,
+                format: .json
+            ),
+            digest: try ContentDigest(algorithm: .sha256, hexadecimalValue: sha256),
+            byteCount: byteCount
+        )
     }
 
 }

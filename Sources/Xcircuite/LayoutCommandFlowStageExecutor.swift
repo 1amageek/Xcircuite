@@ -7,12 +7,6 @@ import LayoutCommands
 import LayoutIO
 import LayoutTech
 
-public protocol LayoutCommandRunning: Sendable {
-    func run(request: LayoutCommandRequest, baseURL: URL) throws -> LayoutCommandResult
-}
-
-extension LayoutCommandRunner: LayoutCommandRunning {}
-
 public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
@@ -23,7 +17,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
     private let artifactBuilder: StageArtifactReferenceBuilder
     private let outputPathGuard: StageArtifactOutputPathGuard
     private let layoutDocumentSerializer: LayoutDocumentSerializer
-    private let fileFingerprinter: any FileFingerprinting
+    private let artifactVerifier: LocalArtifactVerifier
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
 
@@ -44,7 +38,7 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         self.artifactBuilder = StageArtifactReferenceBuilder()
         self.outputPathGuard = StageArtifactOutputPathGuard()
         self.layoutDocumentSerializer = LayoutDocumentSerializer()
-        self.fileFingerprinter = LocalFileFingerprinter()
+        self.artifactVerifier = LocalArtifactVerifier()
         self.decoder = JSONDecoder()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -199,16 +193,15 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         }
         try validateOutputDirectories(expectedPaths, projectRoot: projectRoot)
         try requirePath(
-            result.outputDocumentPath,
+            result.outputArtifact.path,
             equals: expectedPaths.outputDocumentURL,
-            field: "outputDocumentPath"
+            field: "outputArtifact.path"
         )
-        try requirePath(
-            result.artifactManifestPath,
-            equals: expectedPaths.artifactManifestURL,
-            field: "artifactManifestPath"
+        try validateOutputDocumentIntegrity(
+            result,
+            expectedOutputURL: expectedPaths.outputDocumentURL,
+            projectRoot: projectRoot
         )
-        try validateOutputDocumentIntegrity(result, expectedOutputURL: expectedPaths.outputDocumentURL)
     }
 
     private func requirePath(_ actualPath: String, equals expectedURL: URL, field: String) throws {
@@ -226,26 +219,38 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
 
     private func validateOutputDocumentIntegrity(
         _ result: LayoutCommandResult,
-        expectedOutputURL: URL
+        expectedOutputURL: URL,
+        projectRoot: URL
     ) throws {
-        let fingerprint = try fileFingerprinter.fingerprint(fileAt: expectedOutputURL)
-        let actualByteCount = Int64(fingerprint.byteCount)
-        guard actualByteCount == Int64(result.outputDocumentByteCount) else {
+        guard result.outputArtifact.kind == .layout,
+              result.outputArtifact.format == .json,
+              result.outputArtifact.locator.role.rawValue == "output-layout-document" else {
+            throw LayoutCommandFlowStageExecutorError.outputDocumentReferenceInvalid(
+                path: canonicalPath(expectedOutputURL)
+            )
+        }
+        let integrity = artifactVerifier.verify(result.outputArtifact, relativeTo: projectRoot)
+        guard let issue = integrity.issues.first else {
+            return
+        }
+        if issue.code == .byteCountMismatch {
             throw LayoutCommandFlowStageExecutorError.outputDocumentByteCountMismatch(
                 path: canonicalPath(expectedOutputURL),
-                expected: Int64(result.outputDocumentByteCount),
-                actual: actualByteCount
+                expected: Int64(clamping: issue.expectedByteCount ?? result.outputArtifact.byteCount),
+                actual: Int64(clamping: issue.actualByteCount ?? 0)
             )
         }
-
-        let actualDigest = fingerprint.digest.hexadecimalValue
-        guard actualDigest == result.outputDocumentSHA256 else {
+        if issue.code == .digestMismatch {
             throw LayoutCommandFlowStageExecutorError.outputDocumentDigestMismatch(
                 path: canonicalPath(expectedOutputURL),
-                expected: result.outputDocumentSHA256,
-                actual: actualDigest
+                expected: issue.expectedDigest?.hexadecimalValue ?? result.outputArtifact.sha256,
+                actual: issue.actualDigest?.hexadecimalValue ?? "unavailable"
             )
         }
+        throw LayoutCommandFlowStageExecutorError.outputDocumentIntegrityFailure(
+            path: canonicalPath(expectedOutputURL),
+            issue: issue.code.rawValue
+        )
     }
 
     private func exportDRCLayout(
@@ -574,8 +579,10 @@ private struct StandardLayoutArtifact: Sendable, Hashable {
 private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {
     case runnerReportedUnpassedStatus(String)
     case resultPathMismatch(field: String, expected: String, actual: String)
+    case outputDocumentReferenceInvalid(path: String)
     case outputDocumentByteCountMismatch(path: String, expected: Int64, actual: Int64)
     case outputDocumentDigestMismatch(path: String, expected: String, actual: String)
+    case outputDocumentIntegrityFailure(path: String, issue: String)
 
     var diagnosticCode: String {
         switch self {
@@ -583,10 +590,14 @@ private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {
             "LAYOUT_COMMAND_RESULT_STATUS_NOT_PASSED"
         case .resultPathMismatch:
             "LAYOUT_COMMAND_RESULT_PATH_MISMATCH"
+        case .outputDocumentReferenceInvalid:
+            "LAYOUT_COMMAND_OUTPUT_REFERENCE_INVALID"
         case .outputDocumentByteCountMismatch:
             "LAYOUT_COMMAND_OUTPUT_BYTE_COUNT_MISMATCH"
         case .outputDocumentDigestMismatch:
             "LAYOUT_COMMAND_OUTPUT_SHA256_MISMATCH"
+        case .outputDocumentIntegrityFailure:
+            "LAYOUT_COMMAND_OUTPUT_INTEGRITY_FAILURE"
         }
     }
 
@@ -596,10 +607,14 @@ private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {
             "Layout command runner returned status \(status), expected passed."
         case .resultPathMismatch(let field, let expected, let actual):
             "Layout command runner returned \(field) \(actual), expected \(expected)."
+        case .outputDocumentReferenceInvalid(let path):
+            "Layout command output artifact reference is invalid for \(path)."
         case .outputDocumentByteCountMismatch(let path, let expected, let actual):
             "Layout command output byte count mismatch for \(path): expected \(expected), got \(actual)."
         case .outputDocumentDigestMismatch(let path, let expected, let actual):
             "Layout command output SHA-256 mismatch for \(path): expected \(expected), got \(actual)."
+        case .outputDocumentIntegrityFailure(let path, let issue):
+            "Layout command output integrity verification failed for \(path): \(issue)."
         }
     }
 }

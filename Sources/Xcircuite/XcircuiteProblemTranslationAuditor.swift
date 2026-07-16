@@ -11,29 +11,29 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
 
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         actionDomainSnapshotBuilder: XcircuiteActionDomainSnapshotBuilder,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = XcircuitePlanningArtifactStore(
             workspaceStore: workspaceStore,
             snapshotBuilder: actionDomainSnapshotBuilder
         )
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func auditProblemTranslation(
@@ -999,7 +999,7 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
                 reason: "planning problems must be JSON artifacts."
             )
         }
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuiteProblemTranslationAuditError.artifactIntegrityFailed(
                 path: reference.path,

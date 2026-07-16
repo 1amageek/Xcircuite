@@ -4,14 +4,14 @@ import DesignFlowKernel
 
 struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     init(
         workspaceStore: XcircuiteWorkspaceStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     func runManifest(runID: String) async throws -> FlowRunManifest {
@@ -182,7 +182,7 @@ struct XcircuiteSymbolicPlannerArtifactReferenceResolver: Sendable {
         field: String,
         projectRoot: URL
     ) throws {
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuiteSymbolicPlannerSolverError.artifactIntegrityFailed(
                 field: field,

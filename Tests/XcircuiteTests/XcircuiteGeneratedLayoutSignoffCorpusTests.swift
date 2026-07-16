@@ -668,7 +668,7 @@ extension XcircuiteFlowRuntimeTests {
         #expect(cliQualification.qualificationArtifact?.artifactID == "generated-layout-signoff-corpus-qualification")
 
         let retainedSignoffReportURL = workspaceRoot()
-            .appending(path: "docs/contract-fixtures/signoff-retained-report-v1.json")
+            .appending(path: "docs/contract-fixtures/signoff-retained-report-v2.json")
         #expect(FileManager.default.fileExists(atPath: retainedSignoffReportURL.path(percentEncoded: false)))
         let retainedSignoffReportData = try Data(contentsOf: retainedSignoffReportURL)
         let retainedSignoffReport = try JSONDecoder().decode(

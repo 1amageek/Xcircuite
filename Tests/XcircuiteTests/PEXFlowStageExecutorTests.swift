@@ -283,27 +283,47 @@ struct PEXFlowStageExecutorTests {
         let manifestURL = rawDirectory.appending(path: "manifest.json")
         let now = Date()
         let cornerID = PEXCornerID("tt")
-        let irRecord = try PEXArtifactRecord(
-            id: "ir-tt",
-            kind: .parasiticIR,
+        let irRecord = PEXArtifactRecord(
+            payload: .available(
+                ArtifactReference(
+                    id: try ArtifactID(rawValue: "ir-tt"),
+                    locator: ArtifactLocator(
+                        location: try ArtifactLocation(workspaceRelativePath: "ir/tt.json"),
+                        role: .output,
+                        kind: try ArtifactKind(rawValue: PEXArtifactKind.parasiticIR.foundationRawValue),
+                        format: .json
+                    ),
+                    digest: try ContentDigest(
+                        algorithm: .sha256,
+                        hexadecimalValue: String(repeating: "b", count: 64)
+                    ),
+                    byteCount: 128
+                )
+            ),
             stage: .persistence,
             cornerID: cornerID,
-            relativePath: PEXArtifactPath("ir/tt.json"),
-            sha256: String(repeating: "b", count: 64),
-            byteCount: 128,
-            createdAt: now,
-            status: .available
+            createdAt: now
         )
-        let rawRecord = try PEXArtifactRecord(
-            id: "raw-tt",
-            kind: .rawOutput,
+        let rawRecord = PEXArtifactRecord(
+            payload: .available(
+                ArtifactReference(
+                    id: try ArtifactID(rawValue: "raw-tt"),
+                    locator: ArtifactLocator(
+                        location: try ArtifactLocation(workspaceRelativePath: "raw/tt.spef"),
+                        role: .output,
+                        kind: try ArtifactKind(rawValue: PEXArtifactKind.rawOutput.foundationRawValue),
+                        format: .spef
+                    ),
+                    digest: try ContentDigest(
+                        algorithm: .sha256,
+                        hexadecimalValue: String(repeating: "c", count: 64)
+                    ),
+                    byteCount: 64
+                )
+            ),
             stage: .backendExecution,
             cornerID: cornerID,
-            relativePath: PEXArtifactPath("raw/tt.spef"),
-            sha256: String(repeating: "c", count: 64),
-            byteCount: 64,
-            createdAt: now,
-            status: .available
+            createdAt: now
         )
         let manifest = PEXArtifactManifest(
             runID: PEXRunID(),
@@ -846,25 +866,42 @@ struct PEXFlowStageExecutorTests {
             let cornerID = PEXCornerID("tt")
             let now = Date()
             let manifestURL = workingDirectory.appending(path: "manifest.json")
-            let rawRecord = try PEXArtifactRecord(
-                id: "raw-tt",
-                kind: .rawOutput,
+            let rawRecord = PEXArtifactRecord(
+                payload: .available(
+                    ArtifactReference(
+                        id: try ArtifactID(rawValue: "raw-tt"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "raw/tt/tt.spef"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.rawOutput.foundationRawValue),
+                            format: .spef
+                        ),
+                        digest: try ContentDigest(
+                            algorithm: .sha256,
+                            hexadecimalValue: String(repeating: "0", count: 64)
+                        ),
+                        byteCount: 1
+                    )
+                ),
                 stage: .backendExecution,
                 cornerID: cornerID,
-                relativePath: PEXArtifactPath("raw/tt/tt.spef"),
-                sha256: "missing",
-                byteCount: 1,
-                createdAt: now,
-                status: .available
+                createdAt: now
             )
-            let omittedIRRecord = try PEXArtifactRecord(
-                id: "ir-tt",
-                kind: .parasiticIR,
+            let omittedIRRecord = PEXArtifactRecord(
+                payload: .omitted(
+                    PEXArtifactDeclaration(
+                        id: try ArtifactID(rawValue: "ir-tt"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "ir/tt.json"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.parasiticIR.foundationRawValue),
+                            format: .json
+                        )
+                    )
+                ),
                 stage: .persistence,
                 cornerID: cornerID,
-                relativePath: PEXArtifactPath("ir/tt.json"),
-                createdAt: now,
-                status: .omitted
+                createdAt: now
             )
             let manifest = PEXArtifactManifest(
                 runID: runID,
@@ -991,35 +1028,62 @@ struct PEXFlowStageExecutorTests {
             try rawData.write(to: rawURL, options: .atomic)
             try extraData.write(to: extraURL, options: .atomic)
 
-            let rawRecord = try PEXArtifactRecord(
-                id: "raw-tt",
-                kind: .rawOutput,
+            let rawRecord = PEXArtifactRecord(
+                payload: .available(
+                    ArtifactReference(
+                        id: try ArtifactID(rawValue: "raw-tt"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "raw/tt/tt.spef"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.rawOutput.foundationRawValue),
+                            format: .spef
+                        ),
+                        digest: try ContentDigest(
+                            algorithm: .sha256,
+                            hexadecimalValue: PEXArtifactResolver.sha256(data: rawData)
+                        ),
+                        byteCount: UInt64(rawData.count)
+                    )
+                ),
                 stage: .backendExecution,
                 cornerID: cornerID,
-                relativePath: PEXArtifactPath("raw/tt/tt.spef"),
-                sha256: PEXArtifactResolver.sha256(data: rawData),
-                byteCount: rawData.count,
-                createdAt: now,
-                status: .available
+                createdAt: now
             )
-            let omittedIRRecord = try PEXArtifactRecord(
-                id: "ir-tt",
-                kind: .parasiticIR,
+            let omittedIRRecord = PEXArtifactRecord(
+                payload: .omitted(
+                    PEXArtifactDeclaration(
+                        id: try ArtifactID(rawValue: "ir-tt"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "ir/tt.json"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.parasiticIR.foundationRawValue),
+                            format: .json
+                        )
+                    )
+                ),
                 stage: .persistence,
                 cornerID: cornerID,
-                relativePath: PEXArtifactPath("ir/tt.json"),
-                createdAt: now,
-                status: .omitted
+                createdAt: now
             )
-            let extraRecord = try PEXArtifactRecord(
-                id: "extra-report",
-                kind: .report,
+            let extraRecord = PEXArtifactRecord(
+                payload: .available(
+                    ArtifactReference(
+                        id: try ArtifactID(rawValue: "extra-report"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "reports/extra.json"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.report.foundationRawValue),
+                            format: .json
+                        ),
+                        digest: try ContentDigest(
+                            algorithm: .sha256,
+                            hexadecimalValue: PEXArtifactResolver.sha256(data: extraData)
+                        ),
+                        byteCount: UInt64(extraData.count)
+                    )
+                ),
                 stage: .reporting,
-                relativePath: PEXArtifactPath("reports/extra.json"),
-                sha256: PEXArtifactResolver.sha256(data: extraData),
-                byteCount: extraData.count,
-                createdAt: now,
-                status: .available
+                createdAt: now
             )
             let returnedManifest = PEXArtifactManifest(
                 runID: runID,
@@ -1106,25 +1170,42 @@ struct PEXFlowStageExecutorTests {
                 withDestinationURL: externalArtifactURL
             )
             let rawData = try Data(contentsOf: externalArtifactURL)
-            let rawRecord = try PEXArtifactRecord(
-                id: "raw-tt",
-                kind: .rawOutput,
+            let rawRecord = PEXArtifactRecord(
+                payload: .available(
+                    ArtifactReference(
+                        id: try ArtifactID(rawValue: "raw-tt"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "raw/tt/tt.spef"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.rawOutput.foundationRawValue),
+                            format: .spef
+                        ),
+                        digest: try ContentDigest(
+                            algorithm: .sha256,
+                            hexadecimalValue: PEXArtifactResolver.sha256(data: rawData)
+                        ),
+                        byteCount: UInt64(rawData.count)
+                    )
+                ),
                 stage: .backendExecution,
                 cornerID: cornerID,
-                relativePath: PEXArtifactPath("raw/tt/tt.spef"),
-                sha256: PEXArtifactResolver.sha256(data: rawData),
-                byteCount: rawData.count,
-                createdAt: now,
-                status: .available
+                createdAt: now
             )
-            let omittedIRRecord = try PEXArtifactRecord(
-                id: "ir-tt",
-                kind: .parasiticIR,
+            let omittedIRRecord = PEXArtifactRecord(
+                payload: .omitted(
+                    PEXArtifactDeclaration(
+                        id: try ArtifactID(rawValue: "ir-tt"),
+                        locator: ArtifactLocator(
+                            location: try ArtifactLocation(workspaceRelativePath: "ir/tt.json"),
+                            role: .output,
+                            kind: try ArtifactKind(rawValue: PEXArtifactKind.parasiticIR.foundationRawValue),
+                            format: .json
+                        )
+                    )
+                ),
                 stage: .persistence,
                 cornerID: cornerID,
-                relativePath: PEXArtifactPath("ir/tt.json"),
-                createdAt: now,
-                status: .omitted
+                createdAt: now
             )
             let manifest = PEXArtifactManifest(
                 runID: runID,

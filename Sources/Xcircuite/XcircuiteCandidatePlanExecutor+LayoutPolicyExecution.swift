@@ -241,21 +241,16 @@ extension XcircuiteCandidatePlanExecutor {
         let manifestURL = try projectURL(for: manifestPath, projectRoot: projectRoot)
         let resultURL = try projectURL(for: resultPath, projectRoot: projectRoot)
         try requireLayoutCommandPath(
-            result.outputDocumentPath,
+            result.outputArtifact.path,
             equals: outputURL,
             stepID: step.stepID,
-            field: "outputDocumentPath"
-        )
-        try requireLayoutCommandPath(
-            result.artifactManifestPath,
-            equals: manifestURL,
-            stepID: step.stepID,
-            field: "artifactManifestPath"
+            field: "outputArtifact.path"
         )
         try validateLayoutCommandOutputIntegrity(
             result,
             outputURL: outputURL,
-            stepID: step.stepID
+            stepID: step.stepID,
+            projectRoot: projectRoot
         )
         return CandidatePlanLayoutCommandArtifacts(
             outputDocumentURL: outputURL,
@@ -285,27 +280,42 @@ extension XcircuiteCandidatePlanExecutor {
     func validateLayoutCommandOutputIntegrity(
         _ result: LayoutCommandResult,
         outputURL: URL,
-        stepID: String
+        stepID: String,
+        projectRoot: URL
     ) throws {
-        let fingerprint = try LocalFileFingerprinter().fingerprint(fileAt: outputURL)
-        let byteCount = Int64(fingerprint.byteCount)
-        guard byteCount == Int64(result.outputDocumentByteCount) else {
+        guard result.outputArtifact.kind == .layout,
+              result.outputArtifact.format == .json,
+              result.outputArtifact.locator.role.rawValue == "output-layout-document" else {
+            throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputReferenceInvalid(
+                stepID: stepID,
+                path: canonicalPath(outputURL)
+            )
+        }
+        let integrity = artifactVerifier.verify(result.outputArtifact, relativeTo: projectRoot)
+        guard let issue = integrity.issues.first else {
+            return
+        }
+        if issue.code == .byteCountMismatch {
             throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputByteCountMismatch(
                 stepID: stepID,
                 path: canonicalPath(outputURL),
-                expected: Int64(result.outputDocumentByteCount),
-                actual: byteCount
+                expected: Int64(clamping: issue.expectedByteCount ?? result.outputArtifact.byteCount),
+                actual: Int64(clamping: issue.actualByteCount ?? 0)
             )
         }
-        let digest = fingerprint.digest.hexadecimalValue
-        guard digest == result.outputDocumentSHA256 else {
+        if issue.code == .digestMismatch {
             throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputDigestMismatch(
                 stepID: stepID,
                 path: canonicalPath(outputURL),
-                expected: result.outputDocumentSHA256,
-                actual: digest
+                expected: issue.expectedDigest?.hexadecimalValue ?? result.outputArtifact.sha256,
+                actual: issue.actualDigest?.hexadecimalValue ?? "unavailable"
             )
         }
+        throw XcircuiteCandidatePlanExecutionError.layoutCommandOutputIntegrityFailed(
+            stepID: stepID,
+            path: canonicalPath(outputURL),
+            issue: issue.code.rawValue
+        )
     }
 
     func canonicalPath(_ url: URL) -> String {

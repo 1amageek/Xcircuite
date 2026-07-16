@@ -5,16 +5,16 @@ import DesignFlowKernel
 public struct XcircuiteParameterCandidateGenerator: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func generateParameterCandidates(
@@ -980,7 +980,7 @@ public struct XcircuiteParameterCandidateGenerator: Sendable {
                 reason: "expected \(expectedFormat.rawValue) artifact, got \(reference.kind.rawValue)/\(reference.format.rawValue)."
             )
         }
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuiteParameterCandidateGenerationError.artifactIntegrityFailed(
                 path: reference.path,

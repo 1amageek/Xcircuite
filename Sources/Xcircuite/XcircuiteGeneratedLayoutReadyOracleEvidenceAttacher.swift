@@ -78,7 +78,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
             throw XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentError
                 .unsupportedReportSchemaVersion(report.schemaVersion)
         }
-        guard retainedSignoffReport.schemaVersion == 1 else {
+        guard retainedSignoffReport.schemaVersion == 2 else {
             throw XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentError
                 .unsupportedRetainedSignoffReportSchemaVersion(retainedSignoffReport.schemaVersion)
         }
@@ -200,19 +200,20 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
         _ lane: XcircuiteRetainedSignoffReport.ExternalOracleResult
     ) -> XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleEvidenceReference? {
         guard let report = lane.report,
-              report.provesRetainedExternalOracleReportEvidence,
-              let path = report.path,
-              let sha256 = report.sha256,
-              let byteCount = report.byteCount else {
+              report.kind == .report,
+              report.format == .json,
+              report.digest.algorithm == .sha256,
+              report.byteCount > 0,
+              report.byteCount <= UInt64(Int64.max) else {
             return nil
         }
         return XcircuiteGeneratedLayoutSignoffCorpusRequest.OracleEvidenceReference(
-            role: "\(lane.domain)-external-oracle-report",
-            path: path,
-            kind: "report",
-            format: "JSON",
-            sha256: sha256,
-            byteCount: byteCount
+            role: report.locator.role.rawValue,
+            path: report.path,
+            kind: report.kind.rawValue,
+            format: report.format.rawValue,
+            sha256: report.sha256,
+            byteCount: Int64(report.byteCount)
         )
     }
 

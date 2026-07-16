@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 
 public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
     private static let supportedReadinessDomains: Set<String> = ["drc", "lvs", "pex"]
@@ -30,7 +31,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
     }
 
     public var provesRetainedExternalOracleInfrastructureReadiness: Bool {
-        schemaVersion == 1
+        schemaVersion == 2
             && kind == "retained-signoff-report"
             && status == "passed"
             && summary.externalOracleQualificationStatus == "passed"
@@ -83,7 +84,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
         public var oracleAgreementRate: Double?
         public var readinessFailureCount: Int?
         public var requiredProbeIDs: [String]?
-        public var report: Artifact?
+        public var report: ArtifactReference?
 
         public init(
             domain: String,
@@ -97,7 +98,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
             oracleAgreementRate: Double? = nil,
             readinessFailureCount: Int? = nil,
             requiredProbeIDs: [String]? = nil,
-            report: Artifact? = nil
+            report: ArtifactReference? = nil
         ) {
             self.domain = domain
             self.status = status
@@ -121,7 +122,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
                 && hasPositiveCaseCoverage
                 && hasPassingCaseCounts
                 && hasPassingRates
-                && report?.provesRetainedExternalOracleReportEvidence == true
+                && hasRetainedExternalOracleReportEvidence
         }
 
         private var hasPositiveCaseCoverage: Bool {
@@ -147,43 +148,15 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
             }
             return true
         }
-    }
 
-    public struct Artifact: Codable, Sendable, Hashable {
-        private static let hexDigits = Set("0123456789abcdefABCDEF")
-
-        public var status: String?
-        public var path: String?
-        public var sha256: String?
-        public var byteCount: Int64?
-
-        public init(
-            status: String? = nil,
-            path: String? = nil,
-            sha256: String? = nil,
-            byteCount: Int64? = nil
-        ) {
-            self.status = status
-            self.path = path
-            self.sha256 = sha256
-            self.byteCount = byteCount
-        }
-
-        public var provesRetainedExternalOracleReportEvidence: Bool {
-            guard status == "available",
-                  let path,
-                  !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  let sha256,
-                  Self.isSHA256(sha256),
-                  let byteCount,
-                  byteCount > 0 else {
+        private var hasRetainedExternalOracleReportEvidence: Bool {
+            guard let report else {
                 return false
             }
-            return true
-        }
-
-        private static func isSHA256(_ value: String) -> Bool {
-            value.count == 64 && value.allSatisfy { hexDigits.contains($0) }
+            return report.kind == .report
+                && report.format == .json
+                && report.digest.algorithm == .sha256
+                && report.byteCount > 0
         }
     }
 

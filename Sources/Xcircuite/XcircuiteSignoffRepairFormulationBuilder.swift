@@ -23,13 +23,13 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
     private let workspaceStore: XcircuiteWorkspaceStore
     private let artifactStore: XcircuitePlanningArtifactStore
     private let compiler: XcircuiteRepairPlanFormulationCompiler
-    private let makeArtifactReferenceVerifier: LocalArtifactVerifier
+    private let artifactVerifier: LocalArtifactVerifier
 
     public init(
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
         compiler: XcircuiteRepairPlanFormulationCompiler? = nil,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
@@ -37,7 +37,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
             workspaceStore: workspaceStore,
             artifactStore: artifactStore
         )
-        self.makeArtifactReferenceVerifier = makeArtifactReferenceVerifier
+        self.artifactVerifier = artifactVerifier
     }
 
     public func compile(
@@ -189,7 +189,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
                 reason: "repair hint reports must be JSON report artifacts."
             )
         }
-        let integrity = makeArtifactReferenceVerifier.verify(reference, relativeTo: projectRoot)
+        let integrity = artifactVerifier.verify(reference, relativeTo: projectRoot)
         guard integrity.isVerified else {
             throw XcircuiteSignoffRepairFormulationError.repairHintArtifactIntegrityFailed(
                 sourceKind: sourceKind,

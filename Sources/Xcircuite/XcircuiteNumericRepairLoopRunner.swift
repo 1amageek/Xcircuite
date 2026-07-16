@@ -24,29 +24,29 @@ public struct XcircuiteNumericRepairLoopRunner: Sendable {
         planExecutor: XcircuiteCandidatePlanExecutor? = nil,
         planVerifier: XcircuiteCandidatePlanVerifier? = nil,
         improvementArtifactGenerator: XcircuiteImprovementPlanningArtifactGenerator? = nil,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.candidateGenerator = candidateGenerator ?? XcircuiteParameterCandidateGenerator(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
         self.planSynthesizer = planSynthesizer ?? XcircuiteParameterCandidatePlanSynthesizer(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
         self.planExecutor = planExecutor ?? XcircuiteCandidatePlanExecutor(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
         self.planVerifier = planVerifier ?? XcircuiteCandidatePlanVerifier(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
         self.improvementArtifactGenerator = improvementArtifactGenerator
             ?? XcircuiteImprovementPlanningArtifactGenerator(

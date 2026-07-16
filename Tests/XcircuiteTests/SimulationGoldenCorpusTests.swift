@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import Testing
 import Xcircuite
 import XcircuiteFlowCLISupport
@@ -17,6 +18,8 @@ struct SimulationGoldenCorpusTests {
             projectRoot: packageRoot,
             artifactDirectory: artifactDirectory
         )
+
+        #expect(report.schemaVersion == 2)
 
         #expect(report.status == "passed")
         #expect(report.summary.caseCount == 5)
@@ -70,6 +73,8 @@ struct SimulationGoldenCorpusTests {
                 #expect(comparisonArtifact.byteCount > 0)
                 #expect(FileManager.default.fileExists(atPath: waveformArtifact.path))
                 #expect(FileManager.default.fileExists(atPath: comparisonArtifact.path))
+                #expect(LocalArtifactVerifier().verify(waveformArtifact).isVerified)
+                #expect(LocalArtifactVerifier().verify(comparisonArtifact).isVerified)
             } else {
                 #expect(caseResult.observedGateStatus == "failed")
                 #expect(caseResult.candidateWaveformArtifact == nil)

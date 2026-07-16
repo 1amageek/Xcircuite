@@ -14,18 +14,18 @@ public struct XcircuiteSymbolicPlannerSolverQualifier: Sendable {
         workspaceStore: XcircuiteWorkspaceStore,
         artifactStore: XcircuitePlanningArtifactStore,
         solverRunner: (any XcircuiteSymbolicPlannerSolving)? = nil,
-        makeArtifactReferenceVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
+        artifactVerifier: LocalArtifactVerifier = LocalArtifactVerifier()
     ) {
         self.workspaceStore = workspaceStore
         self.artifactStore = artifactStore
         self.solverRunner = solverRunner ?? XcircuiteSymbolicPlannerSolverRunner(
             workspaceStore: workspaceStore,
             artifactStore: artifactStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
         self.artifactReferenceResolver = XcircuiteSymbolicPlannerArtifactReferenceResolver(
             workspaceStore: workspaceStore,
-            makeArtifactReferenceVerifier: makeArtifactReferenceVerifier
+            artifactVerifier: artifactVerifier
         )
     }
 

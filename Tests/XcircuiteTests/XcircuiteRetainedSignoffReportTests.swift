@@ -1,11 +1,12 @@
 import Foundation
+import CircuiteFoundation
 import Testing
 import Xcircuite
 
 @Suite("Xcircuite retained signoff report")
 struct XcircuiteRetainedSignoffReportTests {
-    @Test func retainedExternalOracleReadinessRequiresExplicitQualificationAndArtifactEvidence() {
-        let passingLane = makeExternalOracleLane()
+    @Test func retainedExternalOracleReadinessRequiresExplicitQualificationAndArtifactEvidence() throws {
+        let passingLane = try makeExternalOracleLane()
         #expect(passingLane.provesRetainedExternalOracleReadiness)
 
         var missingQualification = passingLane
@@ -35,7 +36,7 @@ struct XcircuiteRetainedSignoffReportTests {
         let retainedReportURL = root.appending(path: "retained-signoff-report.json")
         try Data("{}".utf8).write(to: retainedReportURL, options: [.atomic])
 
-        var unqualifiedLane = makeExternalOracleLane()
+        var unqualifiedLane = try makeExternalOracleLane()
         unqualifiedLane.qualified = nil
         let retainedReport = makeRetainedReport(lanes: [unqualifiedLane])
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -67,7 +68,7 @@ struct XcircuiteRetainedSignoffReportTests {
         lanes: [XcircuiteRetainedSignoffReport.ExternalOracleResult]
     ) -> XcircuiteRetainedSignoffReport {
         XcircuiteRetainedSignoffReport(
-            schemaVersion: 1,
+            schemaVersion: 2,
             kind: "retained-signoff-report",
             suiteID: "retained-signoff-suite",
             status: "passed",
@@ -85,8 +86,8 @@ struct XcircuiteRetainedSignoffReportTests {
         )
     }
 
-    private func makeExternalOracleLane() -> XcircuiteRetainedSignoffReport.ExternalOracleResult {
-        XcircuiteRetainedSignoffReport.ExternalOracleResult(
+    private func makeExternalOracleLane() throws -> XcircuiteRetainedSignoffReport.ExternalOracleResult {
+        return XcircuiteRetainedSignoffReport.ExternalOracleResult(
             domain: "drc",
             status: "passed",
             oracleBackendID: "magic",
@@ -98,10 +99,20 @@ struct XcircuiteRetainedSignoffReportTests {
             oracleAgreementRate: 1,
             readinessFailureCount: 0,
             requiredProbeIDs: ["magic-drc"],
-            report: XcircuiteRetainedSignoffReport.Artifact(
-                status: "available",
-                path: "ci-artifacts/signoff/drc/drc-corpus-report.json",
-                sha256: String(repeating: "a", count: 64),
+            report: ArtifactReference(
+                id: try ArtifactID(rawValue: "drc-external-oracle-report"),
+                locator: ArtifactLocator(
+                    location: try ArtifactLocation(
+                        workspaceRelativePath: "ci-artifacts/signoff/drc/drc-corpus-report.json"
+                    ),
+                    role: try ArtifactRole(validatingRawValue: "drc-external-oracle-report"),
+                    kind: .report,
+                    format: .json
+                ),
+                digest: try ContentDigest(
+                    algorithm: .sha256,
+                    hexadecimalValue: String(repeating: "a", count: 64)
+                ),
                 byteCount: 128
             )
         )

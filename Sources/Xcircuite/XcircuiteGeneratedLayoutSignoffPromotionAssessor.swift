@@ -116,7 +116,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             )
         }
         if let retainedSignoffReport {
-            guard retainedSignoffReport.schemaVersion == 1 else {
+            guard retainedSignoffReport.schemaVersion == 2 else {
                 throw XcircuiteGeneratedLayoutSignoffPromotionAssessmentError
                     .unsupportedRetainedSignoffReportSchemaVersion(retainedSignoffReport.schemaVersion)
             }

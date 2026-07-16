@@ -25,6 +25,11 @@ packages; the explicit PDK external-inspection provider is the controlled
 process boundary, using `SignoffToolSupport` and retaining raw process evidence
 before `PDKKit` validates the typed result.
 
+`XcircuiteEnginePackageDescriptor` expresses input and output roles with
+CircuiteFoundation's open `ArtifactRole` token. Package discovery therefore
+shares the same validated semantic role contract as every persisted
+`ArtifactReference`; raw strings are not a parallel artifact schema.
+
 ## License
 
 Xcircuite is source-available under the
@@ -69,12 +74,13 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 
 | Type | Responsibility |
 |---|---|
-| `LayoutCommandFlowStageExecutor` | Applies replayable `LayoutCommands` requests, writes flow-managed layout/result/manifest artifacts, and can emit DRC-compatible JSON plus standard layout exports for downstream DRC/LVS/PEX stages |
+| `LayoutCommandFlowStageExecutor` | Applies replayable `LayoutCommands` requests through LayoutCommands' public `LayoutCommandRunning` protocol, verifies the result's canonical `outputArtifact`, writes flow-managed layout/result/manifest artifacts, and can emit DRC-compatible JSON plus standard layout exports for downstream DRC/LVS/PEX stages |
 | `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `ArtifactReference`s, and blocks unavailable infrastructure without fabricating signoff output |
 | `DFTQualificationFlowStageExecutor` / `DFTReleaseFlowStageExecutor` | Correlates retained DFT oracle cases, persists request-digest-bound qualification provenance, validates independent ToolQualification process evidence, bundles equivalence/DRC/LVS/PEX artifacts, and drives immutable release eligibility or review/resume artifacts |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
+| `TimingSTAFlowStageExecutor` / `TimingSIFlowStageExecutor` | Invoke TimingEngine protocols directly and read every design, library, constraint, PDK, and parasitic input through `LocalArtifactVerifier` before analysis |
 | `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | Electrical corpus stage | Persists raw corpus and independent-oracle observations for ToolQualification without issuing trust |
@@ -396,7 +402,7 @@ xcodebuild -scheme Xcircuite-Package -destination 'platform=macOS' \
 
 | Protocol | Implementation |
 |---|---|
-| `DRCExecuting` / `LVSExecuting` / `PEXExecuting` | Engine swapped in from the adapter side |
+| `DRCExecuting` / `LVSExecuting` / `PEXExecuting` | Domain engine implementation injected directly into the stage executor |
 | `SimulationExecuting` | `CoreSpiceSimulationEngine` — runs CoreSpice in-process, executes the netlist's own `.op` / `.dc` / `.ac` / `.tran` / `.noise` / `.tf` / `.sens` / `.pz` / `.four` / `.mc`, evaluates `.measure` results, and persists real, complex, or Monte Carlo statistics CSV artifacts without silently substituting a different analysis |
 
 The simulation gate compares declared `SimulationMeasurementExpectation`s
@@ -411,7 +417,10 @@ Checked-in simulation corpus qualification is available through
 `SimulationGoldenCorpusRunner` and
 `xcircuite-flow qualify-simulation-golden-corpus`, which run SPICE netlists,
 compare produced waveforms against golden CSV baselines, and retain per-case
-candidate waveform / comparison artifacts with coverage tags.
+candidate waveform / comparison artifacts as canonical `ArtifactReference`
+values with coverage tags. The corpus report does not define its own artifact
+reference shape. This canonical representation is simulation golden corpus
+report schema version 2.
 
 ## Support types
 
