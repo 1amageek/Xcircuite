@@ -202,8 +202,8 @@ extension XcircuiteCandidatePlanVerifier {
             ),
         ]
 
-        for artifact in executionResult.artifacts.artifacts where artifact.status == .available {
-            let url = pexRunDirectory.appending(path: artifact.relativePath.value)
+        for artifact in executionResult.artifacts.artifacts where artifact.availability == .available {
+            let url = pexRunDirectory.appending(path: artifact.locator.location.value)
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
             }
@@ -211,8 +211,8 @@ extension XcircuiteCandidatePlanVerifier {
                 for: url,
                 projectRoot: projectRoot,
                 artifactID: planningPEXArtifactID(for: artifact),
-                kind: pexFileKind(for: artifact.kind),
-                format: pexFileFormat(for: artifact, url: url)
+                kind: artifact.locator.kind,
+                format: artifact.locator.format
             ))
         }
         return uniqueArtifactReferences(artifacts)
@@ -577,69 +577,14 @@ extension XcircuiteCandidatePlanVerifier {
         if let cornerID = issue.cornerID {
             parts.append("corner=\(cornerID.value)")
         }
-        if let path = issue.path {
-            parts.append("path=\(path.value)")
+        if let location = issue.location {
+            parts.append("path=\(location.value)")
         }
         return parts.joined(separator: " ")
     }
 
-    func pexFileKind(for kind: PEXArtifactKind) -> ArtifactKind {
-        switch kind {
-        case .layoutInput:
-            return .layout
-        case .netlistInput:
-            return .netlist
-        case .technologyInput, .processProfileDeckInput:
-            return .technology
-        case .request, .log, .report, .sourceConnectivityReport:
-            return .report
-        case .rawOutput, .spefRoundTrip, .spiceBackannotation, .parasiticIR:
-            return .parasitics
-        }
-    }
-
-    func pexFileFormat(
-        for artifact: PEXArtifactRecord,
-        url: URL
-    ) -> ArtifactFormat {
-        switch artifact.kind {
-        case .rawOutput, .spefRoundTrip:
-            return .spef
-        case .parasiticIR, .request, .technologyInput, .sourceConnectivityReport:
-            return .json
-        case .spiceBackannotation:
-            return .spice
-        case .log, .report, .processProfileDeckInput:
-            return .text
-        case .layoutInput:
-            return layoutFileFormat(from: url)
-        case .netlistInput:
-            return netlistFileFormat(from: url)
-        }
-    }
-
-    func layoutFileFormat(from url: URL) -> ArtifactFormat {
-        switch url.pathExtension.lowercased() {
-        case "oas", "oasis":
-            return .oasis
-        case "gds":
-            return .gdsii
-        default:
-            return .unknown
-        }
-    }
-
-    func netlistFileFormat(from url: URL) -> ArtifactFormat {
-        switch url.pathExtension.lowercased() {
-        case "sp", "spi", "cir", "net", "spice":
-            return .spice
-        default:
-            return .unknown
-        }
-    }
-
     func planningPEXArtifactID(for artifact: PEXArtifactRecord) -> String {
-        sanitizedArtifactID(raw: artifact.id, prefix: "planning-pex-")
+        sanitizedArtifactID(raw: artifact.id.rawValue, prefix: "planning-pex-")
     }
 
     func sanitizedArtifactID(raw: String, prefix: String) -> String {

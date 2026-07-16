@@ -367,14 +367,14 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
         _ artifact: FlowRunReviewArtifact
     ) -> XcircuiteGeneratedLayoutFailureLadderReport.ArtifactSnapshot {
         XcircuiteGeneratedLayoutFailureLadderReport.ArtifactSnapshot(
-            role: artifact.role,
-            artifactID: artifact.artifactID,
+            role: artifact.purpose.rawValue,
+            artifactID: artifact.reference.id.rawValue,
             stageID: artifact.stageID,
-            path: artifact.path,
-            kind: artifact.kind.rawValue,
-            format: artifact.format.rawValue,
-            sha256: artifact.sha256,
-            byteCount: artifact.byteCount.flatMap(Int64.init(exactly:)),
+            path: artifact.reference.locator.location.value,
+            kind: artifact.reference.locator.kind.rawValue,
+            format: artifact.reference.locator.format.rawValue,
+            sha256: artifact.reference.digest.hexadecimalValue,
+            byteCount: Int64(exactly: artifact.reference.byteCount),
             integrityStatus: artifact.integrity?.status.rawValue,
             integrityMessage: artifact.integrity?.message
         )
@@ -387,8 +387,8 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
             return nil
         }
         return XcircuiteGeneratedLayoutFailureLadderReport.ArtifactIssue(
-            artifactID: artifact.artifactID,
-            path: artifact.path,
+            artifactID: artifact.reference.id.rawValue,
+            path: artifact.reference.locator.location.value,
             status: integrity.status.rawValue,
             message: integrity.message
         )

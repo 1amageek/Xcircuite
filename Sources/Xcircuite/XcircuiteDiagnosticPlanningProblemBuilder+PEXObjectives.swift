@@ -311,7 +311,7 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         ]
         insertOptional(issue.artifactID, key: "artifactID", into: &evidence)
         insertOptional(issue.cornerID?.value, key: "cornerID", into: &evidence)
-        insertOptional(issue.path?.value, key: "path", into: &evidence)
+        insertOptional(issue.location?.value, key: "path", into: &evidence)
         return XcircuitePlanningObjective(
             objectiveID: try identifier("pex-completeness-\(issue.kind.rawValue)-\(index + 1)"),
             kind: "satisfy",

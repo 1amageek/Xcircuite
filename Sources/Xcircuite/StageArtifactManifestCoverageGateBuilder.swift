@@ -96,15 +96,16 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let manifest = try decoder.decode(PEXArtifactManifest.self, from: data)
-            return manifest.artifacts
-                .filter { $0.status == .available }
+            let records: [PEXArtifactRecord] = manifest[keyPath: \.artifacts]
+            return records
+                .filter { $0.availability == .available }
                 .map { record in
                     ManifestOutputRecord(
-                        id: record.id,
-                        kind: record.kind.rawValue,
-                        path: record.relativePath.value,
-                        byteCount: record.byteCount.map(Int64.init),
-                        sha256: record.sha256
+                        id: record.id.rawValue,
+                        kind: record.locator.kind.rawValue,
+                        path: record.locator.location.value,
+                        byteCount: record.reference.flatMap { Int64(exactly: $0.byteCount) },
+                        sha256: record.reference?.digest.hexadecimalValue
                     )
                 }
         }

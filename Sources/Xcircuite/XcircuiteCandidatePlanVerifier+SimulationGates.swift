@@ -344,4 +344,13 @@ extension XcircuiteCandidatePlanVerifier {
         }
         return hint
     }
+
+    func netlistFileFormat(from url: URL) -> ArtifactFormat {
+        switch url.pathExtension.lowercased() {
+        case "sp", "spi", "cir", "net", "spice":
+            return .spice
+        default:
+            return .unknown
+        }
+    }
 }

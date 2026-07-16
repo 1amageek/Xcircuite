@@ -570,8 +570,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             ))
         }
 
-        for artifact in result.artifacts.artifacts where artifact.status == .available {
-            let url = pexRunDirectory.appending(path: artifact.relativePath.value)
+        for artifact in result.artifacts.artifacts where artifact.availability == .available {
+            let url = pexRunDirectory.appending(path: artifact.locator.location.value)
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
             }
@@ -593,9 +593,9 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             return try artifactBuilder.reference(
                 for: url,
                 projectRoot: context.projectRoot,
-                artifactID: artifact.id,
-                kind: fileKind(for: artifact.kind),
-                format: fileFormat(for: artifact, url: url)
+                artifactID: artifact.id.rawValue,
+                kind: artifact.locator.kind,
+                format: artifact.locator.format
             )
         } catch let error as XcircuiteRuntimeError {
             switch error {
@@ -616,7 +616,11 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         url: URL,
         context: FlowExecutionContext
     ) throws -> ArtifactReference {
-        let artifactID = try ArtifactID(rawValue: artifact.id)
+        guard let declaredReference = artifact.reference else {
+            throw XcircuiteRuntimeError.invalidConfiguration(
+                "Available PEX artifact \(artifact.id.rawValue) has no canonical reference."
+            )
+        }
         let relativePath = try lexicalProjectRelativePath(
             for: url,
             projectRoot: context.projectRoot
@@ -624,18 +628,14 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         let locator = ArtifactLocator(
             location: try ArtifactLocation(workspaceRelativePath: relativePath),
             role: .output,
-            kind: fileKind(for: artifact.kind),
-            format: fileFormat(for: artifact, url: url)
-        )
-        let digest = try ContentDigest(
-            algorithm: .sha256,
-            hexadecimalValue: artifact.sha256 ?? ""
+            kind: artifact.locator.kind,
+            format: artifact.locator.format
         )
         return ArtifactReference(
-            id: artifactID,
+            id: artifact.id,
             locator: locator,
-            digest: digest,
-            byteCount: UInt64(artifact.byteCount ?? 0)
+            digest: declaredReference.digest,
+            byteCount: declaredReference.byteCount
         )
     }
 
@@ -779,61 +779,9 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         if let cornerID = issue.cornerID {
             parts.append("corner=\(cornerID.value)")
         }
-        if let path = issue.path {
-            parts.append("path=\(path.value)")
+        if let location = issue.location {
+            parts.append("path=\(location.value)")
         }
         return parts.joined(separator: " ")
-    }
-
-    private func fileKind(for kind: PEXArtifactKind) -> ArtifactKind {
-        switch kind {
-        case .layoutInput:
-            .layout
-        case .netlistInput:
-            .netlist
-        case .technologyInput, .processProfileDeckInput:
-            .technology
-        case .request, .log, .report, .sourceConnectivityReport:
-            .report
-        case .rawOutput, .spefRoundTrip, .spiceBackannotation, .parasiticIR:
-            .parasitics
-        }
-    }
-
-    private func fileFormat(for artifact: PEXArtifactRecord, url: URL) -> ArtifactFormat {
-        switch artifact.kind {
-        case .rawOutput, .spefRoundTrip:
-            .spef
-        case .parasiticIR, .request, .technologyInput, .sourceConnectivityReport:
-            .json
-        case .spiceBackannotation:
-            .spice
-        case .log, .report, .processProfileDeckInput:
-            .text
-        case .layoutInput:
-            layoutFormat(from: url)
-        case .netlistInput:
-            netlistFormat(from: url)
-        }
-    }
-
-    private func layoutFormat(from url: URL) -> ArtifactFormat {
-        switch url.pathExtension.lowercased() {
-        case "oas", "oasis":
-            .oasis
-        case "gds":
-            .gdsii
-        default:
-            .unknown
-        }
-    }
-
-    private func netlistFormat(from url: URL) -> ArtifactFormat {
-        switch url.pathExtension.lowercased() {
-        case "sp", "spi", "cir", "net", "spice":
-            .spice
-        default:
-            .unknown
-        }
     }
 }
