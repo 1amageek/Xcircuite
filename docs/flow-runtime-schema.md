@@ -24,6 +24,12 @@ flowchart LR
 | `XcircuiteFlowToolSpec` | Per-tool trust inputs passed into `ToolQualification` |
 | `toolchain.json` | Persisted selected/rejected tool decisions for review and replay |
 
+Run ledger reads have two explicit trust boundaries. Human review uses
+`FlowRunReviewLedgerLoading` to load structurally validated metadata and then
+reports each artifact's integrity independently. Resume, approval, release, and
+ordinary ledger mutation use the attested `FlowRunLedgerLoading` boundary and
+fail before proceeding when any retained artifact is missing or changed.
+
 `Xcircuite` does not implement verdict logic. Stage executors call engine
 packages and adapt their results into `DesignFlowKernel` artifacts.
 

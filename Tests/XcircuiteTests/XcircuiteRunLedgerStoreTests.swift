@@ -225,6 +225,8 @@ struct XcircuiteRunLedgerPersistenceTests {
         try await store.saveRunLedger(ledger)
 
         try await workspace.write(Data("tampered".utf8), to: path)
+        let reviewLedger = try await store.loadRunLedgerForReview(runID: "run-1")
+        #expect(reviewLedger.artifacts == [reference])
         do {
             _ = try await store.loadAttestedRunLedger(runID: "run-1")
             Issue.record("Expected retained artifact integrity failure.")

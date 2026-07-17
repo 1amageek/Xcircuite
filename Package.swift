@@ -39,7 +39,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DesignFlowKernel",
-            revision: "5159da1cb7b7c91a6b7bf92a8ec68daf49820a2b"
+            revision: "8bad03bbccddfb32f3767c8df00e816ee10cd4f3"
         ),
         workspaceDependency(
             named: "DRCEngine",
@@ -99,7 +99,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "00b6ba866780b43b9b4e143f2133dc654a17c293"
+            revision: "85284e5ae7489dffb06c8256849d6f37da78d723"
         ),
     ],
     targets: [

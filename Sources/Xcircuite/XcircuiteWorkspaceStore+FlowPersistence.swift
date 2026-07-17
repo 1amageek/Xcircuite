@@ -3,7 +3,7 @@ import DesignFlowKernel
 import Foundation
 import ToolQualification
 
-extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersisting, ToolQualificationArtifactReading {
+extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersisting, FlowRunReviewLedgerLoading, ToolQualificationArtifactReading {
     public func verifyArtifact(
         _ reference: ArtifactReference
     ) async -> ArtifactIntegrity {
@@ -16,6 +16,10 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
 
     public func loadRunLedger(runID: String) async throws -> FlowRunLedger {
         try await loadAttestedRunLedger(runID: runID)
+    }
+
+    public func loadRunLedgerForReview(runID: String) async throws -> FlowRunLedger {
+        try loadRunLedgerMetadata(runID: runID)
     }
 
     /// Loads a run ledger and verifies every retained artifact against its
@@ -76,7 +80,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
     ///
     /// Consumers must verify each artifact reference before reading its content.
     /// Use `loadAttestedRunLedger(runID:)` when full retained-artifact attestation is
-    /// required, such as resume and human review.
+    /// required, such as resume, approval, and release authorization.
     public func loadRunManifest(runID: String) throws -> FlowRunManifest {
         try loadRunLedgerMetadata(runID: runID).runManifest
     }
