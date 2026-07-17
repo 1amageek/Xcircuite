@@ -225,10 +225,12 @@ struct XcircuiteFlowLifecycleCLITests {
                 "--stage-id", "001-analysis",
                 "--verdict", "approved",
                 "--reviewer", "integration-reviewer",
+                "--reviewer-kind", "agent",
                 "--note", "Stage evidence reviewed.",
             ]
         )
         #expect(result.approval.verdict == .approved)
+        #expect(result.approval.reviewerKind == .agent)
         #expect(result.approval.evidence.plan.artifactID == "run-plan")
         #expect(result.approval.evidence.stageResult.artifactID == "001-analysis-result")
 
@@ -236,6 +238,7 @@ struct XcircuiteFlowLifecycleCLITests {
         #expect(ledger.approvals == [result.approval])
         #expect(ledger.actions.contains {
             $0.actionKind == FlowRunReviewDecisionKind.approval.rawValue
+                && $0.actor.kind == .agent
         })
     }
 

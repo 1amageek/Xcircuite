@@ -17,7 +17,7 @@ Flow lifecycle services remain in `DesignFlowKernel`. The executable command sur
 | `build-retention-index` | Index construction, persistence, artifact registration | `XcircuiteFlowLifecycleCLITests` | Passing integration covered |
 | `validate-retention-index` | Digest, retention, and evidence-age validation | `XcircuiteFlowLifecycleCLITests` | Passing integration covered |
 | `progress-run` | Snapshot, wait, JSONL follow, completion stop | `XcircuiteFlowLifecycleCLITests` | Cancellation snapshot integration covered |
-| `approve-gate` | Approval, waiver reason, stale evidence rejection | `XcircuiteFlowLifecycleCLITests` | Approved evidence binding covered |
+| `approve-gate` | Approval, reviewer kind, waiver reason, stale evidence rejection | `XcircuiteFlowLifecycleCLITests` | Approved evidence binding and Agent actor projection covered |
 | `request-cancel` | Cancellation artifact and progress event | `XcircuiteFlowLifecycleCLITests` | Integration covered |
 
 The migration is complete only when every row is implemented in `Xcircuite`, its former `DesignFlowKernel` CLI scenario has an equivalent integration test, and no `DesignFlowCLICommand` reference remains in kernel tests.

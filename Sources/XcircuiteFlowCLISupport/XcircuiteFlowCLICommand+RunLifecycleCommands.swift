@@ -261,6 +261,7 @@ extension XcircuiteFlowCLICommand {
         var stageID: String?
         var verdict: FlowGateApprovalVerdict?
         var reviewer: String?
+        var reviewerKind = FlowRunActor.Kind.human
         var note = ""
         var pretty = false
         while let argument = parser.next() {
@@ -275,6 +276,12 @@ extension XcircuiteFlowCLICommand {
                 }
                 verdict = parsed
             case "--reviewer": reviewer = try parser.requiredValue(after: argument)
+            case "--reviewer-kind":
+                let value = try parser.requiredValue(after: argument)
+                guard let parsed = FlowRunActor.Kind(rawValue: value) else {
+                    throw XcircuiteFlowCLIError.invalidValue(option: argument, value: value)
+                }
+                reviewerKind = parsed
             case "--note": note = try parser.requiredValue(after: argument)
             case "--pretty": pretty = true
             default: throw XcircuiteFlowCLIError.unknownOption(argument)
@@ -299,6 +306,7 @@ extension XcircuiteFlowCLICommand {
             stageID: stageID,
             verdict: verdict,
             reviewer: reviewer,
+            reviewerKind: reviewerKind,
             note: note
         ))
         return try encode(result, pretty: options.pretty)
