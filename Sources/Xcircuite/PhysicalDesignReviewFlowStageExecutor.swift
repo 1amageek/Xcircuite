@@ -2,26 +2,25 @@ import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 import PhysicalDesignCore
-import PhysicalDesignEngine
 
-/// Prepares an immutable physical-design review packet and binds the generic
-/// Xcircuite approval record to the native physical-design resume gate.
+/// Prepares an immutable physical-design review packet and validates the
+/// reviewed artifact set against the generic Xcircuite approval record.
 public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStageApprovalValidating {
     public let stageID: String
     public let toolID: String
     private let manifestInput: XcircuiteFlowInputReference
-    private let decisionScope: [String]
+    private let reviewScope: [String]
 
     public init(
         stageID: String = "physical.review",
         manifestInput: XcircuiteFlowInputReference,
-        decisionScope: [String] = ["proposed_layout", "design_diff", "implementation_configuration"],
+        reviewScope: [String] = ["proposed_layout", "design_diff", "implementation_configuration"],
         toolID: String = "physical-design-review"
     ) {
         self.stageID = stageID
         self.toolID = toolID
         self.manifestInput = manifestInput
-        self.decisionScope = decisionScope
+        self.reviewScope = reviewScope
     }
 
     public func execute(
@@ -42,12 +41,12 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
                 kind: .report,
                 format: .json
             )
-            let gate = PhysicalDesignReviewGate(
+            let validator = PhysicalDesignArtifactReviewValidator(
                 artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
             )
-            let packet = try await gate.prepareReview(
+            let packet = try await validator.preparePacket(
                 manifestReference: manifestReference,
-                decisionScope: decisionScope
+                reviewScope: reviewScope
             )
             try await context.checkCancellation()
             let packetReference = try await persist(
@@ -89,7 +88,7 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         _ approval: FlowApprovalRecord,
         reviewedResult: FlowStageResult,
         context: FlowExecutionContext
-    ) throws -> [FlowDiagnostic] {
+    ) async throws -> [FlowDiagnostic] {
         guard approval.verdict == .approved else { return [] }
         guard approval.runID == context.runID, approval.stageID == stageID else {
             return [diagnostic(
@@ -108,38 +107,14 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         let packetURL = try XcircuiteWorkspaceLayout(projectRoot: try context.xcircuiteProjectRoot())
             .url(forProjectRelativePath: packetReference.path)
         let packetData = try Data(contentsOf: packetURL)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let packet = try decoder.decode(PhysicalDesignReviewPacket.self, from: packetData)
-        var diagnostics = verifyPacketArtifacts(packet, projectRoot: try context.xcircuiteProjectRoot())
-        guard diagnostics.isEmpty else { return diagnostics }
-
-        let decision = PhysicalDesignReviewDecision(
-            decisionID: "approval-\(approval.runID)-\(approval.stageID)-\(approval.createdAt.timeIntervalSince1970)",
-            runID: approval.runID,
-            stage: packet.stage,
-            verdict: .approved,
-            reviewer: approval.reviewer,
-            reviewerKind: PhysicalDesignReviewerKind(rawValue: approval.reviewerKind.rawValue) ?? .system,
-            note: approval.note,
-            manifestDigest: packet.manifestDigest,
-            proposedLayoutDigest: packet.proposedLayout.layoutDigest,
-            decisionScope: packet.decisionScope,
-            createdAt: approval.createdAt
+        let packet = try PhysicalDesignJSONCodec().decode(
+            PhysicalDesignReviewPacket.self,
+            from: packetData
         )
-        let resumeRequest = PhysicalDesignResumeRequest(
-            runID: approval.runID,
-            stage: packet.stage,
-            manifestDigest: packet.manifestDigest,
-            expectedBaseLayoutDigest: packet.baseLayout?.layoutDigest,
-            proposedLayoutDigest: packet.proposedLayout.layoutDigest,
-            decision: decision
-        )
-        let result = PhysicalDesignReviewGate(
+        let diagnostics = await PhysicalDesignArtifactReviewValidator(
             artifactStore: FileSystemPhysicalDesignArtifactStore(projectRoot: try context.xcircuiteProjectRoot())
-        ).validateResume(resumeRequest, packet: packet)
-        diagnostics.append(contentsOf: result.diagnostics.map(flowDiagnostic))
-        return diagnostics
+        ).validateCurrentArtifacts(packet)
+        return diagnostics.map(flowDiagnostic)
     }
 
     private func validate(stage: FlowStageDefinition) throws {
@@ -148,80 +123,9 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         }
         try FlowIdentifierValidator().validate(stageID, kind: .stageID)
         try FlowIdentifierValidator().validate(toolID, kind: .toolID)
-        guard !decisionScope.isEmpty, Set(decisionScope).count == decisionScope.count else {
-            throw PhysicalDesignReviewFlowError.invalidDecisionScope
+        guard !reviewScope.isEmpty, Set(reviewScope).count == reviewScope.count else {
+            throw PhysicalDesignReviewFlowError.invalidReviewScope
         }
-    }
-
-    private func verifyPacketArtifacts(
-        _ packet: PhysicalDesignReviewPacket,
-        projectRoot: URL
-    ) -> [FlowDiagnostic] {
-        var diagnostics: [FlowDiagnostic] = []
-        let package = XcircuiteWorkspaceLayout(projectRoot: projectRoot)
-        let digester = SHA256ContentDigester()
-        do {
-            let manifestURL = try package.url(forProjectRelativePath: packet.manifestReference.path)
-            let manifestData = try Data(contentsOf: manifestURL)
-            let manifestDigest = try digester
-                .digest(data: manifestData, using: .sha256)
-                .hexadecimalValue
-            if manifestDigest != packet.manifestDigest
-                || packet.manifestReference.digest.algorithm != .sha256
-                || packet.manifestReference.digest.hexadecimalValue != manifestDigest {
-                diagnostics.append(diagnostic(
-                    code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_TAMPERED",
-                    message: "The reviewed physical-design manifest changed after packet creation.",
-                    actions: ["prepare_a_new_physical_design_review_packet"]
-                ))
-            }
-            if Int64(manifestData.count) != Int64(packet.manifestReference.byteCount) {
-                diagnostics.append(diagnostic(
-                    code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_SIZE_MISMATCH",
-                    message: "The reviewed physical-design manifest byte count changed after packet creation.",
-                    actions: ["prepare_a_new_physical_design_review_packet"]
-                ))
-            }
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let currentManifest = try decoder.decode(PhysicalDesignRunManifest.self, from: manifestData)
-            if currentManifest != packet.manifest {
-                diagnostics.append(diagnostic(
-                    code: "PHYSICAL_DESIGN_REVIEW_MANIFEST_PACKET_MISMATCH",
-                    message: "The embedded physical-design manifest in the review packet does not match the current manifest artifact.",
-                    actions: ["prepare_a_new_physical_design_review_packet"]
-                ))
-            }
-            for (path, expectedDigest) in packet.artifactDigests {
-                let artifactURL = try package.url(forProjectRelativePath: path)
-                let artifactData = try Data(contentsOf: artifactURL)
-                let actualDigest = try digester
-                    .digest(data: artifactData, using: .sha256)
-                    .hexadecimalValue
-                if actualDigest != expectedDigest {
-                    diagnostics.append(diagnostic(
-                        code: "PHYSICAL_DESIGN_REVIEW_ARTIFACT_TAMPERED",
-                        message: "Reviewed artifact \(path) changed after packet creation.",
-                        actions: ["prepare_a_new_physical_design_review_packet"]
-                    ))
-                }
-                if let expectedByteCount = packet.manifest.artifacts.first(where: { $0.path == path })?.byteCount,
-                   Int64(artifactData.count) != expectedByteCount {
-                    diagnostics.append(diagnostic(
-                        code: "PHYSICAL_DESIGN_REVIEW_ARTIFACT_SIZE_MISMATCH",
-                        message: "Reviewed artifact (path) byte count changed after packet creation.",
-                        actions: ["prepare_a_new_physical_design_review_packet"]
-                    ))
-                }
-            }
-        } catch {
-            diagnostics.append(diagnostic(
-                code: "PHYSICAL_DESIGN_REVIEW_ARTIFACT_UNAVAILABLE",
-                message: "Reviewed physical-design artifact verification failed: \(error.localizedDescription)",
-                actions: ["restore_review_artifacts", "prepare_a_new_physical_design_review_packet"]
-            ))
-        }
-        return diagnostics
     }
 
     private func persist<Value: Encodable>(
@@ -299,12 +203,12 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
 }
 
 private enum PhysicalDesignReviewFlowError: Error, LocalizedError {
-    case invalidDecisionScope
+    case invalidReviewScope
 
     var errorDescription: String? {
         switch self {
-        case .invalidDecisionScope:
-            return "Physical-design review decision scope must be non-empty and unique."
+        case .invalidReviewScope:
+            return "Physical-design review scope must be non-empty and unique."
         }
     }
 }

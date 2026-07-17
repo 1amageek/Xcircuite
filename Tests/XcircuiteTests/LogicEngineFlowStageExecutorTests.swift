@@ -268,7 +268,7 @@ struct LogicEngineFlowStageExecutorTests {
             inputs: [designReference.artifact, library, constraints, pdk],
             design: designReference,
             libraries: [TimingLibraryReference(artifact: library, cornerIDs: ["typical"])],
-            constraints: TimingConstraintReference(artifact: constraints, modeIDs: ["default"]),
+            constraints: constraints,
             pdk: PDKReference(manifest: pdk, processID: "fixture", version: "1", digest: pdkDigest)
         )
         let requestPath = try writeRequest(request, name: "synthesis-request.json", root: root)
@@ -316,7 +316,7 @@ struct LogicEngineFlowStageExecutorTests {
             inputs: [designReference.artifact, library, constraints, pdk],
             design: designReference,
             libraries: [TimingLibraryReference(artifact: library, cornerIDs: ["typical"])],
-            constraints: TimingConstraintReference(artifact: constraints, modeIDs: ["default"]),
+            constraints: constraints,
             pdk: PDKReference(manifest: pdk, processID: "fixture", version: "1", digest: pdkDigest)
         )
         let synthesisRequestPath = try writeRequest(

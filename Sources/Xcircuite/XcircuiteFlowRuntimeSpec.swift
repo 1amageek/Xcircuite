@@ -4,14 +4,14 @@ import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var toolchainProfile: XcircuiteFlowToolchainProfile?
     public var executors: [XcircuiteFlowStageExecutorSpec]
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = Self.currentSchemaVersion,
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil,
         executors: [XcircuiteFlowStageExecutorSpec]
     ) {

@@ -196,13 +196,13 @@ and `SimulationFlowStageExecutorTests/simulationExecutorRetriesTransientFailureA
 | `maximumEvidenceAgeSeconds` | number or null | no | Maximum age for required evidence; evidence without `checkedAt` is stale when this is set |
 | `requirePassingHealthCheck` | boolean | no | Defaults to true when omitted |
 
-## XcircuiteFlowRuntimeSpec v1
+## XcircuiteFlowRuntimeSpec v2
 
 Top-level fields:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `schemaVersion` | integer | yes | Must be `1` |
+| `schemaVersion` | integer | yes | Must be `2` |
 | `toolchainProfile` | object or null | no | Shared signoff technology/catalog defaults used by DRC/LVS/PEX stages when a stage does not declare its own technology input |
 | `executors` | array of executor specs | yes | Stage executor configurations |
 
@@ -212,36 +212,24 @@ valid Xcircuite stage identifier, and executor stage IDs must be unique. Duplica
 stage IDs are rejected before attachment so a record cannot be attached to
 an ambiguous stage.
 
-### DFT qualification and release executor
+### DFT execution and qualification executors
 
-The dft executor has three mutually exclusive modes:
+DFT uses separate tagged executor kinds for native execution and ToolQualification evidence:
 
 | Mode | Required fields | Responsibility |
 |---|---|---|
-| qualification | stageID, requestPath, qualificationCorpusPath, qualificationObservationsPath | Correlate retained DFT oracle cases, persist qualification provenance and optionally build independent process evidence |
-| downstream evidence | stageID, releaseEvidenceSources | Resolve and hash exactly one equivalence, DRC, LVS and PEX artifact |
-| release | stageID, requestPath, releaseResultPath, releaseDownstreamEvidencePath, one process evidence input | Validate DFT provenance, independent ToolQualification process evidence, downstream signoff and approval/resume |
+| `dftExecution` | stageID, requestPath | Run a typed DFT request and retain the raw DFT result and artifacts |
+| `dftQualification` | stageID, corpusInput, observationsInput | Correlate retained DFT oracle cases and optionally build independent process evidence |
 
-Qualification mode may set `qualificationProcessEvidenceBuildPath` to a
+The qualification executor may set `processQualificationEvidenceBuildInput` to a
 `ToolProcessQualificationEvidenceBuildRequest` produced from independent,
 artifact-backed evidence. The qualification stage writes
 `dft-process-qualification-evidence.json` only after the builder validates all
 evidence groups, scope, artifact integrity metadata, independence and freshness.
 
-Release mode also accepts `releaseQualificationPath` and `releaseRequestDigest` when the retained qualification provenance is produced by a prior qualification stage. Exactly one of `releaseProcessQualificationEvidencePath` or `releaseProcessQualificationEvidenceInput` is mandatory; the latter supports a `stageRawArtifact` reference to the qualification stage output. The adapter checks evidence freshness, PDK scope, process profile, tool identity, implementation identity, independence, corpus/oracle/health/approval references and blocker state. It persists the validated evidence reference in the immutable eligibility artifact.
-
-The release chain is: dft.qualification -> dft.release-evidence -> dft.release -> approval gate -> resume and re-evaluate dft.release.
-
-Missing or mismatched qualification evidence is a blocked trust result with a review/resume artifact; it is not a successful execution result.
-
-Successful release stages persist `dft-release-eligibility.json` and
-`dft-release-artifact-bundle.json`. The bundle records content-addressed
-references to the request, result, eligibility, independent process evidence,
-downstream evidence bundle, candidate artifacts and human approval so a
-reviewer or Agent can inspect the exact release packet without re-running DFT.
-When process evidence is stage-bound, it also retains the qualification build
-request and support artifacts, and verifies every named reference again before
-the packet is persisted.
+DFT stages do not issue release eligibility or own human approval. ReleaseEngine
+consumes validated DFT and signoff evidence, while DesignFlowKernel owns
+approval, waiver, review, and resume.
 
 ### PDK external inspection executors
 
@@ -420,7 +408,8 @@ Supported `kind` values:
 | `mockPEX` | `PEXFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `layoutFormat`, `sourceNetlistPath` or `sourceNetlistInput`, `topCell`, `corners`, `tool`, plus `technology` or `toolchainProfile.pexTechnology` |
 | `coreSpiceSimulation` | `SimulationFlowStageExecutor` | `stageID`, `netlistPath`, `tool` |
 | `postLayoutComparison` | `PostLayoutComparisonFlowStageExecutor` | `stageID`, `preLayoutWaveformPath`, `postLayoutWaveformPath`, `options`, `tool` |
-| `dft` | DFT qualification, downstream evidence bundle or DFT release executor | `stageID`, `requestPath`, and executor-specific qualification/release inputs |
+| `dftExecution` | `DFTFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
+| `dftQualification` | `DFTQualificationFlowStageExecutor` | `stageID`, `corpusInput`, `observationsInput`, optional `processQualificationEvidenceBuildInput`, `tool` |
 
 Common executor value fields:
 

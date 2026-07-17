@@ -76,100 +76,33 @@ struct DFTFlowStageExecutorTests {
 
     @Test("DFT executor specs round-trip with current fields")
     func stageSpecsRoundTrip() async throws {
-        let scan = XcircuiteFlowStageExecutorSpec.dft(
+        let scan = XcircuiteFlowStageExecutorSpec.dftExecution(
             .init(stageID: "dft.scan", requestPath: "dft-request.json")
         )
-        let qualification = XcircuiteFlowStageExecutorSpec.dft(
+        let qualification = XcircuiteFlowStageExecutorSpec.dftQualification(
             .init(
-                stageID: "dft.qualification",
-                requestPath: "dft-request.json",
-                qualificationCorpusPath: "dft-corpus.json",
-                qualificationObservationsPath: "dft-observations.json",
-                qualificationProcessEvidenceBuildPath: "dft-process-evidence-request.json"
-            )
-        )
-        let release = XcircuiteFlowStageExecutorSpec.dft(
-            .init(
-                stageID: "dft.release",
-                requestPath: "dft-request.json",
-                releaseResultPath: "dft-result.json",
-                releaseProcessQualificationEvidencePath: "dft-process-evidence.json",
-                releaseDownstreamEvidencePath: "dft-downstream.json"
+                corpusInput: .path("dft-corpus.json"),
+                observationsInput: .path("dft-observations.json"),
+                processQualificationEvidenceBuildInput: .path("dft-process-evidence-request.json")
             )
         )
 
-        for spec in [scan, qualification, release] {
+        for spec in [scan, qualification] {
             let decoded = try JSONDecoder().decode(
                 XcircuiteFlowStageExecutorSpec.self,
                 from: JSONEncoder().encode(spec)
             )
             #expect(decoded == spec)
         }
-    }
 
-    @Test("release spec requires exactly one process qualification evidence input")
-    func releaseSpecRequiresProcessQualificationEvidence() async throws {
-        let missing = XcircuiteFlowStageExecutorSpec.dft(
-            .init(
-                stageID: "dft.release",
-                requestPath: "dft-request.json",
-                releaseResultPath: "dft-result.json",
-                releaseDownstreamEvidencePath: "dft-downstream.json"
-            )
+        let runtimeSpec = XcircuiteFlowRuntimeSpec(executors: [scan, qualification])
+        #expect(runtimeSpec.schemaVersion == XcircuiteFlowRuntimeSpec.currentSchemaVersion)
+        let obsoleteData = try JSONEncoder().encode(
+            XcircuiteFlowRuntimeSpec(schemaVersion: 1, executors: [])
         )
-        #expect(throws: XcircuiteFlowRuntimeSpecError.self) {
-            try XcircuiteFlowRuntimeSpec(executors: [missing]).validate()
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: obsoleteData)
         }
-
-        let stageBound = XcircuiteFlowStageExecutorSpec.dft(
-            .init(
-                stageID: "dft.release",
-                requestPath: "dft-request.json",
-                releaseResultPath: "dft-result.json",
-                releaseProcessQualificationEvidenceInput: .stageRawArtifact(
-                    .init(
-                        stageID: "dft.qualification",
-                        relativePath: "dft-process-qualification-evidence.json"
-                    )
-                ),
-                releaseDownstreamEvidencePath: "dft-downstream.json"
-            )
-        )
-        try XcircuiteFlowRuntimeSpec(executors: [stageBound]).validate()
-    }
-
-    @Test("downstream evidence bundle blocks when a required domain is absent")
-    func blocksIncompleteDownstreamEvidenceBundle() async throws {
-        let root = try makeRoot()
-        defer { removeRoot(root) }
-        let runID = "dft-downstream-run"
-        for domain in ["equivalence", "drc", "lvs"] {
-            try Data("{\"status\":\"passed\"}".utf8).write(
-                to: root.appending(path: "\(domain).json"),
-                options: .atomic
-            )
-        }
-        let executor = DFTReleaseDownstreamEvidenceBundleFlowStageExecutor(
-            sources: [
-                .init(domain: .equivalence, role: "equivalence", input: .path("equivalence.json")),
-                .init(domain: .drc, role: "drc", input: .path("drc.json")),
-                .init(domain: .lvs, role: "lvs", input: .path("lvs.json")),
-            ]
-        )
-
-        let result = try await executor.execute(
-            stage: FlowStageDefinition(
-                stageID: "dft.release-evidence",
-                displayName: "DFT downstream evidence"
-            ),
-            context: try await makeContext(root: root, runID: runID)
-        )
-
-        #expect(result.status == .blocked)
-        #expect(result.diagnostics.contains {
-            $0.code == "DFT_RELEASE_EVIDENCE_BUNDLE_INVALID" && $0.message.contains("pex")
-        })
-        #expect(result.artifacts.isEmpty)
     }
 
     @Test("qualification stage builds current ToolQualification process evidence")
@@ -264,249 +197,6 @@ struct DFTFlowStageExecutorTests {
         #expect(result.artifacts.contains {
             $0.id.rawValue == "dft-process-qualification-evidence"
         })
-    }
-
-    @Test("release blocks until a kernel approval record is retained")
-    func blocksReleaseWithoutApproval() async throws {
-        let fixture = try await makeReleaseFixture(includeApproval: false)
-        defer { removeRoot(fixture.root) }
-
-        let result = try await releaseExecutor().execute(
-            stage: releaseStage(),
-            context: try await makeContext(
-                root: fixture.root,
-                runID: fixture.request.runID,
-                approval: fixture.approval
-            )
-        )
-
-        #expect(result.status == .blocked)
-        #expect(result.diagnostics.contains { $0.code == "DFT_RELEASE_APPROVAL_REQUIRED" })
-    }
-
-    @Test("release consumes ToolQualification evidence and a kernel approval record")
-    func executesReleaseStage() async throws {
-        let fixture = try await makeReleaseFixture(includeApproval: true)
-        defer { removeRoot(fixture.root) }
-
-        let result = try await releaseExecutor().execute(
-            stage: releaseStage(),
-            context: try await makeContext(
-                root: fixture.root,
-                runID: fixture.request.runID,
-                approval: fixture.approval
-            )
-        )
-
-        #expect(result.status == .succeeded)
-        #expect(result.gates.contains { $0.gateID == "dft-release" && $0.status == .passed })
-        #expect(result.artifacts.contains { $0.id.rawValue == "dft-release-result" })
-        #expect(result.artifacts.contains { $0.id.rawValue == "dft-release-artifact-bundle" })
-        let bundleURL = fixture.root.appending(
-            path: ".xcircuite/runs/\(fixture.request.runID)/stages/dft.release/raw/dft-release-artifact-bundle.json"
-        )
-        let bundle = try JSONDecoder().decode(
-            DFTReleaseArtifactBundle.self,
-            from: Data(contentsOf: bundleURL)
-        )
-        #expect(bundle.approval == fixture.approval)
-        #expect(bundle.processQualificationEvidence.id.rawValue == "dft-process-qualification-evidence")
-        #expect(bundle.downstreamEvidence.count == 4)
-    }
-
-    @Test("release rejects process evidence scoped to another PDK")
-    func blocksMismatchedProcessQualificationEvidence() async throws {
-        let fixture = try await makeReleaseFixture(includeApproval: true)
-        defer { removeRoot(fixture.root) }
-        var request = fixture.request
-        request.pdk.digest = String(repeating: "f", count: 64)
-        try DFTArtifactJSONEncoder().encode(request).write(
-            to: fixture.root.appending(path: "dft-request.json"),
-            options: .atomic
-        )
-
-        let result = try await releaseExecutor().execute(
-            stage: releaseStage(),
-            context: try await makeContext(
-                root: fixture.root,
-                runID: request.runID,
-                approval: fixture.approval
-            )
-        )
-
-        #expect(result.status == .blocked)
-        #expect(result.diagnostics.contains {
-            $0.code == "DFT_RELEASE_PROCESS_EVIDENCE_INVALID"
-                && $0.message.contains("PDK")
-        })
-    }
-
-    private func releaseExecutor() -> DFTReleaseFlowStageExecutor {
-        DFTReleaseFlowStageExecutor(
-            stageID: "dft.release",
-            requestInput: .path("dft-request.json"),
-            resultInput: .path("dft-result.json"),
-            downstreamEvidenceInput: .path("dft-downstream.json"),
-            processQualificationEvidenceInput: .path("dft-process-qualification-evidence.json")
-        )
-    }
-
-    private func releaseStage() -> FlowStageDefinition {
-        FlowStageDefinition(
-            stageID: "dft.release",
-            displayName: "DFT release",
-            requiresApproval: true
-        )
-    }
-
-    private func makeReleaseFixture(
-        includeApproval: Bool
-    ) async throws -> ReleaseFixture {
-        let root = try makeRoot()
-        let now = Date()
-        let buildRequest = try makeProcessQualificationBuildRequest(
-            root: root,
-            processID: "fixture-process",
-            toolID: "qualified-scan",
-            implementationID: "qualified-scan",
-            now: now
-        )
-        let designArtifact = try writeArtifact(
-            root: root,
-            path: "design.json",
-            artifactID: "design",
-            data: Data("{\"kind\":\"source-design\"}".utf8),
-            kind: .netlist,
-            role: .input
-        )
-        let request = try makeRequest(
-            root: root,
-            runID: "dft-release-run",
-            designArtifact: designArtifact,
-            designDigest: designArtifact.digest.hexadecimalValue,
-            pdkArtifact: buildRequest.identityArtifacts.pdk,
-            pdkDigest: buildRequest.scope.pdkDigest ?? ""
-        )
-        let transformedArtifact = try writeArtifact(
-            root: root,
-            path: "dft/runs/\(request.runID)/transformed-design.json",
-            artifactID: "transformed-design",
-            data: Data("{\"kind\":\"transformed-design\"}".utf8),
-            kind: .netlist
-        )
-        let diffArtifact = try writeArtifact(
-            root: root,
-            path: "dft/runs/\(request.runID)/design-diff.json",
-            artifactID: "design-diff",
-            data: Data("{\"kind\":\"design-diff\"}".utf8),
-            kind: .designDiff
-        )
-        let result = DFTResult(
-            schemaVersion: DFTRequest.currentSchemaVersion,
-            runID: request.runID,
-            status: .completed,
-            artifacts: [transformedArtifact, diffArtifact],
-            provenance: try ExecutionProvenance(
-                producer: ProducerIdentity(
-                    kind: .engine,
-                    identifier: "qualified-scan",
-                    version: "1.0.0"
-                ),
-                startedAt: now.addingTimeInterval(-5),
-                completedAt: now.addingTimeInterval(-4)
-            ),
-            payload: DFTPayload(
-                transformedDesign: LogicDesignReference(
-                    artifact: transformedArtifact,
-                    topDesignName: "top",
-                    designDigest: request.design.designDigest
-                ),
-                faultCoverage: nil,
-                designDiff: DFTDesignDiff(
-                    runID: request.runID,
-                    title: "Qualified scan insertion",
-                    actor: "dft-engine",
-                    baseSnapshot: designArtifact,
-                    proposedSnapshot: transformedArtifact,
-                    changes: []
-                ),
-                evidenceProvenance: DFTEvidenceProvenance(
-                    status: .oracleCorrelated,
-                    corpusRevision: "dft-corpus-r1",
-                    oracleEvidence: String(repeating: "b", count: 64),
-                    processID: request.pdk.processID,
-                    pdkDigest: request.pdk.digest
-                )
-            )
-        )
-        try DFTArtifactJSONEncoder().encode(request).write(
-            to: root.appending(path: "dft-request.json"),
-            options: .atomic
-        )
-        try DFTArtifactJSONEncoder().encode(result).write(
-            to: root.appending(path: "dft-result.json"),
-            options: .atomic
-        )
-        let processEvidence = try await ToolProcessQualificationEvidenceBuilder().build(
-            buildRequest,
-            reading: LocalToolQualificationArtifactReader(workspaceRoot: root),
-            at: now
-        )
-        try processEvidence.canonicalData().write(
-            to: root.appending(path: "dft-process-qualification-evidence.json"),
-            options: .atomic
-        )
-        let downstreamEvidence = try [
-            DFTReleaseDownstreamEvidence.Domain.equivalence,
-            .drc,
-            .lvs,
-            .pex,
-        ].map { domain in
-            let artifact = try writeArtifact(
-                root: root,
-                path: "signoff/\(domain.rawValue).json",
-                artifactID: "\(domain.rawValue)-report",
-                data: Data("{\"domain\":\"\(domain.rawValue)\",\"status\":\"passed\"}".utf8),
-                kind: .report
-            )
-            return DFTReleaseDownstreamEvidence(
-                domain: domain,
-                role: "\(domain.rawValue)-signoff",
-                artifact: artifact
-            )
-        }
-        try DFTArtifactJSONEncoder().encode(downstreamEvidence).write(
-            to: root.appending(path: "dft-downstream.json"),
-            options: .atomic
-        )
-        let approval: FlowApprovalRecord?
-        if includeApproval {
-            let plan = try writeArtifact(
-                root: root,
-                path: "review/plan.json",
-                artifactID: "dft-release-review-plan",
-                data: Data("{\"review\":\"plan\"}".utf8),
-                kind: .report
-            )
-            let stageResult = try writeArtifact(
-                root: root,
-                path: "review/stage-result.json",
-                artifactID: "dft-release-review-stage-result",
-                data: Data("{\"review\":\"stage-result\"}".utf8),
-                kind: .report
-            )
-            approval = FlowApprovalRecord(
-                runID: request.runID,
-                stageID: "dft.release",
-                verdict: .approved,
-                reviewer: "human-reviewer",
-                note: "Reviewed DFT and downstream signoff evidence.",
-                evidence: FlowApprovalEvidenceBinding(plan: plan, stageResult: stageResult)
-            )
-        } else {
-            approval = nil
-        }
-        return ReleaseFixture(root: root, request: request, approval: approval)
     }
 
     private func makeProcessQualificationBuildRequest(
@@ -901,10 +591,4 @@ struct DFTFlowStageExecutorTests {
             Issue.record("Failed to remove temporary root: \(error.localizedDescription)")
         }
     }
-}
-
-private struct ReleaseFixture {
-    var root: URL
-    var request: DFTRequest
-    var approval: FlowApprovalRecord?
 }

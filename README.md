@@ -78,13 +78,13 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `ArtifactReference`s, and blocks unavailable infrastructure without fabricating signoff output |
-| `DFTQualificationFlowStageExecutor` / `DFTReleaseFlowStageExecutor` | Correlates retained DFT oracle cases, persists request-digest-bound qualification provenance, validates independent ToolQualification process evidence, bundles equivalence/DRC/LVS/PEX artifacts, and drives immutable release eligibility or review/resume artifacts |
+| `DFTFlowStageExecutor` / `DFTQualificationFlowStageExecutor` | Runs typed DFT requests and correlates retained oracle cases into raw, request-bound evidence for ToolQualification |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
 | `TimingSTAFlowStageExecutor` / `TimingSIFlowStageExecutor` | Invoke TimingEngine protocols directly and read every design, library, constraint, PDK, and parasitic input through `LocalArtifactVerifier` before analysis |
 | `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
 | Electrical corpus stage | Persists raw corpus and independent-oracle observations for ToolQualification without issuing trust |
-| `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, re-hashes reviewed artifacts on resume, and delegates approval validation to `PhysicalDesignReviewGate` |
+| `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, and delegates reviewed-artifact integrity validation to `PhysicalDesignArtifactReviewValidator` |
 
 PDK external inspection is selected by adding `externalProcess` to a tagged
 `pdkStandardView` or `pdkRuleDeck` runtime executor. The configuration is
@@ -96,18 +96,11 @@ still subject to `PDKKit` schema, run, asset, format, source-reference and
 digest-bound validation; process completion alone never promotes tool trust or
 process qualification.
 
-DFT release is selected through the tagged `dft` runtime executor. A
-production release entry must provide the DFT request/result, downstream
-evidence, retained qualification provenance and a
-`releaseProcessQualificationEvidencePath` or a stage-bound
-`releaseProcessQualificationEvidenceInput`. The DFT qualification stage can
-also build that independent record from an artifact-backed
-`qualificationProcessEvidenceBuildPath`. The release adapter validates
-the independent ToolQualification record against the DFT tool, implementation,
-process profile and PDK digest before recording it in the immutable eligibility
-artifact and the immutable `dft-release-artifact-bundle.json` release packet. When the evidence is stage-bound, the packet also retains the qualification build request and all support-artifact references, then re-verifies every named reference before persistence.
-Missing or mismatched evidence blocks the stage and creates a review/resume
-artifact.
+DFT execution and qualification use distinct `dftExecution` and
+`dftQualification` runtime cases. DFT stages produce raw results, oracle
+correlation, and optional process-evidence build outputs; they do not issue
+release eligibility. `ReleaseEngine` consumes validated signoff evidence and
+`DesignFlowKernel` owns approval, waiver, review, and resume.
 
 ```mermaid
 flowchart LR

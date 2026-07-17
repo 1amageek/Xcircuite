@@ -28,7 +28,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case logicSynthesis(LogicSynthesis)
     case logicEquivalence(LogicEquivalence)
     case logicEvidenceValidation(LogicEvidenceValidation)
-    case dft(DFT)
+    case dftExecution(DFTExecution)
+    case dftQualification(DFTQualification)
     case physicalReview(PhysicalReview)
     case pdkDiscovery(PDKDiscovery)
     case pdkValidation(PDKValidation)
@@ -170,42 +171,40 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         }
     }
 
-    public struct DFT: Sendable, Hashable, Codable {
+    public struct DFTExecution: Sendable, Hashable, Codable {
         public var stageID: String
         public var requestPath: String
-        public var qualificationCorpusPath: String?
-        public var qualificationObservationsPath: String?
-        public var qualificationProcessEvidenceBuildPath: String?
-        public var releaseResultPath: String?
-        public var releaseProcessQualificationEvidencePath: String?
-        public var releaseProcessQualificationEvidenceInput: XcircuiteFlowInputReference?
-        public var releaseDownstreamEvidencePath: String?
-        public var releaseEvidenceSources: [DFTReleaseDownstreamEvidenceSource]?
         public var tool: XcircuiteFlowToolSpec
 
         public init(
             stageID: String,
             requestPath: String,
-            qualificationCorpusPath: String? = nil,
-            qualificationObservationsPath: String? = nil,
-            qualificationProcessEvidenceBuildPath: String? = nil,
-            releaseResultPath: String? = nil,
-            releaseProcessQualificationEvidencePath: String? = nil,
-            releaseProcessQualificationEvidenceInput: XcircuiteFlowInputReference? = nil,
-            releaseDownstreamEvidencePath: String? = nil,
-            releaseEvidenceSources: [DFTReleaseDownstreamEvidenceSource]? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
             self.requestPath = requestPath
-            self.qualificationCorpusPath = qualificationCorpusPath
-            self.qualificationObservationsPath = qualificationObservationsPath
-            self.qualificationProcessEvidenceBuildPath = qualificationProcessEvidenceBuildPath
-            self.releaseResultPath = releaseResultPath
-            self.releaseProcessQualificationEvidencePath = releaseProcessQualificationEvidencePath
-            self.releaseProcessQualificationEvidenceInput = releaseProcessQualificationEvidenceInput
-            self.releaseDownstreamEvidencePath = releaseDownstreamEvidencePath
-            self.releaseEvidenceSources = releaseEvidenceSources
+            self.tool = tool
+        }
+    }
+
+    public struct DFTQualification: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var corpusInput: XcircuiteFlowInputReference
+        public var observationsInput: XcircuiteFlowInputReference
+        public var processQualificationEvidenceBuildInput: XcircuiteFlowInputReference?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "dft.qualification",
+            corpusInput: XcircuiteFlowInputReference,
+            observationsInput: XcircuiteFlowInputReference,
+            processQualificationEvidenceBuildInput: XcircuiteFlowInputReference? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.corpusInput = corpusInput
+            self.observationsInput = observationsInput
+            self.processQualificationEvidenceBuildInput = processQualificationEvidenceBuildInput
             self.tool = tool
         }
     }
@@ -213,18 +212,18 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     public struct PhysicalReview: Sendable, Hashable, Codable {
         public var stageID: String
         public var manifestInput: XcircuiteFlowInputReference
-        public var decisionScope: [String]
+        public var reviewScope: [String]
         public var tool: XcircuiteFlowToolSpec
 
         public init(
             stageID: String = "physical.review",
             manifestInput: XcircuiteFlowInputReference,
-            decisionScope: [String] = ["proposed_layout", "design_diff", "implementation_configuration"],
+            reviewScope: [String] = ["proposed_layout", "design_diff", "implementation_configuration"],
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
             self.manifestInput = manifestInput
-            self.decisionScope = decisionScope
+            self.reviewScope = reviewScope
             self.tool = tool
         }
     }
@@ -688,7 +687,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case logicSynthesis
         case logicEquivalence
         case logicEvidenceValidation
-        case dft
+        case dftExecution
+        case dftQualification
         case physicalReview
         case pdkDiscovery
         case pdkValidation
@@ -729,8 +729,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .logicEquivalence(try container.decode(LogicEquivalence.self, forKey: .value))
         case .logicEvidenceValidation:
             self = .logicEvidenceValidation(try container.decode(LogicEvidenceValidation.self, forKey: .value))
-        case .dft:
-            self = .dft(try container.decode(DFT.self, forKey: .value))
+        case .dftExecution:
+            self = .dftExecution(try container.decode(DFTExecution.self, forKey: .value))
+        case .dftQualification:
+            self = .dftQualification(try container.decode(DFTQualification.self, forKey: .value))
         case .physicalReview:
             self = .physicalReview(try container.decode(PhysicalReview.self, forKey: .value))
         case .pdkDiscovery:
@@ -795,8 +797,11 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .logicEvidenceValidation(let value):
             try container.encode(Kind.logicEvidenceValidation, forKey: .kind)
             try container.encode(value, forKey: .value)
-        case .dft(let value):
-            try container.encode(Kind.dft, forKey: .kind)
+        case .dftExecution(let value):
+            try container.encode(Kind.dftExecution, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .dftQualification(let value):
+            try container.encode(Kind.dftQualification, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .physicalReview(let value):
             try container.encode(Kind.physicalReview, forKey: .kind)
@@ -940,59 +945,24 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 stageID: spec.stageID,
                 reportInput: .path(spec.reportPath)
             )
-        case .dft(let spec):
-            if let sources = spec.releaseEvidenceSources {
-                return DFTReleaseDownstreamEvidenceBundleFlowStageExecutor(
-                    stageID: spec.stageID,
-                    sources: sources
-                )
-            }
-            if let corpusPath = spec.qualificationCorpusPath {
-                guard let observationsPath = spec.qualificationObservationsPath else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "qualificationObservationsPath"
-                    )
-                }
-                return DFTQualificationFlowStageExecutor(
-                    stageID: spec.stageID,
-                    corpusInput: .path(corpusPath),
-                    observationsInput: .path(observationsPath),
-                    processQualificationEvidenceBuildInput: spec.qualificationProcessEvidenceBuildPath.map { .path($0) }
-                )
-            }
-            if let resultPath = spec.releaseResultPath {
-                guard let downstreamEvidencePath = spec.releaseDownstreamEvidencePath else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseDownstreamEvidencePath"
-                    )
-                }
-                guard let processQualificationEvidenceInput = spec.releaseProcessQualificationEvidenceInput
-                    ?? spec.releaseProcessQualificationEvidencePath.map({ .path($0) }) else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseProcessQualificationEvidenceInput"
-                    )
-                }
-                return DFTReleaseFlowStageExecutor(
-                    stageID: spec.stageID,
-                    requestInput: .path(spec.requestPath),
-                    resultInput: .path(resultPath),
-                    downstreamEvidenceInput: .path(downstreamEvidencePath),
-                    processQualificationEvidenceInput: processQualificationEvidenceInput
-                )
-            }
+        case .dftExecution(let spec):
             return DFTFlowStageExecutor(
                 stageID: spec.stageID,
                 toolID: "dft-engine",
                 requestInput: .path(spec.requestPath)
             )
+        case .dftQualification(let spec):
+            return DFTQualificationFlowStageExecutor(
+                stageID: spec.stageID,
+                corpusInput: spec.corpusInput,
+                observationsInput: spec.observationsInput,
+                processQualificationEvidenceBuildInput: spec.processQualificationEvidenceBuildInput
+            )
         case .physicalReview(let spec):
             return PhysicalDesignReviewFlowStageExecutor(
                 stageID: spec.stageID,
                 manifestInput: spec.manifestInput,
-                decisionScope: spec.decisionScope
+                reviewScope: spec.reviewScope
             )
         case .pdkDiscovery(let spec):
             return PDKDiscoveryFlowStageExecutor.local(
@@ -1199,16 +1169,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             LogicToolDescriptors.equivalence()
         case .logicEvidenceValidation:
             LogicToolDescriptors.evidenceValidation()
-        case .dft(let spec):
-            if spec.releaseEvidenceSources != nil {
-                DFTToolDescriptors.release()
-            } else if spec.qualificationCorpusPath != nil || spec.qualificationObservationsPath != nil {
-                DFTToolDescriptors.qualification()
-            } else if spec.releaseResultPath != nil {
-                DFTToolDescriptors.release()
-            } else {
-                DFTToolDescriptors.engine()
-            }
+        case .dftExecution:
+            DFTToolDescriptors.engine()
+        case .dftQualification:
+            DFTToolDescriptors.qualification()
         case .physicalReview:
             PhysicalDesignToolDescriptors.review()
         case .pdkDiscovery:
@@ -1299,7 +1263,9 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             spec.tool
         case .logicEvidenceValidation(let spec):
             spec.tool
-        case .dft(let spec):
+        case .dftExecution(let spec):
+            spec.tool
+        case .dftQualification(let spec):
             spec.tool
         case .physicalReview(let spec):
             spec.tool

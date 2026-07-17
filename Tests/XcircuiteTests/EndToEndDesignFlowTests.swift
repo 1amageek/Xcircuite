@@ -175,10 +175,8 @@ struct EndToEndDesignFlowTests {
                 topDesignName: "e2e_top",
                 designDigest: logicDesignReference.digest.hexadecimalValue
             ),
-            constraints: TimingConstraintReference(
-                artifact: constraintsReference,
-                modeIDs: ["functional"]
-            ),
+            constraints: constraintsReference,
+            requestedModeIDs: ["functional"],
             pdk: PDKReference(
                 manifest: pdkReference,
                 processID: "fixture-process",

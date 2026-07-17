@@ -5,7 +5,6 @@ import LogicIR
 import PDKCore
 import PhysicalDesignCore
 import Testing
-import TimingCore
 import ToolQualification
 @testable import Xcircuite
 
@@ -24,10 +23,8 @@ struct PhysicalDesignFlowStageExecutorTests {
                 topDesignName: "adapter_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
-            constraints: TimingConstraintReference(
-                artifact: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
-                modeIDs: ["func"]
-            ),
+            constraints: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
+            requestedModeIDs: ["func"],
             pdk: PDKReference(
                 manifest: try fixtureReference(path: "inputs/pdk.json", kind: .technology, format: .json),
                 processID: "fixture-130nm",
@@ -83,10 +80,8 @@ struct PhysicalDesignFlowStageExecutorTests {
                 topDesignName: "adapter_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
-            constraints: TimingConstraintReference(
-                artifact: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
-                modeIDs: ["func"]
-            ),
+            constraints: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
+            requestedModeIDs: ["func"],
             pdk: PDKReference(
                 manifest: try fixtureReference(path: "inputs/pdk.json", kind: .technology, format: .json),
                 processID: "fixture-130nm",
@@ -122,7 +117,7 @@ struct PhysicalDesignFlowStageExecutorTests {
         #expect(result.diagnostics.contains { $0.code == "PHYSICAL_DESIGN_STAGE_MISMATCH" })
     }
 
-    @Test("physical review persists a packet and resumes through the native gate")
+    @Test("physical review persists a packet and resumes through the flow approval gate")
     func physicalReviewApprovalResumesFlow() async throws {
         let root = try makeRoot(name: "physical-design-review-resume")
         defer { removeRoot(root) }
@@ -135,10 +130,8 @@ struct PhysicalDesignFlowStageExecutorTests {
                 topDesignName: "review_top",
                 designDigest: String(repeating: "b", count: 64)
             ),
-            constraints: TimingConstraintReference(
-                artifact: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
-                modeIDs: ["func"]
-            ),
+            constraints: try fixtureReference(path: "inputs/constraints.sdc", kind: .constraint, format: .sdc),
+            requestedModeIDs: ["func"],
             pdk: PDKReference(
                 manifest: try fixtureReference(path: "inputs/pdk.json", kind: .technology, format: .json),
                 processID: "fixture-130nm",

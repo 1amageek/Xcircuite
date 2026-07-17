@@ -54,30 +54,4 @@ public enum DFTToolDescriptors {
             )
         )
     }
-
-    public static func release() -> ToolDescriptor {
-        ToolDescriptor(
-            toolID: "dft-release-gate",
-            displayName: "DFT Release Gate",
-            kind: .reporting,
-            version: "1.0.0",
-            capabilities: [
-                ToolCapability(
-                    operationID: "release-dft",
-                    inputFormats: [.json],
-                    outputFormats: [.json]
-                )
-            ],
-            trustProfile: ToolTrustProfile(
-                level: .unknown,
-                knownLimitations: [
-                    "Release requires independently validated process qualification evidence, process-qualified DFT provenance, downstream signoff artifacts and explicit review approval."
-                ]
-            ),
-            environment: ToolEnvironment(
-                executablePath: "in-process",
-                platform: "macOS"
-            )
-        )
-    }
 }

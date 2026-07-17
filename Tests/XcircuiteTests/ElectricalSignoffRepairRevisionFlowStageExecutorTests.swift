@@ -101,10 +101,8 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
                 topDesignName: "top",
                 designDigest: designDigest
             ),
-            constraints: TimingConstraintReference(
-                artifact: constraintReference,
-                modeIDs: ["functional"]
-            ),
+            constraints: constraintReference,
+            requestedModeIDs: ["functional"],
             pdk: PDKReference(
                 manifest: pdkReference,
                 processID: "fixture",

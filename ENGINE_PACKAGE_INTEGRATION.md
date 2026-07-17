@@ -121,9 +121,11 @@ PhysicalDesignEngine also exposes `PhysicalDesignReviewFlowStageExecutor` as
 the Xcircuite human-review boundary. It persists the native immutable review
 packet under the run stage, lets `DesignFlowKernel` record the approval, and
 re-validates the packet manifest and referenced artifact digests before the same
-run resumes through `PhysicalDesignReviewGate`. This retained boundary proves
-review/approval/resume integrity; it remains separate from DRC/LVS/PEX, timing,
-external-oracle correlation, and process qualification.
+run resumes through the flow-owned approval contract. `PhysicalDesignArtifactReviewValidator`
+only validates domain artifacts; it does not own approval, resume, or release
+authorization. This retained boundary proves review-artifact integrity; it
+remains separate from DRC/LVS/PEX, timing, external-oracle correlation, and
+process qualification.
 
 ## Completion evidence
 

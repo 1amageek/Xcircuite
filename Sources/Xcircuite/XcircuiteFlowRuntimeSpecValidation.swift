@@ -113,125 +113,30 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "reportPath"
                 )
             }
-        case .dft(let spec):
-            if let sources = spec.releaseEvidenceSources {
-                guard !sources.isEmpty else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseEvidenceSources"
-                    )
-                }
-                guard spec.qualificationCorpusPath == nil,
-                      spec.qualificationObservationsPath == nil,
-                      spec.qualificationProcessEvidenceBuildPath == nil,
-                      spec.releaseResultPath == nil,
-                      spec.releaseProcessQualificationEvidencePath == nil,
-                      spec.releaseProcessQualificationEvidenceInput == nil,
-                      spec.releaseDownstreamEvidencePath == nil else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "release evidence sources are mutually exclusive with other DFT inputs"
-                    )
-                }
-                return
-            }
-            guard !spec.requestPath.isEmpty else {
+        case .dftExecution(let spec):
+            guard !spec.requestPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
                     field: "requestPath"
                 )
             }
-            let qualificationPaths = [
-                spec.qualificationCorpusPath,
-                spec.qualificationObservationsPath,
-            ]
-            if qualificationPaths.contains(where: { $0 != nil }) {
-                guard let corpusPath = spec.qualificationCorpusPath,
-                      !corpusPath.isEmpty else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "qualificationCorpusPath"
-                    )
-                }
-                guard let observationsPath = spec.qualificationObservationsPath,
-                      !observationsPath.isEmpty else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "qualificationObservationsPath"
-                    )
-                }
-                if let buildPath = spec.qualificationProcessEvidenceBuildPath,
-                   buildPath.isEmpty {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "qualificationProcessEvidenceBuildPath"
-                    )
-                }
-                guard spec.releaseResultPath == nil,
-                      spec.releaseProcessQualificationEvidencePath == nil,
-                      spec.releaseProcessQualificationEvidenceInput == nil,
-                      spec.releaseDownstreamEvidencePath == nil else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "qualification and release inputs are mutually exclusive"
-                    )
-                }
-            } else if spec.qualificationProcessEvidenceBuildPath != nil {
-                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+        case .dftQualification(let spec):
+            try validateInput(spec.corpusInput, stageID: spec.stageID, field: "corpusInput")
+            try validateInput(spec.observationsInput, stageID: spec.stageID, field: "observationsInput")
+            if let buildInput = spec.processQualificationEvidenceBuildInput {
+                try validateInput(
+                    buildInput,
                     stageID: spec.stageID,
-                    field: "qualificationCorpusPath"
-                )
-            } else if spec.releaseResultPath != nil {
-                guard let downstreamEvidencePath = spec.releaseDownstreamEvidencePath,
-                      !downstreamEvidencePath.isEmpty else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseDownstreamEvidencePath"
-                    )
-                }
-                guard !spec.releaseResultPath!.isEmpty else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseResultPath"
-                    )
-                }
-                if let processQualificationPath = spec.releaseProcessQualificationEvidencePath,
-                   processQualificationPath.isEmpty {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "releaseProcessQualificationEvidencePath"
-                    )
-                }
-                if let processQualificationEvidenceInput = spec.releaseProcessQualificationEvidenceInput {
-                    try validateInput(
-                        processQualificationEvidenceInput,
-                        stageID: spec.stageID,
-                        field: "releaseProcessQualificationEvidenceInput"
-                    )
-                }
-                guard (spec.releaseProcessQualificationEvidencePath != nil)
-                        != (spec.releaseProcessQualificationEvidenceInput != nil) else {
-                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                        stageID: spec.stageID,
-                        field: "exactly one release process qualification evidence input"
-                    )
-                }
-            } else if spec.releaseDownstreamEvidencePath != nil
-                        || spec.releaseProcessQualificationEvidencePath != nil
-                        || spec.releaseProcessQualificationEvidenceInput != nil
-                        || spec.qualificationProcessEvidenceBuildPath != nil {
-                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
-                    stageID: spec.stageID,
-                    field: "releaseResultPath"
+                    field: "processQualificationEvidenceBuildInput"
                 )
             }
         case .physicalReview(let spec):
             try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
-            guard !spec.decisionScope.isEmpty,
-                  Set(spec.decisionScope).count == spec.decisionScope.count else {
+            guard !spec.reviewScope.isEmpty,
+                  Set(spec.reviewScope).count == spec.reviewScope.count else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
-                    field: "decisionScope"
+                    field: "reviewScope"
                 )
             }
         case .pdkDiscovery(let spec):
@@ -472,7 +377,9 @@ private extension XcircuiteFlowStageExecutorSpec {
             spec.tool
         case .logicEvidenceValidation(let spec):
             spec.tool
-        case .dft(let spec):
+        case .dftExecution(let spec):
+            spec.tool
+        case .dftQualification(let spec):
             spec.tool
         case .physicalReview(let spec):
             spec.tool
