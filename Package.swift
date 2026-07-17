@@ -5,13 +5,20 @@ import Foundation
 let workspaceRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
+let isLSIWorkspace = FileManager.default.fileExists(
+    atPath: workspaceRoot
+        .appendingPathComponent("docs")
+        .appendingPathComponent("workspace-packages.json")
+        .path
+)
 
 func workspaceDependency(named name: String, revision: String) -> Package.Dependency {
     let siblingManifest = workspaceRoot
         .appendingPathComponent(name)
         .appendingPathComponent("Package.swift")
 
-    if FileManager.default.fileExists(atPath: siblingManifest.path) {
+    if isLSIWorkspace,
+       FileManager.default.fileExists(atPath: siblingManifest.path) {
         return .package(path: "../\(name)")
     }
 
