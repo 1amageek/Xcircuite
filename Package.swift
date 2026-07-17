@@ -35,31 +35,31 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ToolQualification",
-            revision: "1856a1bc5660febbe2f0358d3e5e0262e496b3d3"
+            revision: "81305bc9e603e0fbd6a9bda9084e13d3f59814f0"
         ),
         workspaceDependency(
             named: "DesignFlowKernel",
-            revision: "5a8e7452bc04e10455f64b380aad8ffc7645371b"
+            revision: "5159da1cb7b7c91a6b7bf92a8ec68daf49820a2b"
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "1fe16e33b370d8123071e296095261d4e8f8b21d"
+            revision: "c4f6ffcdf710d2a3cbf8454a9b9a951c9d3b45b1"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "6787b1dead085e5073f8a7cec10a2cf5c7d14037"
+            revision: "9e7c367c7c08ee3a8b9a9b87d9afaf7fade042a9"
         ),
         workspaceDependency(
             named: "PEXEngine",
-            revision: "e60a3b1fdb27879fd95c41a81c313750f7a45485"
+            revision: "f53859d6d87c4504bad4c59e29a9ef1befcd2ab8"
         ),
         workspaceDependency(
             named: "CoreSpice",
-            revision: "20d5663a05b9dd98acc1171a8936eda22713add1"
+            revision: "e38a574d64c8702c60db617393da86cccbe7e987"
         ),
         workspaceDependency(
             named: "semiconductor-layout",
-            revision: "eb4f8ac93dbe4c35410ae55e6bb00794376c8333"
+            revision: "fa8f27852bc251fb340dfcfa261f2b3a0a408d1a"
         ),
         workspaceDependency(
             named: "SignoffToolSupport",
@@ -75,31 +75,31 @@ let package = Package(
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "0fecd6f568c7c21ec98ddc3b96aad8eacac44c8c"
+            revision: "9189b6dba804191d664eeae334fc429fa74ba421"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "c8b51432501d67b5b790032dbb9ce150cf1f69ea"
+            revision: "68635cf5ea11c8c710ab0aa6efb26aae867d4b97"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "b76251c49f2eca89cacd549f864b7fb1f5acd832"
+            revision: "1dd869df365d83981f9db910db724cdae25a22a4"
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "e9547539f8f9522c300c4aa9ee3d983049d50bc4"
+            revision: "c332d850ac62c6147f1c9ce960f11768b1a2299c"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "43e4c92c03386a3bbce8311e146ec5bdce41b229"
+            revision: "ef04beea945c122a0185ac0da08af285c43aa809"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "136aab262566e66dc3783dbcaaee6e290ff3df28"
+            revision: "985202488ab6adb39487db6b2f67a20c0c806337"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "2fd9c5c787537702279d0ab7f5661dcc12abf4ec"
+            revision: "00b6ba866780b43b9b4e143f2133dc654a17c293"
         ),
     ],
     targets: [
