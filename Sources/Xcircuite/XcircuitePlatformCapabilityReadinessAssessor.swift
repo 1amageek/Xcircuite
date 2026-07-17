@@ -304,7 +304,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 if !usesTimeoutWrapper(evidence.command) {
                     appendDiagnostic(
                         code: "test-evidence-command-timeout-missing",
-                        message: "Test evidence command must use a timeout wrapper: \(subject)."
+                        message: "Test evidence command must use a timeout wrapper bounded to 120 seconds: \(subject)."
                     )
                 }
                 if !usesXcodebuildTest(evidence.command) {
@@ -422,7 +422,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         guard command.count >= 5 else { return false }
         guard command[0] == "perl", command[1] == "-e" else { return false }
         guard command[2].contains("alarm shift"), command[2].contains("exec @ARGV") else { return false }
-        guard let timeout = Int(command[3]), timeout > 0 else { return false }
+        guard let timeout = Int(command[3]), timeout > 0, timeout <= 120 else { return false }
         return true
     }
 
@@ -630,9 +630,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 packagePath: "Xcircuite",
                 command: xcodebuildTestCommand(
                     scheme: "Xcircuite-Package",
-                    onlyTesting: "XcircuiteTests/XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages"
+                    onlyTesting: "XcircuiteTests/XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages()"
                 ),
-                testFilter: "XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages",
+                testFilter: "XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages()",
                 coveredMilestoneIDs: ["standalone-local-signoff"],
                 coveredRequirementKinds: ["operation", "artifact", "verification-gate"],
                 evidenceArtifacts: ["run-manifest", "progress-events", "stage-artifacts"]
@@ -654,9 +654,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 packagePath: "Xcircuite",
                 command: xcodebuildTestCommand(
                     scheme: "Xcircuite-Package",
-                    onlyTesting: "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord"
+                    onlyTesting: "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord()"
                 ),
-                testFilter: "XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord",
+                testFilter: "XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord()",
                 coveredMilestoneIDs: ["agent-operable-design-loop", "human-review-audit"],
                 coveredRequirementKinds: ["operation", "artifact", "verification-gate", "human-review"],
                 evidenceArtifacts: ["planning/plan-verification.json", "actions.jsonl"]
@@ -666,9 +666,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 packagePath: "Xcircuite",
                 command: xcodebuildTestCommand(
                     scheme: "Xcircuite-Package",
-                    onlyTesting: "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate"
+                    onlyTesting: "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate()"
                 ),
-                testFilter: "XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate",
+                testFilter: "XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate()",
                 coveredMilestoneIDs: ["human-review-audit"],
                 coveredRequirementKinds: ["approval-gate", "human-review"],
                 evidenceArtifacts: ["approval-record", "planning/plan-verification.json"]
@@ -678,9 +678,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 packagePath: "DRCEngine",
                 command: xcodebuildTestCommand(
                     scheme: "DRCEngine-Package",
-                    onlyTesting: "DRCEngineTests/DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope"
+                    onlyTesting: "DRCCLICoreTests/DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()"
                 ),
-                testFilter: "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope",
+                testFilter: "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()",
                 coveredMilestoneIDs: ["standard-format-grounding"],
                 coveredRequirementKinds: ["standard-format", "artifact", "cli-json"],
                 evidenceArtifacts: ["layout-tech-database", "drc-foundry-rule-import-report"]
@@ -702,9 +702,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 packagePath: "Xcircuite",
                 command: xcodebuildTestCommand(
                     scheme: "Xcircuite-Package",
-                    onlyTesting: "XcircuiteTests/PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass"
+                    onlyTesting: "XcircuiteTests/PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass()"
                 ),
-                testFilter: "PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass",
+                testFilter: "PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass()",
                 coveredMilestoneIDs: ["post-layout-improvement-loop"],
                 coveredRequirementKinds: ["post-layout", "artifact", "verification-gate"],
                 evidenceArtifacts: ["post-layout-comparison"]
@@ -714,9 +714,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 packagePath: "Xcircuite",
                 command: xcodebuildTestCommand(
                     scheme: "Xcircuite-Package",
-                    onlyTesting: "XcircuiteTests/XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses"
+                    onlyTesting: "XcircuiteTests/XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses()"
                 ),
-                testFilter: "XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses",
+                testFilter: "XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses()",
                 coveredMilestoneIDs: ["agent-operable-design-loop", "post-layout-improvement-loop"],
                 coveredRequirementKinds: ["repair-loop", "feedback", "simulation-metric-gate"],
                 evidenceArtifacts: ["planning/numeric-repair-loop.json", "planning/rejected-plans.jsonl"]
@@ -725,7 +725,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
     }
 
     private func xcodebuildTestCommand(
-        timeoutSeconds: Int = 180,
+        timeoutSeconds: Int = 120,
         scheme: String,
         onlyTesting: String
     ) -> [String] {

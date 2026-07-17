@@ -118,6 +118,27 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.milestones.allSatisfy { $0.status == .passed })
     }
 
+    @Test func defaultTestEvidenceUsesExecutableXcodeIdentifiersAndBoundedTimeouts() throws {
+        let report = try XcircuitePlatformCapabilityReadinessAssessor().assess(
+            runID: "default-evidence-command-contract",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+
+        #expect(report.testEvidence.count == Self.expectedDefaultTestEvidence.count)
+        for evidence in report.testEvidence {
+            let expected = try #require(Self.expectedDefaultTestEvidence[evidence.evidenceID])
+            #expect(evidence.testFilter == expected.testFilter)
+            #expect(evidence.command.prefix(4).elementsEqual([
+                "perl", "-e", "alarm shift; exec @ARGV", "120",
+            ]))
+            #expect(evidence.command.contains("xcodebuild"))
+            #expect(evidence.command.contains("test"))
+            #expect(evidence.command.contains("-scheme"))
+            #expect(evidence.command.contains(expected.scheme))
+            #expect(evidence.command.contains("-only-testing:\(expected.onlyTesting)"))
+        }
+    }
+
     @Test func platformCapabilityCLIEmitsDecodableReadinessReport() async throws {
         let json = try await XcircuiteFlowCLICommand.run(arguments: [
             "inspect-platform-capabilities",
@@ -152,7 +173,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.testEvidence.contains {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
                 && $0.packagePath == "DRCEngine"
-                && $0.testFilter == "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope"
+                && $0.testFilter == "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()"
         })
         #expect(report.nextActions.contains("run-test-evidence:drc-foundry-rule-import-agent-envelope"))
         #expect(report.milestones.allSatisfy { !$0.requiredOperations.required.isEmpty })
@@ -435,11 +456,11 @@ struct XcircuitePlatformCapabilityReadinessTests {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
         invalidEvidence[evidenceIndex].command = [
-            "perl", "-e", "alarm shift; exec @ARGV", "180",
+            "perl", "-e", "alarm shift; exec @ARGV", "120",
             "xcodebuild", "test",
             "-scheme", "DRCEngine-Package",
             "-destination", "platform=macOS",
-            "-only-testing:DRCEngineTests/DRCCLIOptionsTests/otherTest",
+            "-only-testing:DRCCLICoreTests/DRCCLIOptionsTests/otherTest()",
         ]
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "test-evidence-filter-gap",
@@ -482,10 +503,39 @@ struct XcircuitePlatformCapabilityReadinessTests {
             "xcodebuild", "test",
             "-scheme", "DRCEngine-Package",
             "-destination", "platform=macOS",
-            "-only-testing:DRCEngineTests/DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope",
+            "-only-testing:DRCCLICoreTests/DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()",
         ]
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "test-evidence-timeout-gap",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+
+        let report = assessor.assess(
+            actionDomainSnapshot: snapshot,
+            testEvidence: invalidEvidence
+        )
+
+        #expect(report.status == .failed)
+        #expect(report.summary.invalidTestEvidenceCount == 1)
+        #expect(report.diagnostics.contains {
+            $0.code == "test-evidence-command-timeout-missing"
+                && $0.nextActions.contains("fix-test-evidence:drc-foundry-rule-import-agent-envelope")
+        })
+    }
+
+    @Test func assessorRejectsRequiredTestEvidenceWhoseTimeoutExceedsLimit() async throws {
+        let assessor = XcircuitePlatformCapabilityReadinessAssessor()
+        let baseline = try assessor.assess(
+            runID: "test-evidence-baseline",
+            generatedAt: "2026-06-28T00:00:00Z"
+        )
+        var invalidEvidence = syntheticallyPassedExecutionEvidence(from: baseline)
+        let evidenceIndex = try #require(invalidEvidence.firstIndex {
+            $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
+        })
+        invalidEvidence[evidenceIndex].command[3] = "121"
+        let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
+            runID: "test-evidence-timeout-over-limit",
             generatedAt: "2026-06-28T00:00:00Z"
         )
 
@@ -513,9 +563,9 @@ struct XcircuitePlatformCapabilityReadinessTests {
             $0.evidenceID == "drc-foundry-rule-import-agent-envelope"
         })
         invalidEvidence[evidenceIndex].command = [
-            "perl", "-e", "alarm shift; exec @ARGV", "180",
+            "perl", "-e", "alarm shift; exec @ARGV", "120",
             "swift", "test", "--filter",
-            "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope",
+            "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()",
         ]
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "test-evidence-runner-gap",
@@ -799,6 +849,51 @@ struct XcircuitePlatformCapabilityReadinessTests {
         "xci-platform-readiness-contract",
         "xci-post-layout-comparison-gate",
         "xci-numeric-repair-loop-feedback",
+    ]
+
+    private static let expectedDefaultTestEvidence: [
+        String: (scheme: String, testFilter: String, onlyTesting: String)
+    ] = [
+        "xci-runtime-local-signoff-flow": (
+            "Xcircuite-Package",
+            "XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages()",
+            "XcircuiteTests/XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages()"
+        ),
+        "xci-signoff-stage-artifact-gates": (
+            "Xcircuite-Package",
+            "SignoffFlowStageExecutorTests",
+            "XcircuiteTests/SignoffFlowStageExecutorTests"
+        ),
+        "xci-candidate-plan-verification-contract": (
+            "Xcircuite-Package",
+            "XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord()",
+            "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord()"
+        ),
+        "xci-risk-approval-review-contract": (
+            "Xcircuite-Package",
+            "XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate()",
+            "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate()"
+        ),
+        "drc-foundry-rule-import-agent-envelope": (
+            "DRCEngine-Package",
+            "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()",
+            "DRCCLICoreTests/DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()"
+        ),
+        "xci-platform-readiness-contract": (
+            "Xcircuite-Package",
+            "XcircuitePlatformCapabilityReadinessTests",
+            "XcircuiteTests/XcircuitePlatformCapabilityReadinessTests"
+        ),
+        "xci-post-layout-comparison-gate": (
+            "Xcircuite-Package",
+            "PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass()",
+            "XcircuiteTests/PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass()"
+        ),
+        "xci-numeric-repair-loop-feedback": (
+            "Xcircuite-Package",
+            "XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses()",
+            "XcircuiteTests/XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses()"
+        ),
     ]
 
     private static let expectedDefaultUnverifiedDiagnosticCount = 10

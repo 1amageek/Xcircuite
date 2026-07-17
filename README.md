@@ -361,6 +361,11 @@ introducing an Agent wrapper.
 | `run-numeric-repair-loop` | `planning/numeric-repair-loop.json` plus per-iteration snapshots under `planning/numeric-repair-loop/iterations/` while generating candidates, synthesizing edits, executing, verifying, and feeding rejected candidates into the next iteration |
 | `run-selected-suggested-action` | loads the latest ready `review.selectSuggestedAction` record, validates its run binding, then projects the typed semantic operation into this project's `xcircuite-flow --project-root` invocation and dispatches through the typed CLI handler |
 
+Default platform-readiness test evidence uses exact Xcode test identifiers,
+including the `()` suffix for Swift Testing methods. Every evidence command is
+wrapped by a 120-second alarm and runs through `xcodebuild test`. DRCEngine CLI
+evidence selects the `DRCCLICoreTests` test target.
+
 The key artifacts for trust review are:
 
 ```text
