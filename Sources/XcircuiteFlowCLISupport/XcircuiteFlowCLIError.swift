@@ -7,7 +7,7 @@ public enum XcircuiteFlowCLIError: Error {
     case missingOption(String)
     case missingValue(String)
     case invalidValue(option: String, value: String)
-    case selectedSuggestedCommandNotRunnable(String)
+    case selectedSuggestedActionNotRunnable(String)
     case encodeFailed(String)
     case readFailed(String)
     case writeFailed(String)
@@ -15,7 +15,7 @@ public enum XcircuiteFlowCLIError: Error {
     public var exitCode: Int {
         switch self {
         case .usage, .unknownCommand, .unknownOption, .missingOption, .missingValue, .invalidValue,
-             .selectedSuggestedCommandNotRunnable:
+             .selectedSuggestedActionNotRunnable:
             64
         case .encodeFailed, .readFailed, .writeFailed:
             1
@@ -36,8 +36,8 @@ public enum XcircuiteFlowCLIError: Error {
             "Missing value after option: \(option)"
         case .invalidValue(let option, let value):
             "Invalid value after option \(option): \(value)"
-        case .selectedSuggestedCommandNotRunnable(let reason):
-            "Selected suggested command is not runnable: \(reason)"
+        case .selectedSuggestedActionNotRunnable(let reason):
+            "Selected suggested action is not runnable: \(reason)"
         case .encodeFailed(let reason):
             "Failed to encode output: \(reason)"
         case .readFailed(let reason):

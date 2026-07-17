@@ -72,19 +72,14 @@ struct EndToEndDesignFlowTests {
             root: root,
             kind: .rtl
         )
-        let snapshotRevision: ContentDigest?
-        if let digest = snapshot.designDigest {
-            snapshotRevision = try ContentDigest(algorithm: .sha256, hexadecimalValue: digest)
-        } else {
-            snapshotRevision = nil
-        }
+        let snapshotDigest = try #require(snapshot.designDigest)
         let loweringRequest = LogicLoweringRequest(
             runID: runID,
             inputs: [snapshotReference],
-            design: LogicDesignArtifact(
+            design: LogicDesignReference(
                 artifact: snapshotReference,
                 topDesignName: "e2e_top",
-                designRevision: snapshotRevision
+                designDigest: snapshotDigest
             )
         )
         let loweringRequestPath = try writeJSON(
@@ -138,7 +133,7 @@ struct EndToEndDesignFlowTests {
         let simulationRequest = LogicSimulationRequest(
             runID: runID,
             inputs: [logicDesignReference, stimulusReference],
-            design: LogicDesignArtifact(
+            design: LogicDesignReference(
                 artifact: logicDesignReference,
                 topDesignName: "e2e_top",
                 designRevision: logicDesignReference.digest

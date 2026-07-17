@@ -9,7 +9,6 @@ public struct PlanningPEXInputs: Sendable, Hashable, Codable {
     public var layoutFormat: String?
     public var sourceNetlistFormat: String?
     public var backendID: String
-    public var allowMockBackend: Bool
     public var executablePath: String?
     public var environmentOverrides: [String: String]
     public var cornerIDs: [String]
@@ -24,7 +23,6 @@ public struct PlanningPEXInputs: Sendable, Hashable, Codable {
         layoutFormat: String? = nil,
         sourceNetlistFormat: String? = nil,
         backendID: String,
-        allowMockBackend: Bool = false,
         executablePath: String? = nil,
         environmentOverrides: [String: String] = [:],
         cornerIDs: [String],
@@ -38,7 +36,6 @@ public struct PlanningPEXInputs: Sendable, Hashable, Codable {
         self.layoutFormat = layoutFormat
         self.sourceNetlistFormat = sourceNetlistFormat
         self.backendID = backendID
-        self.allowMockBackend = allowMockBackend
         self.executablePath = executablePath
         self.environmentOverrides = environmentOverrides
         self.cornerIDs = cornerIDs

@@ -61,6 +61,15 @@ public struct XcircuiteFlowToolchainProfileReadinessValidator: Sendable {
         if let input = profile.lvsTechnologyInput {
             validate(input, field: "lvsTechnologyInput", into: &issues)
         }
+        if let artifacts = profile.lvsExtractionArtifacts {
+            validate(artifacts.profileInput, field: "lvsExtractionArtifacts.profileInput", into: &issues)
+            validate(artifacts.deckInput, field: "lvsExtractionArtifacts.deckInput", into: &issues)
+            validateRequiredIdentifier(
+                artifacts.processProfileID,
+                field: "lvsExtractionArtifacts.processProfileID",
+                into: &issues
+            )
+        }
         if let technology = profile.pexTechnology {
             validate(technology, field: "pexTechnology", into: &issues)
         }

@@ -91,7 +91,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
                 return false
             }
             return inputs.technologyReferenceID == "pex-technology-ref"
-                && inputs.backendID == "mock-pex"
+                && inputs.backendID == "magic"
         })
         #expect(problem.candidateActions.contains {
             $0.domainID == "simulation-analysis"
@@ -267,7 +267,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             summary: PEXRunSummary(
                 runID: "pex-run-1",
                 status: "success",
-                backendID: "mock-pex",
+                backendID: "magic",
                 corners: [
                     PEXCornerParasiticSummary(
                         cornerID: "tt",

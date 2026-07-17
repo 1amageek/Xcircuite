@@ -321,8 +321,16 @@ extension XcircuiteCandidatePlanVerifierTests {
             root: root
         )
         try await writeJSON(LayoutTechDatabase.sampleProcess(), path: "tech/layout-tech.json", root: root)
-        let problem = makeProducedStandardLayoutLVSProblem(runID: runID)
-        let plan = makeProducedStandardLayoutLVSPlan(runID: runID, layoutCase: layoutCase)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
+        let problem = makeProducedStandardLayoutLVSProblem(
+            runID: runID,
+            lvsExtraction: lvsExtraction
+        )
+        let plan = makeProducedStandardLayoutLVSPlan(
+            runID: runID,
+            layoutCase: layoutCase,
+            lvsExtraction: lvsExtraction
+        )
         _ = try await artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
         let candidatePlanRef = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
         let layoutRef = try await writeProducedLayoutArtifact(
@@ -524,7 +532,10 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
     }
 
-    func makeProducedStandardLayoutLVSProblem(runID: String) -> XcircuiteCircuitPlanningProblem {
+    func makeProducedStandardLayoutLVSProblem(
+        runID: String,
+        lvsExtraction: StandardLVSExtractionArtifacts
+    ) -> XcircuiteCircuitPlanningProblem {
         XcircuiteCircuitPlanningProblem(
             problemID: "\(runID)-native-lvs-produced-layout-problem",
             runID: runID,
@@ -539,6 +550,16 @@ extension XcircuiteCandidatePlanVerifierTests {
                     refID: "layout-technology-ref",
                     kind: "layout-technology",
                     path: "tech/layout-tech.json"
+                ),
+                XcircuitePlanningReference(
+                    refID: "lvs-extraction-profile-ref",
+                    kind: "lvs-extraction-profile",
+                    path: lvsExtraction.profilePath
+                ),
+                XcircuitePlanningReference(
+                    refID: "lvs-extraction-deck-ref",
+                    kind: "lvs-extraction-deck",
+                    path: lvsExtraction.deckPath
                 ),
             ],
             objectives: [
@@ -575,7 +596,8 @@ extension XcircuiteCandidatePlanVerifierTests {
 
     func makeProducedStandardLayoutLVSPlan(
         runID: String,
-        layoutCase: ProducedLayoutCorpusCase
+        layoutCase: ProducedLayoutCorpusCase,
+        lvsExtraction: StandardLVSExtractionArtifacts
     ) -> XcircuiteCandidatePlan {
         XcircuiteCandidatePlan(
             planID: "\(runID)-native-lvs-produced-layout-plan",
@@ -599,7 +621,12 @@ extension XcircuiteCandidatePlanVerifierTests {
                     maturity: "implemented",
                     readiness: "ready",
                     sourceObjectiveIDs: ["lvs-produced-layout-equivalence"],
-                    requiredInputRefs: ["schematic-netlist-ref", "layout-technology-ref"],
+                    requiredInputRefs: [
+                        "schematic-netlist-ref",
+                        "layout-technology-ref",
+                        "lvs-extraction-profile-ref",
+                        "lvs-extraction-deck-ref",
+                    ],
                     missingInputRefs: [],
                     verificationGates: ["artifact-integrity", "native-lvs"],
                     reason: "Run native LVS from a produced standard layout artifact.",
@@ -611,6 +638,9 @@ extension XcircuiteCandidatePlanVerifierTests {
                                 layoutGDSReferenceID: layoutCase.artifactID,
                                 schematicNetlistReferenceID: "schematic-netlist-ref",
                                 technologyReferenceID: "layout-technology-ref",
+                                extractionProfileReferenceID: "lvs-extraction-profile-ref",
+                                extractionDeckReferenceID: "lvs-extraction-deck-ref",
+                                processProfileID: lvsExtraction.processProfileID,
                                 topCell: "TOP",
                                 backendID: "native-gds"
                             )
@@ -777,7 +807,7 @@ extension XcircuiteCandidatePlanVerifierTests {
     ) async throws {
         try await store.ensureWorkspace()
         try await prepareTestRun(runID: runID, store: store)
-        try await writeText("GDS placeholder for deterministic mock PEX input", path: "layout/top.gds", root: root)
+        try await writeText("GDS placeholder for deterministic PEX input", path: "layout/top.gds", root: root)
         try await writeText(
             """
             .subckt top in out vdd vss
@@ -893,8 +923,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                                 topCell: "top",
                                 layoutFormat: "gds",
                                 sourceNetlistFormat: "spice",
-                                backendID: "mock",
-                                allowMockBackend: true,
+                                backendID: "magic",
+                                executablePath: "/definitely/missing/magic",
                                 cornerIDs: ["tt"],
                                 options: .default,
                                 topNetCount: 5
@@ -1020,8 +1050,8 @@ extension XcircuiteCandidatePlanVerifierTests {
                                 topCell: "top",
                                 layoutFormat: layoutCase.pexLayoutFormat,
                                 sourceNetlistFormat: "spice",
-                                backendID: "mock",
-                                allowMockBackend: true,
+                                backendID: "magic",
+                                executablePath: "/definitely/missing/magic",
                                 cornerIDs: ["tt"],
                                 options: .default,
                                 topNetCount: 5

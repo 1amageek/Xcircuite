@@ -644,22 +644,11 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             kind: ArtifactKind.report,
             mode: .replaceable
         )
-        let reviewArtifact = makeReviewArtifact(envelope)
-        let reviewReference = try await context.persistJSONArtifact(
-            reviewArtifact,
-            artifactID: "rtl-verification-review",
-            stageID: stageID,
-            directory: "review",
-            fileName: "rtl-verification-review.json",
-            kind: ArtifactKind.report,
-            mode: .replaceable
-        )
         let requestDigest = try digest(for: request)
         let auditArtifactIDs = envelope.artifacts.map(\.artifactID)
             + [
                 "rtl-verification-result",
                 "rtl-verification-evidence-assessment",
-                "rtl-verification-review",
                 "rtl-verification-audit"
             ]
         let auditRecord = RTLVerificationStageAuditRecord(
@@ -670,7 +659,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             evidenceMaturity: envelope.payload.record.maturity,
             artifactIDs: auditArtifactIDs,
             resumable: envelope.status == .completed || envelope.status == .blocked,
-            nextActions: reviewArtifact.suggestedActions
+            nextActions: suggestedActions(for: envelope)
         )
         let auditReference = try await context.persistJSONArtifact(
             auditRecord,
@@ -681,7 +670,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             kind: ArtifactKind.report,
             mode: .replaceable
         )
-        return [resultReference, assessmentReference, reviewReference, auditReference]
+        return [resultReference, assessmentReference, auditReference]
     }
 
     private func loadEvidenceInput(from url: URL) throws -> RTLVerificationEvidenceInput {
@@ -716,8 +705,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         }
         guard let auditData = contents["rtl-verification-audit"],
               let resultData = contents["rtl-verification-result"],
-              let assessmentData = contents["rtl-verification-evidence-assessment"],
-              let reviewData = contents["rtl-verification-review"] else {
+              let assessmentData = contents["rtl-verification-evidence-assessment"] else {
             return nil
         }
         let audit = try JSONDecoder().decode(RTLVerificationStageAuditRecord.self, from: auditData)
@@ -727,7 +715,6 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
               audit.status == .completed || audit.status == .blocked,
               audit.artifactIDs.contains("rtl-verification-result"),
               audit.artifactIDs.contains("rtl-verification-evidence-assessment"),
-              audit.artifactIDs.contains("rtl-verification-review"),
               audit.artifactIDs.contains("rtl-verification-audit"),
               audit.requestDigest == (try digest(for: request)) else {
             return nil
@@ -750,19 +737,6 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 "The persisted RTL evidence assessment does not match the result envelope."
             )
         }
-        let review = try JSONDecoder().decode(RTLVerificationReviewArtifact.self, from: reviewData)
-        guard review.stageID == stageID,
-              review.runID == context.runID,
-              review.analysis == envelope.payload.analysis,
-              review.status == envelope.status,
-              review.findings == envelope.payload.findings,
-              review.diagnostics == envelope.rtlDiagnostics,
-              review.appliedWaivers == envelope.payload.appliedWaivers,
-              review.record == envelope.payload.record else {
-            throw RTLVerificationExecutionError.invalidArtifact(
-                "The persisted RTL review artifact does not match the result envelope."
-            )
-        }
         return (
             envelope: envelope,
             artifacts: try definitions.compactMap { definition in
@@ -783,7 +757,6 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         let definitions: [(String, String, String)] = [
             ("raw", "rtl-verification-result.json", "rtl-verification-result"),
             ("raw", "evidence-assessment.json", "rtl-verification-evidence-assessment"),
-            ("review", "rtl-verification-review.json", "rtl-verification-review"),
             ("audit", "rtl-verification-audit.json", "rtl-verification-audit")
         ]
         return try definitions.map { directory, fileName, artifactID in
@@ -813,27 +786,12 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         )
     }
 
-    private func makeReviewArtifact(
-        _ envelope: RTLVerificationResult
-    ) -> RTLVerificationReviewArtifact {
+    private func suggestedActions(
+        for envelope: RTLVerificationResult
+    ) -> [String] {
         let findingActions = envelope.payload.findings.flatMap(\.suggestedActions)
         let diagnosticActions = envelope.rtlDiagnostics.flatMap(\.suggestedActions)
-        let suggestedActions = Array(Set(findingActions + diagnosticActions)).sorted()
-        let approvalRequired = envelope.status != .completed
-            || !envelope.payload.findings.isEmpty
-            || !envelope.payload.record.limitations.isEmpty
-        return RTLVerificationReviewArtifact(
-            stageID: stageID,
-            runID: envelope.runID,
-            analysis: envelope.payload.analysis,
-            status: envelope.status,
-            findings: envelope.payload.findings,
-            diagnostics: envelope.rtlDiagnostics,
-            appliedWaivers: envelope.payload.appliedWaivers,
-            record: envelope.payload.record,
-            approvalRequired: approvalRequired,
-            suggestedActions: suggestedActions
-        )
+        return Array(Set(findingActions + diagnosticActions)).sorted()
     }
 
     private func digest(for request: RTLVerificationRequest) throws -> String {

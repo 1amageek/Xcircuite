@@ -12,6 +12,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
     private let schematicNetlistInput: XcircuiteFlowInputReference
     private let topCell: String
     private let technologyInput: XcircuiteFlowInputReference?
+    private let extractionProfileInput: XcircuiteFlowInputReference?
     private let extractionDeckInput: XcircuiteFlowInputReference?
     private let processProfileID: String?
     private let waiverInput: XcircuiteFlowInputReference?
@@ -36,6 +37,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         self.schematicNetlistInput = .path(request.schematicNetlistURL.path(percentEncoded: false))
         self.topCell = request.topCell
         self.technologyInput = request.technologyURL.map { .path($0.path(percentEncoded: false)) }
+        self.extractionProfileInput = request.extractionProfileURL.map { .path($0.path(percentEncoded: false)) }
         self.extractionDeckInput = request.extractionDeckURL.map { .path($0.path(percentEncoded: false)) }
         self.processProfileID = request.processProfileID
         self.waiverInput = request.waiverURL.map { .path($0.path(percentEncoded: false)) }
@@ -56,6 +58,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         schematicNetlistInput: XcircuiteFlowInputReference,
         topCell: String,
         technologyInput: XcircuiteFlowInputReference? = nil,
+        extractionProfileInput: XcircuiteFlowInputReference? = nil,
         extractionDeckInput: XcircuiteFlowInputReference? = nil,
         processProfileID: String? = nil,
         waiverInput: XcircuiteFlowInputReference? = nil,
@@ -73,6 +76,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         self.schematicNetlistInput = schematicNetlistInput
         self.topCell = topCell
         self.technologyInput = technologyInput
+        self.extractionProfileInput = extractionProfileInput
         self.extractionDeckInput = extractionDeckInput
         self.processProfileID = processProfileID
         self.waiverInput = waiverInput
@@ -92,6 +96,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         schematicNetlistURL: URL,
         topCell: String,
         technologyURL: URL? = nil,
+        extractionProfileURL: URL? = nil,
         extractionDeckURL: URL? = nil,
         processProfileID: String? = nil,
         terminalEquivalenceURL: URL? = nil,
@@ -108,6 +113,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
                 schematicNetlistURL: schematicNetlistURL,
                 topCell: topCell,
                 technologyURL: technologyURL,
+                extractionProfileURL: extractionProfileURL,
                 extractionDeckURL: extractionDeckURL,
                 processProfileID: processProfileID,
                 terminalEquivalenceURL: terminalEquivalenceURL,
@@ -126,6 +132,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         schematicNetlistInput: XcircuiteFlowInputReference,
         topCell: String,
         technologyInput: XcircuiteFlowInputReference? = nil,
+        extractionProfileInput: XcircuiteFlowInputReference? = nil,
         extractionDeckInput: XcircuiteFlowInputReference? = nil,
         processProfileID: String? = nil,
         terminalEquivalenceInput: XcircuiteFlowInputReference? = nil,
@@ -141,6 +148,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             schematicNetlistInput: schematicNetlistInput,
             topCell: topCell,
             technologyInput: technologyInput,
+            extractionProfileInput: extractionProfileInput,
             extractionDeckInput: extractionDeckInput,
             processProfileID: processProfileID,
             terminalEquivalenceInput: terminalEquivalenceInput,
@@ -326,6 +334,10 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             ),
             topCell: topCell,
             technologyURL: try technologyInput?.resolveExisting(
+                projectRoot: try context.xcircuiteProjectRoot(),
+                runDirectory: try context.xcircuiteRunDirectory()
+            ),
+            extractionProfileURL: try extractionProfileInput?.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
                 runDirectory: try context.xcircuiteRunDirectory()
             ),

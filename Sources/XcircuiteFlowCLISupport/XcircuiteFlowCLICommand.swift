@@ -93,8 +93,8 @@ public enum XcircuiteFlowCLICommand {
             return try await generateImprovementArtifacts(arguments: Array(arguments.dropFirst()))
         case "qualify-verified-improvement-corpus":
             return try await qualifyVerifiedImprovementCorpus(arguments: Array(arguments.dropFirst()))
-        case "run-selected-suggested-command":
-            return try await runSelectedSuggestedCommand(arguments: Array(arguments.dropFirst()))
+        case "run-selected-suggested-action":
+            return try await runSelectedSuggestedAction(arguments: Array(arguments.dropFirst()))
         case "summarize-loop":
             return try await summarizeLoop(arguments: Array(arguments.dropFirst()))
         case "evaluate-run-guard":

@@ -54,7 +54,7 @@ extension XcircuiteFlowCLICommand {
           xcircuite-flow run-numeric-repair-loop --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--initial-candidate-strategy <name>] [--feedback-candidate-strategy <name>] [--max-candidates <count>] [--max-iterations <count>] [--synthesis-strategy <name>] [--mode <name>] [--actor <id>] [--calibration-policy <disabled|cp7-feedback>] [--pretty]
           xcircuite-flow generate-improvement-artifacts --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--numeric-repair-loop-artifact-id <id>] [--numeric-repair-loop-path <path>] [--generated-at <timestamp>] [--pretty]
           xcircuite-flow qualify-verified-improvement-corpus --project-root <path> --suite-spec <path> [--persist] [--pretty]
-          xcircuite-flow run-selected-suggested-command --project-root <path> --run-id <id> [--command-id <id>]
+          xcircuite-flow run-selected-suggested-action --project-root <path> --run-id <id> [--action-id <id>]
           xcircuite-flow summarize-loop --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
           xcircuite-flow evaluate-run-guard --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
           xcircuite-flow compare-artifacts --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
@@ -584,12 +584,12 @@ extension XcircuiteFlowCLICommand {
         """
     }
 
-    public static var runSelectedSuggestedCommandHelpText: String {
+    public static var runSelectedSuggestedActionHelpText: String {
         """
         Usage:
-          xcircuite-flow run-selected-suggested-command --project-root <path> --run-id <id> [--command-id <id>]
+          xcircuite-flow run-selected-suggested-action --project-root <path> --run-id <id> [--action-id <id>]
 
-        Loads the latest ready review.selectSuggestedCommand action from actions.jsonl, verifies that it targets this project/run and an allowlisted xcircuite-flow planning command, then dispatches it through the typed CLI handler.
+        Loads the latest ready review.selectSuggestedAction record from actions.jsonl, verifies its run binding, projects the typed semantic operation into this project's xcircuite-flow invocation, and dispatches it through the typed CLI handler.
         """
     }
 }

@@ -38,75 +38,75 @@ let package = Package(
     dependencies: [
         workspaceDependency(
             named: "CircuiteFoundation",
-            revision: "2ec6ee13a89ac6885be3c26b41a9ee0ef89948ac"
+            revision: "7abcac83517935c9b9f7553d7016d62cffde259d"
         ),
         workspaceDependency(
             named: "ToolQualification",
-            revision: "f6cacdbf64038a35ab62d70f575a8dd8349e5604"
+            revision: "d572d950a9dccb699413cd5157d901812354444f"
         ),
         workspaceDependency(
             named: "DesignFlowKernel",
-            revision: "68e247274e34e56b1337df125b74480196209901"
+            revision: "6bbe1a24bc7e0a983da747844d8b2db1c80fefd4"
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "4ea4f288c43a66bad93863eb88010966d721732f"
+            revision: "e6a0fa2c5b64de1b4ef81e651bd1bb77ecc77299"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "959e21f770c44c2e5a49b33964d2ba82555736b7"
+            revision: "f79b52da83146c108e0a122f4581fe93fae59527"
         ),
         workspaceDependency(
             named: "PEXEngine",
-            revision: "f3078e12af274a714e27ec523f19c5c29abd42dd"
+            revision: "ba10c1fe0b847d5816faef4eae67c64a19d61e1e"
         ),
         workspaceDependency(
             named: "CoreSpice",
-            revision: "a1dff52b12f40bca8696aee914d7d65d55e6fed5"
+            revision: "dec08bf9dc955b0845800765be0b6172d64b1609"
         ),
         workspaceDependency(
             named: "semiconductor-layout",
-            revision: "61cc2be603f57d12f3c582a2fc0fd148c1e62ad9"
+            revision: "692a056d21b6e292c29215f76c3ae225215d03c2"
         ),
         workspaceDependency(
             named: "SignoffToolSupport",
-            revision: "2c8ce00a8f873934e74e3f219e0cbd122a862fe9"
+            revision: "6bf675eecb27e3bd3440c5ce8a85c85c510fc3cb"
         ),
         workspaceDependency(
             named: "PDKKit",
-            revision: "28f3b83304ad2bbb0c2e0269d26616081d90d992"
+            revision: "b62c5ad7e5819a24977038c2133856caed52f481"
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "09768ed203d97d1d0f79f786f9988fcb2cd39155"
+            revision: "b9aa25b0b78e6168befa25df3bfe8309bd020a6d"
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "81898ed51ab05c62712ebca5b1b03869b89f7682"
+            revision: "2b8f0df3e359fca274edc8ede176457de40e1648"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "52c24ed6b5e6406fd462b9276cf449ffd50003d4"
+            revision: "f1ec9581cf3dea9f439ed244b0475e0493505c22"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "3fc67c82f02cdb727764d6ae23ad823fa1a39652"
+            revision: "345e81140439bda43c683aa47c1ecb1dfda83331"
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "724015a944ca0ec10084600a269bd37a8d014801"
+            revision: "601fa71a60c97fbdd994c8e7090291e19651fcc4"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "a98c0895c0c0340326f79d7838ddc37ba86cfa2b"
+            revision: "a2b64a3f9f1651be0601496a7423a211c1438c49"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "328ded423f3bc925e202b3ae7e2be925b11c030b"
+            revision: "5eb111a3c35dfc54285a6b95e72b8f98b2828648"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "4eded125f9c980955362f695de6bc2022c8c2598"
+            revision: "e0f6aa2256950f2046eb834d1e7b9472bd2c97ae"
         ),
     ],
     targets: [
@@ -197,6 +197,7 @@ let package = Package(
                 .product(name: "PDKValidation", package: "PDKKit"),
                 .product(name: "TimingCore", package: "TimingEngine"),
                 .product(name: "LayoutAutoGen", package: "semiconductor-layout"),
+                .product(name: "LayoutLVSExtraction", package: "semiconductor-layout"),
                 .product(name: "LayoutCore", package: "semiconductor-layout"),
                 .product(name: "LayoutIO", package: "semiconductor-layout"),
                 .product(name: "LayoutTech", package: "semiconductor-layout"),

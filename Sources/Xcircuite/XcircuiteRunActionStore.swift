@@ -12,21 +12,15 @@ extension XcircuiteWorkspaceStore {
         try await loadRunLedger(runID: runID).actions
     }
 
-    public func loadSuggestedCommandSelections(
+    public func loadSuggestedActionSelections(
         runID: String
-    ) async throws -> [FlowSuggestedCommandSelection] {
-        var selections: [FlowSuggestedCommandSelection] = []
+    ) async throws -> [FlowRunSuggestedActionSelection] {
+        var selections: [FlowRunSuggestedActionSelection] = []
         for record in try await loadRunActions(runID: runID) {
-            if let selection = try FlowSuggestedCommandSelection(record: record) {
+            if let selection = try FlowRunSuggestedActionSelection(record: record) {
                 selections.append(selection)
             }
         }
         return selections
-    }
-
-    public func loadLatestSuggestedCommandSelection(
-        runID: String
-    ) async throws -> FlowSuggestedCommandSelection? {
-        try await loadSuggestedCommandSelections(runID: runID).last
     }
 }

@@ -5,6 +5,7 @@ public struct PlanningLVSInputs: Sendable, Hashable, Codable {
     public var layoutGDSReferenceID: String?
     public var schematicNetlistReferenceID: String
     public var technologyReferenceID: String?
+    public var extractionProfileReferenceID: String?
     public var extractionDeckReferenceID: String?
     public var processProfileID: String?
     public var waiverReferenceID: String?
@@ -19,6 +20,7 @@ public struct PlanningLVSInputs: Sendable, Hashable, Codable {
         layoutGDSReferenceID: String? = nil,
         schematicNetlistReferenceID: String,
         technologyReferenceID: String? = nil,
+        extractionProfileReferenceID: String? = nil,
         extractionDeckReferenceID: String? = nil,
         processProfileID: String? = nil,
         waiverReferenceID: String? = nil,
@@ -32,6 +34,7 @@ public struct PlanningLVSInputs: Sendable, Hashable, Codable {
         self.layoutGDSReferenceID = layoutGDSReferenceID
         self.schematicNetlistReferenceID = schematicNetlistReferenceID
         self.technologyReferenceID = technologyReferenceID
+        self.extractionProfileReferenceID = extractionProfileReferenceID
         self.extractionDeckReferenceID = extractionDeckReferenceID
         self.processProfileID = processProfileID
         self.waiverReferenceID = waiverReferenceID

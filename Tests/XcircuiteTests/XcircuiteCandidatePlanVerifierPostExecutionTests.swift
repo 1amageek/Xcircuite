@@ -323,8 +323,8 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(action.status == .failed)
     }
 
-    @Test func postExecutionVerificationBlocksMockPEXSummaryEvenWhenPlanAllowsMockBackend() async throws {
-        let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-mock-plan-allow")
+    @Test func postExecutionVerificationReportsProductionPEXBackendFailure() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-backend-failure")
         defer { removeTemporaryRoot(root) }
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
@@ -353,19 +353,19 @@ extension XcircuiteCandidatePlanVerifierTests {
             projectRoot: root
         )
 
-        #expect(result.status == "blocked")
+        #expect(result.status == "rejected")
         #expect(result.accepted == false)
         let verification = try await store.readJSON(
             XcircuitePlanVerification.self,
             from: result.planVerificationArtifact.path
         )
         let gate = try #require(verification.gateResults.first { $0.gateID == "pex-summary-gate" })
-        #expect(gate.status == "blocked")
-        #expect(gate.diagnostics.contains { $0.code == "pex-mock-backend-not-approved" })
+        #expect(gate.status == "failed")
+        #expect(gate.diagnostics.contains { $0.code == "pex-summary-gate-execution-failed" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-summary" } == false)
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-manifest" } == false)
         let action = try #require((try await store.loadRunActions(runID: "run-7")).last)
-        #expect(action.status == .blocked)
+        #expect(action.status == .failed)
     }
 
     @Test func postExecutionVerificationBlocksPEXSummaryGateWithoutExplicitBackend() async throws {
@@ -383,7 +383,6 @@ extension XcircuiteCandidatePlanVerifierTests {
         var plan = makeExecutablePEXPlan(runID: runID)
         try updatePEXInputs(in: &plan) { inputs in
             inputs.backendID = ""
-            inputs.allowMockBackend = false
         }
         _ = try await artifactStore.persistCandidatePlan(
             plan,
@@ -421,58 +420,6 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-summary" } == false)
     }
 
-    @Test func postExecutionVerificationBlocksPEXSummaryGateWhenMockBackendIsNotApproved() async throws {
-        let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-mock-not-approved")
-        defer { removeTemporaryRoot(root) }
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
-        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
-        let runID = "run-pex-mock-not-approved"
-        try await prepareExecutablePEXRun(
-            root: root,
-            runID: runID,
-            store: store,
-            artifactStore: artifactStore
-        )
-        var plan = makeExecutablePEXPlan(runID: runID)
-        try updatePEXInputs(in: &plan) { inputs in
-            inputs.allowMockBackend = false
-        }
-        _ = try await artifactStore.persistCandidatePlan(
-            plan,
-            runID: runID,
-            projectRoot: root
-        )
-        _ = try await XcircuiteCandidatePlanExecutor(
-            workspaceStore: store,
-            artifactStore: artifactStore
-        ).executeCandidatePlan(
-            request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
-            projectRoot: root
-        )
-
-        let result = try await XcircuiteCandidatePlanVerifier(
-            workspaceStore: store,
-            artifactStore: artifactStore
-        ).verifyCandidatePlan(
-            request: XcircuiteCandidatePlanVerificationRequest(
-                runID: runID,
-                verificationMode: "post-execution"
-            ),
-            projectRoot: root
-        )
-
-        #expect(result.status == "blocked")
-        #expect(result.accepted == false)
-        let verification = try await store.readJSON(
-            XcircuitePlanVerification.self,
-            from: result.planVerificationArtifact.path
-        )
-        let gate = try #require(verification.gateResults.first { $0.gateID == "pex-summary-gate" })
-        #expect(gate.status == "blocked")
-        #expect(gate.diagnostics.contains { $0.code == "pex-mock-backend-not-approved" })
-        #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-summary" } == false)
-    }
-
     @Test func postExecutionVerificationUsesProducedStandardLayoutCorpusForPEXSummary() async throws {
         for layoutCase in producedLayoutCorpusCases() {
             let root = try makeTemporaryRoot("candidate-plan-post-execution-pex-produced-\(layoutCase.id)")
@@ -499,7 +446,7 @@ extension XcircuiteCandidatePlanVerifierTests {
                 projectRoot: root
             )
 
-            #expect(result.status == "blocked", "format=\(layoutCase.id)")
+            #expect(result.status == "rejected", "format=\(layoutCase.id)")
             #expect(result.accepted == false, "format=\(layoutCase.id)")
             let verification = try await store.readJSON(
                 XcircuitePlanVerification.self,
@@ -510,13 +457,13 @@ extension XcircuiteCandidatePlanVerifierTests {
                 "format=\(layoutCase.id)"
             )
             #expect(
-                gate.status == "blocked",
+                gate.status == "failed",
                 "format=\(layoutCase.id)"
             )
-            #expect(gate.diagnostics.contains { $0.code == "pex-mock-backend-not-approved" })
+            #expect(gate.diagnostics.contains { $0.code == "pex-summary-gate-execution-failed" })
             #expect(verification.artifactRefs.contains { $0.artifactID == "planning-pex-manifest" } == false)
             let action = try #require((try await store.loadRunActions(runID: runID)).last)
-            #expect(action.status == .blocked, "format=\(layoutCase.id)")
+            #expect(action.status == .failed, "format=\(layoutCase.id)")
         }
     }
 

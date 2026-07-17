@@ -165,7 +165,7 @@ extension XcircuiteFlowCLICommand {
         }
 
         return try encode(
-            ValidationOutput(
+            XcircuiteFlowValidationOutput(
                 status: "valid",
                 validated: validated,
                 runSpecPath: runSpecURL?.path(percentEncoded: false),
@@ -332,7 +332,7 @@ extension XcircuiteFlowCLICommand {
         if let outputURL {
             try write(updatedRuntimeSpec, to: outputURL, pretty: pretty)
             return try encode(
-                QualificationRecordAttachmentOutput(
+                XcircuiteQualificationRecordAttachmentOutput(
                     stageID: stageID,
                     recordArtifactID: reference.id.rawValue,
                     outputPath: outputURL.path(percentEncoded: false)

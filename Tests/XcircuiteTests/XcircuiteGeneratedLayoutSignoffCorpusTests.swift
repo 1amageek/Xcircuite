@@ -92,6 +92,7 @@ extension XcircuiteFlowRuntimeTests {
         let oasisRunID = "generated-layout-corpus-oasis-run"
         try await writeLayoutCommandRequest(root: root)
         try await writeStandardLayoutTechnology(root: root)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -164,6 +165,9 @@ extension XcircuiteFlowRuntimeTests {
                             schematicNetlistInput: .path("circuits/top.spice"),
                             topCell: "top",
                             technologyInput: .path("tech/process.json"),
+                            extractionProfilePath: lvsExtraction.profilePath,
+                            extractionDeckPath: lvsExtraction.deckPath,
+                            processProfileID: lvsExtraction.processProfileID,
                             tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                         )
                     ),
@@ -1708,6 +1712,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(lvsRoot) }
         try await writeLayoutCommandRequest(root: lvsRoot)
         try await writeStandardLayoutTechnology(root: lvsRoot)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: lvsRoot)
         let lvsSpec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .layoutCommand(
@@ -1739,6 +1744,9 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistInput: .path("circuits/missing.spice"),
                         topCell: "top",
                         technologyInput: .path("tech/process.json"),
+                        extractionProfilePath: lvsExtraction.profilePath,
+                        extractionDeckPath: lvsExtraction.deckPath,
+                        processProfileID: lvsExtraction.processProfileID,
                         tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),

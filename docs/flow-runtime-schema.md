@@ -12,6 +12,8 @@ Current schema version: `1`
 flowchart LR
   RunSpec["XcircuiteFlowRunSpec\nwhat to run"] --> CLI["xcircuite-flow"]
   RuntimeSpec["XcircuiteFlowRuntimeSpec\nwhat tools may run"] --> CLI
+  KernelAction["FlowRunSuggestedAction\nsemantic operation"] --> ActionResolver["Xcircuite action resolver\nproject root projection"]
+  ActionResolver --> CLI
   CLI --> Runtime["XcircuiteFlowRuntime"]
   Runtime --> Kernel["DesignFlowKernel"]
   Kernel --> Artifacts[".xcircuite/runs/<run-id>/"]
@@ -22,6 +24,8 @@ flowchart LR
 | `XcircuiteFlowRunSpec` | Run identity, design intent, stage order, stage tool requirements |
 | `XcircuiteFlowRuntimeSpec` | Stage executors, tool qualification level, health status, evidence |
 | `XcircuiteFlowToolSpec` | Per-tool trust inputs passed into `ToolQualification` |
+| `FlowRunSuggestedAction` | Project-independent semantic operation selected through the shared run ledger; it contains no executable, raw arguments, or workspace path |
+| `XcircuiteResolvedSuggestedAction` | Project-bound `xcircuite-flow` command and arguments projected from the semantic operation by Xcircuite |
 | `toolchain.json` | Persisted selected/rejected tool decisions for review and replay |
 
 Run ledger reads have two explicit trust boundaries. Human review uses
@@ -322,6 +326,7 @@ technology defaults were active for DRC/LVS/PEX.
 | `technologyCatalogPath` | string or null | no | Runtime path to a technology catalog JSON file; when project root is available, readiness validation loads it and verifies matching PDK/catalog entry plus required files |
 | `drcTechnologyInput` | `XcircuiteFlowInputReference` or null | no | Default DRC technology input when a `nativeDRC` stage omits `technologyPath` / `technologyInput` |
 | `lvsTechnologyInput` | `XcircuiteFlowInputReference` or null | no | Default LVS technology input when a `nativeLVS` stage omits `technologyPath` / `technologyInput` |
+| `lvsExtractionArtifacts` | `XcircuiteLVSExtractionArtifacts` or null | no | Default native standard-layout LVS profile input, source deck input, and process profile ID; stage-local values take precedence |
 | `pexTechnology` | `XcircuitePEXTechnologySpec` or null | no | Default PEX technology input when a PEX stage omits `technology` |
 | `pexTechnologyByCorner` | object of `XcircuitePEXTechnologySpec` | no | Default per-corner PEX technology overrides keyed by declared corner ID |
 | `metadata` | object or null | no | Additional string metadata for provenance |
@@ -405,11 +410,16 @@ Supported `kind` values:
 | `layoutCommand` | `LayoutCommandFlowStageExecutor` | `stageID`, `requestPath`, `tool`; optional `drcExport`, `standardLayoutExports` |
 | `nativeDRC` | `DRCFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `topCell`, `tool` |
 | `nativeLVS` | `LVSFlowStageExecutor` | `stageID`, schematic netlist input, `topCell`, `tool` plus exactly one layout input |
-| `mockPEX` | `PEXFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `layoutFormat`, `sourceNetlistPath` or `sourceNetlistInput`, `topCell`, `corners`, `tool`, plus `technology` or `toolchainProfile.pexTechnology` |
+| `pex` | `PEXFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `layoutFormat`, `sourceNetlistPath` or `sourceNetlistInput`, `topCell`, `corners`, `backendSelection`, `tool`, plus `technology` or `toolchainProfile.pexTechnology` |
 | `coreSpiceSimulation` | `SimulationFlowStageExecutor` | `stageID`, `netlistPath`, `tool` |
 | `postLayoutComparison` | `PostLayoutComparisonFlowStageExecutor` | `stageID`, `preLayoutWaveformPath`, `postLayoutWaveformPath`, `options`, `tool` |
 | `dftExecution` | `DFTFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
 | `dftQualification` | `DFTQualificationFlowStageExecutor` | `stageID`, `corpusInput`, `observationsInput`, optional `processQualificationEvidenceBuildInput`, `tool` |
+
+`pex` is the only serialized PEX executor kind. Its `backendSelection`
+identifies a backend registered by `PEXEngine`; unavailable executables or
+process material produce typed stage failure evidence. Test extractors are
+injected from the test target and do not appear in runtime specifications.
 
 Common executor value fields:
 
@@ -583,13 +593,22 @@ LVS-specific fields:
 | `topCell` | string | yes | Top cell name |
 | `technologyPath` | string or null | no | Technology/extraction input; takes precedence over `toolchainProfile.lvsTechnologyInput` |
 | `technologyInput` | `XcircuiteFlowInputReference` or null | no | Typed technology input reference; takes precedence over `technologyPath` and `toolchainProfile.lvsTechnologyInput` |
+| `extractionProfilePath` | string or null | conditional | Versioned layout extraction profile for standard-layout LVS |
+| `extractionProfileInput` | `XcircuiteFlowInputReference` or null | conditional | Typed extraction profile input; takes precedence over `extractionProfilePath` and the toolchain profile |
+| `extractionDeckPath` | string or null | conditional | Source extraction deck whose SHA-256 digest is bound by the profile |
+| `extractionDeckInput` | `XcircuiteFlowInputReference` or null | conditional | Typed source deck input; takes precedence over `extractionDeckPath` and the toolchain profile |
+| `processProfileID` | string or null | conditional | Expected process profile identity for standard-layout extraction |
 | `options` | object or null | no | LVS engine options |
 
 Exactly one LVS layout input must be provided across `layoutNetlistPath`,
 `layoutNetlistInput`, `layoutGDSPath`, and `layoutGDSInput`. Exactly one
 schematic input must be provided across `schematicNetlistPath` and
 `schematicNetlistInput`. `technologyPath` and `technologyInput` are mutually
-exclusive.
+exclusive. A standard-layout input additionally requires one extraction profile,
+one source deck, and a process profile ID, either on the stage or through
+`toolchainProfile.lvsExtractionArtifacts`. Profile and deck path/input pairs are
+mutually exclusive. The native backend rejects missing, malformed, mismatched, or
+digest-invalid extraction artifacts before layout extraction.
 
 LVS stage results index the full engine report, engine artifact manifest,
 optional log, optional extracted layout netlist, and a compact Agent-readable

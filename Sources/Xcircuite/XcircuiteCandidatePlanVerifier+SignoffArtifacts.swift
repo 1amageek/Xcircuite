@@ -122,6 +122,12 @@ extension XcircuiteCandidatePlanVerifier {
             fallbackKinds: ["technology", "layout-technology"],
             references: references
         )
+        let extractionProfileRef = planningReference(
+            explicitID: hint.extractionProfileRefID ?? hint.extractionProfileRef,
+            fallbackIDs: ["extraction-profile-ref", "lvs-extraction-profile-ref"],
+            fallbackKinds: ["lvs-extraction-profile", "extraction-profile"],
+            references: references
+        )
         let extractionDeckRef = planningReference(
             explicitID: hint.extractionDeckRefID ?? hint.extractionDeckRef,
             fallbackIDs: ["extraction-deck-ref", "lvs-extraction-deck-ref"],
@@ -139,6 +145,7 @@ extension XcircuiteCandidatePlanVerifier {
             schematicNetlistRef: schematicNetlistRef,
             topCell: hint.topCell ?? "top",
             technologyRef: technologyRef,
+            extractionProfileRef: extractionProfileRef,
             extractionDeckRef: extractionDeckRef,
             processProfileID: hint.processProfileID,
             waiverRef: planningReference(
@@ -173,6 +180,7 @@ extension XcircuiteCandidatePlanVerifier {
                     layoutGDSRefID: inputs.layoutGDSReferenceID,
                     schematicNetlistRefID: inputs.schematicNetlistReferenceID,
                     technologyRefID: inputs.technologyReferenceID,
+                    extractionProfileRefID: inputs.extractionProfileReferenceID,
                     extractionDeckRefID: inputs.extractionDeckReferenceID,
                     processProfileID: inputs.processProfileID,
                     waiverRefID: inputs.waiverReferenceID,
@@ -192,6 +200,8 @@ extension XcircuiteCandidatePlanVerifier {
                 schematicNetlistRefID: stringHint("schematicNetlistRefID", step: step),
                 technologyRef: stringHint("technologyRef", step: step),
                 technologyRefID: stringHint("technologyRefID", step: step),
+                extractionProfileRef: stringHint("extractionProfileRef", step: step),
+                extractionProfileRefID: stringHint("extractionProfileRefID", step: step),
                 extractionDeckRef: stringHint("extractionDeckRef", step: step),
                 extractionDeckRefID: stringHint("extractionDeckRefID", step: step),
                 processProfileID: stringHint("processProfileID", step: step),

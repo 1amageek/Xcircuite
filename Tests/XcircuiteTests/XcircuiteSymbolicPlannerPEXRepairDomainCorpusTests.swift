@@ -43,7 +43,7 @@ struct XcircuiteSymbolicPlannerPEXRepairDomainCorpusTests {
         ).assess(
             request: XcircuiteSymbolicPlannerSolverCorpusAssessmentRequest(
                 suiteID: "pex-repair-domain-corpus",
-                toolID: "mock-pex-repair-planner",
+                toolID: "fixture-pex-repair-planner",
                 executablePath: solverURL.path(percentEncoded: false),
                 arguments: ["{problem}"],
                 requiredCoverageTags: [

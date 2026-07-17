@@ -17,6 +17,7 @@ extension XcircuiteFlowRuntimeTests {
         try await writeLayoutCommandRequest(root: root)
         try await writeStandardLayoutTechnology(root: root)
         try await writePEXTechnology(root: root)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
         try await writeTechnologyCatalog(
             root: root,
             requiredFiles: [
@@ -27,6 +28,14 @@ extension XcircuiteFlowRuntimeTests {
                 XcircuiteFlowTechnologyCatalogRequiredFile(
                     purpose: "pex-technology",
                     path: "pex.json"
+                ),
+                XcircuiteFlowTechnologyCatalogRequiredFile(
+                    purpose: "lvs-extraction-profile",
+                    path: "layout-extraction-profile.json"
+                ),
+                XcircuiteFlowTechnologyCatalogRequiredFile(
+                    purpose: "lvs-extraction-deck",
+                    path: "extraction.deck"
                 ),
             ]
         )
@@ -46,6 +55,11 @@ extension XcircuiteFlowRuntimeTests {
                 technologyCatalogPath: "tech/catalog.json",
                 drcTechnologyInput: .path("tech/process.json"),
                 lvsTechnologyInput: .path("tech/process.json"),
+                lvsExtractionArtifacts: XcircuiteLVSExtractionArtifacts(
+                    profileInput: .path(lvsExtraction.profilePath),
+                    deckInput: .path(lvsExtraction.deckPath),
+                    processProfileID: lvsExtraction.processProfileID
+                ),
                 pexTechnology: .jsonFile(path: "tech/pex.json"),
                 metadata: [
                     "source": "runtime-test",

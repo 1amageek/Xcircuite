@@ -139,11 +139,17 @@ supported GDSII/OASIS handoff the same way. PEX source netlists and technology
 JSON can also be provided through typed input references, which keeps run-scoped
 artifact handoff separate from engine-specific extraction logic.
 
+Native standard-layout LVS is profile-driven. Its process-owned extraction
+profile, source deck, and process profile ID are explicit runtime inputs; the
+profile schema, semantic coverage, identity, and deck digest are verified before
+geometry extraction. They can be declared per stage or supplied together by the
+run-level toolchain profile.
+
 Runtime configs can also declare an `XcircuiteFlowToolchainProfile` at the top
-level. The profile records PDK/catalog provenance and default DRC, LVS, and PEX
-technology inputs for signoff stages. Stage-local technology fields override the
-profile, but stages that omit them can share the same run-level profile instead
-of duplicating paths across every executor.
+level. The profile records PDK/catalog provenance, default DRC/LVS/PEX technology
+inputs, and the native LVS extraction artifact set for signoff stages. Stage-local
+fields override the profile, but stages that omit them can share the same run-level
+profile instead of duplicating paths across every executor.
 
 Every successful PEX stage writes `pex-summary.json` with stable artifact ID
 `pex-summary`. The file is a `PEXRunSummaryReport` generated from the PEX manifest
@@ -155,9 +161,9 @@ scraping logs.
 and the real backend named by `PEXBackendSelection`. An unavailable Magic
 executable, PDK, or extraction deck is retained as typed `adapterUnavailable`
 failure evidence and maps to a blocked flow stage; it does not produce a
-`pex-summary` signoff artifact. `PEXFlowStageExecutor.mock(...)` remains an
-explicit contract-test lane and is never accepted by the production runtime
-spec.
+`pex-summary` signoff artifact. Test-scoped extractors are injected directly
+into `PEXFlowStageExecutor` from the test target and are not part of the public
+runtime specification.
 
 PEX stages also write `evidence/pex-summary-envelope.json`. The envelope expands
 `PEXRunSummaryReport` into Agent-readable observation channels for artifact
@@ -260,11 +266,11 @@ through `PhysicalDesignFlowStageExecutorTests/physicalReviewApprovalResumesFlow`
 
 The retained `EndToEndDesignFlowTests/retainedMultiEngineRunResumesAfterReview`
 test additionally executes one run through LogicDesign lowering, logic
-simulation, timing STA, physical floorplanning, native DRC/LVS, deterministic
-mock PEX, review-packet integrity, human approval and same-run resume. This is
-integration evidence for the current handoff path; mock PEX is contract
-evidence rather than physical signoff and the run does not promote local
-results to external-oracle or foundry/process qualification.
+simulation, timing STA, physical floorplanning, native DRC/LVS, a PEX stage,
+review-packet integrity, human approval and same-run resume. This is integration
+evidence for the current handoff path; the test-scoped PEX implementation proves
+the stage contract rather than physical signoff, and the run does not promote
+local results to external-oracle or foundry/process qualification.
 
 Qualified evidence is passed as a `ToolEvidence.artifact` bound to a canonical
 `ToolCorpusQualificationResult`, `ToolOracleQualificationResult`, or
@@ -353,7 +359,7 @@ introducing an Agent wrapper.
 | `execute-candidate-plan` | `planning/plan-execution.json`, produced layout/netlist artifacts, `design-diff.json`, and `actions.jsonl`; approval-required risk blocks before design mutation unless the required approval record is approved |
 | `verify-candidate-plan` | `planning/plan-verification.json` with symbolic state, gate results, `riskReviews`, approval review state, `planning/rejected-plans.jsonl` for rejected/blocked plans, plus post-execution DRC/LVS/PEX/simulation metric artifacts when inputs exist |
 | `run-numeric-repair-loop` | `planning/numeric-repair-loop.json` plus per-iteration snapshots under `planning/numeric-repair-loop/iterations/` while generating candidates, synthesizing edits, executing, verifying, and feeding rejected candidates into the next iteration |
-| `run-selected-suggested-command` | loads the latest ready `review.selectSuggestedCommand` action, validates the same project/run, `xcircuite-flow` executable, readiness, and command allowlist, then dispatches through the typed CLI handler without arbitrary shell execution |
+| `run-selected-suggested-action` | loads the latest ready `review.selectSuggestedAction` record, validates its run binding, then projects the typed semantic operation into this project's `xcircuite-flow --project-root` invocation and dispatches through the typed CLI handler |
 
 The key artifacts for trust review are:
 

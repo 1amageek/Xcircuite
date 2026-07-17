@@ -55,14 +55,14 @@ extension XcircuiteCandidatePlanVerifier {
         let summaryRef = pexSummaryPlanningReference(
             references: problem.sourceRefs + problem.initialStateRefs
         )
-        if let backendPolicyGate = pexBackendPolicyGateResult(
+        if let backendRequirementGate = pexBackendRequirementGateResult(
             required: required,
             sourceStepIDs: sourceStepIDs,
             hint: hint,
             summaryRef: summaryRef
         ) {
             return GateExecutionEvaluation(
-                gateResult: backendPolicyGate,
+                gateResult: backendRequirementGate,
                 artifactReferences: []
             )
         }
@@ -301,7 +301,6 @@ extension XcircuiteCandidatePlanVerifier {
                     layoutFormat: inputs.layoutFormat,
                     sourceNetlistFormat: inputs.sourceNetlistFormat,
                     backendID: inputs.backendID,
-                    allowMockBackend: inputs.allowMockBackend,
                     executablePath: inputs.executablePath,
                     environmentOverrides: inputs.environmentOverrides,
                     cornerIDs: inputs.cornerIDs,
@@ -321,7 +320,6 @@ extension XcircuiteCandidatePlanVerifier {
                 sourceNetlistFormat: stringHint("sourceNetlistFormat", step: step),
                 backendID: stringHint("backendID", step: step),
                 pexBackendID: stringHint("pexBackendID", step: step),
-                allowMockBackend: boolHint("allowMockBackend", step: step),
                 executablePath: stringHint("pexExecutablePath", step: step) ?? stringHint("executablePath", step: step),
                 cornerIDs: stringArrayHint("cornerIDs", step: step) ?? stringArrayHint("corners", step: step),
                 topNets: intHint("topNets", step: step)
@@ -359,32 +357,24 @@ extension XcircuiteCandidatePlanVerifier {
         return backendID?.isEmpty == false ? backendID : nil
     }
 
-    func pexBackendPolicyGateResult(
+    func pexBackendRequirementGateResult(
         required: Bool,
         sourceStepIDs: [String],
         hint: CandidatePlanPEXInputHint,
         summaryRef: XcircuitePlanningReference?
     ) -> XcircuitePlanVerificationGateResult? {
-        guard let backendID = pexBackendID(from: hint, summaryRef: summaryRef) else {
-            return pexSummaryBackendPolicyGateResult(
+        guard pexBackendID(from: hint, summaryRef: summaryRef) != nil else {
+            return missingPEXBackendGateResult(
                 required: required,
                 sourceStepIDs: sourceStepIDs,
                 code: "pex-backend-required",
-                message: "pex-summary-gate requires an explicit PEX backendID. The verifier does not fall back to a mock backend for signoff acceptance."
-            )
-        }
-        guard !isMockPEXBackend(backendID) || !required else {
-            return pexSummaryBackendPolicyGateResult(
-                required: required,
-                sourceStepIDs: sourceStepIDs,
-                code: "pex-mock-backend-not-approved",
-                message: "PEX backend \(backendID) is a mock backend and cannot satisfy a required PEX signoff gate. Use a qualified extraction backend."
+                message: "pex-summary-gate requires an explicit production PEX backendID."
             )
         }
         return nil
     }
 
-    func pexSummaryBackendPolicyGateResult(
+    func missingPEXBackendGateResult(
         required: Bool,
         sourceStepIDs: [String],
         code: String,
@@ -404,12 +394,6 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
             ]
         )
-    }
-
-    func isMockPEXBackend(_ backendID: String) -> Bool {
-        backendID.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .hasPrefix("mock")
     }
 
     func pexLayoutFormat(

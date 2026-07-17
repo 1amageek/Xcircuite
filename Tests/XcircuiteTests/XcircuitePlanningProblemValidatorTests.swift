@@ -574,7 +574,7 @@ struct XcircuitePlanningProblemValidatorTests {
             summary: PEXRunSummary(
                 runID: "pex-run-1",
                 status: "success",
-                backendID: "mock-pex",
+                backendID: "magic",
                 corners: [
                     PEXCornerParasiticSummary(
                         cornerID: "tt",

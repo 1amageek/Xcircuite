@@ -48,6 +48,7 @@ private extension XcircuiteFlowStageExecutorSpec {
             try spec.validateLayoutInputs()
             try spec.validateSchematicInputs()
             try spec.validateTechnologyInputs()
+            try spec.validateExtractionInputs(toolchainProfile: toolchainProfile)
         case .pex(let spec):
             try spec.validateLayoutInputs()
             try spec.validateSourceNetlistInputs()
@@ -528,6 +529,51 @@ private extension XcircuiteFlowStageExecutorSpec.NativeLVS {
         }
     }
 
+    func validateExtractionInputs(toolchainProfile: XcircuiteFlowToolchainProfile?) throws {
+        let profileFields = presentFields([
+            ("extractionProfilePath", extractionProfilePath != nil),
+            ("extractionProfileInput", extractionProfileInput != nil),
+        ])
+        guard profileFields.count <= 1 else {
+            throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
+                stageID: stageID,
+                fields: profileFields
+            )
+        }
+        let deckFields = presentFields([
+            ("extractionDeckPath", extractionDeckPath != nil),
+            ("extractionDeckInput", extractionDeckInput != nil),
+        ])
+        guard deckFields.count <= 1 else {
+            throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
+                stageID: stageID,
+                fields: deckFields
+            )
+        }
+        guard layoutGDSPath != nil || layoutGDSInput != nil else {
+            return
+        }
+        guard resolvedExtractionProfileInput(toolchainProfile: toolchainProfile) != nil else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "extractionProfilePath/extractionProfileInput or toolchainProfile.lvsExtractionArtifacts.profileInput"
+            )
+        }
+        guard resolvedExtractionDeckInput(toolchainProfile: toolchainProfile) != nil else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "extractionDeckPath/extractionDeckInput or toolchainProfile.lvsExtractionArtifacts.deckInput"
+            )
+        }
+        guard let profileID = resolvedProcessProfileID(toolchainProfile: toolchainProfile),
+              !profileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "processProfileID or toolchainProfile.lvsExtractionArtifacts.processProfileID"
+            )
+        }
+    }
+
     func presentFields(_ fields: [(String, Bool)]) -> [String] {
         fields.compactMap { field in
             field.1 ? field.0 : nil
@@ -609,12 +655,6 @@ private extension XcircuiteFlowStageExecutorSpec.PEX {
             throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                 stageID: stageID,
                 field: "backendSelection.backendID"
-            )
-        }
-        if backendID.lowercased().hasPrefix("mock") {
-            throw XcircuiteFlowRuntimeSpecError.mockPEXBackendNotAllowed(
-                stageID: stageID,
-                backendID: backendID
             )
         }
         try FlowIdentifierValidator().validate(

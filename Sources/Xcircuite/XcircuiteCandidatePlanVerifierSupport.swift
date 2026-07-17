@@ -42,6 +42,7 @@ struct NativeLVSExecutionSpec: Sendable, Hashable {
     var schematicNetlistRef: XcircuitePlanningReference
     var topCell: String
     var technologyRef: XcircuitePlanningReference?
+    var extractionProfileRef: XcircuitePlanningReference?
     var extractionDeckRef: XcircuitePlanningReference?
     var processProfileID: String?
     var waiverRef: XcircuitePlanningReference?
@@ -78,6 +79,8 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
     var schematicNetlistRefID: String?
     var technologyRef: String?
     var technologyRefID: String?
+    var extractionProfileRef: String?
+    var extractionProfileRefID: String?
     var extractionDeckRef: String?
     var extractionDeckRefID: String?
     var processProfileID: String?
@@ -100,6 +103,8 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
         schematicNetlistRefID: String? = nil,
         technologyRef: String? = nil,
         technologyRefID: String? = nil,
+        extractionProfileRef: String? = nil,
+        extractionProfileRefID: String? = nil,
         extractionDeckRef: String? = nil,
         extractionDeckRefID: String? = nil,
         processProfileID: String? = nil,
@@ -121,6 +126,8 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
         self.schematicNetlistRefID = schematicNetlistRefID
         self.technologyRef = technologyRef
         self.technologyRefID = technologyRefID
+        self.extractionProfileRef = extractionProfileRef
+        self.extractionProfileRefID = extractionProfileRefID
         self.extractionDeckRef = extractionDeckRef
         self.extractionDeckRefID = extractionDeckRefID
         self.processProfileID = processProfileID
@@ -144,6 +151,8 @@ struct CandidatePlanLVSInputHint: Sendable, Hashable, Codable {
         schematicNetlistRefID = other.schematicNetlistRefID ?? schematicNetlistRefID
         technologyRef = other.technologyRef ?? technologyRef
         technologyRefID = other.technologyRefID ?? technologyRefID
+        extractionProfileRef = other.extractionProfileRef ?? extractionProfileRef
+        extractionProfileRefID = other.extractionProfileRefID ?? extractionProfileRefID
         extractionDeckRef = other.extractionDeckRef ?? extractionDeckRef
         extractionDeckRefID = other.extractionDeckRefID ?? extractionDeckRefID
         processProfileID = other.processProfileID ?? processProfileID
@@ -205,7 +214,6 @@ struct CandidatePlanPEXInputHint: Sendable, Hashable, Codable {
     var sourceNetlistFormat: String?
     var backendID: String?
     var pexBackendID: String?
-    var allowMockBackend: Bool?
     var executablePath: String?
     var environmentOverrides: [String: String]?
     var corners: [String]?
@@ -225,7 +233,6 @@ struct CandidatePlanPEXInputHint: Sendable, Hashable, Codable {
         sourceNetlistFormat: String? = nil,
         backendID: String? = nil,
         pexBackendID: String? = nil,
-        allowMockBackend: Bool? = nil,
         executablePath: String? = nil,
         environmentOverrides: [String: String]? = nil,
         corners: [String]? = nil,
@@ -244,7 +251,6 @@ struct CandidatePlanPEXInputHint: Sendable, Hashable, Codable {
         self.sourceNetlistFormat = sourceNetlistFormat
         self.backendID = backendID
         self.pexBackendID = pexBackendID
-        self.allowMockBackend = allowMockBackend
         self.executablePath = executablePath
         self.environmentOverrides = environmentOverrides
         self.corners = corners
@@ -265,7 +271,6 @@ struct CandidatePlanPEXInputHint: Sendable, Hashable, Codable {
         sourceNetlistFormat = other.sourceNetlistFormat ?? sourceNetlistFormat
         backendID = other.backendID ?? backendID
         pexBackendID = other.pexBackendID ?? pexBackendID
-        allowMockBackend = other.allowMockBackend ?? allowMockBackend
         executablePath = other.executablePath ?? executablePath
         environmentOverrides = other.environmentOverrides ?? environmentOverrides
         corners = other.corners ?? corners

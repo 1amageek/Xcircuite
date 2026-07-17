@@ -8,6 +8,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
     public var technologyCatalogPath: String?
     public var drcTechnologyInput: XcircuiteFlowInputReference?
     public var lvsTechnologyInput: XcircuiteFlowInputReference?
+    public var lvsExtractionArtifacts: XcircuiteLVSExtractionArtifacts?
     public var pexTechnology: XcircuitePEXTechnologySpec?
     public var pexTechnologyByCorner: [String: XcircuitePEXTechnologySpec]
     public var metadata: [String: String]?
@@ -19,6 +20,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         case technologyCatalogPath
         case drcTechnologyInput
         case lvsTechnologyInput
+        case lvsExtractionArtifacts
         case pexTechnology
         case pexTechnologyByCorner
         case metadata
@@ -31,6 +33,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         technologyCatalogPath: String? = nil,
         drcTechnologyInput: XcircuiteFlowInputReference? = nil,
         lvsTechnologyInput: XcircuiteFlowInputReference? = nil,
+        lvsExtractionArtifacts: XcircuiteLVSExtractionArtifacts? = nil,
         pexTechnology: XcircuitePEXTechnologySpec? = nil,
         pexTechnologyByCorner: [String: XcircuitePEXTechnologySpec] = [:],
         metadata: [String: String]? = nil
@@ -41,6 +44,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         self.technologyCatalogPath = technologyCatalogPath
         self.drcTechnologyInput = drcTechnologyInput
         self.lvsTechnologyInput = lvsTechnologyInput
+        self.lvsExtractionArtifacts = lvsExtractionArtifacts
         self.pexTechnology = pexTechnology
         self.pexTechnologyByCorner = pexTechnologyByCorner
         self.metadata = metadata
@@ -59,6 +63,10 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         lvsTechnologyInput = try container.decodeIfPresent(
             XcircuiteFlowInputReference.self,
             forKey: .lvsTechnologyInput
+        )
+        lvsExtractionArtifacts = try container.decodeIfPresent(
+            XcircuiteLVSExtractionArtifacts.self,
+            forKey: .lvsExtractionArtifacts
         )
         pexTechnology = try container.decodeIfPresent(
             XcircuitePEXTechnologySpec.self,
@@ -79,6 +87,7 @@ public struct XcircuiteFlowToolchainProfile: Sendable, Hashable, Codable {
         try container.encodeIfPresent(technologyCatalogPath, forKey: .technologyCatalogPath)
         try container.encodeIfPresent(drcTechnologyInput, forKey: .drcTechnologyInput)
         try container.encodeIfPresent(lvsTechnologyInput, forKey: .lvsTechnologyInput)
+        try container.encodeIfPresent(lvsExtractionArtifacts, forKey: .lvsExtractionArtifacts)
         try container.encodeIfPresent(pexTechnology, forKey: .pexTechnology)
         try container.encode(pexTechnologyByCorner, forKey: .pexTechnologyByCorner)
         try container.encodeIfPresent(metadata, forKey: .metadata)

@@ -13,7 +13,6 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
     case invalidToolchainProfileField(String)
     case missingExecutorInput(stageID: String, field: String)
     case conflictingExecutorInputs(stageID: String, fields: [String])
-    case mockPEXBackendNotAllowed(stageID: String, backendID: String)
     case conflictingRuntimeToolDescriptor(toolID: String, stageIDs: [String])
     case conflictingRuntimeToolHealth(toolID: String, stageIDs: [String])
     case conflictingQualificationRecord(toolID: String)
@@ -47,8 +46,6 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
             "Runtime spec executor \(stageID) is missing required input: \(field)"
         case .conflictingExecutorInputs(let stageID, let fields):
             "Runtime spec executor \(stageID) has conflicting inputs: \(fields.joined(separator: ", "))"
-        case .mockPEXBackendNotAllowed(let stageID, let backendID):
-            "Runtime spec executor \(stageID) cannot use mock PEX backend \(backendID) through the production PEX executor."
         case .conflictingRuntimeToolDescriptor(let toolID, let stageIDs):
             "Runtime spec contains conflicting descriptors for tool \(toolID) across stages: \(stageIDs.joined(separator: ", "))"
         case .conflictingRuntimeToolHealth(let toolID, let stageIDs):

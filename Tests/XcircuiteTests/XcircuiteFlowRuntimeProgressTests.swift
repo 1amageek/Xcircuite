@@ -16,6 +16,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         try await writeLayoutCommandRequest(root: root)
         try await writeStandardLayoutTechnology(root: root)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -77,6 +78,9 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistPath: "circuits/top.spice",
                         topCell: "top",
                         technologyPath: "tech/process.json",
+                        extractionProfilePath: lvsExtraction.profilePath,
+                        extractionDeckPath: lvsExtraction.deckPath,
+                        processProfileID: lvsExtraction.processProfileID,
                         tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                     )
                 ),
@@ -328,6 +332,7 @@ extension XcircuiteFlowRuntimeTests {
         defer { removeTemporaryRoot(root) }
         try await writeLayoutCommandRequest(root: root)
         try await writeStandardLayoutTechnology(root: root)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
         _ = try writeNetlist(
             """
             .subckt top
@@ -410,6 +415,9 @@ extension XcircuiteFlowRuntimeTests {
                     schematicNetlistPath: "circuits/top.spice",
                     topCell: "top",
                     technologyPath: "tech/process.json",
+                    extractionProfilePath: lvsExtraction.profilePath,
+                    extractionDeckPath: lvsExtraction.deckPath,
+                    processProfileID: lvsExtraction.processProfileID,
                     tool: QualifiedToolFixtures.toolSpec(level: .corpusChecked, toolID: "native-lvs")
                 )
             ))

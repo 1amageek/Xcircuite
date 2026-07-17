@@ -96,7 +96,7 @@ struct XcircuiteProblemTranslationAuditorTests {
         })
     }
 
-    @Test func runSelectedSuggestedCommandDispatchesProblemTranslationAudit() async throws {
+    @Test func runSelectedSuggestedActionDispatchesProblemTranslationAudit() async throws {
         let root = try makeTemporaryRoot("selected-problem-translation-audit")
         defer { removeTemporaryRoot(root) }
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -113,28 +113,25 @@ struct XcircuiteProblemTranslationAuditorTests {
                 actionID: "selection-audit-problem-translation",
                 runID: "run-audit",
                 actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
-                actionKind: FlowSuggestedCommandSelection.actionKind,
+                actionKind: FlowRunSuggestedActionSelection.actionKind,
                 status: .succeeded,
-                context: FlowRunActionContext(suggestedCommand: .init(
+                context: FlowRunActionContext(suggestedAction: .init(
                     nextActionID: "audit-problem-translation",
                     nextActionKind: "auditProblemTranslation",
-                    commandID: "xcircuite-flow.audit-problem-translation",
-                    readiness: "ready",
-                    executable: "xcircuite-flow",
-                    arguments: [
-                        "audit-problem-translation", "--project-root", root.path(percentEncoded: false),
-                        "--run-id", "run-audit", "--problem-artifact-id",
-                        XcircuitePlanningArtifactStore.problemArtifactID,
-                        "--problem-path", problemRef.path, "--pretty",
-                    ],
-                    reason: "Audit source-to-problem translation coverage."
+                    action: FlowRunSuggestedAction(
+                        id: "audit-problem-translation",
+                        readiness: .ready,
+                        operation: .auditProblemTranslation,
+                        runID: "run-audit",
+                        reason: "Audit source-to-problem translation coverage."
+                    )
                 ))
             ),
         )
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
-                "run-selected-suggested-command",
+                "run-selected-suggested-action",
                 "--project-root",
                 root.path(percentEncoded: false),
                 "--run-id",

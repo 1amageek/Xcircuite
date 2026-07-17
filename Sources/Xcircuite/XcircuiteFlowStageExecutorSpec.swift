@@ -458,6 +458,11 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var topCell: String
         public var technologyPath: String?
         public var technologyInput: XcircuiteFlowInputReference?
+        public var extractionProfilePath: String?
+        public var extractionProfileInput: XcircuiteFlowInputReference?
+        public var extractionDeckPath: String?
+        public var extractionDeckInput: XcircuiteFlowInputReference?
+        public var processProfileID: String?
         public var terminalEquivalencePath: String?
         public var terminalEquivalenceInput: XcircuiteFlowInputReference?
         public var options: LVSOptions?
@@ -475,6 +480,11 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             topCell: String,
             technologyPath: String? = nil,
             technologyInput: XcircuiteFlowInputReference? = nil,
+            extractionProfilePath: String? = nil,
+            extractionProfileInput: XcircuiteFlowInputReference? = nil,
+            extractionDeckPath: String? = nil,
+            extractionDeckInput: XcircuiteFlowInputReference? = nil,
+            processProfileID: String? = nil,
             terminalEquivalencePath: String? = nil,
             terminalEquivalenceInput: XcircuiteFlowInputReference? = nil,
             options: LVSOptions? = nil,
@@ -491,6 +501,11 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self.topCell = topCell
             self.technologyPath = technologyPath
             self.technologyInput = technologyInput
+            self.extractionProfilePath = extractionProfilePath
+            self.extractionProfileInput = extractionProfileInput
+            self.extractionDeckPath = extractionDeckPath
+            self.extractionDeckInput = extractionDeckInput
+            self.processProfileID = processProfileID
             self.terminalEquivalencePath = terminalEquivalencePath
             self.terminalEquivalenceInput = terminalEquivalenceInput
             self.options = options
@@ -878,6 +893,9 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 schematicNetlistInput: try spec.resolvedSchematicNetlistInput(),
                 topCell: spec.topCell,
                 technologyInput: spec.resolvedTechnologyInput(toolchainProfile: toolchainProfile),
+                extractionProfileInput: spec.resolvedExtractionProfileInput(toolchainProfile: toolchainProfile),
+                extractionDeckInput: spec.resolvedExtractionDeckInput(toolchainProfile: toolchainProfile),
+                processProfileID: spec.resolvedProcessProfileID(toolchainProfile: toolchainProfile),
                 terminalEquivalenceInput: spec.resolvedTerminalEquivalenceInput(),
                 options: spec.options ?? LVSOptions()
             )
@@ -1350,7 +1368,7 @@ private extension XcircuiteFlowStageExecutorSpec.NativeDRC {
 
 }
 
-private extension XcircuiteFlowStageExecutorSpec.NativeLVS {
+extension XcircuiteFlowStageExecutorSpec.NativeLVS {
     func resolvedLayoutNetlistInput() -> XcircuiteFlowInputReference? {
         if let layoutNetlistInput {
             return layoutNetlistInput
@@ -1386,6 +1404,34 @@ private extension XcircuiteFlowStageExecutorSpec.NativeLVS {
             return .path(technologyPath)
         }
         return toolchainProfile?.lvsTechnologyInput
+    }
+
+    func resolvedExtractionProfileInput(
+        toolchainProfile: XcircuiteFlowToolchainProfile?
+    ) -> XcircuiteFlowInputReference? {
+        if let extractionProfileInput {
+            return extractionProfileInput
+        }
+        if let extractionProfilePath {
+            return .path(extractionProfilePath)
+        }
+        return toolchainProfile?.lvsExtractionArtifacts?.profileInput
+    }
+
+    func resolvedExtractionDeckInput(
+        toolchainProfile: XcircuiteFlowToolchainProfile?
+    ) -> XcircuiteFlowInputReference? {
+        if let extractionDeckInput {
+            return extractionDeckInput
+        }
+        if let extractionDeckPath {
+            return .path(extractionDeckPath)
+        }
+        return toolchainProfile?.lvsExtractionArtifacts?.deckInput
+    }
+
+    func resolvedProcessProfileID(toolchainProfile: XcircuiteFlowToolchainProfile?) -> String? {
+        processProfileID ?? toolchainProfile?.lvsExtractionArtifacts?.processProfileID
     }
 
     func resolvedTerminalEquivalenceInput() -> XcircuiteFlowInputReference? {

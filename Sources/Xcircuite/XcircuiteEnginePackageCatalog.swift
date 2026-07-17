@@ -48,7 +48,6 @@ public enum XcircuiteEnginePackageCatalog {
                 "logic-report",
                 "logic-equivalence-evidence",
                 "logic-synthesis-acceptance",
-                "logic-equivalence-review",
                 "logic-equivalence-audit"
             ])
         ),

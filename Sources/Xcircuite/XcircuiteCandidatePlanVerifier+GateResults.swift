@@ -493,6 +493,19 @@ extension XcircuiteCandidatePlanVerifier {
                 artifactReferences: []
             )
         }
+        if executionSpec.layoutGDSRef != nil,
+           (executionSpec.extractionProfileRef == nil
+            || executionSpec.extractionDeckRef == nil
+            || executionSpec.processProfileID?.isEmpty != false) {
+            return GateExecutionEvaluation(
+                gateResult: nativeLVSMissingInputGateResult(
+                    required: required,
+                    sourceStepIDs: sourceStepIDs,
+                    message: "native-lvs requires an extraction profile, its source deck, and process profile ID when using a standard layout artifact."
+                ),
+                artifactReferences: []
+            )
+        }
 
         do {
             let verificationDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot)
@@ -519,6 +532,9 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
                 topCell: executionSpec.topCell,
                 technologyURL: try executionSpec.technologyRef.map {
+                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
+                },
+                extractionProfileURL: try executionSpec.extractionProfileRef.map {
                     try url(for: $0, manifest: manifest, projectRoot: projectRoot)
                 },
                 extractionDeckURL: try executionSpec.extractionDeckRef.map {

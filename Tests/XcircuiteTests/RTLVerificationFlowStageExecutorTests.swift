@@ -31,7 +31,6 @@ struct RTLVerificationFlowStageExecutorTests {
         #expect(result.gates.first?.status == .passed)
         #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-result" })
         #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-evidence-assessment" })
-        #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-review" })
         #expect(result.artifacts.contains { $0.artifactID == "rtl-verification-audit" })
     }
 

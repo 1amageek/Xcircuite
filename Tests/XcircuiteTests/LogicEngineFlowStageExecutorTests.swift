@@ -120,19 +120,14 @@ struct LogicEngineFlowStageExecutorTests {
             )
         ))
         let snapshotReference = try writeJSON(snapshot, name: "rtl-snapshot.json", root: root, kind: .rtl)
-        let snapshotRevision: ContentDigest?
-        if let digest = snapshot.designDigest {
-            snapshotRevision = try ContentDigest(algorithm: .sha256, hexadecimalValue: digest)
-        } else {
-            snapshotRevision = nil
-        }
+        let snapshotDigest = try #require(snapshot.designDigest)
         let request = LogicLoweringRequest(
             runID: "logic-lowering-stage",
             inputs: [snapshotReference],
-            design: LogicDesignArtifact(
+            design: LogicDesignReference(
                 artifact: snapshotReference,
                 topDesignName: "flow_top",
-                designRevision: snapshotRevision
+                designDigest: snapshotDigest
             )
         )
         let requestPath = try writeRequest(request, name: "lowering-request.json", root: root)
@@ -201,7 +196,7 @@ struct LogicEngineFlowStageExecutorTests {
             )]
         )
         let designReference = try writeJSON(document, name: "signed-design.json", root: root, kind: .netlist)
-        let design = LogicDesignArtifact(
+        let design = LogicDesignReference(
             artifact: designReference,
             topDesignName: document.topDesignName,
             designRevision: designReference.digest
@@ -347,8 +342,15 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(equivalenceResult.artifacts.contains { $0.artifactID == "rtl-verification-report" })
         #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-evidence" })
         #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-synthesis-acceptance" })
-        #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-review" })
         #expect(equivalenceResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
+        let auditURL = root
+            .appending(path: ".xcircuite/runs/logic-equivalence-stage/stages/logic.equivalence/audit/logic-equivalence-audit.json")
+        let audit = try JSONDecoder().decode(
+            RTLVerificationStageAuditRecord.self,
+            from: Data(contentsOf: auditURL)
+        )
+        #expect(audit.artifactIDs.allSatisfy { !$0.hasPrefix("acceptance_state_") })
+        #expect(audit.nextActions.allSatisfy { !$0.hasPrefix("acceptance_state_") })
 
         let resumedResult = try await LogicEquivalenceFlowStageExecutor(
             requestInput: .path(equivalenceRequestReference.locator.location.value),
@@ -363,7 +365,7 @@ struct LogicEngineFlowStageExecutorTests {
         #expect(resumedResult.artifacts.contains { $0.artifactID == "logic-equivalence-audit" })
     }
 
-    private func writeDesign(to root: URL) throws -> LogicDesignArtifact {
+    private func writeDesign(to root: URL) throws -> LogicDesignReference {
         let document = LogicDesignDocument(
             topDesignName: "flow_top",
             ports: [
@@ -375,7 +377,7 @@ struct LogicEngineFlowStageExecutorTests {
             nodes: [LogicNode(id: "and0", kind: .and, inputs: ["a", "b"], outputs: ["y"])]
         )
         let reference = try writeJSON(document, name: "design.json", root: root, kind: .netlist)
-        return LogicDesignArtifact(
+        return LogicDesignReference(
             artifact: reference,
             topDesignName: document.topDesignName,
             designRevision: reference.digest

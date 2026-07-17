@@ -312,6 +312,9 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistInput: .path("circuits/top.spice"),
                         topCell: "top",
                         technologyInput: .path("tech/process.json"),
+                        extractionProfileInput: .path("tech/layout-extraction-profile.json"),
+                        extractionDeckInput: .path("tech/extraction.deck"),
+                        processProfileID: "fixture.generated-mos.v1",
                         terminalEquivalenceInput: .path("tech/lvs-terminal-equivalence.json")
                     )
                 ),
@@ -348,6 +351,9 @@ extension XcircuiteFlowRuntimeTests {
             return
         }
         #expect(technologyPath == "tech/process.json")
+        #expect(lvs.extractionProfileInput == .path("tech/layout-extraction-profile.json"))
+        #expect(lvs.extractionDeckInput == .path("tech/extraction.deck"))
+        #expect(lvs.processProfileID == "fixture.generated-mos.v1")
         guard case .path(let terminalEquivalencePath) = try #require(lvs.terminalEquivalenceInput) else {
             Issue.record("Expected terminal equivalence path input")
             return
@@ -521,7 +527,7 @@ extension XcircuiteFlowRuntimeTests {
         }
     }
 
-    @Test func runtimeSpecRejectsPEXBackendExecutorWithMockBackend() async throws {
+    @Test func runtimeSpecAcceptsProductionPEXBackend() throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [
                 .pex(
@@ -533,20 +539,13 @@ extension XcircuiteFlowRuntimeTests {
                         topCell: "top",
                         corners: [PEXCorner(id: "tt")],
                         technology: .inline(makePEXTechnology()),
-                        backendSelection: PEXBackendSelection(backendID: "mock")
+                        backendSelection: PEXBackendSelection(backendID: "magic")
                     )
                 ),
             ]
         )
 
-        do {
-            try spec.validate()
-            Issue.record("Expected mock backend to be rejected by production PEX executor")
-        } catch let error as XcircuiteFlowRuntimeSpecError {
-            #expect(error == .mockPEXBackendNotAllowed(stageID: "009-pex", backendID: "mock"))
-        } catch {
-            throw error
-        }
+        try spec.validate()
     }
 
     @Test func runtimeSpecRejectsLVSWithoutLayoutInput() async throws {
@@ -573,6 +572,86 @@ extension XcircuiteFlowRuntimeTests {
             #expect(stageID == "008-lvs")
             #expect(field.contains("layoutNetlistInput"))
             #expect(field.contains("layoutGDSInput"))
+        } catch {
+            throw error
+        }
+    }
+
+    @Test func runtimeSpecRejectsStandardLayoutLVSWithoutExtractionIdentity() async throws {
+        let cases: [(
+            profile: XcircuiteFlowInputReference?,
+            deck: XcircuiteFlowInputReference?,
+            processProfileID: String?,
+            expectedField: String
+        )] = [
+            (nil, .path("tech/extraction.deck"), "fixture.generated-mos.v1", "extractionProfile"),
+            (.path("tech/layout-extraction-profile.json"), nil, "fixture.generated-mos.v1", "extractionDeck"),
+            (.path("tech/layout-extraction-profile.json"), .path("tech/extraction.deck"), nil, "processProfileID"),
+        ]
+
+        for item in cases {
+            let spec = XcircuiteFlowRuntimeSpec(
+                executors: [
+                    .nativeLVS(
+                        XcircuiteFlowStageExecutorSpec.NativeLVS(
+                            stageID: "008-lvs",
+                            layoutGDSInput: .path("layout/top.gds"),
+                            layoutFormat: .gds,
+                            schematicNetlistInput: .path("circuits/top.spice"),
+                            topCell: "top",
+                            extractionProfileInput: item.profile,
+                            extractionDeckInput: item.deck,
+                            processProfileID: item.processProfileID
+                        )
+                    ),
+                ]
+            )
+
+            do {
+                try spec.validate()
+                Issue.record("Expected standard-layout LVS extraction identity to be required")
+            } catch let error as XcircuiteFlowRuntimeSpecError {
+                guard case .missingExecutorInput(let stageID, let field) = error else {
+                    Issue.record("Expected a missing executor input diagnostic")
+                    continue
+                }
+                #expect(stageID == "008-lvs")
+                #expect(field.contains(item.expectedField))
+            } catch {
+                throw error
+            }
+        }
+    }
+
+    @Test func runtimeSpecRejectsConflictingLVSExtractionProfileInputs() async throws {
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .nativeLVS(
+                    XcircuiteFlowStageExecutorSpec.NativeLVS(
+                        stageID: "008-lvs",
+                        layoutGDSInput: .path("layout/top.gds"),
+                        layoutFormat: .gds,
+                        schematicNetlistInput: .path("circuits/top.spice"),
+                        topCell: "top",
+                        extractionProfilePath: "tech/layout-extraction-profile.json",
+                        extractionProfileInput: .path("tech/other-layout-extraction-profile.json"),
+                        extractionDeckInput: .path("tech/extraction.deck"),
+                        processProfileID: "fixture.generated-mos.v1"
+                    )
+                ),
+            ]
+        )
+
+        do {
+            try spec.validate()
+            Issue.record("Expected conflicting LVS extraction profile inputs to be rejected")
+        } catch let error as XcircuiteFlowRuntimeSpecError {
+            guard case .conflictingExecutorInputs(let stageID, let fields) = error else {
+                Issue.record("Expected a conflicting executor input diagnostic")
+                return
+            }
+            #expect(stageID == "008-lvs")
+            #expect(fields == ["extractionProfilePath", "extractionProfileInput"])
         } catch {
             throw error
         }
@@ -1039,6 +1118,9 @@ extension XcircuiteFlowRuntimeTests {
                         schematicNetlistInput: .path("circuits/top.spice"),
                         topCell: "TOP",
                         technologyInput: .path("tech/process.json"),
+                        extractionProfileInput: .path("tech/layout-extraction-profile.json"),
+                        extractionDeckInput: .path("tech/extraction.deck"),
+                        processProfileID: "fixture.generated-mos.v1",
                         tool: XcircuiteFlowToolSpec()
                     )
                 ),
@@ -1082,6 +1164,9 @@ extension XcircuiteFlowRuntimeTests {
         #expect(lvs.layoutGDSInput == .path("layout/top.gds"))
         #expect(lvs.layoutFormat == .gds)
         #expect(lvs.technologyInput == .path("tech/process.json"))
+        #expect(lvs.extractionProfileInput == .path("tech/layout-extraction-profile.json"))
+        #expect(lvs.extractionDeckInput == .path("tech/extraction.deck"))
+        #expect(lvs.processProfileID == "fixture.generated-mos.v1")
         #expect(comparison.options.requiredPostVariables == ["V(n1_pex)"])
     }
 

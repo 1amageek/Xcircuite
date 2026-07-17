@@ -125,19 +125,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 stageID: stageID,
                 context: context
             )
-            let review = makeReviewArtifact(
-                result: result,
-                acceptance: acceptance,
-                stageID: stageID
-            )
-            let reviewArtifact = try await persistJSON(
-                review,
-                fileName: "logic-equivalence-review.json",
-                artifactID: "logic-equivalence-review",
-                stageID: stageID,
-                context: context,
-                directoryName: "review"
-            )
             let requestArtifact = try artifactBuilder.reference(
                 for: requestURL,
                 projectRoot: try context.xcircuiteProjectRoot(),
@@ -156,7 +143,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                     "logic-equivalence-request",
                     "logic-equivalence-evidence",
                     "logic-synthesis-acceptance",
-                    "logic-equivalence-review",
                     "logic-equivalence-audit",
                 ]
             )
@@ -190,7 +176,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                     requestArtifact,
                     evidenceArtifact,
                     acceptanceArtifact,
-                    reviewArtifact,
                     auditArtifact,
                 ],
                 additionalDiagnostics: acceptance.diagnostics,
@@ -225,10 +210,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             .appending(path: "stages")
             .appending(path: stageID)
             .appending(path: "raw")
-        let reviewDirectory = try context.xcircuiteRunDirectory()
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "review")
         let auditDirectory = try context.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: stageID)
@@ -236,9 +217,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         let resultURL = rawDirectory.appending(path: "logic-equivalence-result.json")
         let evidenceURL = rawDirectory.appending(path: "logic-equivalence-evidence.json")
         let acceptanceURL = rawDirectory.appending(path: "logic-synthesis-acceptance.json")
-        let reviewURL = reviewDirectory.appending(path: "logic-equivalence-review.json")
         let auditURL = auditDirectory.appending(path: "logic-equivalence-audit.json")
-        let requiredURLs = [resultURL, evidenceURL, acceptanceURL, reviewURL, auditURL]
+        let requiredURLs = [resultURL, evidenceURL, acceptanceURL, auditURL]
         guard requiredURLs.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
             return nil
         }
@@ -252,7 +232,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             "logic-equivalence-request",
             "logic-equivalence-evidence",
             "logic-synthesis-acceptance",
-            "logic-equivalence-review",
             "logic-equivalence-audit",
         ]
         guard audit.stageID == stageID,
@@ -298,30 +277,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 "The persisted synthesis acceptance does not match the equivalence evidence."
             )
         }
-        let review = try JSONDecoder().decode(
-            RTLVerificationReviewArtifact.self,
-            from: Data(contentsOf: reviewURL)
-        )
-        let expectedReview = makeReviewArtifact(
-            result: result,
-            acceptance: acceptance,
-            stageID: stageID
-        )
-        guard review.schemaVersion == expectedReview.schemaVersion,
-              review.stageID == expectedReview.stageID,
-              review.runID == expectedReview.runID,
-              review.analysis == expectedReview.analysis,
-              review.status == expectedReview.status,
-              review.findings == expectedReview.findings,
-              review.diagnostics == expectedReview.diagnostics,
-              review.appliedWaivers == expectedReview.appliedWaivers,
-              review.record == expectedReview.record,
-              review.approvalRequired == expectedReview.approvalRequired,
-              review.suggestedActions == expectedReview.suggestedActions else {
-            throw LogicExecutionError.invalidArtifact(
-                "The persisted logic equivalence review does not match the result envelope."
-            )
-        }
         guard audit.status == result.status,
               audit.evidenceMaturity == result.payload.record.maturity else {
             throw LogicExecutionError.invalidArtifact(
@@ -358,13 +313,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             kind: ArtifactKind.report,
             format: ArtifactFormat.json
         )
-        let reviewArtifact = try artifactBuilder.reference(
-            for: reviewURL,
-            projectRoot: try context.xcircuiteProjectRoot(),
-            artifactID: "logic-equivalence-review",
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
-        )
         let auditArtifact = try artifactBuilder.reference(
             for: auditURL,
             projectRoot: try context.xcircuiteProjectRoot(),
@@ -395,7 +343,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 requestArtifact,
                 evidenceArtifact,
                 acceptanceArtifact,
-                reviewArtifact,
                 auditArtifact,
             ],
             additionalDiagnostics: acceptance.diagnostics,
@@ -464,11 +411,10 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         )
     }
 
-    private func makeReviewArtifact(
+    private func suggestedActions(
         result: RTLVerificationResult,
-        acceptance: LogicSynthesisAcceptanceResult,
-        stageID: String
-    ) -> RTLVerificationReviewArtifact {
+        acceptance: LogicSynthesisAcceptanceResult
+    ) -> [String] {
         let findingActions = result.payload.findings.flatMap(\.suggestedActions)
         let resultActions = result.rtlDiagnostics.flatMap(\.suggestedActions)
         let acceptanceActions = acceptance.diagnostics.flatMap { diagnostic in
@@ -480,19 +426,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         if acceptance.state != .accepted {
             actionSet.insert("inspect_logic_synthesis_acceptance")
         }
-        let actions = actionSet.sorted()
-        return RTLVerificationReviewArtifact(
-            stageID: stageID,
-            runID: result.runID,
-            analysis: result.payload.analysis,
-            status: result.status,
-            findings: result.payload.findings,
-            diagnostics: result.rtlDiagnostics + rtlDiagnostics(acceptance.diagnostics),
-            appliedWaivers: result.payload.appliedWaivers,
-            record: result.payload.record,
-            approvalRequired: acceptance.state != .accepted || result.status != .completed,
-            suggestedActions: actions
-        )
+        return actionSet.sorted()
     }
 
     private func makeAuditRecord(
@@ -506,16 +440,15 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         let requestDigest = try SHA256ContentDigester()
             .digest(data: try encoder.encode(request))
             .hexadecimalValue
-        let acceptanceAction = "acceptance_state_\(acceptance.state.rawValue)"
         return RTLVerificationStageAuditRecord(
             stageID: stageID,
             runID: result.runID,
             requestDigest: requestDigest,
             status: result.status,
             evidenceMaturity: result.payload.record.maturity,
-            artifactIDs: artifactIDs + [acceptanceAction],
+            artifactIDs: artifactIDs,
             resumable: result.status == .completed || result.status == .blocked,
-            nextActions: [acceptanceAction]
+            nextActions: suggestedActions(result: result, acceptance: acceptance)
         )
     }
 
@@ -541,22 +474,5 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             kind: ArtifactKind.rtl,
             format: url.pathExtension.lowercased() == "json" ? ArtifactFormat.json : ArtifactFormat.text
         )
-    }
-
-    private func rtlDiagnostics(_ diagnostics: [DesignDiagnostic]) -> [RTLDiagnostic] {
-        diagnostics.map { diagnostic in
-            let severity: RTLDiagnosticSeverity
-            switch diagnostic.severity {
-            case .information: severity = .info
-            case .warning: severity = .warning
-            case .error: severity = .error
-            }
-            return RTLDiagnostic(
-                severity: severity,
-                code: diagnostic.code.rawValue,
-                message: diagnostic.summary,
-                suggestedActions: diagnostic.suggestedActions.map(\.code)
-            )
-        }
     }
 }
