@@ -50,11 +50,11 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "e6a0fa2c5b64de1b4ef81e651bd1bb77ecc77299"
+            revision: "835997d81adfda7590695dc840abd3c076f3dd51"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "f79b52da83146c108e0a122f4581fe93fae59527"
+            revision: "123ff573036294955a90d3619095c156cf8e7f37"
         ),
         workspaceDependency(
             named: "PEXEngine",
