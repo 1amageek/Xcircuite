@@ -10,7 +10,7 @@ public struct XcircuiteFlowRunSpec: Sendable, Hashable, Codable {
     public var stages: [FlowStageDefinition]
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = Self.currentSchemaVersion,
         runID: String,
         intent: String,
         stages: [FlowStageDefinition]

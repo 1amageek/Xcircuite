@@ -90,7 +90,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "efc9a5fc580edb2aedeaae4b8a682fb45266af73"
+            revision: "3fc67c82f02cdb727764d6ae23ad823fa1a39652"
         ),
         workspaceDependency(
             named: "DFTEngine",
@@ -106,7 +106,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "28c77369345a536905e9c80ebd16ad3f6040bb63"
+            revision: "4eded125f9c980955362f695de6bc2022c8c2598"
         ),
     ],
     targets: [

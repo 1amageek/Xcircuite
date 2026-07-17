@@ -7,7 +7,7 @@ public extension XcircuiteFlowRuntimeSpec {
     func validate(
         projectRoot: URL? = nil
     ) throws {
-        guard schemaVersion == 1 else {
+        guard schemaVersion == Self.currentSchemaVersion else {
             throw XcircuiteFlowRuntimeSpecError.unsupportedSchemaVersion(schemaVersion)
         }
         guard !executors.isEmpty else {
