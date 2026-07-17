@@ -217,7 +217,7 @@ struct XcircuiteRunLedgerPersistenceTests {
         )
         let reference = try LocalArtifactReferencer().reference(
             locator,
-            relativeTo: await workspace.projectRoot
+            relativeTo: workspace.projectRoot
         )
         var ledger = try makeLedger(runID: "run-1")
         ledger.artifacts = [reference]

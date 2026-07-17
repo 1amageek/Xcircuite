@@ -320,7 +320,7 @@ extension XcircuiteFlowRuntimeTests {
         )
         let progressArtifact = try #require(manifest.artifacts.first { $0.artifactID == "run-progress" })
         #expect(progressArtifact.path == ".xcircuite/runs/run-progress-drc-stress/progress.jsonl")
-        #expect((progressArtifact.byteCount ?? 0) > 0)
+        #expect(progressArtifact.byteCount > 0)
     }
 
     @Test func runtimeProgressFollowStreamsMultiFamilyStressStagesWithoutSequenceGaps() async throws {
@@ -533,7 +533,7 @@ extension XcircuiteFlowRuntimeTests {
         )
         let progressArtifact = try #require(manifest.artifacts.first { $0.artifactID == "run-progress" })
         #expect(progressArtifact.path == ".xcircuite/runs/run-progress-multifamily-stress/progress.jsonl")
-        #expect((progressArtifact.byteCount ?? 0) > 0)
+        #expect(progressArtifact.byteCount > 0)
         try await copyProgressStressArtifactIfRequested(
             root: root,
             runID: "run-progress-multifamily-stress"

@@ -112,6 +112,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunJSON(value, id: Self.repairPlanFormulationArtifactID, path: Self.repairPlanFormulationRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    @discardableResult
     public func persistPlanningProblem(_ value: XcircuiteCircuitPlanningProblem, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunJSON(value, id: Self.problemArtifactID, path: Self.problemRelativePath, runID: runID, projectRoot: projectRoot)
@@ -135,6 +136,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunText(try jsonLines(values), id: Self.parameterCandidatesArtifactID, path: Self.parameterCandidatesRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    @discardableResult
     public func appendRejectedPlan(_ record: XcircuiteRejectedPlanRecord, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(record.runID, expected: runID)
         let store = try resolvedWorkspaceStore(projectRoot: projectRoot)
@@ -164,6 +166,7 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunJSON(value, id: Self.parameterCandidateSelectionTraceArtifactID, path: Self.parameterCandidateSelectionTraceRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    @discardableResult
     public func persistCandidatePlan(_ value: XcircuiteCandidatePlan, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunJSON(value, id: Self.candidatePlanArtifactID, path: Self.candidatePlanRelativePath, runID: runID, projectRoot: projectRoot)
@@ -309,16 +312,19 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunJSON(value, id: Self.numericRepairLoopArtifactID, path: Self.numericRepairLoopRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    @discardableResult
     public func persistMetricThresholdProfile(_ value: XcircuiteMetricThresholdProfile, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunJSON(value, id: Self.metricThresholdProfileArtifactID, path: Self.metricThresholdProfileRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    @discardableResult
     public func persistCostCalibrationReport(_ value: XcircuiteCostCalibrationReport, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunJSON(value, id: Self.costCalibrationArtifactID, path: Self.costCalibrationRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    @discardableResult
     public func persistParetoCandidates(_ value: XcircuiteParetoCandidateSet, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunText(try jsonLines(value.candidates), id: Self.paretoCandidatesArtifactID, path: Self.paretoCandidatesRelativePath, runID: runID, projectRoot: projectRoot)

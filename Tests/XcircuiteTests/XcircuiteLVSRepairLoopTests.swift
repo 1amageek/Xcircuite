@@ -1197,7 +1197,7 @@ struct XcircuiteLVSRepairLoopTests {
             reference,
             runID: runID,
             store: store,
-            projectRoot: await store.projectRoot
+            projectRoot: store.projectRoot
         )
     }
 

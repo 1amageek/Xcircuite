@@ -1163,41 +1163,41 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             url = try XcircuiteFlowRuntimeSpec.resolvePath(path, projectRoot: projectRoot)
         } catch {
             throw XcircuiteFlowRuntimeSpecError.invalidPath(
-                "(stageID).requestPath: (error.localizedDescription)"
+                "\(stageID).requestPath: \(error.localizedDescription)"
             )
         }
         do {
             return try JSONDecoder().decode(Value.self, from: Data(contentsOf: url))
         } catch {
             throw XcircuiteFlowRuntimeSpecError.invalidPath(
-                "(stageID).requestPath: (error.localizedDescription)"
+                "\(stageID).requestPath: \(error.localizedDescription)"
             )
         }
     }
 
     public func makeDescriptor() -> ToolDescriptor {
         switch self {
-        case .layoutCommand(let spec):
+        case .layoutCommand:
             SignoffToolDescriptors.layoutCommand()
-        case .nativeDRC(let spec):
+        case .nativeDRC:
             SignoffToolDescriptors.nativeDRC()
-        case .nativeLVS(let spec):
+        case .nativeLVS:
             SignoffToolDescriptors.nativeLVS()
         case .pex(let spec):
             SignoffToolDescriptors.pexBackend(
                 backendID: spec.backendSelection.backendID
             )
-        case .coreSpiceSimulation(let spec):
+        case .coreSpiceSimulation:
             SignoffToolDescriptors.coreSpiceSimulation()
-        case .postLayoutComparison(let spec):
+        case .postLayoutComparison:
             SignoffToolDescriptors.postLayoutComparison()
-        case .rtlVerification(let spec):
+        case .rtlVerification:
             RTLToolDescriptors.native()
-        case .logicSynthesis(let spec):
+        case .logicSynthesis:
             LogicToolDescriptors.synthesis()
-        case .logicEquivalence(let spec):
+        case .logicEquivalence:
             LogicToolDescriptors.equivalence()
-        case .logicEvidenceValidation(let spec):
+        case .logicEvidenceValidation:
             LogicToolDescriptors.evidenceValidation()
         case .dft(let spec):
             if spec.releaseEvidenceSources != nil {
@@ -1209,33 +1209,33 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             } else {
                 DFTToolDescriptors.engine()
             }
-        case .physicalReview(let spec):
+        case .physicalReview:
             PhysicalDesignToolDescriptors.review()
-        case .pdkDiscovery(let spec):
+        case .pdkDiscovery:
             PDKToolDescriptors.discovery()
-        case .pdkValidation(let spec):
+        case .pdkValidation:
             PDKToolDescriptors.validation()
-        case .pdkCorpus(let spec):
+        case .pdkCorpus:
             PDKToolDescriptors.corpus()
-        case .pdkStandardView(let spec):
+        case .pdkStandardView:
             PDKToolDescriptors.standardView()
-        case .pdkRuleDeck(let spec):
+        case .pdkRuleDeck:
             PDKToolDescriptors.ruleDeck()
-        case .pdkOracle(let spec):
+        case .pdkOracle:
             PDKToolDescriptors.oracle()
-        case .releaseAuthorization(let spec):
+        case .releaseAuthorization:
             ReleaseToolDescriptors.authorization()
-        case .releaseSignoff(let spec):
+        case .releaseSignoff:
             ReleaseToolDescriptors.signoff()
-        case .releaseTapeout(let spec):
+        case .releaseTapeout:
             ReleaseToolDescriptors.tapeout()
-        case .electricalStandardLayoutImport(let spec):
+        case .electricalStandardLayoutImport:
             SignoffToolDescriptors.nativeElectricalStandardLayoutImport()
-        case .electricalSignoff(let spec):
+        case .electricalSignoff:
             SignoffToolDescriptors.nativeElectricalSignoff()
-        case .electricalSignoffCorpus(let spec):
+        case .electricalSignoffCorpus:
             SignoffToolDescriptors.nativeElectricalCorpus()
-        case .electricalRepairRevision(let spec):
+        case .electricalRepairRevision:
             SignoffToolDescriptors.nativeElectricalRepairRevision()
         }
     }

@@ -14,6 +14,24 @@ import Xcircuite
 import XcircuiteFlowCLISupport
 
 extension XcircuiteFlowRuntimeTests {
+    @Test func runtimeSpecPathErrorIdentifiesTheFailingStage() async throws {
+        let stageID = "electrical-signoff.fixture"
+        let executor = XcircuiteFlowStageExecutorSpec.electricalSignoff(
+            .init(stageID: stageID, requestPath: "missing-request.json")
+        )
+
+        do {
+            _ = try await XcircuiteFlowRuntimeSpec(executors: [executor]).makeRuntime(
+                projectRoot: FileManager.default.temporaryDirectory
+            )
+            Issue.record("Expected the missing request to fail")
+        } catch XcircuiteFlowRuntimeSpecError.invalidPath(let detail) {
+            #expect(detail.contains(stageID))
+            #expect(detail.contains("missing-request.json"))
+            #expect(!detail.contains("(stageID)"))
+        }
+    }
+
     @Test func runtimeSpecRoundTripsRTLVerificationStageWithEvidenceInput() async throws {
         let spec = XcircuiteFlowRuntimeSpec(
             executors: [

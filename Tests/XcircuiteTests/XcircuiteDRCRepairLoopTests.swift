@@ -680,7 +680,6 @@ struct XcircuiteDRCRepairLoopTests {
         root: URL,
         runID: String
     ) async throws {
-        let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let url = root.appending(path: path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),

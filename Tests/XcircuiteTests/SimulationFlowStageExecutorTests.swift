@@ -370,9 +370,6 @@ struct SimulationFlowStageExecutorTests {
         let netlistData = Data(rcNetlist.utf8)
         try netlistData.write(to: netlistURL, options: [.atomic])
         let netlistPath = ".xcircuite/runs/run-sim-input-digest/stages/005-netlist/raw/input.cir"
-        let producerStageDirectory = runDirectory
-            .appending(path: "stages")
-            .appending(path: "005-netlist")
         try await workspaceStore.writeJSON(
             FlowStageResult(
                 stageID: "005-netlist",

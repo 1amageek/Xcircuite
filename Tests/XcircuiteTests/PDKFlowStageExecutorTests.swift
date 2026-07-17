@@ -86,7 +86,7 @@ struct PDKFlowStageExecutorTests {
     func standardOracleAndQualificationPersistArtifacts() async throws {
         let root = try makeRoot(name: "pdk-evidence-adapters")
         defer { removeRoot(root) }
-        let fixtureRoot = try makeFixtureProject(root: root)
+        _ = try makeFixtureProject(root: root)
 
         let standardContext = try await makeContext(root: root, runID: "pdk-standard-view-adapter")
         let standardResult = try await PDKStandardViewInspectionFlowStageExecutor.local(

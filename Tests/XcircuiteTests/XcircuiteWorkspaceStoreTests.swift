@@ -397,7 +397,7 @@ struct XcircuiteWorkspaceStoreTests {
         )
         return try LocalArtifactReferencer().reference(
             locator,
-            relativeTo: await store.projectRoot
+            relativeTo: store.projectRoot
         )
     }
 
