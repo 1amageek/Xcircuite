@@ -14,7 +14,7 @@ public struct XcircuiteFlowRuntime: Sendable {
     private let toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore
     private let workspaceStore: XcircuiteWorkspaceStore
 
-    init(
+    public init(
         toolRegistry: ToolRegistry,
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],
@@ -64,7 +64,7 @@ public struct XcircuiteFlowRuntime: Sendable {
         self.workspaceStore = workspaceStore
     }
 
-    init(
+    public init(
         descriptors: [ToolDescriptor],
         healthResults: [String: ToolHealthCheckResult],
         executors: [any FlowStageExecutor],
