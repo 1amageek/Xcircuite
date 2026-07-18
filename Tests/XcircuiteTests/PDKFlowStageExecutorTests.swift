@@ -69,7 +69,7 @@ struct PDKFlowStageExecutorTests {
             rootInput: .path("fixtures")
         ).execute(
             stage: FlowStageDefinition(
-                stageID: PDKKitAPI.corpusValidationStageID,
+                stageID: PDKOperation.corpusValidation.rawValue,
                 displayName: "PDK retained corpus"
             ),
             context: context
@@ -95,7 +95,7 @@ struct PDKFlowStageExecutorTests {
             format: .lef
         ).execute(
             stage: FlowStageDefinition(
-                stageID: PDKKitAPI.standardViewInspectionStageID,
+                stageID: PDKOperation.standardViewInspection.rawValue,
                 displayName: "PDK standard-view inspection"
             ),
             context: standardContext
@@ -109,7 +109,7 @@ struct PDKFlowStageExecutorTests {
             assetID: "rules"
         ).execute(
             stage: FlowStageDefinition(
-                stageID: PDKKitAPI.ruleDeckInspectionStageID,
+                stageID: PDKOperation.ruleDeckInspection.rawValue,
                 displayName: "PDK rule-deck inspection"
             ),
             context: ruleDeckContext
@@ -118,7 +118,7 @@ struct PDKFlowStageExecutorTests {
         #expect(ruleDeckResult.artifacts.count == 1)
         let ruleDeckURL = try ruleDeckContext.xcircuiteRunDirectory()
             .appending(path: "stages")
-            .appending(path: PDKKitAPI.ruleDeckInspectionStageID)
+            .appending(path: PDKOperation.ruleDeckInspection.rawValue)
             .appending(path: "raw/pdk-result.json")
         let ruleDeckData = try Data(contentsOf: ruleDeckURL)
         let ruleDeckInspectionResult = try JSONDecoder().decode(
@@ -136,7 +136,7 @@ struct PDKFlowStageExecutorTests {
             oracleInput: .path("fixtures/standard-view-oracle.json")
         ).execute(
             stage: FlowStageDefinition(
-                stageID: PDKKitAPI.oracleComparisonStageID,
+                stageID: PDKOperation.oracleComparison.rawValue,
                 displayName: "PDK oracle comparison"
             ),
             context: oracleContext

@@ -50,11 +50,11 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "835997d81adfda7590695dc840abd3c076f3dd51"
+            revision: "3cab3f150fb47c9a084472aa9f4ad3ea09edc882"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "123ff573036294955a90d3619095c156cf8e7f37"
+            revision: "0ac3caff6a8e72b2daadd0da7f9121831d7b760f"
         ),
         workspaceDependency(
             named: "PEXEngine",
@@ -74,39 +74,39 @@ let package = Package(
         ),
         workspaceDependency(
             named: "PDKKit",
-            revision: "b62c5ad7e5819a24977038c2133856caed52f481"
+            revision: "ab148cc60a4872b0e33755869372baaf816cff17"
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "b9aa25b0b78e6168befa25df3bfe8309bd020a6d"
+            revision: "87d6ef006b7889b6dd6098e3e79f402a56cb3075"
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "2b8f0df3e359fca274edc8ede176457de40e1648"
+            revision: "8d302e0a9ffe7e0ba4b4079c72fa3c96aec7c8d3"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "f1ec9581cf3dea9f439ed244b0475e0493505c22"
+            revision: "d882dbebcd8c25b57016c45be7996c10c60b5b1c"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "345e81140439bda43c683aa47c1ecb1dfda83331"
+            revision: "24b64f53e58bca64db3e9eac5784187d32514649"
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "601fa71a60c97fbdd994c8e7090291e19651fcc4"
+            revision: "2a5795b58ab29007b712b858d0ef840e55f4ca1c"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "a2b64a3f9f1651be0601496a7423a211c1438c49"
+            revision: "eb0395c538d63517ed78070aa802b5ec471e61dc"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "5eb111a3c35dfc54285a6b95e72b8f98b2828648"
+            revision: "c2f995ccb7611b17124b8fe77b7719f36d4b7943"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "e0f6aa2256950f2046eb834d1e7b9472bd2c97ae"
+            revision: "be52779216b055914fe02063862941c88a227498"
         ),
     ],
     targets: [

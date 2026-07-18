@@ -15,7 +15,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         stageID: String,
         toolID: String = "native-electrical-signoff",
         request: ElectricalSignoffRequest,
-        axes: [ElectricalSignoffAnalysisAxis] = ElectricalSignoffEngineAPI.supportedAxes,
+        axes: [ElectricalSignoffAnalysisAxis] = ElectricalSignoffEngine.supportedAxes,
         engine: any ElectricalSignoffExecuting
     ) {
         self.stageID = stageID

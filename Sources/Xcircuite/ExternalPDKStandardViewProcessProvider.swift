@@ -10,7 +10,7 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
 
     public init(
         configuration: PDKExternalInspectionProcessConfiguration,
-        stageID: String = PDKKitAPI.standardViewInspectionStageID,
+        stageID: String = PDKOperation.standardViewInspection.rawValue,
         runner: any PDKExternalInspectionProcessRunning = TimedPDKExternalInspectionProcessRunner()
     ) {
         self.support = PDKExternalInspectionProcessProviderSupport(

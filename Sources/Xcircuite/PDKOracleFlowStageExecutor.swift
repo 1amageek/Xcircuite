@@ -14,7 +14,7 @@ public struct PDKOracleFlowStageExecutor: FlowStageExecutor {
     private let support: PDKStageExecutionSupport
 
     public init(
-        stageID: String = PDKKitAPI.oracleComparisonStageID,
+        stageID: String = PDKOperation.oracleComparison.rawValue,
         toolID: String = "pdk-oracle-comparison",
         manifestInput: XcircuiteFlowInputReference,
         oracleInput: XcircuiteFlowInputReference,
@@ -29,7 +29,7 @@ public struct PDKOracleFlowStageExecutor: FlowStageExecutor {
     }
 
     public static func local(
-        stageID: String = PDKKitAPI.oracleComparisonStageID,
+        stageID: String = PDKOperation.oracleComparison.rawValue,
         manifestInput: XcircuiteFlowInputReference,
         oracleInput: XcircuiteFlowInputReference
     ) -> PDKOracleFlowStageExecutor {

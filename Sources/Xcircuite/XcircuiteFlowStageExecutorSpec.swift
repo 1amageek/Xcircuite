@@ -52,7 +52,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = PDKKitAPI.discoveryStageID,
+            stageID: String = PDKOperation.discovery.rawValue,
             searchRoots: [XcircuiteFlowInputReference],
             requiredProcessID: String? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
@@ -72,7 +72,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = PDKKitAPI.validationStageID,
+            stageID: String = PDKOperation.validation.rawValue,
             manifestInput: XcircuiteFlowInputReference,
             requiredAssetRoles: [PDKAssetRole] = [],
             validateCrossViews: Bool = true,
@@ -93,7 +93,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = PDKKitAPI.corpusValidationStageID,
+            stageID: String = PDKOperation.corpusValidation.rawValue,
             suiteInput: XcircuiteFlowInputReference,
             rootInput: XcircuiteFlowInputReference,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
@@ -114,7 +114,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = PDKKitAPI.standardViewInspectionStageID,
+            stageID: String = PDKOperation.standardViewInspection.rawValue,
             manifestInput: XcircuiteFlowInputReference,
             assetID: String,
             format: PDKStandardViewFormat,
@@ -138,7 +138,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
+            stageID: String = PDKOperation.ruleDeckInspection.rawValue,
             manifestInput: XcircuiteFlowInputReference,
             assetID: String,
             externalProcess: PDKExternalInspectionProcessConfiguration? = nil,
@@ -159,7 +159,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = PDKKitAPI.oracleComparisonStageID,
+            stageID: String = PDKOperation.oracleComparison.rawValue,
             manifestInput: XcircuiteFlowInputReference,
             oracleInput: XcircuiteFlowInputReference,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
@@ -290,7 +290,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public init(
             stageID: String = "electrical-signoff",
             requestPath: String,
-            axes: [ElectricalSignoffAnalysisAxis] = ElectricalSignoffEngineAPI.supportedAxes,
+            axes: [ElectricalSignoffAnalysisAxis] = ElectricalSignoffEngine.supportedAxes,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID

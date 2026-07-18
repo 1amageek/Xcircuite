@@ -14,7 +14,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
     private let support: PDKStageExecutionSupport
 
     public init(
-        stageID: String = PDKKitAPI.corpusValidationStageID,
+        stageID: String = PDKOperation.corpusValidation.rawValue,
         toolID: String = "pdk-corpus-validation",
         suiteInput: XcircuiteFlowInputReference,
         rootInput: XcircuiteFlowInputReference,
@@ -29,7 +29,7 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
     }
 
     public static func local(
-        stageID: String = PDKKitAPI.corpusValidationStageID,
+        stageID: String = PDKOperation.corpusValidation.rawValue,
         suiteInput: XcircuiteFlowInputReference,
         rootInput: XcircuiteFlowInputReference
     ) -> PDKCorpusValidationFlowStageExecutor {

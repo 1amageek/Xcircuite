@@ -10,7 +10,7 @@ public struct ExternalPDKRuleDeckProcessProvider: PDKExternalRuleDeckResultProvi
 
     public init(
         configuration: PDKExternalInspectionProcessConfiguration,
-        stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
+        stageID: String = PDKOperation.ruleDeckInspection.rawValue,
         runner: any PDKExternalInspectionProcessRunning = TimedPDKExternalInspectionProcessRunner()
     ) {
         self.support = PDKExternalInspectionProcessProviderSupport(

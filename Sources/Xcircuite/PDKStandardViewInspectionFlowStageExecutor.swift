@@ -14,7 +14,7 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
     private let support: PDKStageExecutionSupport
 
     public init(
-        stageID: String = PDKKitAPI.standardViewInspectionStageID,
+        stageID: String = PDKOperation.standardViewInspection.rawValue,
         toolID: String = "pdk-standard-view-inspection",
         manifestInput: XcircuiteFlowInputReference,
         assetID: String,
@@ -31,7 +31,7 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
     }
 
     public static func local(
-        stageID: String = PDKKitAPI.standardViewInspectionStageID,
+        stageID: String = PDKOperation.standardViewInspection.rawValue,
         manifestInput: XcircuiteFlowInputReference,
         assetID: String,
         format: PDKStandardViewFormat
@@ -47,7 +47,7 @@ public struct PDKStandardViewInspectionFlowStageExecutor: FlowStageExecutor {
 
     public static func external(
         configuration: PDKExternalInspectionProcessConfiguration,
-        stageID: String = PDKKitAPI.standardViewInspectionStageID,
+        stageID: String = PDKOperation.standardViewInspection.rawValue,
         toolID: String = "pdk-standard-view-inspection",
         manifestInput: XcircuiteFlowInputReference,
         assetID: String,

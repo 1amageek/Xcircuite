@@ -13,7 +13,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
     private let support: PDKStageExecutionSupport
 
     public init(
-        stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
+        stageID: String = PDKOperation.ruleDeckInspection.rawValue,
         toolID: String = "pdk-rule-deck-inspection",
         manifestInput: XcircuiteFlowInputReference,
         assetID: String,
@@ -28,7 +28,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
     }
 
     public static func local(
-        stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
+        stageID: String = PDKOperation.ruleDeckInspection.rawValue,
         manifestInput: XcircuiteFlowInputReference,
         assetID: String
     ) -> PDKRuleDeckInspectionFlowStageExecutor {
@@ -42,7 +42,7 @@ public struct PDKRuleDeckInspectionFlowStageExecutor: FlowStageExecutor {
 
     public static func external(
         configuration: PDKExternalInspectionProcessConfiguration,
-        stageID: String = PDKKitAPI.ruleDeckInspectionStageID,
+        stageID: String = PDKOperation.ruleDeckInspection.rawValue,
         toolID: String = "pdk-rule-deck-inspection",
         manifestInput: XcircuiteFlowInputReference,
         assetID: String,
