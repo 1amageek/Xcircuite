@@ -27,7 +27,7 @@ func writeStandardLVSExtractionArtifacts(
         processID: fixture.processID,
         processProfileID: fixture.processProfileID,
         extractionDeckDigest: digest,
-        productionEligible: fixture.productionEligible,
+        deckUseScope: fixture.deckUseScope,
         parameterValueConvention: fixture.parameterValueConvention,
         conductorLayers: fixture.conductorLayers,
         connectionRules: fixture.connectionRules,

@@ -40,7 +40,7 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            toolRegistry: try ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: [
                 "pex-test-fixture": qualification.health,
             ],

@@ -121,16 +121,11 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "requestPath"
                 )
             }
-        case .dftQualification(let spec):
+        case .dftOracleCorrelation(let spec):
             try validateInput(spec.corpusInput, stageID: spec.stageID, field: "corpusInput")
             try validateInput(spec.observationsInput, stageID: spec.stageID, field: "observationsInput")
-            if let buildInput = spec.processQualificationEvidenceBuildInput {
-                try validateInput(
-                    buildInput,
-                    stageID: spec.stageID,
-                    field: "processQualificationEvidenceBuildInput"
-                )
-            }
+        case .processQualificationEvidenceBuild(let spec):
+            try validateInput(spec.buildRequestInput, stageID: spec.stageID, field: "buildRequestInput")
         case .physicalReview(let spec):
             try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
             guard !spec.reviewScope.isEmpty,
@@ -380,7 +375,9 @@ private extension XcircuiteFlowStageExecutorSpec {
             spec.tool
         case .dftExecution(let spec):
             spec.tool
-        case .dftQualification(let spec):
+        case .dftOracleCorrelation(let spec):
+            spec.tool
+        case .processQualificationEvidenceBuild(let spec):
             spec.tool
         case .physicalReview(let spec):
             spec.tool

@@ -116,7 +116,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on width, spacing, enclosure, overlap-short, minimum-density, antenna, routing, notch, grid, and cut DRC repair-domain cases.",
+                capability: "Assess symbolic solver behavior on width, spacing, enclosure, overlap-short, minimum-density, antenna, routing, notch, grid, and cut DRC repair-domain cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -131,7 +131,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-overlap-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on different-net overlap-short DRC repair cases.",
+                capability: "Assess symbolic solver behavior on different-net overlap-short DRC repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -145,7 +145,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-density-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on minimum-density DRC repair cases.",
+                capability: "Assess symbolic solver behavior on minimum-density DRC repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -159,7 +159,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-antenna-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on antenna-ratio DRC repair cases.",
+                capability: "Assess symbolic solver behavior on antenna-ratio DRC repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -173,7 +173,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-routing-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on DRC routing-detour repair cases.",
+                capability: "Assess symbolic solver behavior on DRC routing-detour repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -187,7 +187,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-notch-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on notch DRC repair cases.",
+                capability: "Assess symbolic solver behavior on notch DRC repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -201,7 +201,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-grid-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on manufacturing-grid DRC repair cases.",
+                capability: "Assess symbolic solver behavior on manufacturing-grid DRC repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -215,7 +215,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.drc-cut-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on cut-rule DRC repair cases.",
+                capability: "Assess symbolic solver behavior on cut-rule DRC repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -229,7 +229,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on port, model, parameter, device, terminal-equivalence, hierarchy, global-net, policy-mutation, black-box hierarchy, arrayed-device, and parasitic-device LVS mismatch repair-domain cases.",
+                capability: "Assess symbolic solver behavior on port, model, parameter, device, terminal-equivalence, hierarchy, global-net, policy-mutation, black-box hierarchy, arrayed-device, and parasitic-device LVS mismatch repair-domain cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -243,7 +243,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-device-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS device mismatch repair cases.",
+                capability: "Assess symbolic solver behavior on LVS device mismatch repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -257,7 +257,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-terminal-equivalence-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS terminal-equivalence repair cases.",
+                capability: "Assess symbolic solver behavior on LVS terminal-equivalence repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -271,7 +271,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-hierarchy-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS hierarchy binding repair cases.",
+                capability: "Assess symbolic solver behavior on LVS hierarchy binding repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -285,7 +285,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-global-net-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS global-net repair cases.",
+                capability: "Assess symbolic solver behavior on LVS global-net repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -299,7 +299,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-policy-mutation-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS matching policy mutation repair cases.",
+                capability: "Assess symbolic solver behavior on LVS matching policy mutation repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -313,7 +313,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-black-box-hierarchy-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS black-box hierarchy repair cases.",
+                capability: "Assess symbolic solver behavior on LVS black-box hierarchy repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -327,7 +327,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-arrayed-device-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS arrayed-device repair cases.",
+                capability: "Assess symbolic solver behavior on LVS arrayed-device repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -341,7 +341,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.lvs-parasitic-device-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on LVS parasitic-device repair cases.",
+                capability: "Assess symbolic solver behavior on LVS parasitic-device repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -355,7 +355,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.pex-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on parasitic capacitance, coupling, post-layout metric degradation, multi-corner, RC-network, and post-layout simulation regression repair cases.",
+                capability: "Assess symbolic solver behavior on parasitic capacitance, coupling, post-layout metric degradation, multi-corner, RC-network, and post-layout simulation regression repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -369,7 +369,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.pex-multi-corner-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on PEX multi-corner repair cases.",
+                capability: "Assess symbolic solver behavior on PEX multi-corner repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -383,7 +383,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.pex-rc-network-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on PEX RC-network repair cases.",
+                capability: "Assess symbolic solver behavior on PEX RC-network repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [
@@ -397,7 +397,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
             XcircuiteSymbolicPlannerFeature(
                 coverageTag: "symbolic.pex-post-layout-simulation-repair-domain",
                 category: "domain-corpus",
-                capability: "Qualify symbolic solver behavior on PEX-driven post-layout simulation regression repair cases.",
+                capability: "Assess symbolic solver behavior on PEX-driven post-layout simulation regression repair cases.",
                 maturity: "implemented",
                 requiredForCorpusTrust: false,
                 evidence: [

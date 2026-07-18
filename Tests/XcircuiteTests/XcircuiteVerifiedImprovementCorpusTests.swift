@@ -7,7 +7,7 @@ import XcircuiteFlowCLISupport
 
 @Suite("Xcircuite verified improvement corpus")
 struct XcircuiteVerifiedImprovementCorpusTests {
-    @Test func qualifyVerifiedImprovementCorpusCollectsDRCLVSPEXNumericCases() async throws {
+    @Test func assessVerifiedImprovementCorpusCollectsDRCLVSPEXNumericCases() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -64,7 +64,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         try await writeJSON(suiteSpec, to: suiteURL)
 
         let output = try await XcircuiteFlowCLICommand.run(arguments: [
-            "qualify-verified-improvement-corpus",
+            "assess-verified-improvement-corpus",
             "--project-root",
             root.path(percentEncoded: false),
             "--suite-spec",
@@ -94,7 +94,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         #expect(report.summary.improvementArtifactCount == 4)
         #expect(report.suiteSpecArtifact?.artifactID == "verified-improvement-corpus-suite")
         #expect(report.reportArtifact?.artifactID == "verified-improvement-corpus-report")
-        #expect(report.reportArtifact?.path == ".xcircuite/qualification/verified-improvement/verified-improvement-suite/corpus-report.json")
+        #expect(report.reportArtifact?.path == ".xcircuite/assessments/verified-improvement/verified-improvement-suite/corpus-report.json")
 
         let lvsCase = try #require(report.caseResults.first { $0.caseID == "case-run-lvs" })
         #expect(lvsCase.status == .passed)
@@ -121,7 +121,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         })
     }
 
-    @Test func qualifyVerifiedImprovementCorpusReportsInvalidSuiteSpecPath() async throws {
+    @Test func assessVerifiedImprovementCorpusReportsInvalidSuiteSpecPath() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-invalid-json")
         defer { removeTemporaryRoot(root) }
         let suiteURL = root.appending(path: "invalid-suite.json")
@@ -129,7 +129,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
 
         do {
             _ = try await XcircuiteFlowCLICommand.run(arguments: [
-                "qualify-verified-improvement-corpus",
+                "assess-verified-improvement-corpus",
                 "--project-root",
                 root.path(percentEncoded: false),
                 "--suite-spec",
@@ -146,7 +146,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         }
     }
 
-    @Test func qualifyVerifiedImprovementCorpusReportsMissingEvidence() async throws {
+    @Test func assessVerifiedImprovementCorpusReportsMissingEvidence() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-missing")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -180,9 +180,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             ]
         )
 
-        let report = try await XcircuiteVerifiedImprovementCorpusQualifier(
+        let report = try await XcircuiteVerifiedImprovementCorpusAssessor(
             storage: workspaceStore
-        ).qualify(suiteSpec: suiteSpec)
+        ).assess(suiteSpec: suiteSpec)
 
         #expect(report.status == .failed)
         #expect(report.summary.caseCount == 1)
@@ -193,7 +193,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         #expect(result.missingArtifactIDs == ["planning-design-diff"])
     }
 
-    @Test func qualifyVerifiedImprovementCorpusRejectsAmbiguousCanonicalManifest() async throws {
+    @Test func assessVerifiedImprovementCorpusRejectsAmbiguousCanonicalManifest() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -222,9 +222,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             suiteID: "verified-improvement-duplicate-artifact-suite",
             cases: [caseSpec]
         )
-        let report = try await XcircuiteVerifiedImprovementCorpusQualifier(
+        let report = try await XcircuiteVerifiedImprovementCorpusAssessor(
             storage: workspaceStore
-        ).qualify(suiteSpec: suiteSpec)
+        ).assess(suiteSpec: suiteSpec)
 
         #expect(report.status == .failed)
         let result = try #require(report.caseResults.first)
@@ -235,7 +235,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         })
     }
 
-    @Test func qualifyVerifiedImprovementCorpusAcceptsExplicitManifestLoopPaths() async throws {
+    @Test func assessVerifiedImprovementCorpusAcceptsExplicitManifestLoopPaths() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-explicit-manifest-paths")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -280,9 +280,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             cases: [explicitCaseSpec]
         )
 
-        let report = try await XcircuiteVerifiedImprovementCorpusQualifier(
+        let report = try await XcircuiteVerifiedImprovementCorpusAssessor(
             storage: workspaceStore
-        ).qualify(suiteSpec: suiteSpec)
+        ).assess(suiteSpec: suiteSpec)
 
         #expect(report.status == .passed)
         let result = try #require(report.caseResults.first)
@@ -297,7 +297,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         })
     }
 
-    @Test func qualifyVerifiedImprovementCorpusRejectsExplicitLoopPathOutsideRunManifest() async throws {
+    @Test func assessVerifiedImprovementCorpusRejectsExplicitLoopPathOutsideRunManifest() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-explicit-path-mismatch")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -340,9 +340,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             cases: [explicitCaseSpec]
         )
 
-        let report = try await XcircuiteVerifiedImprovementCorpusQualifier(
+        let report = try await XcircuiteVerifiedImprovementCorpusAssessor(
             storage: workspaceStore
-        ).qualify(suiteSpec: suiteSpec)
+        ).assess(suiteSpec: suiteSpec)
 
         #expect(report.status == .failed)
         let result = try #require(report.caseResults.first)
@@ -354,7 +354,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         })
     }
 
-    @Test func qualifyVerifiedImprovementCorpusRejectsTamperedPlanVerificationArtifact() async throws {
+    @Test func assessVerifiedImprovementCorpusRejectsTamperedPlanVerificationArtifact() async throws {
         let root = try makeTemporaryRoot("verified-improvement-corpus-tampered-plan-verification")
         defer { removeTemporaryRoot(root) }
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -385,9 +385,9 @@ struct XcircuiteVerifiedImprovementCorpusTests {
             suiteID: "verified-improvement-tampered-artifact-suite",
             cases: [caseSpec]
         )
-        let report = try await XcircuiteVerifiedImprovementCorpusQualifier(
+        let report = try await XcircuiteVerifiedImprovementCorpusAssessor(
             storage: workspaceStore
-        ).qualify(suiteSpec: suiteSpec)
+        ).assess(suiteSpec: suiteSpec)
 
         #expect(report.status == .failed)
         let result = try #require(report.caseResults.first)

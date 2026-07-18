@@ -2,7 +2,7 @@ import Foundation
 import Xcircuite
 
 extension XcircuiteFlowCLICommand {
-    static func qualifySimulationGoldenCorpus(arguments: [String]) async throws -> String {
+    static func assessSimulationGoldenCorpus(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var suiteURL: URL?
@@ -23,7 +23,7 @@ extension XcircuiteFlowCLICommand {
             case "--pretty":
                 pretty = true
             case "--help", "-h":
-                return qualifySimulationGoldenCorpusHelpText
+                return assessSimulationGoldenCorpusHelpText
             default:
                 throw XcircuiteFlowCLIError.unknownOption(argument)
             }
@@ -40,7 +40,7 @@ extension XcircuiteFlowCLICommand {
         let resolvedArtifactDirectory = artifactDirectory
             ?? projectRoot
                 .appending(path: ".xcircuite")
-                .appending(path: "qualification")
+                .appending(path: "assessments")
                 .appending(path: "simulation-golden")
                 .appending(path: suite.suiteID)
         let report = try await SimulationGoldenCorpusRunner().run(

@@ -12,7 +12,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path>] [--pretty]
           xcircuite-flow compare-simulation-golden --golden-csv <path> --candidate-csv <path> [--max-absolute-delta <number>] [--max-relative-delta <number>] [--relative-delta-denominator-floor <number>] [--required-variable <name> ...] [--compare-variable <name> ...] [--no-interpolation] [--out <path>] [--pretty]
-          xcircuite-flow qualify-simulation-golden-corpus --project-root <path> --suite <path> [--artifact-dir <path>] [--out <path>] [--pretty]
+          xcircuite-flow assess-simulation-golden-corpus --project-root <path> --suite <path> [--artifact-dir <path>] [--out <path>] [--pretty]
           xcircuite-flow run --project-root <path> --run-spec <path> --runtime-config <path> [--pretty]
           xcircuite-flow resume-run --project-root <path> --run-id <id> --runtime-config <path> [--pretty]
           xcircuite-flow inspect-run --project-root <path> --run-id <id> [--pretty]
@@ -53,7 +53,7 @@ extension XcircuiteFlowCLICommand {
           xcircuite-flow execute-candidate-plan --project-root <path> --run-id <id> [--candidate-plan-artifact-id <id>] [--candidate-plan-path <path>] [--actor <id>] [--pretty]
           xcircuite-flow run-numeric-repair-loop --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--initial-candidate-strategy <name>] [--feedback-candidate-strategy <name>] [--max-candidates <count>] [--max-iterations <count>] [--synthesis-strategy <name>] [--mode <name>] [--actor <id>] [--calibration-policy <disabled|cp7-feedback>] [--pretty]
           xcircuite-flow generate-improvement-artifacts --project-root <path> --run-id <id> [--problem-artifact-id <id>] [--problem-path <path>] [--numeric-repair-loop-artifact-id <id>] [--numeric-repair-loop-path <path>] [--generated-at <timestamp>] [--pretty]
-          xcircuite-flow qualify-verified-improvement-corpus --project-root <path> --suite-spec <path> [--persist] [--pretty]
+          xcircuite-flow assess-verified-improvement-corpus --project-root <path> --suite-spec <path> [--persist] [--pretty]
           xcircuite-flow run-selected-suggested-action --project-root <path> --run-id <id> [--action-id <id>]
           xcircuite-flow summarize-loop --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
           xcircuite-flow evaluate-run-guard --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
@@ -211,10 +211,10 @@ extension XcircuiteFlowCLICommand {
         """
     }
 
-    public static var qualifySimulationGoldenCorpusHelpText: String {
+    public static var assessSimulationGoldenCorpusHelpText: String {
         """
         Usage:
-          xcircuite-flow qualify-simulation-golden-corpus --project-root <path> --suite <path> [--artifact-dir <path>] [--out <path>] [--pretty]
+          xcircuite-flow assess-simulation-golden-corpus --project-root <path> --suite <path> [--artifact-dir <path>] [--out <path>] [--pretty]
 
         Runs each SPICE netlist in a simulation golden corpus suite, compares the produced waveform against the checked-in golden waveform, writes per-case candidate waveform and comparison artifacts, and emits a corpus report with pass/fail counts and coverage tags.
         """
@@ -380,7 +380,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow audit-generated-layout-failure-ladder-coverage --project-root <path> --policy <path> --report <path> [--report <path> ...] [--persist] [--pretty]
 
-        Loads one or more generated-layout failure ladder reports plus an explicit coverage audit policy, then returns missing first-failing families, suggested actions, evidence artifacts, and diagnostic-code coverage. With --persist, the policy and audit are written under .xcircuite/qualification/generated-layout-failure-ladder/<audit-id>/.
+        Loads one or more generated-layout failure ladder reports plus an explicit coverage audit policy, then returns missing first-failing families, suggested actions, evidence artifacts, and diagnostic-code coverage. With --persist, the policy and audit are written under .xcircuite/assessments/generated-layout-failure-ladder/<audit-id>/.
         """
     }
 
@@ -575,12 +575,12 @@ extension XcircuiteFlowCLICommand {
         """
     }
 
-    public static var qualifyVerifiedImprovementCorpusHelpText: String {
+    public static var assessVerifiedImprovementCorpusHelpText: String {
         """
         Usage:
-          xcircuite-flow qualify-verified-improvement-corpus --project-root <path> --suite-spec <path> [--persist] [--pretty]
+          xcircuite-flow assess-verified-improvement-corpus --project-root <path> --suite-spec <path> [--persist] [--pretty]
 
-        Loads a verified improvement corpus suite, checks DRC/LVS/PEX/numeric loop outcomes against expected status, accepted/rejected results, diagnostics, failed gates, design diffs, and plan verification artifacts. With --persist, writes corpus-suite.json and corpus-report.json under .xcircuite/qualification/verified-improvement/<suite-id>/.
+        Loads a verified improvement corpus suite, checks DRC/LVS/PEX/numeric loop outcomes against expected status, accepted/rejected results, diagnostics, failed gates, design diffs, and plan verification artifacts. With --persist, writes corpus-suite.json and corpus-report.json under .xcircuite/assessments/verified-improvement/<suite-id>/.
         """
     }
 

@@ -29,7 +29,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case logicEquivalence(LogicEquivalence)
     case logicEvidenceValidation(LogicEvidenceValidation)
     case dftExecution(DFTExecution)
-    case dftQualification(DFTQualification)
+    case dftOracleCorrelation(DFTOracleCorrelation)
+    case processQualificationEvidenceBuild(ProcessQualificationEvidenceBuild)
     case physicalReview(PhysicalReview)
     case pdkDiscovery(PDKDiscovery)
     case pdkValidation(PDKValidation)
@@ -187,24 +188,37 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         }
     }
 
-    public struct DFTQualification: Sendable, Hashable, Codable {
+    public struct DFTOracleCorrelation: Sendable, Hashable, Codable {
         public var stageID: String
         public var corpusInput: XcircuiteFlowInputReference
         public var observationsInput: XcircuiteFlowInputReference
-        public var processQualificationEvidenceBuildInput: XcircuiteFlowInputReference?
         public var tool: XcircuiteFlowToolSpec
 
         public init(
-            stageID: String = "dft.qualification",
+            stageID: String = "dft.oracle-correlation",
             corpusInput: XcircuiteFlowInputReference,
             observationsInput: XcircuiteFlowInputReference,
-            processQualificationEvidenceBuildInput: XcircuiteFlowInputReference? = nil,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
             self.corpusInput = corpusInput
             self.observationsInput = observationsInput
-            self.processQualificationEvidenceBuildInput = processQualificationEvidenceBuildInput
+            self.tool = tool
+        }
+    }
+
+    public struct ProcessQualificationEvidenceBuild: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var buildRequestInput: XcircuiteFlowInputReference
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "tool-qualification.process-evidence-build",
+            buildRequestInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.buildRequestInput = buildRequestInput
             self.tool = tool
         }
     }
@@ -703,7 +717,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case logicEquivalence
         case logicEvidenceValidation
         case dftExecution
-        case dftQualification
+        case dftOracleCorrelation
+        case processQualificationEvidenceBuild
         case physicalReview
         case pdkDiscovery
         case pdkValidation
@@ -746,8 +761,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .logicEvidenceValidation(try container.decode(LogicEvidenceValidation.self, forKey: .value))
         case .dftExecution:
             self = .dftExecution(try container.decode(DFTExecution.self, forKey: .value))
-        case .dftQualification:
-            self = .dftQualification(try container.decode(DFTQualification.self, forKey: .value))
+        case .dftOracleCorrelation:
+            self = .dftOracleCorrelation(try container.decode(DFTOracleCorrelation.self, forKey: .value))
+        case .processQualificationEvidenceBuild:
+            self = .processQualificationEvidenceBuild(try container.decode(ProcessQualificationEvidenceBuild.self, forKey: .value))
         case .physicalReview:
             self = .physicalReview(try container.decode(PhysicalReview.self, forKey: .value))
         case .pdkDiscovery:
@@ -815,8 +832,11 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .dftExecution(let value):
             try container.encode(Kind.dftExecution, forKey: .kind)
             try container.encode(value, forKey: .value)
-        case .dftQualification(let value):
-            try container.encode(Kind.dftQualification, forKey: .kind)
+        case .dftOracleCorrelation(let value):
+            try container.encode(Kind.dftOracleCorrelation, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .processQualificationEvidenceBuild(let value):
+            try container.encode(Kind.processQualificationEvidenceBuild, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .physicalReview(let value):
             try container.encode(Kind.physicalReview, forKey: .kind)
@@ -969,12 +989,16 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 toolID: "dft-engine",
                 requestInput: .path(spec.requestPath)
             )
-        case .dftQualification(let spec):
-            return DFTQualificationFlowStageExecutor(
+        case .dftOracleCorrelation(let spec):
+            return DFTOracleCorrelationFlowStageExecutor(
                 stageID: spec.stageID,
                 corpusInput: spec.corpusInput,
-                observationsInput: spec.observationsInput,
-                processQualificationEvidenceBuildInput: spec.processQualificationEvidenceBuildInput
+                observationsInput: spec.observationsInput
+            )
+        case .processQualificationEvidenceBuild(let spec):
+            return ProcessQualificationEvidenceBuilderFlowStageExecutor(
+                stageID: spec.stageID,
+                buildRequestInput: spec.buildRequestInput
             )
         case .physicalReview(let spec):
             return PhysicalDesignReviewFlowStageExecutor(
@@ -1189,8 +1213,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             LogicToolDescriptors.evidenceValidation()
         case .dftExecution:
             DFTToolDescriptors.engine()
-        case .dftQualification:
-            DFTToolDescriptors.qualification()
+        case .dftOracleCorrelation:
+            DFTToolDescriptors.oracleCorrelation()
+        case .processQualificationEvidenceBuild:
+            ToolQualificationToolDescriptors.processEvidenceBuilder()
         case .physicalReview:
             PhysicalDesignToolDescriptors.review()
         case .pdkDiscovery:
@@ -1283,7 +1309,9 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             spec.tool
         case .dftExecution(let spec):
             spec.tool
-        case .dftQualification(let spec):
+        case .dftOracleCorrelation(let spec):
+            spec.tool
+        case .processQualificationEvidenceBuild(let spec):
             spec.tool
         case .physicalReview(let spec):
             spec.tool

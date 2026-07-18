@@ -54,7 +54,7 @@ struct SimulationFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            toolRegistry: try ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: [
                 "corespice": qualification.health,
             ],
@@ -152,7 +152,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(
@@ -184,7 +184,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL),
@@ -224,7 +224,7 @@ struct SimulationFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(
@@ -295,7 +295,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run named-node simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -329,7 +329,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run simulation with an output-like netlist filename",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -432,7 +432,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(
@@ -484,7 +484,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(
@@ -529,7 +529,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run cancellable simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(
@@ -574,7 +574,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -625,7 +625,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run DC sweep simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -744,7 +744,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run transfer function simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -793,7 +793,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run sensitivity simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -839,7 +839,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run noise simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -886,7 +886,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run pole-zero simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -938,7 +938,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run Fourier simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),
@@ -987,7 +987,7 @@ struct SimulationFlowStageExecutorTests {
                 intent: "Run Monte Carlo simulation",
                 stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 SimulationFlowStageExecutor(stageID: "010-sim", netlistURL: netlistURL, allowObservationOnly: true),

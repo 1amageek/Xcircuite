@@ -266,22 +266,19 @@ struct SimulationGoldenCorpusTests {
         })
     }
 
-    @Test func cliQualifiesCheckedInGoldenCorpusAndWritesReport() async throws {
+    @Test func cliAssessesCheckedInGoldenCorpusAndWritesReport() async throws {
         let packageRoot = try materializeGoldenCorpusProject()
-        let artifactDirectory = try makeTemporaryRoot("simulation-golden-corpus-cli-artifacts")
         let outputRoot = try makeTemporaryRoot("simulation-golden-corpus-cli-report")
         defer {
             removeTemporaryRoot(packageRoot)
-            removeTemporaryRoot(artifactDirectory)
             removeTemporaryRoot(outputRoot)
         }
         let outputURL = outputRoot.appending(path: "simulation-golden-corpus-report.json")
 
         let output = try await XcircuiteFlowCLICommand.run(arguments: [
-            "qualify-simulation-golden-corpus",
+            "assess-simulation-golden-corpus",
             "--project-root", packageRoot.path(percentEncoded: false),
             "--suite", suiteURL(packageRoot: packageRoot).path(percentEncoded: false),
-            "--artifact-dir", artifactDirectory.path(percentEncoded: false),
             "--out", outputURL.path(percentEncoded: false),
             "--pretty",
         ])
@@ -293,6 +290,11 @@ struct SimulationGoldenCorpusTests {
             SimulationGoldenCorpusReport.self,
             from: Data(contentsOf: outputURL)
         )
+        let expectedArtifactPathPrefix = packageRoot
+            .appending(path: ".xcircuite")
+            .appending(path: "assessments")
+            .appending(path: "simulation-golden")
+            .path(percentEncoded: false) + "/"
 
         #expect(stdoutReport == persistedReport)
         #expect(stdoutReport.status == "passed")
@@ -305,13 +307,16 @@ struct SimulationGoldenCorpusTests {
         #expect(stdoutReport.cases.filter { $0.expectedGateStatus == "passed" }.allSatisfy {
             $0.comparison?.gateStatus == "passed"
                 && $0.candidateWaveformArtifact?.digest.hexadecimalValue.count == 64
+                && $0.candidateWaveformArtifact?.path.hasPrefix(
+                    expectedArtifactPathPrefix
+                ) == true
         })
         #expect(stdoutReport.cases.filter { $0.expectedGateStatus == "failed" }.allSatisfy {
             $0.observedGateStatus == "failed" && !$0.diagnostics.isEmpty
         })
     }
 
-    @Test func sourcePreservingNetlistEditFeedsGoldenCorpusQualification() async throws {
+    @Test func sourcePreservingNetlistEditFeedsGoldenCorpusAssessment() async throws {
         let projectRoot = try makeTemporaryRoot("simulation-golden-source-edit")
         defer { removeTemporaryRoot(projectRoot) }
         let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
@@ -426,14 +431,14 @@ struct SimulationGoldenCorpusTests {
         #expect(caseResult.comparisonArtifact?.digest.hexadecimalValue.count == 64)
     }
 
-    @Test func actionDomainSnapshotIncludesGoldenCorpusQualificationOperation() async throws {
+    @Test func actionDomainSnapshotIncludesGoldenCorpusAssessmentOperation() async throws {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "simulation-golden-corpus-action-domain",
             generatedAt: "2026-06-29T00:00:00Z"
         )
         let simulation = try #require(snapshot.domains.first { $0.domainID == "simulation-analysis" })
         let operation = try #require(simulation.operations.first {
-            $0.operationID == "simulation.qualify-golden-corpus"
+            $0.operationID == "simulation.assess-golden-corpus"
         })
 
         #expect(operation.maturity == "implemented")
@@ -498,7 +503,7 @@ struct SimulationGoldenCorpusTests {
                     requiredInputRefs: ["source-netlist"],
                     missingInputRefs: [],
                     verificationGates: ["artifact-integrity", "simulation-golden-corpus"],
-                    reason: "Materialize a source-preserving parameter edit and re-run simulation golden qualification.",
+                    reason: "Materialize a source-preserving parameter edit and re-run simulation golden assessment.",
                     parameterHints: [
                         "netlistPath": .text(sourceNetlistPath),
                         "assignments": .parameterAssignments([

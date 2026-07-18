@@ -8,7 +8,7 @@ struct XcircuiteSimulationActionDomainSupplement: Sendable {
                 metricImprovementObjectiveOperation(),
                 comparePostLayoutOperation(),
                 compareGoldenOperation(),
-                qualifyGoldenCorpusOperation(),
+                assessGoldenCorpusOperation(),
             ])
         )
     }
@@ -105,9 +105,9 @@ struct XcircuiteSimulationActionDomainSupplement: Sendable {
         )
     }
 
-    private func qualifyGoldenCorpusOperation() -> XcircuiteActionDomainOperation {
+    private func assessGoldenCorpusOperation() -> XcircuiteActionDomainOperation {
         XcircuiteActionDomainOperation(
-            operationID: "simulation.qualify-golden-corpus",
+            operationID: "simulation.assess-golden-corpus",
             maturity: "implemented",
             inputRefs: [
                 "simulation-golden-corpus-suite-ref",

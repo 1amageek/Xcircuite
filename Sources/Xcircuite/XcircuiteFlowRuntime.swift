@@ -76,7 +76,7 @@ public struct XcircuiteFlowRuntime: Sendable {
         toolchainProfileArtifactStore: XcircuiteFlowToolchainProfileArtifactStore? = nil
     ) throws {
         try self.init(
-            toolRegistry: ToolRegistry(descriptors: descriptors),
+            toolRegistry: try ToolRegistry(descriptors: descriptors),
             healthResults: healthResults,
             executors: executors,
             workspaceStore: workspaceStore,

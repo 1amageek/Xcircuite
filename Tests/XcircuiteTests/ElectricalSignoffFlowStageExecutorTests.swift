@@ -360,10 +360,10 @@ struct ElectricalSignoffFlowStageExecutorTests {
     @Test("electrical catalog delegates release authority to ReleaseEngine", .timeLimit(.minutes(1)))
     func electricalCatalogDelegatesReleaseAuthority() async throws {
         let electrical = try #require(
-            XcircuiteEnginePackageCatalog.descriptors.first { $0.packageID == "ElectricalSignoffEngine" }
+            try XcircuiteEnginePackageCatalog.descriptors.first { $0.packageID == "ElectricalSignoffEngine" }
         )
         let release = try #require(
-            XcircuiteEnginePackageCatalog.descriptors.first { $0.packageID == "ReleaseEngine" }
+            try XcircuiteEnginePackageCatalog.descriptors.first { $0.packageID == "ReleaseEngine" }
         )
 
         #expect(electrical.stageIDs.contains("electrical-signoff.corpus"))

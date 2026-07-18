@@ -31,10 +31,10 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
     }
 
     public var provesRetainedExternalOracleInfrastructureReadiness: Bool {
-        schemaVersion == 2
+        schemaVersion == 4
             && kind == "retained-signoff-report"
             && status == "passed"
-            && summary.externalOracleQualificationStatus == "passed"
+            && summary.externalOracleAssessmentStatus == "passed"
             && failures.isEmpty
             && !externalOracleResults.isEmpty
             && externalOracleResults.allSatisfy(\.provesRetainedExternalOracleReadiness)
@@ -47,7 +47,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
     public struct Summary: Codable, Sendable, Hashable {
         public var dashboardStatus: String?
         public var externalOracleStatus: String?
-        public var externalOracleQualificationStatus: String?
+        public var externalOracleAssessmentStatus: String?
         public var externalOracleLaneCount: Int?
         public var passedExternalOracleLaneCount: Int?
         public var blockedExternalOracleLaneCount: Int?
@@ -56,7 +56,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
         public init(
             dashboardStatus: String? = nil,
             externalOracleStatus: String? = nil,
-            externalOracleQualificationStatus: String? = nil,
+            externalOracleAssessmentStatus: String? = nil,
             externalOracleLaneCount: Int? = nil,
             passedExternalOracleLaneCount: Int? = nil,
             blockedExternalOracleLaneCount: Int? = nil,
@@ -64,7 +64,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
         ) {
             self.dashboardStatus = dashboardStatus
             self.externalOracleStatus = externalOracleStatus
-            self.externalOracleQualificationStatus = externalOracleQualificationStatus
+            self.externalOracleAssessmentStatus = externalOracleAssessmentStatus
             self.externalOracleLaneCount = externalOracleLaneCount
             self.passedExternalOracleLaneCount = passedExternalOracleLaneCount
             self.blockedExternalOracleLaneCount = blockedExternalOracleLaneCount
@@ -76,7 +76,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
         public var domain: String
         public var status: String
         public var oracleBackendID: String?
-        public var qualified: Bool?
+        public var assessmentPassed: Bool?
         public var caseCount: Int?
         public var passedCaseCount: Int?
         public var failedCaseCount: Int?
@@ -90,7 +90,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
             domain: String,
             status: String,
             oracleBackendID: String? = nil,
-            qualified: Bool? = nil,
+            assessmentPassed: Bool? = nil,
             caseCount: Int? = nil,
             passedCaseCount: Int? = nil,
             failedCaseCount: Int? = nil,
@@ -103,7 +103,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
             self.domain = domain
             self.status = status
             self.oracleBackendID = oracleBackendID
-            self.qualified = qualified
+            self.assessmentPassed = assessmentPassed
             self.caseCount = caseCount
             self.passedCaseCount = passedCaseCount
             self.failedCaseCount = failedCaseCount
@@ -117,7 +117,7 @@ public struct XcircuiteRetainedSignoffReport: Codable, Sendable, Hashable {
         public var provesRetainedExternalOracleReadiness: Bool {
             status == "passed"
                 && XcircuiteRetainedSignoffReport.supportedReadinessDomains.contains(domain)
-                && qualified == true
+                && assessmentPassed == true
                 && readinessFailureCount == 0
                 && hasPositiveCaseCoverage
                 && hasPassingCaseCounts

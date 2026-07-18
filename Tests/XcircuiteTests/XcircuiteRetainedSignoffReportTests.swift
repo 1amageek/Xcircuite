@@ -5,13 +5,13 @@ import Xcircuite
 
 @Suite("Xcircuite retained signoff report")
 struct XcircuiteRetainedSignoffReportTests {
-    @Test func retainedExternalOracleReadinessRequiresExplicitQualificationAndArtifactEvidence() throws {
+    @Test func retainedExternalOracleReadinessRequiresExplicitAssessmentAndArtifactEvidence() throws {
         let passingLane = try makeExternalOracleLane()
         #expect(passingLane.provesRetainedExternalOracleReadiness)
 
-        var missingQualification = passingLane
-        missingQualification.qualified = nil
-        #expect(!missingQualification.provesRetainedExternalOracleReadiness)
+        var missingAssessment = passingLane
+        missingAssessment.assessmentPassed = nil
+        #expect(!missingAssessment.provesRetainedExternalOracleReadiness)
 
         var missingReport = passingLane
         missingReport.report = nil
@@ -30,15 +30,15 @@ struct XcircuiteRetainedSignoffReportTests {
         #expect(report.passingExternalOracleResults == [passingLane])
     }
 
-    @Test func promotionAssessmentBlocksRetainedExternalOracleLaneWithoutExplicitQualification() async throws {
+    @Test func promotionAssessmentBlocksRetainedExternalOracleLaneWithoutExplicitAssessment() async throws {
         let root = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(root) }
         let retainedReportURL = root.appending(path: "retained-signoff-report.json")
         try Data("{}".utf8).write(to: retainedReportURL, options: [.atomic])
 
-        var unqualifiedLane = try makeExternalOracleLane()
-        unqualifiedLane.qualified = nil
-        let retainedReport = makeRetainedReport(lanes: [unqualifiedLane])
+        var unassessedLane = try makeExternalOracleLane()
+        unassessedLane.assessmentPassed = nil
+        let retainedReport = makeRetainedReport(lanes: [unassessedLane])
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
         let assessment = try await XcircuiteGeneratedLayoutSignoffPromotionAssessor(
             workspaceStore: workspaceStore
@@ -68,14 +68,14 @@ struct XcircuiteRetainedSignoffReportTests {
         lanes: [XcircuiteRetainedSignoffReport.ExternalOracleResult]
     ) -> XcircuiteRetainedSignoffReport {
         XcircuiteRetainedSignoffReport(
-            schemaVersion: 2,
+            schemaVersion: 4,
             kind: "retained-signoff-report",
             suiteID: "retained-signoff-suite",
             status: "passed",
             summary: XcircuiteRetainedSignoffReport.Summary(
                 dashboardStatus: "passed",
                 externalOracleStatus: "passed",
-                externalOracleQualificationStatus: "passed",
+                externalOracleAssessmentStatus: "passed",
                 externalOracleLaneCount: lanes.count,
                 passedExternalOracleLaneCount: lanes.filter(\.provesRetainedExternalOracleReadiness).count,
                 blockedExternalOracleLaneCount: lanes.filter { $0.status == "blocked" }.count,
@@ -91,7 +91,7 @@ struct XcircuiteRetainedSignoffReportTests {
             domain: "drc",
             status: "passed",
             oracleBackendID: "magic",
-            qualified: true,
+            assessmentPassed: true,
             caseCount: 1,
             passedCaseCount: 1,
             failedCaseCount: 0,

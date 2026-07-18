@@ -54,7 +54,7 @@ struct SignoffFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            toolRegistry: try ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: ["native-drc": qualification.health],
             executors: [
                 DRCFlowStageExecutor.native(
@@ -619,7 +619,7 @@ struct SignoffFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            toolRegistry: try ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: ["native-lvs": qualification.health],
             executors: [
                 LVSFlowStageExecutor.native(

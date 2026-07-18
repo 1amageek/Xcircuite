@@ -183,7 +183,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 code: "required-operation-partial",
                 message: "Required operation is declared but only partially implemented: \(operation).",
                 milestoneID: spec.milestoneID,
-                nextActions: ["complete-operation:\(operation)", "qualify-operation:\(operation)"]
+                nextActions: ["complete-operation:\(operation)", "validate-operation:\(operation)"]
             ))
         }
         return values

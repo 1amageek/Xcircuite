@@ -79,15 +79,17 @@ struct DFTFlowStageExecutorTests {
         let scan = XcircuiteFlowStageExecutorSpec.dftExecution(
             .init(stageID: "dft.scan", requestPath: "dft-request.json")
         )
-        let qualification = XcircuiteFlowStageExecutorSpec.dftQualification(
+        let correlation = XcircuiteFlowStageExecutorSpec.dftOracleCorrelation(
             .init(
                 corpusInput: .path("dft-corpus.json"),
-                observationsInput: .path("dft-observations.json"),
-                processQualificationEvidenceBuildInput: .path("dft-process-evidence-request.json")
+                observationsInput: .path("dft-observations.json")
             )
         )
+        let processEvidence = XcircuiteFlowStageExecutorSpec.processQualificationEvidenceBuild(
+            .init(buildRequestInput: .path("dft-process-evidence-request.json"))
+        )
 
-        for spec in [scan, qualification] {
+        for spec in [scan, correlation, processEvidence] {
             let decoded = try JSONDecoder().decode(
                 XcircuiteFlowStageExecutorSpec.self,
                 from: JSONEncoder().encode(spec)
@@ -95,7 +97,7 @@ struct DFTFlowStageExecutorTests {
             #expect(decoded == spec)
         }
 
-        let runtimeSpec = XcircuiteFlowRuntimeSpec(executors: [scan, qualification])
+        let runtimeSpec = XcircuiteFlowRuntimeSpec(executors: [scan, correlation, processEvidence])
         #expect(runtimeSpec.schemaVersion == XcircuiteFlowRuntimeSpec.currentSchemaVersion)
         let obsoleteData = try JSONEncoder().encode(
             XcircuiteFlowRuntimeSpec(schemaVersion: 1, executors: [])
@@ -105,8 +107,8 @@ struct DFTFlowStageExecutorTests {
         }
     }
 
-    @Test("qualification stage builds current ToolQualification process evidence")
-    func executesQualificationStage() async throws {
+    @Test("DFT correlation and ToolQualification process evidence execute as separate stages")
+    func executesCorrelationAndProcessEvidenceStages() async throws {
         let root = try makeRoot()
         defer { removeRoot(root) }
         let runID = "dft-qualification-run"
@@ -177,25 +179,42 @@ struct DFTFlowStageExecutorTests {
             options: .atomic
         )
 
-        let result = try await DFTQualificationFlowStageExecutor(
+        let correlationResult = try await DFTOracleCorrelationFlowStageExecutor(
             corpusInput: .path("dft-corpus.json"),
-            observationsInput: .path("dft-observations.json"),
-            processQualificationEvidenceBuildInput: .path("dft-process-evidence-request.json")
+            observationsInput: .path("dft-observations.json")
         ).execute(
             stage: FlowStageDefinition(
-                stageID: "dft.qualification",
-                displayName: "DFT qualification"
+                stageID: "dft.oracle-correlation",
+                displayName: "DFT oracle correlation"
             ),
             context: try await makeContext(root: root, runID: runID)
         )
 
-        #expect(result.status == .succeeded)
-        #expect(result.gates.contains {
+        #expect(correlationResult.status == .succeeded)
+        #expect(correlationResult.gates.contains {
             $0.gateID == "dft-oracle-correlation" && $0.status == .passed
         })
-        #expect(result.artifacts.contains { $0.id.rawValue == "dft-evidence-provenance" })
-        #expect(result.artifacts.contains {
+        #expect(correlationResult.artifacts.contains { $0.id.rawValue == "dft-evidence-provenance" })
+        #expect(correlationResult.artifacts.contains {
             $0.id.rawValue == "dft-process-qualification-evidence"
+        } == false)
+
+        let evidenceResult = try await ProcessQualificationEvidenceBuilderFlowStageExecutor(
+            buildRequestInput: .path("dft-process-evidence-request.json")
+        ).execute(
+            stage: FlowStageDefinition(
+                stageID: "tool-qualification.process-evidence-build",
+                displayName: "Tool process qualification evidence"
+            ),
+            context: try await makeContext(root: root, runID: runID)
+        )
+
+        #expect(evidenceResult.status == .succeeded)
+        #expect(evidenceResult.gates.contains {
+            $0.gateID == "tool-process-qualification-evidence" && $0.status == .passed
+        })
+        #expect(evidenceResult.artifacts.contains {
+            $0.id.rawValue == "tool-process-qualification-evidence"
         })
     }
 

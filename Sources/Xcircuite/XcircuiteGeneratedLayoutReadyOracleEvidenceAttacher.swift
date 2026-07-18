@@ -78,7 +78,7 @@ public struct XcircuiteGeneratedLayoutReadyOracleEvidenceAttacher: Sendable {
             throw XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentError
                 .unsupportedReportSchemaVersion(report.schemaVersion)
         }
-        guard retainedSignoffReport.schemaVersion == 2 else {
+        guard retainedSignoffReport.schemaVersion == 4 else {
             throw XcircuiteGeneratedLayoutReadyOracleEvidenceAttachmentError
                 .unsupportedRetainedSignoffReportSchemaVersion(retainedSignoffReport.schemaVersion)
         }

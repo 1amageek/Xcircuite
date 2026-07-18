@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "suiteID": "simulation-golden-breadth-v1",
-  "description": "Representative CoreSpice golden waveform corpus for Agent-facing multi-analysis simulation qualification.",
+  "description": "Representative CoreSpice golden waveform corpus for Agent-facing multi-analysis simulation assessment.",
   "cases": [
     {
       "caseID": "dc-resistor-sweep",

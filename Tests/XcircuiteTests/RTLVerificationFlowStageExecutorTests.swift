@@ -221,7 +221,7 @@ struct RTLVerificationFlowStageExecutorTests {
             level: .oracleChecked,
             toolID: oracleToolID
         )
-        let toolRegistry = try ToolRegistry(validating: [descriptor])
+        let toolRegistry = try ToolRegistry(descriptors: [descriptor])
         let health = oracleHealthResult(toolID: oracleToolID)
         let (projectRoot, context) = try await makeRTLStageFixture(
             runID: "rtl-oracle-run",
@@ -305,7 +305,7 @@ struct RTLVerificationFlowStageExecutorTests {
             toolID: oracleToolID
         )
         let health = oracleHealthResult(toolID: oracleToolID)
-        let toolRegistry = try ToolRegistry(validating: [descriptor])
+        let toolRegistry = try ToolRegistry(descriptors: [descriptor])
         let (projectRoot, context) = try await makeRTLStageFixture(
             runID: "rtl-oracle-mismatch-run",
             toolRegistry: toolRegistry,

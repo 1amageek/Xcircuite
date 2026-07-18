@@ -249,10 +249,10 @@ struct XcircuitePlatformCapabilityReadinessTests {
             $0.severity == "warning"
                 && $0.code == "required-operation-partial"
                 && $0.nextActions.contains("complete-operation:drc.import-foundry-rule-seed")
-                && $0.nextActions.contains("qualify-operation:drc.import-foundry-rule-seed")
+                && $0.nextActions.contains("validate-operation:drc.import-foundry-rule-seed")
         })
         #expect(report.nextActions.contains("complete-operation:drc.import-foundry-rule-seed"))
-        #expect(report.nextActions.contains("qualify-operation:drc.import-foundry-rule-seed"))
+        #expect(report.nextActions.contains("validate-operation:drc.import-foundry-rule-seed"))
     }
 
     @Test func assessorKeepsMilestonePartialWhenRequiredOperationIsPlanned() async throws {

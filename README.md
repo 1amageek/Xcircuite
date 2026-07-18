@@ -55,7 +55,7 @@ through typed stage executors, artifact references, trust gates, and the
 | `semiconductor-layout` | Layout IR, editing, placement/routing, and native DRC preparation | [semiconductor-layout](https://github.com/1amageek/semiconductor-layout) |
 | `swift-mask-data` | GDSII/OASIS/LEF/DEF/CIF/DXF mask-data I/O | [swift-mask-data](https://github.com/1amageek/swift-mask-data) |
 | `DRCEngine` | Native and external DRC execution, diagnostics, and artifacts | [DRCEngine](https://github.com/1amageek/DRCEngine) |
-| `LVSEngine` | Native and external LVS execution, matching, and qualification | [LVSEngine](https://github.com/1amageek/LVSEngine) |
+| `LVSEngine` | Native and external LVS execution, matching, and assessment | [LVSEngine](https://github.com/1amageek/LVSEngine) |
 | `PEXEngine` | Parasitic extraction, canonical `ParasiticIR`, and PEX artifacts | [PEXEngine](https://github.com/1amageek/PEXEngine) |
 | `ToolQualification` | Tool capability, health, evidence, and trust gates | [ToolQualification](https://github.com/1amageek/ToolQualification) |
 | `DesignFlowKernel` | Stage lifecycle, retries, approvals, and resume | [DesignFlowKernel](https://github.com/1amageek/DesignFlowKernel) |
@@ -78,7 +78,8 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
 | `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `ArtifactReference`s, and blocks unavailable infrastructure without fabricating signoff output |
-| `DFTFlowStageExecutor` / `DFTQualificationFlowStageExecutor` | Runs typed DFT requests and correlates retained oracle cases into raw, request-bound evidence for ToolQualification |
+| `DFTFlowStageExecutor` / `DFTOracleCorrelationFlowStageExecutor` | Runs typed DFT requests and correlates retained oracle cases into raw, request-bound observations |
+| `ProcessQualificationEvidenceBuilderFlowStageExecutor` | Builds ToolQualification-owned process evidence from independently retained artifact groups |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
 | `TimingSTAFlowStageExecutor` / `TimingSIFlowStageExecutor` | Invoke TimingEngine protocols directly and read every design, library, constraint, PDK, and parasitic input through `LocalArtifactVerifier` before analysis |
 | `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
@@ -96,10 +97,11 @@ still subject to `PDKKit` schema, run, asset, format, source-reference and
 digest-bound validation; process completion alone never promotes tool trust or
 process qualification.
 
-DFT execution and qualification use distinct `dftExecution` and
-`dftQualification` runtime cases. DFT stages produce raw results, oracle
-correlation, and optional process-evidence build outputs; they do not issue
-release eligibility. `ReleaseEngine` consumes validated signoff evidence and
+DFT execution and oracle correlation use distinct `dftExecution` and
+`dftOracleCorrelation` runtime cases. The DFT stages produce raw results and
+correlation observations. A separate `processQualificationEvidenceBuild` stage
+uses ToolQualification to build process evidence; neither stage issues release
+eligibility. `ReleaseEngine` consumes validated signoff evidence and
 `DesignFlowKernel` owns approval, waiver, review, and resume.
 
 ```mermaid
@@ -272,9 +274,9 @@ evidence for the current handoff path; the test-scoped PEX implementation proves
 the stage contract rather than physical signoff, and the run does not promote
 local results to external-oracle or foundry/process qualification.
 
-Engines emit raw `ObservationRecord` values. A domain-aware flow policy derives
-typed qualification results from those observations, and `ToolQualification`
-independently verifies the retained results before issuing a canonical
+Engines emit raw `ObservationRecord` values. Domain-specific assessors derive
+typed assessments from those observations. `ToolQualification` independently
+verifies the retained observations and assessments before issuing a canonical
 `ToolQualificationRecord`. Xcircuite receives only a digest-bound
 `ArtifactReference` to that record. A run stage can require
 the record's qualified evidence through
@@ -362,6 +364,7 @@ introducing an Agent wrapper.
 | `execute-candidate-plan` | `planning/plan-execution.json`, produced layout/netlist artifacts, `design-diff.json`, and `actions.jsonl`; approval-required risk blocks before design mutation unless the required approval record is approved |
 | `verify-candidate-plan` | `planning/plan-verification.json` with symbolic state, gate results, `riskReviews`, approval review state, `planning/rejected-plans.jsonl` for rejected/blocked plans, plus post-execution DRC/LVS/PEX/simulation metric artifacts when inputs exist |
 | `run-numeric-repair-loop` | `planning/numeric-repair-loop.json` plus per-iteration snapshots under `planning/numeric-repair-loop/iterations/` while generating candidates, synthesizing edits, executing, verifying, and feeding rejected candidates into the next iteration |
+| `assess-verified-improvement-corpus` | `.xcircuite/assessments/verified-improvement/<suite-id>/corpus-suite.json` and `corpus-report.json` with typed DRC/LVS/PEX/numeric-loop outcome assessment; it does not issue tool qualification |
 | `run-selected-suggested-action` | loads the latest ready `review.selectSuggestedAction` record, validates its run binding, then projects the typed semantic operation into this project's `xcircuite-flow --project-root` invocation and dispatches through the typed CLI handler |
 
 Default platform-readiness test evidence uses exact Xcode test identifiers,
@@ -413,20 +416,21 @@ Golden waveform regression checks are available through
 `xcircuite-flow compare-simulation-golden`, producing a JSON report with
 required-variable coverage, variable-level deltas, worst points, interpolation
 policy, and gate violations.
-Checked-in simulation corpus qualification is available through
+Checked-in simulation corpus assessment is available through
 `SimulationGoldenCorpusRunner` and
-`xcircuite-flow qualify-simulation-golden-corpus`, which run SPICE netlists,
+`xcircuite-flow assess-simulation-golden-corpus`, which run SPICE netlists,
 compare produced waveforms against golden CSV baselines, and retain per-case
 candidate waveform / comparison artifacts as canonical `ArtifactReference`
 values with coverage tags. The corpus report does not define its own artifact
-reference shape. This canonical representation is simulation golden corpus
-report schema version 2.
+reference shape. The default artifacts are stored under
+`.xcircuite/assessments/simulation-golden/<suite-id>/`. This canonical
+representation is simulation golden corpus report schema version 2.
 
 ## Support types
 
 | Type | Responsibility |
 |---|---|
-| `SignoffToolDescriptors` | Qualification descriptors for layout commands, Native DRC/LVS backends, CoreSpice simulation, and PEX backends |
+| `SignoffToolDescriptors` | Tool descriptors for layout commands, Native DRC/LVS backends, CoreSpice simulation, and PEX backends |
 | `StageArtifactReferenceBuilder` | Builds `ArtifactReference`s for stage outputs (artifact ID, path, kind, format, digest) |
 | `XcircuiteRuntimeError` | Typed runtime failures |
 

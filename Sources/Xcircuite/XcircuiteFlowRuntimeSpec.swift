@@ -4,7 +4,7 @@ import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var toolchainProfile: XcircuiteFlowToolchainProfile?
@@ -62,7 +62,7 @@ public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
         let toolBindings = try await makeToolBindings(projectRoot: projectRoot)
 
         return try XcircuiteFlowRuntime(
-            toolRegistry: try ToolRegistry(validating: toolBindings.descriptors),
+            toolRegistry: try ToolRegistry(descriptors: toolBindings.descriptors),
             healthResults: toolBindings.healthResults,
             executors: executors,
             workspaceStore: try XcircuiteWorkspaceStore(projectRoot: projectRoot),

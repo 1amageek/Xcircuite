@@ -2,7 +2,7 @@ import Foundation
 import Xcircuite
 
 extension XcircuiteFlowCLICommand {
-    static func qualifyVerifiedImprovementCorpus(arguments: [String]) async throws -> String {
+    static func assessVerifiedImprovementCorpus(arguments: [String]) async throws -> String {
         var parser = XcircuiteFlowCLIArgumentParser(arguments: arguments)
         var projectRoot: URL?
         var suiteSpecPath: URL?
@@ -20,7 +20,7 @@ extension XcircuiteFlowCLICommand {
             case "--pretty":
                 pretty = true
             case "--help", "-h":
-                return qualifyVerifiedImprovementCorpusHelpText
+                return assessVerifiedImprovementCorpusHelpText
             default:
                 throw XcircuiteFlowCLIError.unknownOption(argument)
             }
@@ -40,12 +40,12 @@ extension XcircuiteFlowCLICommand {
         )
 
         let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
-        let qualifier = XcircuiteVerifiedImprovementCorpusQualifier(storage: store)
+        let assessor = XcircuiteVerifiedImprovementCorpusAssessor(storage: store)
         let report: XcircuiteVerifiedImprovementCorpusReport
         if persist {
-            report = try await qualifier.qualifyAndPersist(suiteSpec: suiteSpec)
+            report = try await assessor.assessAndPersist(suiteSpec: suiteSpec)
         } else {
-            report = try await qualifier.qualify(suiteSpec: suiteSpec)
+            report = try await assessor.assess(suiteSpec: suiteSpec)
         }
         return try encode(report, pretty: pretty)
     }

@@ -37,7 +37,8 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .logicEquivalence(let spec): spec.stageID
         case .logicEvidenceValidation(let spec): spec.stageID
         case .dftExecution(let spec): spec.stageID
-        case .dftQualification(let spec): spec.stageID
+        case .dftOracleCorrelation(let spec): spec.stageID
+        case .processQualificationEvidenceBuild(let spec): spec.stageID
         case .physicalReview(let spec): spec.stageID
         case .pdkDiscovery(let spec): spec.stageID
         case .pdkValidation(let spec): spec.stageID
@@ -68,7 +69,8 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .logicEquivalence(var spec): spec.tool.qualificationRecord = reference; return .logicEquivalence(spec)
         case .logicEvidenceValidation(var spec): spec.tool.qualificationRecord = reference; return .logicEvidenceValidation(spec)
         case .dftExecution(var spec): spec.tool.qualificationRecord = reference; return .dftExecution(spec)
-        case .dftQualification(var spec): spec.tool.qualificationRecord = reference; return .dftQualification(spec)
+        case .dftOracleCorrelation(var spec): spec.tool.qualificationRecord = reference; return .dftOracleCorrelation(spec)
+        case .processQualificationEvidenceBuild(var spec): spec.tool.qualificationRecord = reference; return .processQualificationEvidenceBuild(spec)
         case .physicalReview(var spec): spec.tool.qualificationRecord = reference; return .physicalReview(spec)
         case .pdkDiscovery(var spec): spec.tool.qualificationRecord = reference; return .pdkDiscovery(spec)
         case .pdkValidation(var spec): spec.tool.qualificationRecord = reference; return .pdkValidation(spec)

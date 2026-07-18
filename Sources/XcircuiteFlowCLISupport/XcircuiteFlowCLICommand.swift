@@ -27,8 +27,8 @@ public enum XcircuiteFlowCLICommand {
             return try inspectPlatformCapabilities(arguments: Array(arguments.dropFirst()))
         case "compare-simulation-golden":
             return try compareSimulationGolden(arguments: Array(arguments.dropFirst()))
-        case "qualify-simulation-golden-corpus":
-            return try await qualifySimulationGoldenCorpus(arguments: Array(arguments.dropFirst()))
+        case "assess-simulation-golden-corpus":
+            return try await assessSimulationGoldenCorpus(arguments: Array(arguments.dropFirst()))
         case "generate-planning-problem":
             return try await generatePlanningProblem(arguments: Array(arguments.dropFirst()))
         case "formulate-repair-planning-problem":
@@ -91,8 +91,8 @@ public enum XcircuiteFlowCLICommand {
             return try await runNumericRepairLoop(arguments: Array(arguments.dropFirst()))
         case "generate-improvement-artifacts":
             return try await generateImprovementArtifacts(arguments: Array(arguments.dropFirst()))
-        case "qualify-verified-improvement-corpus":
-            return try await qualifyVerifiedImprovementCorpus(arguments: Array(arguments.dropFirst()))
+        case "assess-verified-improvement-corpus":
+            return try await assessVerifiedImprovementCorpus(arguments: Array(arguments.dropFirst()))
         case "run-selected-suggested-action":
             return try await runSelectedSuggestedAction(arguments: Array(arguments.dropFirst()))
         case "summarize-loop":

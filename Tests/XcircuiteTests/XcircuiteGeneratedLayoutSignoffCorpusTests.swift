@@ -699,7 +699,7 @@ extension XcircuiteFlowRuntimeTests {
                 id: try ArtifactID(rawValue: "retained-\(domain)-oracle-report"),
                 locator: ArtifactLocator(
                     location: try ArtifactLocation(
-                        workspaceRelativePath: "qualification/\(domain)-oracle-report.json"
+                        workspaceRelativePath: "assessments/\(domain)-oracle-report.json"
                     ),
                     role: .output,
                     kind: .report,
@@ -710,14 +710,14 @@ extension XcircuiteFlowRuntimeTests {
             )
         }
         let retainedSignoffReport = XcircuiteRetainedSignoffReport(
-            schemaVersion: 2,
+            schemaVersion: 4,
             kind: "retained-signoff-report",
             suiteID: "retained-signoff-test-suite",
             status: "passed",
             summary: XcircuiteRetainedSignoffReport.Summary(
                 dashboardStatus: "passed",
                 externalOracleStatus: "passed",
-                externalOracleQualificationStatus: "passed",
+                externalOracleAssessmentStatus: "passed",
                 externalOracleLaneCount: 3,
                 passedExternalOracleLaneCount: 3,
                 blockedExternalOracleLaneCount: 0,
@@ -728,7 +728,7 @@ extension XcircuiteFlowRuntimeTests {
                     domain: domain,
                     status: "passed",
                     oracleBackendID: "\(domain)-oracle",
-                    qualified: true,
+                    assessmentPassed: true,
                     caseCount: 1,
                     passedCaseCount: 1,
                     failedCaseCount: 0,
@@ -741,7 +741,7 @@ extension XcircuiteFlowRuntimeTests {
             },
             failures: []
         )
-        let retainedSignoffReportURL = root.appending(path: "retained-signoff-report-v2.json")
+        let retainedSignoffReportURL = root.appending(path: "retained-signoff-report-v4.json")
         try await writeJSON(retainedSignoffReport, to: retainedSignoffReportURL)
         var readyWithoutEvidenceReport = report
         readyWithoutEvidenceReport.caseResults = report.caseResults.map { caseResult in
@@ -2108,7 +2108,7 @@ extension XcircuiteFlowRuntimeTests {
             from: cliCoverageAuditData
         )
         #expect(cliCoverageAudit.status == .satisfied)
-        #expect(cliCoverageAudit.auditArtifact?.path == ".xcircuite/qualification/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit.json")
+        #expect(cliCoverageAudit.auditArtifact?.path == ".xcircuite/assessments/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit.json")
 
         let cliDuplicateCoverageAuditJSON = try await XcircuiteFlowCLICommand.run(arguments: [
             "audit-generated-layout-failure-ladder-coverage",
@@ -2137,11 +2137,11 @@ extension XcircuiteFlowRuntimeTests {
         let coverageManifest = try await postLayoutStore.loadManifest()
         #expect(coverageManifest.files.contains {
             $0.artifactID == "generated-layout-failure-ladder-coverage-audit-policy"
-                && $0.path == ".xcircuite/qualification/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit-policy.json"
+                && $0.path == ".xcircuite/assessments/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit-policy.json"
         })
         #expect(coverageManifest.files.contains {
             $0.artifactID == "generated-layout-failure-ladder-coverage-audit"
-                && $0.path == ".xcircuite/qualification/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit.json"
+                && $0.path == ".xcircuite/assessments/generated-layout-failure-ladder/generated-layout-failure-ladder-local-coverage/failure-ladder-coverage-audit.json"
         })
     }
 

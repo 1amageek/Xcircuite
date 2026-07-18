@@ -116,7 +116,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             )
         }
         if let retainedSignoffReport {
-            guard retainedSignoffReport.schemaVersion == 2 else {
+            guard retainedSignoffReport.schemaVersion == 4 else {
                 throw XcircuiteGeneratedLayoutSignoffPromotionAssessmentError
                     .unsupportedRetainedSignoffReportSchemaVersion(retainedSignoffReport.schemaVersion)
             }
@@ -267,11 +267,11 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
                     )
                 )
             }
-            if retainedSignoffReport.summary.externalOracleQualificationStatus != "passed" {
+            if retainedSignoffReport.summary.externalOracleAssessmentStatus != "passed" {
                 blockers.append(
                     blocker(
-                        code: "retained-external-oracle-qualification-not-passed",
-                        message: "Retained signoff report external oracle qualification is \(retainedSignoffReport.summary.externalOracleQualificationStatus ?? "missing").",
+                        code: "retained-external-oracle-assessment-not-passed",
+                        message: "Retained signoff report external oracle assessment is \(retainedSignoffReport.summary.externalOracleAssessmentStatus ?? "missing").",
                         evidencePath: retainedReportPath
                     )
                 )
@@ -326,7 +326,7 @@ public struct XcircuiteGeneratedLayoutSignoffPromotionAssessor: Sendable {
             observed: observedDomains
         )
         let blockedLaneCount = lanes.filter { $0.status == "blocked" }.count
-        let failedLaneCount = lanes.filter { $0.status == "failed" || $0.qualified == false }.count
+        let failedLaneCount = lanes.filter { $0.status == "failed" || $0.assessmentPassed == false }.count
         let nonPassingLanes = lanes.filter { !$0.provesRetainedExternalOracleReadiness }
         let retainedSummaryReady = retainedSignoffReport.provesRetainedExternalOracleInfrastructureReadiness
         return ExternalOracleSummary(

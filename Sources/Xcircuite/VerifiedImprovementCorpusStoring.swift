@@ -2,7 +2,7 @@ import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
 
-/// Persistence capabilities required to qualify a verified-improvement corpus.
+/// Persistence capabilities required to assess a verified-improvement corpus.
 ///
 /// The contract uses canonical Foundation artifacts and the DesignFlowKernel
 /// ledger directly. It intentionally does not expose filesystem compatibility

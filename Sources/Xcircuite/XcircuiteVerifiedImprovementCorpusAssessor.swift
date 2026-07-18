@@ -2,7 +2,7 @@ import Foundation
 import CircuiteFoundation
 import DesignFlowKernel
 
-public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
+public struct XcircuiteVerifiedImprovementCorpusAssessor: Sendable {
     private let storage: any VerifiedImprovementCorpusStoring
     private let identifierValidator: FlowIdentifierValidator
 
@@ -14,13 +14,13 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         self.identifierValidator = identifierValidator
     }
 
-    public func qualify(
+    public func assess(
         suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec
     ) async throws -> XcircuiteVerifiedImprovementCorpusReport {
         try validate(suiteSpec)
         var caseResults: [XcircuiteVerifiedImprovementCorpusReport.CaseResult] = []
         for caseSpec in suiteSpec.cases {
-            caseResults.append(try await qualifyCase(caseSpec))
+            caseResults.append(try await assessCase(caseSpec))
         }
         return makeReport(
             suiteSpec: suiteSpec,
@@ -30,7 +30,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         )
     }
 
-    public func qualifyAndPersist(
+    public func assessAndPersist(
         suiteSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec
     ) async throws -> XcircuiteVerifiedImprovementCorpusReport {
         try validate(suiteSpec)
@@ -45,7 +45,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
 
         var caseResults: [XcircuiteVerifiedImprovementCorpusReport.CaseResult] = []
         for caseSpec in suiteSpec.cases {
-            caseResults.append(try await qualifyCase(caseSpec))
+            caseResults.append(try await assessCase(caseSpec))
         }
         let reportWithoutSelfRef = makeReport(
             suiteSpec: suiteSpec,
@@ -101,7 +101,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         }
     }
 
-    private func qualifyCase(
+    private func assessCase(
         _ caseSpec: XcircuiteVerifiedImprovementCorpusSuiteSpec.CaseSpec
     ) async throws -> XcircuiteVerifiedImprovementCorpusReport.CaseResult {
         var diagnostics: [XcircuiteVerifiedImprovementCorpusReport.Diagnostic] = []
@@ -205,13 +205,13 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
         let missingFailedGateIDs = caseSpec.requiredFailedGateIDs
             .filter { !failedGateIDs.contains($0) }
             .sorted()
-        let hasQualificationErrors = diagnostics.contains(where: isQualificationFailureDiagnostic)
+        let hasAssessmentErrors = diagnostics.contains(where: isAssessmentFailureDiagnostic)
         let casePassed = statusMatches
             && acceptedMatches
             && missingArtifactIDs.isEmpty
             && missingDiagnosticCodes.isEmpty
             && missingFailedGateIDs.isEmpty
-            && !hasQualificationErrors
+            && !hasAssessmentErrors
 
         return XcircuiteVerifiedImprovementCorpusReport.CaseResult(
             caseID: caseSpec.caseID,
@@ -350,7 +350,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
                     diagnostic(
                         severity: "error",
                         code: "artifact-reference-duplicate",
-                        message: "Run \(runID) contains \(matches.count) references for artifact \(artifactID); qualification requires one unambiguous artifact."
+                        message: "Run \(runID) contains \(matches.count) references for artifact \(artifactID); assessment requires one unambiguous artifact."
                     )
                 )
                 return nil
@@ -395,7 +395,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
                 diagnostic(
                     severity: "error",
                     code: "artifact-reference-duplicate",
-                    message: "Run \(runID) contains \(matches.count) references for artifact \(artifactID); qualification requires one unambiguous artifact."
+                    message: "Run \(runID) contains \(matches.count) references for artifact \(artifactID); assessment requires one unambiguous artifact."
                 )
             )
             return nil
@@ -607,7 +607,7 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
     }
 
     private func suiteProjectRelativePath(suiteID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/verified-improvement/\(suiteID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/assessments/verified-improvement/\(suiteID)/\(fileName)"
     }
 
     private func isDesignDiffArtifact(_ reference: ArtifactReference) -> Bool {
@@ -621,14 +621,13 @@ public struct XcircuiteVerifiedImprovementCorpusQualifier: Sendable {
             "accepted",
             "ok",
             "passed",
-            "qualified",
             "success",
             "succeeded"
         ]
         return passingStatuses.contains(status.lowercased())
     }
 
-    private func isQualificationFailureDiagnostic(
+    private func isAssessmentFailureDiagnostic(
         _ diagnostic: XcircuiteVerifiedImprovementCorpusReport.Diagnostic
     ) -> Bool {
         guard diagnostic.severity.lowercased() == "error" else {

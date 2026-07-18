@@ -29,15 +29,15 @@ public enum DFTToolDescriptors {
         )
     }
 
-    public static func qualification() -> ToolDescriptor {
+    public static func oracleCorrelation() -> ToolDescriptor {
         ToolDescriptor(
-            toolID: "dft-qualification",
-            displayName: "DFT Qualification",
+            toolID: "dft-oracle-correlation",
+            displayName: "DFT Oracle Correlation",
             kind: .reporting,
             version: "1.0.0",
             capabilities: [
                 ToolCapability(
-                    operationID: "qualify-dft",
+                    operationID: "correlate-dft-oracle-corpus",
                     inputFormats: [.json],
                     outputFormats: [.json]
                 )
@@ -45,7 +45,7 @@ public enum DFTToolDescriptors {
             trustProfile: ToolTrustProfile(
                 level: .unknown,
                 knownLimitations: [
-                    "Process qualification requires retained oracle artifacts and explicit approval evidence."
+                    "Correlation produces domain observations and does not grant tool or process qualification."
                 ]
             ),
             environment: ToolEnvironment(

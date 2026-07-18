@@ -207,7 +207,7 @@ Top-level fields:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `schemaVersion` | integer | yes | Must be `2` |
+| `schemaVersion` | integer | yes | Must be `3` |
 | `toolchainProfile` | object or null | no | Shared signoff technology/catalog defaults used by DRC/LVS/PEX stages when a stage does not declare its own technology input |
 | `executors` | array of executor specs | yes | Stage executor configurations |
 
@@ -217,20 +217,21 @@ valid Xcircuite stage identifier, and executor stage IDs must be unique. Duplica
 stage IDs are rejected before attachment so a record cannot be attached to
 an ambiguous stage.
 
-### DFT execution and qualification executors
+### DFT execution, oracle correlation, and qualification evidence executors
 
-DFT uses separate tagged executor kinds for native execution and ToolQualification evidence:
+DFT uses separate tagged executor kinds for native execution and oracle correlation. ToolQualification evidence has its own generic stage:
 
 | Mode | Required fields | Responsibility |
 |---|---|---|
 | `dftExecution` | stageID, requestPath | Run a typed DFT request and retain the raw DFT result and artifacts |
-| `dftQualification` | stageID, corpusInput, observationsInput | Correlate retained DFT oracle cases and optionally build independent process evidence |
+| `dftOracleCorrelation` | stageID, corpusInput, observationsInput | Correlate retained DFT oracle cases into raw observations |
+| `processQualificationEvidenceBuild` | stageID, buildRequestInput | Build process qualification evidence through ToolQualification |
 
-The qualification executor may set `processQualificationEvidenceBuildInput` to a
+The `processQualificationEvidenceBuild` executor reads a
 `ToolProcessQualificationEvidenceBuildRequest` produced from independent,
-artifact-backed evidence. The qualification stage writes
-`dft-process-qualification-evidence.json` only after the builder validates all
-evidence groups, scope, artifact integrity metadata, independence and freshness.
+artifact-backed evidence. It writes `tool-process-qualification-evidence.json`
+only after ToolQualification validates all evidence groups, scope, artifact
+integrity metadata, independence, and freshness.
 
 DFT stages do not issue release eligibility or own human approval. ReleaseEngine
 consumes validated DFT and signoff evidence, while DesignFlowKernel owns
@@ -415,7 +416,8 @@ Supported `kind` values:
 | `coreSpiceSimulation` | `SimulationFlowStageExecutor` | `stageID`, `netlistPath`, `tool` |
 | `postLayoutComparison` | `PostLayoutComparisonFlowStageExecutor` | `stageID`, `preLayoutWaveformPath`, `postLayoutWaveformPath`, `options`, `tool` |
 | `dftExecution` | `DFTFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
-| `dftQualification` | `DFTQualificationFlowStageExecutor` | `stageID`, `corpusInput`, `observationsInput`, optional `processQualificationEvidenceBuildInput`, `tool` |
+| `dftOracleCorrelation` | `DFTOracleCorrelationFlowStageExecutor` | `stageID`, `corpusInput`, `observationsInput`, `tool` |
+| `processQualificationEvidenceBuild` | `ProcessQualificationEvidenceBuilderFlowStageExecutor` | `stageID`, `buildRequestInput`, `tool` |
 
 `pex` is the only serialized PEX executor kind. Its `backendSelection`
 identifies a backend registered by `PEXEngine`; unavailable executables or

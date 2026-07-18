@@ -53,7 +53,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
                     ),
                 ]
             ),
-            toolRegistry: ToolRegistry(descriptors: [qualification.descriptor]),
+            toolRegistry: try ToolRegistry(descriptors: [qualification.descriptor]),
             healthResults: ["post-layout-comparison": qualification.health],
             executors: [
                 PostLayoutComparisonFlowStageExecutor(
@@ -127,7 +127,7 @@ struct PostLayoutComparisonFlowStageExecutorTests {
                 intent: "Compare post-layout waveform",
                 stages: [FlowStageDefinition(stageID: "030-compare", displayName: "Post-layout comparison")]
             ),
-            toolRegistry: ToolRegistry(descriptors: []),
+            toolRegistry: ToolRegistry(),
             healthResults: [:],
             executors: [
                 PostLayoutComparisonFlowStageExecutor(

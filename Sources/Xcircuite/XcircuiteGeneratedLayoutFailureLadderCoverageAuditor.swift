@@ -279,7 +279,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCoverageAuditor: Sendable {
     }
 
     private func auditProjectRelativePath(auditID: String, fileName: String) -> String {
-        "\(XcircuiteWorkspaceLayout.directoryName)/qualification/generated-layout-failure-ladder/\(auditID)/\(fileName)"
+        "\(XcircuiteWorkspaceLayout.directoryName)/assessments/generated-layout-failure-ladder/\(auditID)/\(fileName)"
     }
 
     private func missingRequirement(
