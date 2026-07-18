@@ -561,35 +561,6 @@ extension XcircuiteFlowRuntimeTests {
         )
     }
 
-    func fixtureURL(_ name: String) throws -> URL {
-        guard let url = Bundle.module.url(
-            forResource: name,
-            withExtension: nil,
-            subdirectory: "Fixtures/FlowRuntime"
-        ) else {
-            throw CocoaError(.fileNoSuchFile)
-        }
-        return url
-    }
-
-    func installQualificationEvidenceFixtures(in root: URL) throws {
-        let destination = root.appending(path: "qualification", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(
-            at: destination,
-            withIntermediateDirectories: true
-        )
-        for name in [
-            "drc-corpus-report.json",
-            "lvs-corpus-report.json",
-            "pex-spef-corpus-report.json",
-        ] {
-            try FileManager.default.copyItem(
-                at: fixtureURL(name),
-                to: destination.appending(path: name)
-            )
-        }
-    }
-
     func makeTemporaryRoot(_ name: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "XcircuiteFlowRuntimeTests-\(name)-\(UUID().uuidString)")

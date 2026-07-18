@@ -224,7 +224,7 @@ The versioned JSON contract is documented in
 ```mermaid
 flowchart LR
   RunSpec["XcircuiteFlowRunSpec\nstages + requiredTool"] --> CLI["xcircuite-flow"]
-  RuntimeSpec["XcircuiteFlowRuntimeSpec\nexecutors + tool evidence + toolchainProfile"] --> CLI
+  RuntimeSpec["XcircuiteFlowRuntimeSpec\nexecutors + qualification record references + toolchainProfile"] --> CLI
   CLI --> Runtime["XcircuiteFlowRuntime"]
   Runtime --> Flow["DesignFlowKernel"]
   Flow --> Toolchain[".xcircuite/runs/<run-id>/toolchain.json"]
@@ -235,11 +235,11 @@ flowchart LR
 | Type | Responsibility |
 |---|---|
 | `XcircuiteFlowRunSpec` | Run ID, intent, stage definitions, and `ToolTrustRequirement`s |
-| `XcircuiteFlowRuntimeSpec` | Executor configuration, tool qualification level, health status, evidence, and optional run-level signoff profile |
+| `XcircuiteFlowRuntimeSpec` | Executor configuration, optional `ToolQualificationRecord` artifact references, and optional run-level signoff profile |
 | `XcircuiteFlowToolchainProfile` | PDK/catalog provenance and default DRC/LVS/PEX technology inputs for shared signoff runs |
 | `XcircuiteFlowTechnologyCatalog` | Catalog-backed readiness contract for matching profile PDK/catalog IDs and required local technology files |
 | `XcircuiteFlowTechnologyCatalogInventory` | Agent-facing inventory report for PDK-root discovery, catalog entries, required-file resolution, and missing PDK/catalog assets |
-| `XcircuiteFlowToolSpec` | Per-tool trust inputs: qualification level, health status, `ToolEvidence` |
+| `XcircuiteFlowToolSpec` | Optional digest-bound `ArtifactReference` to a `ToolQualificationRecord` issued outside the Engine |
 | `XcircuiteFlowRuntime` | Runs or resumes through `DesignFlowKernel` with the configured registry and executors |
 
 `xcircuite-flow validate --project-root <path> --runtime-config <path>` gates
@@ -272,14 +272,17 @@ evidence for the current handoff path; the test-scoped PEX implementation proves
 the stage contract rather than physical signoff, and the run does not promote
 local results to external-oracle or foundry/process qualification.
 
-Qualified evidence is passed as a `ToolEvidence.artifact` bound to a canonical
-`ToolCorpusQualificationResult`, `ToolOracleQualificationResult`, or
-`ToolHealthQualificationResult`. A run stage can require it through
-`ToolTrustRequirement.requiredQualifiedEvidenceKinds`. `ToolQualification`
-re-hashes the retained artifact, decodes the canonical typed result, and verifies
-its tool identity, issuer, timestamp, scope, and passing cases. Missing, stale,
-non-canonical, or mismatched evidence blocks at the `tool-trust` gate and is
-persisted in `toolchain.json`.
+Engines emit raw `ObservationRecord` values. A domain-aware flow policy derives
+typed qualification results from those observations, and `ToolQualification`
+independently verifies the retained results before issuing a canonical
+`ToolQualificationRecord`. Xcircuite receives only a digest-bound
+`ArtifactReference` to that record. A run stage can require
+the record's qualified evidence through
+`ToolTrustRequirement.requiredQualifiedEvidenceKinds`. During runtime
+construction, `ToolQualification` re-hashes the record and its retained evidence,
+then verifies tool identity, issuer, timestamp, scope, and issuance decisions.
+Missing, stale, non-canonical, or mismatched records block at the `tool-trust`
+gate and are persisted in `toolchain.json`.
 Runtime configs are validated before runtime construction and evidence
 attachment: the executor list must be non-empty, executor `stageID`s must be valid
 Xcircuite identifiers, duplicate executor stage IDs are rejected, and present
@@ -384,20 +387,15 @@ Committed runtime/run spec fixtures live under
 
 | Fixture | Purpose |
 |---|---|
-| `qualified-evidence-runtime.json` | Runtime config with a digest-bound canonical DRC corpus result |
 | `qualified-evidence-run.json` | Run spec whose DRC stage requires `requiredQualifiedEvidenceKinds: ["corpus"]` plus `maximumEvidenceAgeSeconds` |
-| `qualified-signoff-runtime.json` | Runtime config for DRC/LVS/PEX signoff stages before evidence attachment |
 | `qualified-signoff-run.json` | Run spec whose DRC/LVS/PEX stages require qualified corpus evidence |
 
 Regression:
 
 ```bash
 xcodebuild -scheme Xcircuite-Package -destination 'platform=macOS' \
-  -only-testing:'XcircuiteTests/XcircuiteFlowRuntimeTests/runCLIAcceptsFoundationArtifactEvidenceFixture()' \
-  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 30 test
-xcodebuild -scheme Xcircuite-Package -destination 'platform=macOS' \
-  -only-testing:XcircuiteTests/XcircuiteFlowScaffoldRunCLITests \
-  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 30 test
+  -only-testing:XcircuiteTests/XcircuiteQualificationRecordIntegrationTests \
+  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 60 test
 ```
 
 ## Engine seams

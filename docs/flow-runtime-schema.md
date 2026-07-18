@@ -4,7 +4,8 @@ This document defines the versioned JSON contracts consumed by `xcircuite-flow`.
 The schema is intentionally explicit because Agent / CLI / CI callers must be
 able to run the same flow without reading Swift source or driving the UI.
 
-Current schema version: `1`
+Current schema versions: `XcircuiteFlowRunSpec` is `1` and
+`XcircuiteFlowRuntimeSpec` is `2`.
 
 ## Contract Boundary
 
@@ -22,8 +23,8 @@ flowchart LR
 | Contract | Responsibility |
 |---|---|
 | `XcircuiteFlowRunSpec` | Run identity, design intent, stage order, stage tool requirements |
-| `XcircuiteFlowRuntimeSpec` | Stage executors, tool qualification level, health status, evidence |
-| `XcircuiteFlowToolSpec` | Per-tool trust inputs passed into `ToolQualification` |
+| `XcircuiteFlowRuntimeSpec` | Stage executors, optional qualification record references, and toolchain profile |
+| `XcircuiteFlowToolSpec` | Optional digest-bound `ArtifactReference` to a ToolQualification-issued record |
 | `FlowRunSuggestedAction` | Project-independent semantic operation selected through the shared run ledger; it contains no executable, raw arguments, or workspace path |
 | `XcircuiteResolvedSuggestedAction` | Project-bound `xcircuite-flow` command and arguments projected from the semantic operation by Xcircuite |
 | `toolchain.json` | Persisted selected/rejected tool decisions for review and replay |
@@ -719,7 +720,8 @@ If a run stage declares:
 }
 ```
 
-then the selected runtime tool must provide at least one `ToolEvidence` with:
+then the validated `ToolQualificationRecord` must supply a descriptor containing
+at least one `ToolEvidence` with:
 
 ```json
 {
@@ -757,55 +759,26 @@ Committed fixtures:
 
 | Fixture | Purpose |
 |---|---|
-| `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-evidence-runtime.json` | Runtime config carrying qualified, timestamped DRC corpus evidence |
 | `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-evidence-run.json` | Run spec requiring qualified corpus evidence within a maximum age |
-| `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-signoff-runtime.json` | DRC/LVS/PEX runtime config before evidence attachment |
 | `Tests/XcircuiteTests/Fixtures/FlowRuntime/qualified-signoff-run.json` | DRC/LVS/PEX run spec requiring qualified corpus evidence |
 
 Regression:
 
 ```bash
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/runCLIAcceptsQualifiedEvidenceFixtureContracts
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/runCLIAcceptsQualifiedSignoffFixtureContracts
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/attachEvidenceCLIProducesRunnableQualifiedRuntimeConfig
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/validateCLIReportsRunRuntimeAndCoverage
-perl -e 'alarm shift; exec @ARGV' 240 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecBuildsRuntimeForLayoutCommandExecutor
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeFeedsLayoutCommandDRCExportIntoDRCStage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeFeedsLayoutCommandStandardGDSExportIntoLVSStage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeFeedsLayoutCommandStandardMaskExportsIntoLVSStage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeFeedsLayoutCommandStandardGDSExportIntoPEXStage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeFeedsLayoutCommandOASISExportIntoPEXStage
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeToolchainProfileFeedsDefaultSignoffTechnologyInputs
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/layoutCommandStandardExportRejectsUnsupportedFormat
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRoundTripsLayoutCommandStandardExportsAndLVSInputs
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRoundTripsPEXStageArtifactInputs
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRoundTripsToolchainProfile
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsToolchainProfile
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/toolchainProfileReadinessReportValidatesTechnologyCatalogFiles
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsToolchainProfileCatalogPDKMismatch
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsToolchainProfileMissingCatalogRequiredFile
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/validateCLIRejectsMissingCatalogRequiredFileWithProjectRoot
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/inspectToolchainProfileCLI
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/inspectTechnologyCatalogCLI
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRoundTripsStageArtifactInputReference
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/stageArtifactInputReferenceRejectsDigestMismatch
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecValidationRejectsDRCWithoutLayoutInput
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsLVSWithoutLayoutInput
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsConflictingLVSLayoutInputs
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsPEXWithoutTechnologyOrToolchainProfile
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsPEXWithoutLayoutInput
-perl -e 'alarm shift; exec @ARGV' 300 swift test --filter XcircuiteFlowRuntimeTests/runtimeSpecRejectsConflictingPEXSourceNetlistInputs
+xcodebuild -scheme Xcircuite-Package -destination 'platform=macOS' \
+  -only-testing:XcircuiteTests/XcircuiteQualificationRecordIntegrationTests \
+  -test-timeouts-enabled YES -maximum-test-execution-time-allowance 60 test
 ```
 
-This regression executes `xcircuite-flow` through the public JSON fixtures and
-then inspects `toolchain.json` for the selected tool and evidence verdict.
+This regression decodes the committed run requirements, issues a canonical
+`ToolQualificationRecord`, creates its digest-bound `ArtifactReference`, and
+executes `attach-qualification-record` through the public CLI boundary.
 
 ## Versioning Rule
 
-Each persisted contract owns its schema version. Flow runtime contracts use
-version `1`; retained signoff reports and simulation golden corpus reports use
-version `2`. Incompatible changes
+Each persisted contract owns its schema version. The flow run contract uses
+version `1`, while the flow runtime contract uses version `2`. Retained signoff
+reports and simulation golden corpus reports use version `2`. Incompatible changes
 must increment the owning contract's `schemaVersion`. This development package
 does not retain obsolete decoders after fixtures and callers migrate.
 

@@ -2,10 +2,11 @@ import CircuiteFoundation
 import Foundation
 import Testing
 import ToolQualification
+import XcircuiteFlowCLISupport
 
 @testable import Xcircuite
 
-@Suite("Xcircuite qualification record integration")
+@Suite("Xcircuite qualification record integration", .timeLimit(.minutes(1)))
 struct XcircuiteQualificationRecordIntegrationTests {
     @Test func attachmentStoresOnlyRecordReference() throws {
         let reference = try recordReference(id: "record-a", path: "qualification/a.json")
@@ -77,6 +78,54 @@ struct XcircuiteQualificationRecordIntegrationTests {
         #expect(descriptor.trustProfile.evidence.isEmpty)
     }
 
+    @Test func attachQualificationRecordCLIValidatesCanonicalRecordReference() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: "XcircuiteQualificationRecordIntegrationTests-\(UUID().uuidString)"
+        )
+        defer { removeTemporaryRoot(root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let unqualifiedSpec = runtimeSpec()
+        let descriptor = try #require(unqualifiedSpec.makeUnqualifiedToolBindings().descriptors.first)
+        let reference = try await QualifiedToolFixtures.qualificationRecordReference(
+            for: descriptor,
+            level: .smokeChecked,
+            projectRoot: root
+        )
+        let runtimeURL = root.appending(path: "runtime.json")
+        let referenceURL = root.appending(path: "qualification-record-reference.json")
+        let attachedRuntimeURL = root.appending(path: "runtime-qualified.json")
+        try writeJSON(unqualifiedSpec, to: runtimeURL)
+        try writeJSON(reference, to: referenceURL)
+
+        _ = try await XcircuiteFlowCLICommand.run(arguments: [
+            "attach-qualification-record",
+            "--project-root", root.path(percentEncoded: false),
+            "--runtime-config", runtimeURL.path(percentEncoded: false),
+            "--stage-id", "sim",
+            "--record-reference", referenceURL.path(percentEncoded: false),
+            "--out", attachedRuntimeURL.path(percentEncoded: false),
+        ])
+
+        let attachedSpec = try XcircuiteFlowRuntimeSpec.load(from: attachedRuntimeURL)
+        guard case .coreSpiceSimulation(let executor) = attachedSpec.executors[0] else {
+            Issue.record("Expected a simulation executor")
+            return
+        }
+        #expect(executor.tool.qualificationRecord == reference)
+        _ = try await attachedSpec.makeRuntime(projectRoot: root)
+    }
+
+    @Test func qualifiedRunRequirementFixturesDecodeCurrentSchema() throws {
+        for name in ["qualified-evidence-run.json", "qualified-signoff-run.json"] {
+            let runSpec = try XcircuiteFlowRunSpec.load(from: fixtureURL(name))
+            #expect(runSpec.schemaVersion == XcircuiteFlowRunSpec.currentSchemaVersion)
+            #expect(runSpec.stages.allSatisfy {
+                $0.requiredTool?.requiredQualifiedEvidenceKinds.isEmpty == false
+            })
+        }
+    }
+
     private func runtimeSpec() -> XcircuiteFlowRuntimeSpec {
         XcircuiteFlowRuntimeSpec(executors: [
             .coreSpiceSimulation(.init(stageID: "sim", netlistPath: "input.cir")),
@@ -103,5 +152,33 @@ struct XcircuiteQualificationRecordIntegrationTests {
                 version: "1"
             )
         )
+    }
+
+    private func fixtureURL(_ name: String) throws -> URL {
+        guard let url = Bundle.module.url(
+            forResource: name,
+            withExtension: nil,
+            subdirectory: "Fixtures/FlowRuntime"
+        ) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return url
+    }
+
+    private func writeJSON<T: Encodable>(_ value: T, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(value).write(to: url, options: .atomic)
+    }
+
+    private func removeTemporaryRoot(_ root: URL) {
+        guard FileManager.default.fileExists(atPath: root.path(percentEncoded: false)) else {
+            return
+        }
+        do {
+            try FileManager.default.removeItem(at: root)
+        } catch {
+            Issue.record("Failed to remove temporary root: \(error)")
+        }
     }
 }

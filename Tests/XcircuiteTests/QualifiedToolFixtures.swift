@@ -104,7 +104,7 @@ enum QualifiedToolFixtures {
             issuedAt: checkedAt
         )
         let recordURL = projectRoot.appending(
-            path: "qualification/test-fixtures/\(descriptor.toolID)-record.json"
+            path: qualificationRecordPath(for: descriptor.toolID)
         )
         try FileManager.default.createDirectory(
             at: recordURL.deletingLastPathComponent(),
@@ -112,6 +112,33 @@ enum QualifiedToolFixtures {
         )
         try record.canonicalData().write(to: recordURL, options: .atomic)
         return record
+    }
+
+    static func qualificationRecordReference(
+        for descriptor: ToolDescriptor,
+        level: ToolQualificationLevel,
+        projectRoot: URL
+    ) async throws -> ArtifactReference {
+        let record = try await qualificationRecord(
+            for: descriptor,
+            level: level,
+            projectRoot: projectRoot
+        )
+        let relativePath = qualificationRecordPath(for: descriptor.toolID)
+        return try LocalArtifactReferencer().reference(
+            ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: relativePath),
+                role: .output,
+                kind: .evidence,
+                format: .json
+            ),
+            relativeTo: projectRoot,
+            producer: record.issuer
+        )
+    }
+
+    private static func qualificationRecordPath(for toolID: String) -> String {
+        "qualification/test-fixtures/\(toolID)-record.json"
     }
 
     private static func externallyQualifiedBindings(

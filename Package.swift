@@ -42,7 +42,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ToolQualification",
-            revision: "d572d950a9dccb699413cd5157d901812354444f"
+            revision: "c9f93df1b35298820116fdf69a4026dfb4e84217"
         ),
         workspaceDependency(
             named: "DesignFlowKernel",
