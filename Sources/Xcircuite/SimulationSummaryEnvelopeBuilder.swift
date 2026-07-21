@@ -16,6 +16,12 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
             throw XcircuiteRuntimeError.artifactReferenceNotFound(stageID: stageID)
         }
+        guard let producer = summaryArtifact.producer,
+              producer.build != nil else {
+            throw XcircuiteRuntimeError.invalidConfiguration(
+                "Stage \(stageID) simulation summary artifact requires an attested producer identity."
+            )
+        }
         let artifactID = summaryArtifact.artifactID
 
         let hasQualifiedEvidence = hasQualifiedEvidence(context: context, toolID: toolID)
@@ -54,10 +60,7 @@ struct SimulationSummaryEnvelopeBuilder: Sendable {
             role: "simulation-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: FlowArtifactProducer(
-                producerID: toolID,
-                toolID: toolID
-            ),
+            producer: FlowArtifactProducer(identity: producer),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
             evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",

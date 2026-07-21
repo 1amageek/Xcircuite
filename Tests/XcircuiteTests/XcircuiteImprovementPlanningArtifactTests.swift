@@ -574,11 +574,11 @@ struct XcircuiteImprovementPlanningArtifactTests {
             )
             Issue.record("Expected an invalid run ledger error.")
         } catch let error as FlowRunLedgerPersistenceError {
-            guard case .storageFailed(let reason) = error else {
-                Issue.record("Expected storageFailed, got \(error).")
+            guard case .decodingFailed(let reason) = error else {
+                Issue.record("Expected decodingFailed, got \(error).")
                 return
             }
-            #expect(reason.contains("must be unique"))
+            #expect(reason.contains("Canonical and embedded run manifests differ"))
         }
     }
 

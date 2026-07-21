@@ -67,10 +67,11 @@ public struct SimulationGoldenCorpusRunner: Sendable {
             let goldenURL = try resolvePath(corpusCase.goldenWaveformPath, projectRoot: projectRoot)
             let netlistSource = try String(contentsOf: netlistURL, encoding: .utf8)
             let goldenCSV = try String(contentsOf: goldenURL, encoding: .utf8)
-            let outcome = try await engine.run(
+            let outcome = try await engine.execute(SimulationExecutionRequest(
                 netlistSource: netlistSource,
-                fileName: netlistURL.lastPathComponent
-            )
+                fileName: netlistURL.lastPathComponent,
+                inputs: []
+            ))
             let comparison = try comparisonService.compare(
                 goldenCSV: goldenCSV,
                 candidateCSV: outcome.waveformCSV,

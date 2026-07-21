@@ -37,10 +37,9 @@ extension XcircuiteCandidatePlanVerifier {
         manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
-        guard let problem = try sourcePlanningProblem(
+        guard let problem = try await sourcePlanningProblem(
             for: plan,
-            manifest: manifest,
-            projectRoot: projectRoot
+            manifest: manifest
         ) else {
             return GateExecutionEvaluation(
                 gateResult: pexSummaryMissingInputGateResult(
@@ -99,26 +98,26 @@ extension XcircuiteCandidatePlanVerifier {
                 .appending(path: "verification")
                 .appending(path: "pex-summary")
             try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
+            let layoutURL = try await verifiedInputURL(
+                for: layoutRef,
+                runID: plan.runID
+            )
+            let sourceNetlistURL = try await verifiedInputURL(
+                for: executionSpec.sourceNetlistRef,
+                runID: plan.runID
+            )
+            let technologyURL = try await verifiedInputURL(
+                for: executionSpec.technologyRef,
+                runID: plan.runID
+            )
             let executionResult = try await DefaultPEXEngine.withDefaults().run(PEXRunRequest(
-                layoutURL: try url(
-                    for: layoutRef,
-                    manifest: manifest,
-                    projectRoot: projectRoot
-                ),
+                layoutURL: layoutURL,
                 layoutFormat: layoutFormat,
-                sourceNetlistURL: try url(
-                    for: executionSpec.sourceNetlistRef,
-                    manifest: manifest,
-                    projectRoot: projectRoot
-                ),
+                sourceNetlistURL: sourceNetlistURL,
                 sourceNetlistFormat: executionSpec.sourceNetlistFormat,
                 topCell: executionSpec.topCell,
                 corners: executionSpec.corners,
-                technology: .jsonFile(try url(
-                    for: executionSpec.technologyRef,
-                    manifest: manifest,
-                    projectRoot: projectRoot
-                )),
+                technology: .jsonFile(technologyURL),
                 backendSelection: executionSpec.backendSelection,
                 options: executionSpec.options,
                 workingDirectory: verificationDirectory
@@ -158,6 +157,12 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
                 artifactReferences: artifacts
             )
+        } catch let error as XcircuiteCandidatePlanVerificationError {
+            throw error
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
+        } catch let error as FlowRunLedgerPersistenceError {
+            throw error
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
                 severity: "error",

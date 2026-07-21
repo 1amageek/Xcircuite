@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import Foundation
 
 public struct PostLayoutComparisonService: Sendable {
@@ -15,8 +16,16 @@ public struct PostLayoutComparisonService: Sendable {
     public func compare(
         preLayoutCSV: String,
         postLayoutCSV: String,
-        options: PostLayoutComparisonOptions = PostLayoutComparisonOptions()
+        options: PostLayoutComparisonOptions = PostLayoutComparisonOptions(),
+        inputs: [ArtifactReference] = [],
+        producer: ProducerIdentity? = nil
     ) throws -> PostLayoutComparisonReport {
+        let startedAt = Date()
+        let resolvedProducer = try producer ?? ProducerIdentity(
+            kind: .engine,
+            identifier: "post-layout-comparison",
+            version: "1.0.0"
+        )
         let preLayout = try parseWaveformCSV(preLayoutCSV, label: "pre-layout")
         let postLayout = try parseWaveformCSV(postLayoutCSV, label: "post-layout")
         let postVariableMap = canonicalVariableMap(postLayout.variableNames)
@@ -127,7 +136,7 @@ public struct PostLayoutComparisonService: Sendable {
             gateViolations.append(contentsOf: metric.violations)
         }
 
-        return PostLayoutComparisonReport(
+        return try PostLayoutComparisonReport(
             status: status,
             preLayoutPointCount: preLayout.pointCount,
             postLayoutPointCount: postLayout.pointCount,
@@ -142,7 +151,16 @@ public struct PostLayoutComparisonService: Sendable {
             addedInPostLayout: postLayout.variableNames.filter { preVariableMap[canonicalVariableName($0)] == nil },
             diagnostics: diagnostics,
             gateStatus: gateViolations.isEmpty ? "passed" : "failed",
-            gateViolations: gateViolations
+            gateViolations: gateViolations,
+            provenance: ExecutionProvenance(
+                producer: resolvedProducer,
+                inputs: inputs,
+                invocation: ExecutionInvocation.inProcess(
+                    entryPoint: "PostLayoutComparisonService.compare"
+                ),
+                startedAt: startedAt,
+                completedAt: Date()
+            )
         )
     }
 

@@ -25,10 +25,7 @@ extension XcircuiteCandidatePlanVerifier {
             planID: verification.planID,
             verificationMode: verification.verificationMode,
             status: status,
-            sourceParameterCandidateIDs: try sourceParameterCandidateIDs(
-                from: verification,
-                projectRoot: projectRoot
-            ),
+            sourceParameterCandidateIDs: try await sourceParameterCandidateIDs(from: verification),
             failedStepIDs: verification.stepResults
                 .filter { $0.status == "failed" || $0.status == "blocked" }
                 .map(\.stepID),
@@ -60,19 +57,17 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     func sourceParameterCandidateIDs(
-        from verification: XcircuitePlanVerification,
-        projectRoot: URL
-    ) throws -> [String] {
+        from verification: XcircuitePlanVerification
+    ) async throws -> [String] {
         let artifactReferences = verification.artifactRefs
         var ids: [String] = []
         for reference in artifactReferences {
             guard reference.id.rawValue.hasSuffix("-netlist-parameter-edit-report") else {
                 continue
             }
-            let storageReference = reference
-            let report = try JSONDecoder().decode(
-                XcircuiteNetlistParameterEditReport.self,
-                from: Data(contentsOf: projectURL(for: storageReference.path, projectRoot: projectRoot))
+            let report: XcircuiteNetlistParameterEditReport = try await decodeRetainedArtifact(
+                reference,
+                as: XcircuiteNetlistParameterEditReport.self
             )
             if let sourceParameterCandidateID = report.sourceParameterCandidateID {
                 ids.append(sourceParameterCandidateID)
@@ -95,9 +90,7 @@ extension XcircuiteCandidatePlanVerifier {
     func appendActionRecord(
         verification: XcircuitePlanVerification,
         candidatePlanRef: ArtifactReference,
-        verificationRef: ArtifactReference,
-        rejectedPlansRef: ArtifactReference?,
-        projectRoot: URL
+        verificationRef: ArtifactReference
     ) async throws {
         let actionStatus: FlowRunActionStatus
         switch verificationStatus(for: verification) {
@@ -117,17 +110,93 @@ extension XcircuiteCandidatePlanVerifier {
                 message: $0.message
             )
         }
-        try await workspaceStore.appendRunAction(
-            FlowRunActionRecord(
-                actionID: "\(verification.planID)-verification",
-                runID: verification.runID,
-                actor: FlowRunActor(kind: .cli, identifier: "xcircuite-flow"),
-                actionKind: "planning.verify-candidate-plan",
-                status: actionStatus,
-                inputs: [candidatePlanRef],
-                outputs: [verificationRef] + [rejectedPlansRef].compactMap { $0 },
-                diagnostics: diagnostics
-            )
+        let actionID = "\(verification.planID)-\(candidatePlanRef.digest.hexadecimalValue)-"
+            + "\(verificationRef.digest.hexadecimalValue)-verification"
+        try await appendIdempotentVerificationAction(
+            actionID: actionID,
+            runID: verification.runID,
+            status: actionStatus,
+            inputs: [candidatePlanRef],
+            outputs: [verificationRef],
+            diagnostics: diagnostics
+        )
+    }
+
+    private func appendIdempotentVerificationAction(
+        actionID: String,
+        runID: String,
+        status: FlowRunActionStatus,
+        inputs: [ArtifactReference],
+        outputs: [ArtifactReference],
+        diagnostics: [FlowRunDiagnostic]
+    ) async throws {
+        let existing = try await workspaceStore.loadRunActions(runID: runID).first {
+            $0.actionID == actionID
+        }
+        let action = verificationAction(
+            actionID: actionID,
+            runID: runID,
+            status: status,
+            inputs: inputs,
+            outputs: outputs,
+            diagnostics: diagnostics,
+            createdAt: existing?.createdAt ?? Date()
+        )
+        if let existing {
+            guard existing == action else {
+                throw FlowRunLedgerPersistenceError.duplicateActionID(
+                    runID: runID,
+                    actionID: actionID
+                )
+            }
+            return
+        }
+        do {
+            try await workspaceStore.appendRunAction(action)
+        } catch let persistenceError as FlowRunLedgerPersistenceError {
+            switch persistenceError {
+            case .duplicateActionID, .concurrentUpdate:
+                break
+            default:
+                throw persistenceError
+            }
+            let concurrentlyAppended = try await workspaceStore.loadRunActions(runID: runID).first {
+                $0.actionID == actionID
+            }
+            guard let concurrentlyAppended,
+                  concurrentlyAppended == verificationAction(
+                    actionID: actionID,
+                    runID: runID,
+                    status: status,
+                    inputs: inputs,
+                    outputs: outputs,
+                    diagnostics: diagnostics,
+                    createdAt: concurrentlyAppended.createdAt
+                  ) else {
+                throw persistenceError
+            }
+        }
+    }
+
+    private func verificationAction(
+        actionID: String,
+        runID: String,
+        status: FlowRunActionStatus,
+        inputs: [ArtifactReference],
+        outputs: [ArtifactReference],
+        diagnostics: [FlowRunDiagnostic],
+        createdAt: Date
+    ) -> FlowRunActionRecord {
+        FlowRunActionRecord(
+            actionID: actionID,
+            runID: runID,
+            actor: FlowRunActor(kind: .cli, identifier: "xcircuite-flow"),
+            actionKind: "planning.verify-candidate-plan",
+            status: status,
+            inputs: inputs,
+            outputs: outputs,
+            diagnostics: diagnostics,
+            createdAt: createdAt
         )
     }
 
@@ -148,18 +217,19 @@ extension XcircuiteCandidatePlanVerifier {
 
     func loadPlanningProblem(
         for plan: XcircuiteCandidatePlan,
-        projectRoot: URL
-    ) throws -> XcircuiteCircuitPlanningProblem? {
-        guard let path = plan.sourceProblemRef.path else {
+        manifest: FlowRunManifest
+    ) async throws -> XcircuiteCircuitPlanningProblem? {
+        guard plan.sourceProblemRef.path != nil || plan.sourceProblemRef.artifactID != nil else {
             return nil
         }
-        let url = try projectURL(for: path, projectRoot: projectRoot)
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
-            return nil
-        }
-        let problem = try JSONDecoder().decode(
-            XcircuiteCircuitPlanningProblem.self,
-            from: Data(contentsOf: url)
+        let reference = try requiredSourceProblemReference(
+            plan.sourceProblemRef,
+            manifest: manifest,
+            runID: plan.runID
+        )
+        let problem: XcircuiteCircuitPlanningProblem = try await decodeRetainedArtifact(
+            reference,
+            as: XcircuiteCircuitPlanningProblem.self
         )
         guard problem.runID == plan.runID else {
             throw XcircuiteCandidatePlanVerificationError.runMismatch(
@@ -168,6 +238,179 @@ extension XcircuiteCandidatePlanVerifier {
             )
         }
         return problem
+    }
+
+    func decodeRetainedArtifact<Value: Decodable>(
+        _ reference: ArtifactReference,
+        as type: Value.Type
+    ) async throws -> Value {
+        let content: Data
+        do {
+            content = try await workspaceStore.loadArtifactContent(for: reference)
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
+        } catch {
+            throw XcircuiteCandidatePlanVerificationError.artifactIntegrityFailed(
+                path: reference.path,
+                status: .unreadableArtifact,
+                message: error.localizedDescription
+            )
+        }
+        do {
+            return try JSONDecoder().decode(type, from: content)
+        } catch {
+            throw XcircuiteCandidatePlanVerificationError.invalidArtifactPayload(
+                path: reference.path,
+                reason: error.localizedDescription
+            )
+        }
+    }
+
+    func requiredSourceProblemReference(
+        _ source: XcircuitePlanningReference,
+        manifest: FlowRunManifest,
+        runID: String
+    ) throws -> ArtifactReference {
+        let matches = manifest.artifacts.filter { reference in
+            let pathMatches = source.path.map { reference.path == $0 } ?? true
+            let identifierMatches = source.artifactID.map { reference.artifactID == $0 } ?? true
+            return pathMatches && identifierMatches
+        }
+        guard matches.count == 1, let reference = matches.first else {
+            throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
+                path: source.path ?? source.artifactID ?? source.refID,
+                reason: "source planning problem must resolve to exactly one retained artifact; found \(matches.count)."
+            )
+        }
+        guard reference.locator.format == .json else {
+            throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
+                path: reference.path,
+                reason: "source planning problem must be a retained JSON artifact."
+            )
+        }
+        let runPrefix = ".xcircuite/runs/\(runID)/"
+        guard reference.path.hasPrefix(runPrefix) else {
+            throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
+                path: reference.path,
+                reason: "source planning problem is not scoped to run \(runID)."
+            )
+        }
+        return reference
+    }
+
+    func validatedRiskApprovals(
+        in ledger: FlowRunLedger,
+        for plan: XcircuiteCandidatePlan,
+        candidatePlanReference: ArtifactReference
+    ) async throws -> [FlowApprovalRecord] {
+        let requiredApprovalIDs = Set(
+            plan.riskClassifications.flatMap(\.requiredApprovals)
+        )
+        guard !requiredApprovalIDs.isEmpty else {
+            return []
+        }
+        var approvalsByID: [String: FlowApprovalRecord] = [:]
+        for approval in ledger.approvals where requiredApprovalIDs.contains(approval.stageID) {
+            guard approvalsByID.updateValue(approval, forKey: approval.stageID) == nil else {
+                throw XcircuiteCandidatePlanVerificationError.stalePlanVerification(
+                    "Multiple approval records exist for \(approval.stageID)."
+                )
+            }
+        }
+        guard !approvalsByID.isEmpty else {
+            return []
+        }
+
+        let currentVerificationReference = try await currentPlanVerificationReference(
+            in: ledger,
+            for: plan,
+            candidatePlanReference: candidatePlanReference
+        )
+        var validated: [FlowApprovalRecord] = []
+        for approvalID in requiredApprovalIDs.sorted() {
+            guard let approval = approvalsByID[approvalID] else {
+                continue
+            }
+            guard approval.runID == plan.runID,
+                  approval.evidence.plan == candidatePlanReference,
+                  approval.evidence.stageResult == currentVerificationReference else {
+                throw XcircuiteCandidatePlanVerificationError.stalePlanVerification(
+                    "Approval \(approvalID) is not bound to the current candidate plan and its current verification."
+                )
+            }
+            let expectedInputs = Set([
+                approval.evidence.plan,
+                approval.evidence.stageResult,
+            ])
+            let expectedActionStatus: FlowRunActionStatus = approval.verdict == .approved
+                ? .succeeded
+                : .failed
+            let approvalActions = ledger.actions.filter { action in
+                action.runID == plan.runID
+                    && action.stageID == approvalID
+                    && action.actionKind == "planning.approve-candidate-plan-risk"
+                    && action.status == expectedActionStatus
+                    && action.inputs.count == expectedInputs.count
+                    && Set(action.inputs) == expectedInputs
+                    && action.outputs.count == 1
+                    && action.outputs.allSatisfy { output in
+                        output.artifactID == "approval-\(approvalID)"
+                            && output.locator.role == .output
+                            && output.locator.kind == .report
+                            && output.locator.format == .json
+                            && output.path == ".xcircuite/runs/\(plan.runID)/approvals/\(approvalID).json"
+                    }
+            }
+            guard approvalActions.count == 1 else {
+                throw XcircuiteCandidatePlanVerificationError.stalePlanVerification(
+                    "Approval \(approvalID) must have exactly one attested action-artifact binding; found \(approvalActions.count)."
+                )
+            }
+            let approvalArtifact = approvalActions[0].outputs[0]
+            let retainedApproval: FlowApprovalRecord = try await decodeRetainedArtifact(
+                approvalArtifact,
+                as: FlowApprovalRecord.self
+            )
+            guard retainedApproval == approval else {
+                throw XcircuiteCandidatePlanVerificationError.stalePlanVerification(
+                    "Approval \(approvalID) projection does not match its retained approval artifact."
+                )
+            }
+            validated.append(approval)
+        }
+        return validated
+    }
+
+    private func currentPlanVerificationReference(
+        in ledger: FlowRunLedger,
+        for plan: XcircuiteCandidatePlan,
+        candidatePlanReference: ArtifactReference
+    ) async throws -> ArtifactReference {
+        let retained = Set(ledger.artifacts + ledger.actions.flatMap(\.outputs))
+        var matchingReferences: Set<ArtifactReference> = []
+        for reference in retained where
+            reference.artifactID == XcircuitePlanningArtifactStore.planVerificationArtifactID {
+            let verification: XcircuitePlanVerification = try await decodeRetainedArtifact(
+                reference,
+                as: XcircuitePlanVerification.self
+            )
+            if verification.runID == plan.runID,
+               verification.planID == plan.planID,
+               verification.problemID == plan.problemID,
+               verification.candidatePlanRef == candidatePlanReference,
+               verification.artifactRefs.contains(candidatePlanReference) {
+                matchingReferences.insert(reference)
+            }
+        }
+        for action in ledger.actions.reversed() where
+            action.actionKind == "planning.verify-candidate-plan" {
+            if let reference = action.outputs.first(where: matchingReferences.contains) {
+                return reference
+            }
+        }
+        throw XcircuiteCandidatePlanVerificationError.stalePlanVerification(
+            "No action-bound plan verification matches the current candidate plan."
+        )
     }
 
     func loadOrPersistActionDomainSnapshot(

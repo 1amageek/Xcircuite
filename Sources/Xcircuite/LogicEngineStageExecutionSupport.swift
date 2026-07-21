@@ -17,7 +17,9 @@ struct LogicEngineStageExecutionSupport: Sendable {
         fileName: String,
         artifactID: String,
         stageID: String,
-        context: FlowExecutionContext
+        context: FlowExecutionContext,
+        producer: ProducerIdentity? = nil,
+        mode: FlowArtifactPersistenceMode = .replaceable
     ) async throws -> ArtifactReference {
         try await context.persistJSONArtifact(
             result,
@@ -25,7 +27,8 @@ struct LogicEngineStageExecutionSupport: Sendable {
             stageID: stageID,
             fileName: fileName,
             kind: .report,
-            mode: .replaceable
+            producer: producer,
+            mode: mode
         )
     }
 

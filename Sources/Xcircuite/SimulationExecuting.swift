@@ -1,3 +1,5 @@
+import CircuiteFoundation
+import CoreSpice
 import Foundation
 
 /// A measurement the simulation stage must satisfy: the netlist's
@@ -28,26 +30,63 @@ public struct SimulationMeasurementValue: Sendable, Codable, Hashable {
     }
 }
 
-/// What a completed simulation hands the stage: the analysis that ran,
-/// the evaluated measurements, and the waveform as CSV text.
+/// The source and exact artifact inputs supplied to a simulation execution.
+public struct SimulationExecutionRequest: Sendable {
+    public let netlistSource: String
+    public let fileName: String?
+    public let inputs: [ArtifactReference]
+
+    public init(
+        netlistSource: String,
+        fileName: String?,
+        inputs: [ArtifactReference]
+    ) {
+        self.netlistSource = netlistSource
+        self.fileName = fileName
+        self.inputs = inputs
+    }
+}
+
+/// What a completed simulation hands the stage: the canonical CoreSpice
+/// result together with evaluated measurements and waveform data.
 public struct SimulationStageOutcome: Sendable {
-    public var analysisLabel: String
-    public var measurements: [SimulationMeasurementValue]
-    public var waveformCSV: String
+    public let analysisLabel: String
+    public let measurements: [SimulationMeasurementValue]
+    public let waveformCSV: String
+    public let coreSpiceResult: CoreSpiceSimulationResult
 
     public init(
         analysisLabel: String,
         measurements: [SimulationMeasurementValue],
-        waveformCSV: String
+        waveformCSV: String,
+        coreSpiceResult: CoreSpiceSimulationResult
     ) {
         self.analysisLabel = analysisLabel
         self.measurements = measurements
         self.waveformCSV = waveformCSV
+        self.coreSpiceResult = coreSpiceResult
     }
 }
 
 /// The simulation backend the stage executor drives — CoreSpice in
 /// production, injectable for tests.
 public protocol SimulationExecuting: Sendable {
-    func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome
+    func execute(_ request: SimulationExecutionRequest) async throws -> SimulationStageOutcome
+}
+
+enum SimulationArtifactLineageError: Error, LocalizedError, Equatable {
+    case inputMismatch
+    case producerMismatch(expected: String, actual: String)
+    case outputProducerMismatch(path: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .inputMismatch:
+            "CoreSpice execution provenance does not exactly match the persisted simulation input artifact."
+        case .producerMismatch(let expected, let actual):
+            "CoreSpice producer identifier mismatch: expected \(expected), received \(actual)."
+        case .outputProducerMismatch(let path):
+            "CoreSpice output artifact has missing or inconsistent producer lineage: \(path)."
+        }
+    }
 }

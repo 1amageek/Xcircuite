@@ -33,6 +33,15 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "timing-sta-request",
+                stageID: stageID,
+                fileName: "timing-sta-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
             let executingEngine: any STAExecuting
             if let engine {
                 executingEngine = engine
@@ -45,7 +54,11 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             let result = try await executingEngine.execute(request)
             try await context.checkCancellation()
             let resultArtifact = try await persistResult(result, context: context)
-            return makeStageResult(result: result, resultArtifact: resultArtifact)
+            return makeStageResult(
+                result: result,
+                requestArtifact: requestArtifact,
+                resultArtifact: resultArtifact
+            )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
@@ -140,19 +153,12 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         kind: ArtifactKind,
         formatFallback: ArtifactFormat
     ) throws -> ArtifactReference {
-        let url = try input.resolveExisting(projectRoot: try context.xcircuiteProjectRoot(), runDirectory: try context.xcircuiteRunDirectory())
-        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: try context.xcircuiteProjectRoot())
-        let data = try Data(contentsOf: url)
-        return ArtifactReference(
-            id: try ArtifactID(rawValue: artifactID),
-            locator: ArtifactLocator(
-                location: try ArtifactLocation(workspaceRelativePath: path),
-                role: .input,
-                kind: kind,
-                format: format(for: url, fallback: formatFallback)
-            ),
-            digest: try SHA256ContentDigester().digest(data: data),
-            byteCount: UInt64(data.count)
+        try input.resolveArtifactReference(
+            projectRoot: try context.xcircuiteProjectRoot(),
+            runDirectory: try context.xcircuiteRunDirectory(),
+            artifactID: artifactID,
+            kind: kind,
+            format: formatFallback
         )
     }
 
@@ -168,12 +174,15 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             stageID: stageID,
             fileName: "timing-sta-result.json",
             kind: .report,
-            format: .json
+            format: .json,
+            producer: result.evidence.provenance.producer,
+            mode: .replaceable
         )
     }
 
     private func makeStageResult(
         result: STAExecutionResult,
+        requestArtifact: ArtifactReference,
         resultArtifact: ArtifactReference
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map { diagnostic in
@@ -205,7 +214,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
             status: stageStatus,
             diagnostics: diagnostics,
             gates: [FlowGateResult(gateID: stageID, status: gateStatus, diagnostics: diagnostics)],
-            artifacts: [resultArtifact]
+            artifacts: [requestArtifact] + result.artifacts + [resultArtifact]
         )
     }
 
@@ -217,18 +226,6 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func format(for url: URL, fallback: ArtifactFormat) -> ArtifactFormat {
-        switch url.pathExtension.lowercased() {
-        case "lib": return .liberty
-        case "sdc": return .sdc
-        case "spef": return .spef
-        case "sdf": return .sdf
-        case "json": return .json
-        case "v", "vh": return .verilog
-        case "sv", "svh": return .systemVerilog
-        default: return fallback
-        }
-    }
 }
 
 private struct ProjectTimingArtifactReader: TimingArtifactReading {

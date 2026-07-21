@@ -192,4 +192,113 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(verification.nextActions.contains("request-human-approval:policy-repair-approval") == false)
     }
 
+    @Test func retainedApprovalWithAlternateEvidenceBindingDoesNotUnlockRiskGate() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-approval-alternate-binding")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-approval-alternate-binding"
+        let approvalID = "policy-repair-approval"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        var plan = makeSingleStepPlan(
+            runID: runID,
+            domainID: "layout-edit",
+            operationID: "layout.add-rect",
+            maturity: "implemented"
+        )
+        plan.riskClassifications = [
+            XcircuitePlanningRiskClassification(
+                riskID: "policy-mutation-risk",
+                category: "lvs-policy",
+                severity: "high",
+                scope: "candidate-plan",
+                description: "Policy mutation requires explicit review before execution.",
+                affectedObjectiveIDs: [],
+                affectedActionIDs: ["candidate-action-1"],
+                requiredApprovals: [approvalID],
+                mitigationActions: ["approval-gate"]
+            ),
+        ]
+        _ = try await artifactStore.persistPlanningProblem(
+            makeRetainedPlanningProblem(for: plan),
+            runID: runID,
+            projectRoot: root
+        )
+        let candidatePlanReference = try await artifactStore.persistCandidatePlan(
+            plan,
+            runID: runID,
+            projectRoot: root
+        )
+        let initialVerification = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
+            request: XcircuiteCandidatePlanVerificationRequest(runID: runID),
+            projectRoot: root
+        )
+        #expect(initialVerification.accepted == false)
+
+        let approval = FlowApprovalRecord(
+            runID: runID,
+            stageID: approvalID,
+            verdict: .approved,
+            reviewer: "reviewer-1",
+            note: "This fixture intentionally reverses the evidence binding.",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_001),
+            evidence: FlowApprovalEvidenceBinding(
+                plan: initialVerification.planVerificationArtifact,
+                stageResult: candidatePlanReference
+            )
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let approvalContent = try encoder.encode(approval)
+        let approvalPath = ".xcircuite/runs/\(runID)/approvals/\(approvalID).json"
+        let approvalReference = ArtifactReference(
+            id: try ArtifactID(rawValue: "approval-\(approvalID)"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: approvalPath),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            digest: try SHA256ContentDigester().digest(data: approvalContent, using: .sha256),
+            byteCount: UInt64(approvalContent.count)
+        )
+        let action = FlowRunActionRecord(
+            actionID: "\(runID)-alternate-binding-approval",
+            runID: runID,
+            stageID: approvalID,
+            actor: FlowRunActor(kind: .human, identifier: "reviewer-1"),
+            actionKind: "planning.approve-candidate-plan-risk",
+            status: .succeeded,
+            inputs: [initialVerification.planVerificationArtifact, candidatePlanReference],
+            outputs: [approvalReference],
+            createdAt: approval.createdAt
+        )
+        _ = try await store.appendApprovalArtifact(
+            content: approvalContent,
+            reference: approvalReference,
+            approval: approval,
+            action: action
+        )
+
+        do {
+            _ = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
+                request: XcircuiteCandidatePlanVerificationRequest(runID: runID),
+                projectRoot: root
+            )
+            Issue.record("Alternate approval evidence binding must not unlock the risk gate.")
+        } catch let error as XcircuiteCandidatePlanVerificationError {
+            guard case .stalePlanVerification = error else {
+                Issue.record("Expected stalePlanVerification, got \(error).")
+                return
+            }
+        }
+    }
+
 }

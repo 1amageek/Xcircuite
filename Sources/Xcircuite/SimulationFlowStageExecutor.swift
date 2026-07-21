@@ -1,4 +1,5 @@
 import CircuiteFoundation
+import CoreSpice
 import DesignFlowKernel
 import Foundation
 
@@ -14,7 +15,6 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
     private let expectations: [SimulationMeasurementExpectation]
     private let allowObservationOnly: Bool
     private let engine: any SimulationExecuting
-    private let artifactBuilder: StageArtifactReferenceBuilder
 
     public init(
         stageID: String,
@@ -30,7 +30,6 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         self.expectations = expectations
         self.allowObservationOnly = allowObservationOnly
         self.engine = engine
-        self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
     public init(
@@ -47,7 +46,6 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
         self.expectations = expectations
         self.allowObservationOnly = allowObservationOnly
         self.engine = engine
-        self.artifactBuilder = StageArtifactReferenceBuilder()
     }
 
     public func execute(
@@ -78,11 +76,14 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             )
             try await context.checkCancellation()
 
-            let outcome = try await engine.run(
+            let outcome = try await engine.execute(SimulationExecutionRequest(
                 netlistSource: source,
-                fileName: resolvedNetlistURL.lastPathComponent
-            )
+                fileName: resolvedNetlistURL.lastPathComponent,
+                inputs: [netlistReference]
+            ))
             try await context.checkCancellation()
+            try validateLineage(outcome: outcome, input: netlistReference)
+            let producer = outcome.coreSpiceResult.provenance.producer
 
             let waveformReference = try await context.persistArtifact(
                 Data(outcome.waveformCSV.utf8),
@@ -91,6 +92,7 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 fileName: "waveform.csv",
                 kind: .waveform,
                 format: .csv,
+                producer: producer,
                 mode: .replaceable
             )
             let measurementsReference = try await context.persistJSONArtifact(
@@ -99,6 +101,24 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 stageID: stageID,
                 fileName: "measurements.json",
                 kind: .measurement,
+                producer: producer,
+                mode: .replaceable
+            )
+            let canonicalResult = CoreSpiceSimulationResult(
+                artifacts: outcome.coreSpiceResult.artifacts + [
+                    waveformReference,
+                    measurementsReference,
+                ],
+                diagnostics: outcome.coreSpiceResult.diagnostics,
+                provenance: outcome.coreSpiceResult.provenance
+            )
+            let canonicalResultReference = try await context.persistJSONArtifact(
+                canonicalResult,
+                artifactID: "corespice-simulation-result",
+                stageID: stageID,
+                fileName: "corespice-result.json",
+                kind: .report,
+                producer: producer,
                 mode: .replaceable
             )
 
@@ -119,13 +139,15 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
                 stageID: stageID,
                 fileName: "simulation-summary.json",
                 kind: .report,
+                producer: producer,
                 mode: .replaceable
             )
 
-            var artifacts = [
+            var artifacts = outcome.coreSpiceResult.artifacts + [
                 netlistReference,
                 waveformReference,
                 measurementsReference,
+                canonicalResultReference,
                 summaryReference,
             ]
             let preEnvelopeArtifactIntegrityGate = StageArtifactIntegrityGateBuilder().gate(
@@ -202,6 +224,26 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
     }
 
     // MARK: - Gate
+
+    private func validateLineage(
+        outcome: SimulationStageOutcome,
+        input: ArtifactReference
+    ) throws {
+        let provenance = outcome.coreSpiceResult.provenance
+        guard provenance.inputs == [input] else {
+            throw SimulationArtifactLineageError.inputMismatch
+        }
+        guard provenance.producer.identifier == toolID else {
+            throw SimulationArtifactLineageError.producerMismatch(
+                expected: toolID,
+                actual: provenance.producer.identifier
+            )
+        }
+        for artifact in outcome.coreSpiceResult.artifacts
+        where artifact.producer != provenance.producer {
+            throw SimulationArtifactLineageError.outputProducerMismatch(path: artifact.path)
+        }
+    }
 
     private func expectationVerdicts(
         outcome: SimulationStageOutcome
@@ -355,6 +397,9 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
             case .missingDeviceDescriptor:
                 return "SIMULATION_DEVICE_DESCRIPTOR_MISSING"
             }
+        }
+        if error is SimulationArtifactLineageError {
+            return "SIMULATION_ARTIFACT_LINEAGE_INVALID"
         }
         return "SIMULATION_EXECUTION_ERROR"
     }

@@ -33,6 +33,7 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
             return try failureResult(
                 request: request,
                 artifacts: run.artifacts,
+                provenance: run.provenance,
                 finding: PDKValidationFinding(
                     severity: .error,
                     code: "pdk.external.process-execution-failed",
@@ -46,12 +47,14 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
             return try support.appendArtifacts(
                 to: run.resultData ?? Data(),
                 artifacts: run.artifacts,
+                provenance: run.provenance,
                 as: PDKStandardViewInspectionResult.self
             )
         } catch {
             return try failureResult(
                 request: request,
                 artifacts: run.artifacts,
+                provenance: run.provenance,
                 finding: PDKValidationFinding(
                     severity: .error,
                     code: "pdk.external.process-result-invalid",
@@ -66,30 +69,22 @@ public struct ExternalPDKStandardViewProcessProvider: PDKExternalStandardViewRes
     private func failureResult(
         request: PDKStandardViewInspectionRequest,
         artifacts: [ArtifactReference],
+        provenance: ExecutionProvenance,
         finding: PDKValidationFinding
     ) throws -> Data {
-        let timestamp = Date()
         let result = PDKStandardViewInspectionResult(
             schemaVersion: PDKStandardViewInspectionRequest.currentSchemaVersion,
             runID: request.runID,
             status: .failed,
             diagnostics: [PDKStandardViewDiagnosticMapper.map(finding)],
             artifacts: artifacts,
-            provenance: try ExecutionProvenance(
-                producer: ProducerIdentity(
-                    kind: .engine,
-                    identifier: "ExternalPDKStandardViewProcessProvider",
-                    version: "1"
-                ),
-                startedAt: timestamp,
-                completedAt: timestamp
-            ),
+            provenance: provenance,
             payload: PDKStandardViewInspectionPayload(
                 isValid: false,
                 assetID: request.assetID,
                 findings: [finding],
                 parserID: "external-process",
-                parserVersion: "unknown",
+                parserVersion: "not-executed",
                 limitations: [
                     "The external process did not produce an accepted standard-view result.",
                     "Process execution and tool qualification remain separate evidence gates."

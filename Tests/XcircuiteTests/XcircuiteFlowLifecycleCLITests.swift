@@ -19,6 +19,7 @@ struct XcircuiteFlowLifecycleCLITests {
             requiresApproval: false,
             store: store
         )
+        let baselineLedger = try await store.loadRunLedger(runID: runID)
 
         let summary: FlowRunLedgerSummary = try await runCLI(
             "inspect-run",
@@ -46,6 +47,17 @@ struct XcircuiteFlowLifecycleCLITests {
         )
         #expect(ladder.ladder.runID == runID)
         #expect(ladder.artifact.artifactID == DefaultFlowRunStageArtifactLadderBuilder.artifactID)
+        #expect(ladder.artifact.path.contains("/review/stage-artifact-ladder-sha256-"))
+        #expect(ladder.artifact.path.hasSuffix(".json"))
+
+        let actionCountAfterFirstLadder = try await store.loadRunLedger(runID: runID).actions.count
+        let repeatedLadder: FlowRunStageArtifactLadderBuildResult = try await runCLI(
+            "build-stage-artifact-ladder",
+            root: root,
+            runID: runID
+        )
+        #expect(repeatedLadder.artifact == ladder.artifact)
+        #expect(try await store.loadRunLedger(runID: runID).actions.count == actionCountAfterFirstLadder)
 
         let loopSummary: FlowRunLoopSummaryResult = try await runCLI(
             "summarize-loop",
@@ -63,6 +75,7 @@ struct XcircuiteFlowLifecycleCLITests {
         )
         #expect(packet.packet.runID == runID)
         #expect(packet.artifact.artifactID == DefaultFlowRunDecisionPacketBuilder.artifactID)
+        #expect(packet.artifact.path.contains("/review/decision-packet-sha256-"))
 
         let validation: FlowRunDecisionPacketValidationResult = try await runCLI(
             "validate-decision-packet",
@@ -71,6 +84,7 @@ struct XcircuiteFlowLifecycleCLITests {
         )
         #expect(validation.runID == runID)
         #expect(validation.packetArtifactIntegrity?.status == .verified)
+        #expect(validation.packetPath == packet.artifact.path)
 
         let envelope: FlowRunReleaseEnvelopeBuildResult = try await runCLI(
             "build-release-envelope",
@@ -80,12 +94,16 @@ struct XcircuiteFlowLifecycleCLITests {
         )
         #expect(envelope.envelope.runID == runID)
         #expect(envelope.artifact.artifactID == DefaultFlowRunReleaseEnvelopeBuilder.artifactID)
+        #expect(envelope.artifact.path.contains("/qualification/release-envelope-sha256-"))
 
         let ledger = try await store.loadRunLedger(runID: runID)
-        let artifactIDs = Set(ledger.artifacts.map(\.artifactID))
+        let artifactIDs = Set(ledger.actions.flatMap(\.outputs).map(\.artifactID))
         #expect(artifactIDs.contains(DefaultFlowRunStageArtifactLadderBuilder.artifactID))
         #expect(artifactIDs.contains(DefaultFlowRunDecisionPacketBuilder.artifactID))
         #expect(artifactIDs.contains(DefaultFlowRunReleaseEnvelopeBuilder.artifactID))
+        #expect(ledger.artifacts == baselineLedger.artifacts)
+        #expect(ledger.runManifest.artifacts == baselineLedger.runManifest.artifacts)
+        #expect(ledger.evidence == baselineLedger.evidence)
     }
 
     @Test func releaseEvidenceAndRetentionCommandsPersistVerifiableArtifacts() async throws {
@@ -193,6 +211,45 @@ struct XcircuiteFlowLifecycleCLITests {
         #expect(retentionBuild.index.status == .passed)
         #expect(retentionBuild.index.appendOnly)
         #expect(retentionBuild.artifact.artifactID == "qualification-retention-index")
+        #expect(retentionBuild.artifact.path.contains("/qualification/retention-index-sha256-"))
+
+        let actionCountAfterRetentionBuild = try await store.loadRunLedger(runID: runID).actions.count
+        let repeatedRetentionBuild: FlowRunReleaseRetentionIndexBuildResult = try await runCLI(
+            "build-retention-index",
+            root: root,
+            runID: runID,
+            additionalArguments: [
+                "--workflow-run-id", "workflow-1",
+                "--source-dashboard", try await store.url(for: dashboardPath).path(percentEncoded: false),
+                "--history", try await store.url(for: historyPath).path(percentEncoded: false),
+                "--previous-entry-count", "0",
+                "--retention-days", "30",
+                "--minimum-retention-days", "30",
+                "--recorded-at", timestamp,
+            ]
+        )
+        #expect(repeatedRetentionBuild.artifact == retentionBuild.artifact)
+        #expect(try await store.loadRunLedger(runID: runID).actions.count == actionCountAfterRetentionBuild)
+
+        let laterTimestamp = ISO8601DateFormatter().string(from: recordedAt.addingTimeInterval(1))
+        let changedRetentionBuild: FlowRunReleaseRetentionIndexBuildResult = try await runCLI(
+            "build-retention-index",
+            root: root,
+            runID: runID,
+            additionalArguments: [
+                "--workflow-run-id", "workflow-2",
+                "--source-dashboard", try await store.url(for: dashboardPath).path(percentEncoded: false),
+                "--history", try await store.url(for: historyPath).path(percentEncoded: false),
+                "--previous-entry-count", "0",
+                "--retention-days", "30",
+                "--minimum-retention-days", "30",
+                "--recorded-at", laterTimestamp,
+            ]
+        )
+        #expect(changedRetentionBuild.artifact != retentionBuild.artifact)
+        #expect(changedRetentionBuild.artifact.path != retentionBuild.artifact.path)
+        #expect(try await store.artifactExists(at: retentionBuild.artifact.locator))
+        #expect(try await store.artifactExists(at: changedRetentionBuild.artifact.locator))
 
         let retentionValidation: FlowRunReleaseRetentionValidationResult = try await runCLI(
             "validate-retention-index",
@@ -202,6 +259,34 @@ struct XcircuiteFlowLifecycleCLITests {
         )
         #expect(retentionValidation.status == .passed)
         #expect(retentionValidation.diagnostics.isEmpty)
+
+        let _: FlowRunDecisionPacketBuildResult = try await runCLI(
+            "build-decision-packet",
+            root: root,
+            runID: runID
+        )
+        let envelope: FlowRunReleaseEnvelopeBuildResult = try await runCLI(
+            "build-release-envelope",
+            root: root,
+            runID: runID,
+            additionalArguments: ["--max-evidence-age-days", "30"]
+        )
+        let requirements = Dictionary(
+            uniqueKeysWithValues: envelope.envelope.requirements.map { ($0.requirementID, $0) }
+        )
+        let evidenceByID = Dictionary(
+            uniqueKeysWithValues: evidence.artifacts.map { ($0.artifactID, $0) }
+        )
+        #expect(requirements["retained-corpus-history"]?.artifactPaths == [
+            try #require(evidenceByID["qualification-corpus-history"]).path,
+        ])
+        #expect(requirements["performance-envelope"]?.artifactPaths == [
+            try #require(evidenceByID["qualification-performance-envelope"]).path,
+        ])
+        #expect(requirements["contract-audit"]?.artifactPaths == [
+            try #require(evidenceByID["qualification-contract-audit"]).path,
+        ])
+        #expect(requirements["retention-index"]?.artifactPaths == [changedRetentionBuild.artifact.path])
     }
 
     @Test func approvalCommandBindsPersistedPlanAndStageEvidence() async throws {
@@ -232,7 +317,7 @@ struct XcircuiteFlowLifecycleCLITests {
         #expect(result.approval.verdict == .approved)
         #expect(result.approval.reviewerKind == .agent)
         #expect(result.approval.evidence.plan.artifactID == "run-plan")
-        #expect(result.approval.evidence.stageResult.artifactID == "001-analysis-result")
+        #expect(result.approval.evidence.stageResult.artifactID == "approval-review-001-analysis")
 
         let ledger = try await store.loadRunLedger(runID: runID)
         #expect(ledger.approvals == [result.approval])
@@ -323,7 +408,7 @@ struct XcircuiteFlowLifecycleCLITests {
             artifactID: "run-plan",
             path: ".xcircuite/runs/\(runID)/plan.json",
             role: .input,
-            kind: .request,
+            kind: .other,
             store: store
         )
         let stageResultReference = try await writeArtifact(
@@ -331,7 +416,7 @@ struct XcircuiteFlowLifecycleCLITests {
             artifactID: "\(stageID)-result",
             path: ".xcircuite/runs/\(runID)/stages/\(stageID)/result.json",
             role: .output,
-            kind: .report,
+            kind: .other,
             store: store
         )
         let references = [planReference, stageResultReference, summaryReference]
@@ -363,12 +448,42 @@ struct XcircuiteFlowLifecycleCLITests {
             inputs: [planReference],
             outputs: [summaryReference]
         )
+        let toolchain: FlowToolchainManifest? = status.isTerminal
+            ? FlowToolchainManifest(
+                runID: runID,
+                stages: [
+                    FlowToolchainStageRecord(
+                        stageID: stageID,
+                        executorToolID: "integration-analysis"
+                    ),
+                ]
+            )
+            : nil
+        let evidence: EvidenceManifest? = if status.isTerminal {
+            EvidenceManifest(
+                provenance: try ExecutionProvenance(
+                    producer: ProducerIdentity(
+                        kind: .engine,
+                        identifier: "integration-analysis",
+                        version: "1"
+                    ),
+                    inputs: [planReference],
+                    startedAt: now,
+                    completedAt: now
+                ),
+                artifacts: references
+            )
+        } else {
+            nil
+        }
         try await store.saveRunLedger(
             FlowRunLedger(
                 runID: runID,
                 runManifest: manifest,
                 plan: plan,
                 stages: [stage],
+                toolchain: toolchain,
+                evidence: evidence,
                 artifacts: references,
                 actions: [action]
             )

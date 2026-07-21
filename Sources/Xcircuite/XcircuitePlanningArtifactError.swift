@@ -5,6 +5,7 @@ public enum XcircuitePlanningArtifactError: Error, LocalizedError, Equatable {
     case invalidUTF8
     case invalidJSONLLine(path: String, line: Int, message: String)
     case duplicateRejectedPlan(rejectionID: String)
+    case concurrentAppendConflict(path: String)
 
     public var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ public enum XcircuitePlanningArtifactError: Error, LocalizedError, Equatable {
             "Planning artifact JSONL at \(path) has invalid line \(line): \(message)"
         case .duplicateRejectedPlan(let rejectionID):
             "Planning artifact rejected-plan ledger already contains rejectionID \(rejectionID)."
+        case .concurrentAppendConflict(let path):
+            "Planning artifact append could not converge after concurrent updates at \(path)."
         }
     }
 }

@@ -12,7 +12,8 @@ extension XcircuiteCandidatePlanGenerator {
         calibrationContext: SymbolicCalibrationContext?,
         policyTrace: XcircuiteSymbolicPlannerPolicyTrace?
     ) throws -> CandidatePlanDraft {
-        let planID = try identifier("\(problem.problemID)-candidate-plan-1")
+        let planGeneration = rejectedPlanFeedback.recordCount + 1
+        let planID = try identifier("\(problem.problemID)-candidate-plan-\(planGeneration)")
         let availableRefs = availableReferences(for: problem)
         var sequence = try makeCandidatePlanSequence(
             problem: problem,

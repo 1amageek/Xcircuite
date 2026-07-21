@@ -1,6 +1,6 @@
 public struct XcircuiteActionDomainOperation: Codable, Sendable, Hashable {
     public var operationID: String
-    public var maturity: String
+    public var maturity: XcircuiteOperationMaturity
     public var inputRefs: [String]
     public var preconditions: [String]
     public var effects: [String]
@@ -10,7 +10,7 @@ public struct XcircuiteActionDomainOperation: Codable, Sendable, Hashable {
 
     public init(
         operationID: String,
-        maturity: String,
+        maturity: XcircuiteOperationMaturity,
         inputRefs: [String],
         preconditions: [String],
         effects: [String],

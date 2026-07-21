@@ -49,28 +49,49 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let preLayoutWaveformURL = try preLayoutWaveformInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+            let projectRoot = try context.xcircuiteProjectRoot()
+            let runDirectory = try context.xcircuiteRunDirectory()
+            let preLayoutWaveform = try preLayoutWaveformInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "pre-layout-waveform",
+                kind: .waveform,
+                format: .csv
             )
-            let postLayoutWaveformURL = try postLayoutWaveformInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+            let postLayoutWaveform = try postLayoutWaveformInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "post-layout-waveform",
+                kind: .waveform,
+                format: .csv
             )
+            let preLayoutWaveformURL = try preLayoutWaveform.locator.location
+                .resolvedFileURL(relativeTo: projectRoot)
+            let postLayoutWaveformURL = try postLayoutWaveform.locator.location
+                .resolvedFileURL(relativeTo: projectRoot)
             let preLayoutCSV = try String(contentsOf: preLayoutWaveformURL, encoding: .utf8)
             let postLayoutCSV = try String(contentsOf: postLayoutWaveformURL, encoding: .utf8)
             try await context.checkCancellation()
+            let producer = try ProducerIdentity(
+                kind: .engine,
+                identifier: toolID,
+                version: "1.0.0"
+            )
             let report = try service.compare(
                 preLayoutCSV: preLayoutCSV,
                 postLayoutCSV: postLayoutCSV,
-                options: options
+                options: options,
+                inputs: [preLayoutWaveform, postLayoutWaveform],
+                producer: producer
             )
             try await context.checkCancellation()
             let reportArtifact = try await context.persistJSONArtifact(
                 report,
                 artifactID: "post-layout-comparison",
                 stageID: stageID,
-                fileName: "comparison-report.json"
+                fileName: "comparison-report.json",
+                producer: report.provenance.producer,
+                mode: .replaceable
             )
 
             let diagnostics = diagnostics(from: report)

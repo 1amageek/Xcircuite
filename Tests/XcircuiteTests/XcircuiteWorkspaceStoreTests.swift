@@ -2,10 +2,78 @@ import Foundation
 import Testing
 import CircuiteFoundation
 import DesignFlowKernel
+import ReleaseCore
+import TapeoutEngine
 @testable import Xcircuite
 
 @Suite("XcircuiteWorkspaceStore")
 struct XcircuiteWorkspaceStoreTests {
+    @Test
+    func persistsReleaseArtifactsThroughTheWorkspaceStoreContract() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.createWorkspace()
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: "release/top.gds"),
+            role: .output,
+            kind: .layout,
+            format: .gdsii
+        )
+        let producer = try ProducerIdentity(
+            kind: .tool,
+            identifier: "release-stream-encoder",
+            version: "1.0.0"
+        )
+        let request = ReleaseArtifactPersistenceRequest(
+            locator: locator,
+            bytes: Data("gds-stream".utf8),
+            producer: producer
+        )
+
+        let reference = try await store.persist(request, relativeTo: root)
+        #expect(reference.producer == producer)
+        #expect(try await store.load(reference, relativeTo: root) == request.bytes)
+
+        await #expect(throws: XcircuiteWorkspaceStoreError.artifactAlreadyExists("release/top.gds")) {
+            _ = try await store.persist(request, relativeTo: root)
+        }
+    }
+
+    @Test
+    func releaseArtifactPersistenceRejectsSymlinkEscape() async throws {
+        let root = try makeTemporaryRoot()
+        let outside = try makeTemporaryRoot()
+        defer {
+            remove(root)
+            remove(outside)
+        }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await store.createWorkspace()
+        try FileManager.default.createSymbolicLink(
+            at: root.appending(path: "release"),
+            withDestinationURL: outside
+        )
+        let request = ReleaseArtifactPersistenceRequest(
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(workspaceRelativePath: "release/top.gds"),
+                role: .output,
+                kind: .layout,
+                format: .gdsii
+            ),
+            bytes: Data("gds-stream".utf8),
+            producer: try ProducerIdentity(
+                kind: .tool,
+                identifier: "release-stream-encoder",
+                version: "1.0.0"
+            )
+        )
+
+        await #expect(throws: XcircuiteWorkspaceStoreError.unsafeProjectPath("release/top.gds")) {
+            _ = try await store.persist(request, relativeTo: root)
+        }
+    }
+
     @Test
     func writesAndReadsProjectLocalArtifacts() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -133,6 +201,182 @@ struct XcircuiteWorkspaceStoreTests {
             )
         }
         #expect(try await store.read(from: path) == content)
+    }
+
+    @Test
+    func terminalRunAcceptsNewAuditArtifactButRejectsReplacement() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runID = "run-terminal-audit"
+        try await prepareTestRun(runID: runID, store: store)
+        let coordinator = FlowRunLedgerCoordinator(persistence: store)
+        _ = try await coordinator.transition(runID: runID, to: .running)
+        let terminalStageID = "audit-ready"
+        _ = try await coordinator.finalize(
+            runID: runID,
+            status: .succeeded,
+            stages: [FlowStageResult(stageID: terminalStageID, status: .succeeded)],
+            toolchain: FlowToolchainManifest(
+                runID: runID,
+                stages: [
+                    FlowToolchainStageRecord(
+                        stageID: terminalStageID,
+                        executorToolID: "workspace-store-test"
+                    ),
+                ]
+            ),
+            evidence: EvidenceManifest(
+                provenance: try ExecutionProvenance(
+                    producer: ProducerIdentity(
+                        kind: .engine,
+                        identifier: "workspace-store-test",
+                        version: "1"
+                    ),
+                    inputs: [],
+                    startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                    completedAt: Date(timeIntervalSince1970: 1_700_000_001)
+                ),
+                artifacts: []
+            ),
+            artifacts: []
+        )
+
+        let path = ".xcircuite/runs/\(runID)/review/audit.json"
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .output,
+            kind: .evidence,
+            format: .json
+        )
+        let original = Data("audit".utf8)
+        let reference = try await store.persistArtifact(
+            content: original,
+            id: try ArtifactID(rawValue: "terminal-audit"),
+            locator: locator,
+            runID: runID,
+            mode: .replaceable
+        )
+
+        #expect(try await store.loadArtifactContent(for: reference) == original)
+        #expect(try await store.loadRunLedger(runID: runID).artifacts.contains(reference))
+        await #expect(throws: XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
+            runID: runID,
+            path: path
+        )) {
+            _ = try await store.persistArtifact(
+                content: Data("replacement".utf8),
+                id: try ArtifactID(rawValue: "terminal-audit"),
+                locator: locator,
+                runID: runID,
+                mode: .replaceable
+            )
+        }
+    }
+
+    @Test
+    func terminalRunAllowsOnlyPrefixPreservingAuditAppend() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runID = "run-terminal-append"
+        try await prepareTestRun(runID: runID, store: store)
+        let coordinator = FlowRunLedgerCoordinator(persistence: store)
+        _ = try await coordinator.transition(runID: runID, to: .running)
+        let stageID = "append-ready"
+        _ = try await coordinator.finalize(
+            runID: runID,
+            status: .succeeded,
+            stages: [FlowStageResult(stageID: stageID, status: .succeeded)],
+            toolchain: FlowToolchainManifest(
+                runID: runID,
+                stages: [FlowToolchainStageRecord(stageID: stageID, executorToolID: "workspace-store-test")]
+            ),
+            evidence: EvidenceManifest(
+                provenance: try ExecutionProvenance(
+                    producer: ProducerIdentity(kind: .engine, identifier: "workspace-store-test", version: "1"),
+                    inputs: [],
+                    startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                    completedAt: Date(timeIntervalSince1970: 1_700_000_001)
+                ),
+                artifacts: []
+            ),
+            artifacts: []
+        )
+
+        let path = ".xcircuite/runs/\(runID)/planning/rejected-plans.jsonl"
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: path),
+            role: .output,
+            kind: .other,
+            format: .text
+        )
+        let first = Data("{\"id\":1}\n".utf8)
+        let second = Data("{\"id\":1}\n{\"id\":2}\n".utf8)
+        _ = try await store.persistArtifact(
+            content: first,
+            id: try ArtifactID(rawValue: "append-only-audit"),
+            locator: locator,
+            runID: runID,
+            mode: .appendOnly
+        )
+        let appended = try await store.persistArtifact(
+            content: second,
+            id: try ArtifactID(rawValue: "append-only-audit"),
+            locator: locator,
+            runID: runID,
+            mode: .appendOnly
+        )
+
+        #expect(try await store.loadArtifactContent(for: appended) == second)
+        await #expect(throws: XcircuiteWorkspaceStoreError.appendOnlyArtifactConflict(path)) {
+            _ = try await store.persistArtifact(
+                content: Data("{\"id\":0}\n{\"id\":2}\n".utf8),
+                id: try ArtifactID(rawValue: "append-only-audit"),
+                locator: locator,
+                runID: runID,
+                mode: .appendOnly
+            )
+        }
+        #expect(try await store.read(from: path) == second)
+    }
+
+    @Test
+    func persistsArtifactProducerInLedgerAndRunManifest() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runID = "run-producer-lineage"
+        try await prepareTestRun(runID: runID, store: store)
+        let producer = try ProducerIdentity(
+            kind: .engine,
+            identifier: "logic-simulation",
+            version: "2.1.0"
+        )
+        let reference = try await store.persistArtifact(
+            content: Data("measured-result".utf8),
+            id: try ArtifactID(rawValue: "measured-result"),
+            locator: ArtifactLocator(
+                location: try ArtifactLocation(
+                    workspaceRelativePath: ".xcircuite/runs/\(runID)/stages/logic.simulate/raw/result.json"
+                ),
+                role: .output,
+                kind: .report,
+                format: .json
+            ),
+            runID: runID,
+            producer: producer,
+            mode: .immutable
+        )
+
+        let ledger = try await store.loadRunLedger(runID: runID)
+        let manifest = try await store.loadRunManifest(runID: runID)
+        #expect(reference.producer == producer)
+        #expect(ledger.artifacts.first { $0.id == reference.id }?.producer == producer)
+        #expect(manifest.artifacts.first { $0.id == reference.id }?.producer == producer)
     }
 
     @Test

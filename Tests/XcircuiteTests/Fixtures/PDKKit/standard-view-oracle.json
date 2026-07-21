@@ -9,9 +9,9 @@
       "assetID": "cells",
       "format": "lef",
       "expectedLibraryName": "LEF",
-      "expectedLayerNames": ["M1"],
+      "expectedLayerNames": ["ACTIVE", "M1"],
       "expectedCellNames": ["nmos"],
-      "expectedElementCount": 2,
+      "expectedElementCount": 3,
       "expectedMetadata": { "lef.version": "5.8", "dbuPerMicron": "1000.0" }
     },
     {

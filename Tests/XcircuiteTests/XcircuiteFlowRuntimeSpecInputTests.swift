@@ -14,6 +14,55 @@ import Xcircuite
 import XcircuiteFlowCLISupport
 
 extension XcircuiteFlowRuntimeTests {
+    @Test func runtimeSpecRoundTripsCoreSpiceProducerOutputInput() throws {
+        let input = XcircuiteFlowInputReference.stageArtifact(
+            .init(
+                stageID: "pex.extract",
+                artifactID: "extracted-netlist",
+                kind: .netlist,
+                format: .spice
+            )
+        )
+        let spec = XcircuiteFlowRuntimeSpec(executors: [
+            .coreSpiceSimulation(.init(stageID: "simulate.post-layout", netlistInput: input)),
+        ])
+
+        let data = try JSONEncoder().encode(spec)
+        let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
+        try decoded.validate()
+
+        guard case .coreSpiceSimulation(let simulation) = try #require(decoded.executors.first) else {
+            Issue.record("Expected CoreSpice simulation executor")
+            return
+        }
+        #expect(decoded.schemaVersion == XcircuiteFlowRuntimeSpec.currentSchemaVersion)
+        #expect(simulation.netlistInput == input)
+    }
+
+    @Test func nativeDesignRuntimeFixtureIsCLIReady() throws {
+        guard let url = Bundle.module.url(
+            forResource: "native-design-runtime.json",
+            withExtension: nil,
+            subdirectory: "Fixtures/FlowRuntime"
+        ) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let spec = try XcircuiteFlowRuntimeSpec.load(from: url)
+
+        try spec.validate()
+
+        #expect(spec.executors.count == 7)
+        #expect(spec.executors.map(\.stageID) == [
+            "logic.elaborate",
+            "logic.power-intent",
+            "logic.lower",
+            "logic.simulate",
+            "physical.floorplan",
+            "timing.sta",
+            "timing.signal-integrity",
+        ])
+    }
+
     @Test func runtimeSpecPathErrorIdentifiesTheFailingStage() async throws {
         let stageID = "electrical-signoff.fixture"
         let executor = XcircuiteFlowStageExecutorSpec.electricalSignoff(
@@ -40,6 +89,7 @@ extension XcircuiteFlowRuntimeTests {
                         analysis: .lint,
                         rtlInput: .path("rtl/top.sv"),
                         evidenceInput: .path("qualification/rtl-input.json"),
+                        pdkInput: .path("pdk/manifest.json"),
                         topModuleName: "top"
                     )
                 ),
@@ -69,6 +119,7 @@ extension XcircuiteFlowRuntimeTests {
                     XcircuiteFlowStageExecutorSpec.RTLVerification(
                         analysis: .lint,
                         rtlInput: .path("rtl/top.sv"),
+                        pdkInput: .path("pdk/manifest.json"),
                         topModuleName: "top",
                         oracleTool: RTLVerificationOracleToolSpec(
                             toolID: oracleToolID,
@@ -279,6 +330,137 @@ extension XcircuiteFlowRuntimeTests {
         #expect(decoded.executors[0].makeDescriptor().toolID == "logic-synthesis")
         #expect(decoded.executors[1].makeDescriptor().toolID == "native-rtl-verification")
         #expect(decoded.executors[2].makeDescriptor().toolID == "logic-evidence-validation")
+    }
+
+    @Test func runtimeSpecRoundTripsAgentOperableDesignAndTimingStages() throws {
+        let producedDesign = XcircuiteFlowInputReference.stageArtifact(.init(
+            stageID: "logic.lower",
+            artifactID: "logic-execution-design",
+            kind: .netlist,
+            format: .json
+        ))
+        let producedParasitics = XcircuiteFlowInputReference.stageArtifact(.init(
+            stageID: "signoff.pex",
+            kind: .parasitics,
+            format: .spef,
+            pathSuffix: "tt.spef"
+        ))
+        let pdkDigest = String(repeating: "0", count: 64)
+        let spec = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .logicElaboration(.init(
+                    sourceInput: .path("rtl/top.sv"),
+                    topDesignName: "top"
+                )),
+                .powerIntent(.init(
+                    sourceInput: .path("power/top.upf"),
+                    designInput: .stageArtifact(.init(
+                        stageID: "logic.elaborate",
+                        artifactID: "logic-design",
+                        kind: .rtl,
+                        format: .json
+                    )),
+                    pdkInput: .path("pdk/manifest.json"),
+                    topDesignName: "top"
+                )),
+                .logicLowering(.init(
+                    designInput: .stageArtifact(.init(
+                        stageID: "logic.elaborate",
+                        artifactID: "logic-design",
+                        kind: .rtl,
+                        format: .json
+                    )),
+                    topDesignName: "top"
+                )),
+                .logicSimulation(.init(
+                    designInput: producedDesign,
+                    pdkInput: .path("pdk/manifest.json"),
+                    topDesignName: "top",
+                    stimulusInput: .path("logic/stimulus.json"),
+                    seed: 7
+                )),
+                .physicalDesign(.init(
+                    stageID: "physical.floorplan",
+                    requestInput: .path("requests/floorplan.json"),
+                    allowedStages: [.floorplan]
+                )),
+                .timingSTA(.init(inputs: TimingSTAFlowInputs(
+                    design: producedDesign,
+                    libraries: [.path("timing/cells.lib")],
+                    constraints: .path("timing/top.sdc"),
+                    pdkManifest: .path("pdk/manifest.json"),
+                    parasitics: producedParasitics,
+                    topDesignName: "top",
+                    processID: "fixture-process",
+                    pdkVersion: "1",
+                    pdkDigest: pdkDigest,
+                    modeIDs: ["functional"],
+                    cornerIDs: ["tt"],
+                    requiresPostLayoutInputs: true
+                ))),
+                .timingSignalIntegrity(.init(inputs: TimingSIFlowInputs(
+                    design: producedDesign,
+                    constraints: .path("timing/top.sdc"),
+                    pdkManifest: .path("pdk/manifest.json"),
+                    parasitics: producedParasitics,
+                    topDesignName: "top",
+                    processID: "fixture-process",
+                    pdkVersion: "1",
+                    pdkDigest: pdkDigest,
+                    modeIDs: ["functional"],
+                    maxDeltaDelay: 0.5,
+                    maxNoiseRatio: 0.1
+                ))),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(spec)
+        let decoded = try JSONDecoder().decode(XcircuiteFlowRuntimeSpec.self, from: data)
+        try decoded.validate()
+
+        #expect(decoded == spec)
+        #expect(decoded.executors.map { $0.makeDescriptor().toolID } == [
+            "logic-design.native",
+            "logic-design.power-intent",
+            "logic-lowering",
+            "logic-simulation",
+            "physical-design",
+            "native-sta",
+            "native-signal-integrity",
+        ])
+    }
+
+    @Test func runtimeSpecRejectsIncompleteTimingAndPhysicalDesignInputs() throws {
+        let invalidPhysical = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .physicalDesign(.init(
+                    stageID: "physical.floorplan",
+                    requestInput: .path("requests/floorplan.json"),
+                    allowedStages: []
+                )),
+            ]
+        )
+        #expect(throws: XcircuiteFlowRuntimeSpecError.self) {
+            try invalidPhysical.validate()
+        }
+
+        let invalidTiming = XcircuiteFlowRuntimeSpec(
+            executors: [
+                .timingSTA(.init(inputs: TimingSTAFlowInputs(
+                    design: .path("design.json"),
+                    libraries: [],
+                    constraints: .path("constraints.sdc"),
+                    pdkManifest: .path("pdk.json"),
+                    topDesignName: "top",
+                    processID: "fixture-process",
+                    pdkVersion: "1",
+                    pdkDigest: String(repeating: "0", count: 64)
+                ))),
+            ]
+        )
+        #expect(throws: XcircuiteFlowRuntimeSpecError.self) {
+            try invalidTiming.validate()
+        }
     }
 
     @Test func runtimeSpecRoundTripsLayoutCommandStandardExportsAndLVSInputs() async throws {

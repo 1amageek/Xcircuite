@@ -34,13 +34,15 @@ extension XcircuiteCandidatePlanVerifier {
         let preExecutionMissingGoalAtoms = missingGoalAtomRefs(from: preExecutionGoalCoverage)
         let riskReviewer = XcircuiteCandidatePlanRiskReviewer()
         let riskReviews = riskReviewer.riskReviews(for: plan, approvals: approvals)
-        guard let executionRef = manifest.artifacts.first(where: {
-            $0.artifactID == XcircuitePlanningArtifactStore.planExecutionArtifactID
-        }) else {
+        guard let executionInput = try await matchingPlanExecution(
+            runID: plan.runID,
+            candidatePlanRef: candidatePlanRef,
+            manifest: manifest
+        ) else {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
                 severity: "error",
                 code: "plan-execution-missing",
-                message: "Post-execution verification requires planning/plan-execution.json."
+                message: "Post-execution verification requires an action-bound planning/plan-execution/<sha256>.json artifact."
             )
             let gateResults = postExecutionGateResultsWithoutExecution(
                 plan: plan,
@@ -55,6 +57,7 @@ extension XcircuiteCandidatePlanVerifier {
             let nextActions = unique(["execute-candidate-plan"] + riskReviewer.nextActions(from: riskReviews))
             let correctnessGateResults = makeCorrectnessGateResults(
                 plan: plan,
+                candidatePlanArtifact: candidatePlanRef,
                 verificationMode: "post-execution",
                 planningProblem: planningProblem,
                 planningProblemValidationArtifact: planningProblemValidationArtifact,
@@ -88,10 +91,8 @@ extension XcircuiteCandidatePlanVerifier {
                 nextActions: nextActions
             )
         }
-        let execution = try JSONDecoder().decode(
-            XcircuiteCandidatePlanExecution.self,
-            from: Data(contentsOf: projectURL(for: executionRef.path, projectRoot: projectRoot))
-        )
+        let executionRef = executionInput.reference
+        let execution = executionInput.execution
         let postExecutionSymbolicSummary = postExecutionSymbolicVerificationSummary(
             for: plan,
             actionDomainSnapshot: actionDomainSnapshot,
@@ -152,6 +153,7 @@ extension XcircuiteCandidatePlanVerifier {
             && plan.unresolvedObjectives.isEmpty
         let correctnessGateResults = makeCorrectnessGateResults(
             plan: plan,
+            candidatePlanArtifact: candidatePlanRef,
             verificationMode: "post-execution",
             planningProblem: planningProblem,
             planningProblemValidationArtifact: planningProblemValidationArtifact,
@@ -184,6 +186,42 @@ extension XcircuiteCandidatePlanVerifier {
             diagnostics: diagnostics,
             accepted: accepted,
             nextActions: nextActions
+        )
+    }
+
+    private func matchingPlanExecution(
+        runID: String,
+        candidatePlanRef: ArtifactReference,
+        manifest: FlowRunManifest
+    ) async throws -> (reference: ArtifactReference, execution: XcircuiteCandidatePlanExecution)? {
+        let candidates = manifest.artifacts.filter {
+            $0.artifactID == XcircuitePlanningArtifactStore.planExecutionArtifactID
+        }
+        var matches: [(ArtifactReference, XcircuiteCandidatePlanExecution)] = []
+        for reference in candidates {
+            let execution: XcircuiteCandidatePlanExecution = try await decodeRetainedArtifact(
+                reference,
+                as: XcircuiteCandidatePlanExecution.self
+            )
+            if execution.candidatePlanRef == candidatePlanRef {
+                matches.append((reference, execution))
+            }
+        }
+        guard matches.count > 1 else {
+            return matches.first
+        }
+        let matchesByReference = Dictionary(uniqueKeysWithValues: matches.map { ($0.0, $0.1) })
+        let actions = try await workspaceStore.loadRunActions(runID: runID)
+        for action in actions.reversed() where action.actionKind == "planning.execute-candidate-plan" {
+            for output in action.outputs {
+                if let execution = matchesByReference[output] {
+                    return (output, execution)
+                }
+            }
+        }
+        throw XcircuiteCandidatePlanVerificationError.invalidArtifactPayload(
+            path: candidatePlanRef.path,
+            reason: "Multiple plan executions reference the same candidate plan without an ordered action binding."
         )
     }
 

@@ -93,7 +93,23 @@ struct PostLayoutComparisonFlowStageExecutorTests {
             PostLayoutComparisonReport.self,
             from: Data(contentsOf: reportURL)
         )
+        #expect(report.schemaVersion == PostLayoutComparisonReport.currentSchemaVersion)
         #expect(report.gateStatus == "passed")
+        #expect(report.provenance.producer.identifier == "post-layout-comparison")
+        #expect(report.provenance.producer.version == "1.0.0")
+        #expect(report.provenance.inputs.count == 2)
+        #expect(report.provenance.inputs.allSatisfy {
+            $0.kind == .waveform && $0.format == .csv
+        })
+        #expect(reportArtifact.producer == report.provenance.producer)
+        #expect(report.provenance.inputs.allSatisfy {
+            LocalArtifactVerifier().verify($0, relativeTo: root).isVerified
+        })
+        let ledger = try await XcircuiteWorkspaceStore(projectRoot: root)
+            .loadRunLedger(runID: "run-comparison")
+        #expect(ledger.artifacts.first {
+            $0.locator == reportArtifact.locator
+        } == reportArtifact)
         #expect(report.requiredPostVariables.contains { $0.variableName == "V(out_pex)" && $0.present })
         #expect(report.oscillationMetrics.first?.postLayout?.transitionCount == 4)
     }

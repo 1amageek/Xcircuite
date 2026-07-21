@@ -10,6 +10,7 @@ import DesignFlowKernel
 extension XcircuiteCandidatePlanVerifier {
     func makeCorrectnessGateResults(
         plan: XcircuiteCandidatePlan,
+        candidatePlanArtifact: ArtifactReference,
         verificationMode: String,
         planningProblem: XcircuiteCircuitPlanningProblem?,
         planningProblemValidationArtifact: ArtifactReference?,
@@ -32,6 +33,7 @@ extension XcircuiteCandidatePlanVerifier {
                 stepResults: stepResults
             ),
             plannerReplayCorrectnessGate(
+                candidatePlanArtifact: candidatePlanArtifact,
                 stepResults: stepResults,
                 goalCoverage: goalCoverage,
                 diagnostics: diagnostics
@@ -127,6 +129,7 @@ extension XcircuiteCandidatePlanVerifier {
     }
 
     func plannerReplayCorrectnessGate(
+        candidatePlanArtifact: ArtifactReference,
         stepResults: [XcircuitePlanVerificationStepResult],
         goalCoverage: [XcircuiteSymbolicPlannerGoalCoverage],
         diagnostics: [XcircuitePlanVerificationDiagnostic]
@@ -137,7 +140,7 @@ extension XcircuiteCandidatePlanVerifier {
                 gateID: "planner-replay",
                 status: "blocked",
                 summary: "Symbolic replay did not cover all declared objective goal atoms.",
-                evidenceArtifactIDs: [XcircuitePlanningArtifactStore.candidatePlanArtifactID],
+                evidenceArtifactIDs: [candidatePlanArtifact.artifactID],
                 diagnostics: missingGoalDiagnostics,
                 nextActions: unique(missingGoalDiagnostics.flatMap { nextActions(for: $0) })
             )
@@ -152,7 +155,7 @@ extension XcircuiteCandidatePlanVerifier {
                 gateID: "planner-replay",
                 status: "not-evaluated",
                 summary: "No explicit symbolic goals were available for replay coverage.",
-                evidenceArtifactIDs: [XcircuitePlanningArtifactStore.candidatePlanArtifactID],
+                evidenceArtifactIDs: [candidatePlanArtifact.artifactID],
                 diagnostics: [diagnostic],
                 nextActions: ["add-objective-goal-atoms"]
             )
@@ -161,7 +164,7 @@ extension XcircuiteCandidatePlanVerifier {
             gateID: "planner-replay",
             status: "passed",
             summary: "Symbolic replay covered declared objective goal atoms.",
-            evidenceArtifactIDs: [XcircuitePlanningArtifactStore.candidatePlanArtifactID]
+            evidenceArtifactIDs: [candidatePlanArtifact.artifactID]
         )
     }
 

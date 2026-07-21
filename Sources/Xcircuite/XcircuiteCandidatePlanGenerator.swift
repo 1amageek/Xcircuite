@@ -24,13 +24,14 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
         projectRoot: URL
     ) async throws -> XcircuiteCandidatePlanGenerationResult {
         let build = try await makeCandidatePlanBuild(request: request, projectRoot: projectRoot)
-        let reference = try await artifactStore.persistCandidatePlan(
+        let reference = try await artifactStore.persistGeneratedCandidatePlan(
             build.draft.plan,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let traceReference = try await artifactStore.persistSymbolicPlannerTrace(
+        let traceReference = try await artifactStore.persistGeneratedSymbolicPlannerTrace(
             build.draft.trace,
+            planID: build.draft.plan.planID,
             runID: request.runID,
             projectRoot: projectRoot
         )
@@ -103,13 +104,14 @@ public struct XcircuiteCandidatePlanGenerator: Sendable {
             candidates,
             selectionPolicy: request.selectionPolicy
         )
-        let promotedPlanArtifact = try await artifactStore.persistCandidatePlan(
+        let promotedPlanArtifact = try await artifactStore.persistGeneratedCandidatePlan(
             selected.build.draft.plan,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let promotedTraceArtifact = try await artifactStore.persistSymbolicPlannerTrace(
+        let promotedTraceArtifact = try await artifactStore.persistGeneratedSymbolicPlannerTrace(
             selected.build.draft.trace,
+            planID: selected.build.draft.plan.planID,
             runID: request.runID,
             projectRoot: projectRoot
         )

@@ -7,6 +7,7 @@ import DesignFlowKernel
 public struct DFTFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
+    public let expectedOperation: DFTOperation
     private let requestInput: XcircuiteFlowInputReference
     private let injectedEngine: (any DFTEngineExecuting)?
 
@@ -14,9 +15,11 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         stageID: String,
         toolID: String = "dft-engine",
         requestInput: XcircuiteFlowInputReference,
+        expectedOperation: DFTOperation,
         engine: (any DFTEngineExecuting)? = nil
     ) {
         self.stageID = stageID
+        self.expectedOperation = expectedOperation
         self.toolID = toolID
         self.requestInput = requestInput
         self.injectedEngine = engine
@@ -44,6 +47,30 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                     message: "DFT request run ID \(request.runID) does not match flow run \(context.runID)."
                 )
             }
+            guard request.operation == expectedOperation else {
+                return blockedResult(
+                    stageID: stage.stageID,
+                    code: "DFT_OPERATION_MISMATCH",
+                    message: "DFT stage \(stage.stageID) requires \(expectedOperation.rawValue), but the request declares \(request.operation.rawValue)."
+                )
+            }
+            let inputArtifacts = uniqueArtifacts(
+                request.inputs
+                    + [request.design.artifact, request.constraints.artifact, request.pdk.manifest]
+                    + [request.cellLibrary?.artifact].compactMap { $0 }
+            )
+            for artifact in inputArtifacts {
+                _ = try await context.infrastructure.loadArtifactContent(for: artifact)
+            }
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "dft-request",
+                stageID: stageID,
+                fileName: "dft-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
             let engine: any DFTEngineExecuting
             if let injectedEngine {
                 engine = injectedEngine
@@ -63,10 +90,13 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                 result,
                 stageID: stage.stageID,
                 artifactID: "dft-result",
-                context: context
+                context: context,
+                producer: result.provenance.producer,
+                mode: .replaceable
             )
-            let persistedArtifacts = result.artifacts
-                + [resultArtifact]
+            let persistedArtifacts = uniqueArtifacts(
+                inputArtifacts + result.artifacts + [requestArtifact, resultArtifact]
+            )
             let integrityGate = StageArtifactIntegrityGateBuilder().gate(
                 for: persistedArtifacts,
                 projectRoot: try context.xcircuiteProjectRoot()
@@ -158,6 +188,10 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         case .failed:
             return .failed
         }
+    }
+
+    private func uniqueArtifacts(_ artifacts: [ArtifactReference]) -> [ArtifactReference] {
+        Array(Set(artifacts)).sorted { $0.path < $1.path }
     }
 
     private func blockedResult(

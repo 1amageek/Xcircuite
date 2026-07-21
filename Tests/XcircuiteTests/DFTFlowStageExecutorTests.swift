@@ -56,7 +56,8 @@ struct DFTFlowStageExecutorTests {
 
         let result = try await DFTFlowStageExecutor(
             stageID: "dft.scan",
-            requestInput: .path("dft-request.json")
+            requestInput: .path("dft-request.json"),
+            expectedOperation: .scanInsertion
         ).execute(
             stage: FlowStageDefinition(stageID: "dft.scan", displayName: "DFT scan insertion"),
             context: try await makeContext(root: root, runID: runID)
@@ -65,6 +66,11 @@ struct DFTFlowStageExecutorTests {
         #expect(result.status == .succeeded)
         #expect(result.gates.contains { $0.gateID == "dft" && $0.status == .passed })
         #expect(Set(result.artifacts.map(\.artifactID)) == [
+            "design",
+            "constraints",
+            "pdk",
+            "cell-library",
+            "dft-request",
             "dft-transformed-design",
             "dft-design-diff",
             "dft-result",
@@ -74,10 +80,52 @@ struct DFTFlowStageExecutorTests {
             .path))
     }
 
+    @Test("DFT flow stage rejects a request for another operation")
+    func rejectsOperationMismatch() async throws {
+        let root = try makeRoot()
+        defer { removeRoot(root) }
+        let runID = "dft-operation-mismatch"
+        let sourceSnapshot = try LogicDesignSnapshotCodec.finalized(makeGateSnapshot())
+        let designArtifact = try writeArtifact(
+            root: root,
+            path: "design.json",
+            artifactID: "design",
+            data: try LogicDesignSnapshotCodec.encode(sourceSnapshot),
+            kind: .netlist,
+            role: .input
+        )
+        let request = try makeRequest(
+            root: root,
+            runID: runID,
+            designArtifact: designArtifact,
+            designDigest: try LogicDesignSnapshotCodec.digest(sourceSnapshot)
+        )
+        try DFTArtifactJSONEncoder().encode(request).write(
+            to: root.appending(path: "dft-request.json"),
+            options: .atomic
+        )
+
+        let result = try await DFTFlowStageExecutor(
+            stageID: "dft.atpg",
+            requestInput: .path("dft-request.json"),
+            expectedOperation: .atpg
+        ).execute(
+            stage: FlowStageDefinition(stageID: "dft.atpg", displayName: "DFT ATPG"),
+            context: try await makeContext(root: root, runID: runID)
+        )
+
+        #expect(result.status == .blocked)
+        #expect(result.diagnostics.contains { $0.code == "DFT_OPERATION_MISMATCH" })
+    }
+
     @Test("DFT executor specs round-trip with current fields")
     func stageSpecsRoundTrip() async throws {
         let scan = XcircuiteFlowStageExecutorSpec.dftExecution(
-            .init(stageID: "dft.scan", requestPath: "dft-request.json")
+            .init(
+                stageID: "dft.scan",
+                operation: .scanInsertion,
+                requestPath: "dft-request.json"
+            )
         )
         let correlation = XcircuiteFlowStageExecutorSpec.dftOracleCorrelation(
             .init(
@@ -273,6 +321,7 @@ struct DFTFlowStageExecutorTests {
         )
         let input = try writeQualificationArtifact(root: root, name: "input")
         let output = try writeQualificationArtifact(root: root, name: "output")
+        let oracleOutput = try writeQualificationArtifact(root: root, name: "oracle-output")
         let issuer = try ProducerIdentity(
             kind: .engine,
             identifier: "dft-qualification-runner",
@@ -318,17 +367,17 @@ struct DFTFlowStageExecutorTests {
                 issuer: issuer,
                 inputArtifacts: [input],
                 primaryOutputArtifacts: [output],
-                oracleOutputArtifacts: [output],
+                oracleOutputArtifacts: [oracleOutput],
                 cases: [
                     ToolOracleCaseComparison(
                         caseID: "dft-case",
                         primary: passingCase,
                         oracle: passingCase,
                         agreementComparisons: [
-                            ToolQualificationMetricComparison(
-                                metricID: "agreement",
-                                observed: 0,
-                                expected: 0
+                            ToolOracleMetricComparison(
+                                metricID: "result",
+                                primaryObserved: 1,
+                                oracleObserved: 1
                             ),
                         ]
                     ),
@@ -361,7 +410,7 @@ struct DFTFlowStageExecutorTests {
             oracleResultArtifacts: [oracle],
             healthResultArtifacts: [health],
             inputArtifacts: [input],
-            outputArtifacts: [output],
+            outputArtifacts: [output, oracleOutput],
             qualifiedAt: now.addingTimeInterval(-60),
             expiresAt: now.addingTimeInterval(3_600)
         )

@@ -76,10 +76,11 @@ public struct OpAmpSimulationDeckValidator: Sendable {
         }
 
         do {
-            let outcome = try await CoreSpiceSimulationEngine().run(
+            let outcome = try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
                 netlistSource: deck.netlist,
-                fileName: "\(deck.deckID).cir"
-            )
+                fileName: "\(deck.deckID).cir",
+                inputs: []
+            ))
             let producedMeasurementNames = outcome.measurements.map(\.name)
             let missing = missingMeasurements(
                 expected: deck.measurementNames,

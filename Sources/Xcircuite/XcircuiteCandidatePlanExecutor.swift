@@ -34,32 +34,45 @@ public struct XcircuiteCandidatePlanExecutor: Sendable {
     ) async throws -> XcircuiteCandidatePlanExecutionResult {
         try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         let manifest = try await loadRunManifest(runID: request.runID)
-        let candidatePlanRef = try requiredCandidatePlanReference(
+        let expectedCandidatePlanArtifactID: String?
+        if let artifactID = request.candidatePlanArtifactID {
+            expectedCandidatePlanArtifactID = artifactID
+        } else if request.candidatePlanPath == nil {
+            let generatedReferences = XcircuitePlanningArtifactStore
+                .generatedCandidatePlanReferences(in: manifest)
+            guard generatedReferences.count <= 1 else {
+                throw XcircuiteCandidatePlanExecutionError.invalidArtifactReference(
+                    path: XcircuitePlanningArtifactStore.generatedCandidatePlanDirectory,
+                    reason: "multiple generated candidate plans are retained; specify an artifact ID or path."
+                )
+            }
+            expectedCandidatePlanArtifactID = generatedReferences.first?.artifactID
+                ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID
+        } else {
+            expectedCandidatePlanArtifactID = nil
+        }
+        let currentCandidatePlanRef = try requiredCandidatePlanReference(
             explicitPath: request.candidatePlanPath,
-            artifactID: request.candidatePlanArtifactID ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID,
+            artifactID: expectedCandidatePlanArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let candidatePlanURL: URL
-        do {
-            candidatePlanURL = try candidatePlanRef.locator.location.resolvedFileURL(relativeTo: projectRoot)
-        } catch {
-            throw XcircuiteCandidatePlanExecutionError.invalidArtifactReference(
-                path: candidatePlanRef.path,
-                reason: error.localizedDescription
-            )
-        }
-        let plan = try JSONDecoder().decode(
-            XcircuiteCandidatePlan.self,
-            from: Data(contentsOf: candidatePlanURL)
+        let candidatePlanContent = try await workspaceStore.loadArtifactContent(
+            for: currentCandidatePlanRef
         )
+        let plan = try JSONDecoder().decode(XcircuiteCandidatePlan.self, from: candidatePlanContent)
         guard plan.runID == request.runID else {
             throw XcircuiteCandidatePlanExecutionError.runMismatch(
                 expected: request.runID,
                 actual: plan.runID
             )
         }
+        let candidatePlanRef = try await artifactStore.persistCandidatePlanSnapshot(
+            plan,
+            runID: request.runID,
+            projectRoot: projectRoot
+        )
         let riskReviewer = XcircuiteCandidatePlanRiskReviewer()
         let approvals = try await workspaceStore.loadRunApprovals(runID: request.runID)
         let riskReviews = riskReviewer.riskReviews(for: plan, approvals: approvals)

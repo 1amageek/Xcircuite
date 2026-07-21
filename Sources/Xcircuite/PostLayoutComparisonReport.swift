@@ -1,4 +1,8 @@
+import CircuiteFoundation
+
 public struct PostLayoutComparisonReport: Sendable, Hashable, Codable {
+    public static let currentSchemaVersion = 2
+
     public var schemaVersion: Int
     public var status: String
     public var preLayoutPointCount: Int
@@ -15,9 +19,9 @@ public struct PostLayoutComparisonReport: Sendable, Hashable, Codable {
     public var diagnostics: [String]
     public var gateStatus: String
     public var gateViolations: [String]
+    public var provenance: ExecutionProvenance
 
     public init(
-        schemaVersion: Int = 1,
         status: String,
         preLayoutPointCount: Int,
         postLayoutPointCount: Int,
@@ -32,9 +36,10 @@ public struct PostLayoutComparisonReport: Sendable, Hashable, Codable {
         addedInPostLayout: [String],
         diagnostics: [String],
         gateStatus: String,
-        gateViolations: [String]
+        gateViolations: [String],
+        provenance: ExecutionProvenance
     ) {
-        self.schemaVersion = schemaVersion
+        self.schemaVersion = Self.currentSchemaVersion
         self.status = status
         self.preLayoutPointCount = preLayoutPointCount
         self.postLayoutPointCount = postLayoutPointCount
@@ -50,5 +55,6 @@ public struct PostLayoutComparisonReport: Sendable, Hashable, Codable {
         self.diagnostics = diagnostics
         self.gateStatus = gateStatus
         self.gateViolations = gateViolations
+        self.provenance = provenance
     }
 }

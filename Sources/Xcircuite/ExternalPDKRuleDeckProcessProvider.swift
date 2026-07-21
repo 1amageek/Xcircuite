@@ -33,6 +33,7 @@ public struct ExternalPDKRuleDeckProcessProvider: PDKExternalRuleDeckResultProvi
             return try failureResult(
                 request: request,
                 artifacts: run.artifacts,
+                provenance: run.provenance,
                 finding: PDKValidationFinding(
                     severity: .error,
                     code: "pdk.external.process-execution-failed",
@@ -46,12 +47,14 @@ public struct ExternalPDKRuleDeckProcessProvider: PDKExternalRuleDeckResultProvi
             return try support.appendArtifacts(
                 to: run.resultData ?? Data(),
                 artifacts: run.artifacts,
+                provenance: run.provenance,
                 as: PDKRuleDeckInspectionResult.self
             )
         } catch {
             return try failureResult(
                 request: request,
                 artifacts: run.artifacts,
+                provenance: run.provenance,
                 finding: PDKValidationFinding(
                     severity: .error,
                     code: "pdk.external.process-result-invalid",
@@ -66,24 +69,16 @@ public struct ExternalPDKRuleDeckProcessProvider: PDKExternalRuleDeckResultProvi
     private func failureResult(
         request: PDKRuleDeckInspectionRequest,
         artifacts: [ArtifactReference],
+        provenance: ExecutionProvenance,
         finding: PDKValidationFinding
     ) throws -> Data {
-        let timestamp = Date()
         let result = PDKRuleDeckInspectionResult(
             schemaVersion: PDKRuleDeckInspectionRequest.currentSchemaVersion,
             runID: request.runID,
             status: .failed,
             diagnostics: [PDKStandardViewDiagnosticMapper.map(finding)],
             artifacts: artifacts,
-            provenance: try ExecutionProvenance(
-                producer: ProducerIdentity(
-                    kind: .engine,
-                    identifier: "ExternalPDKRuleDeckProcessProvider",
-                    version: "1"
-                ),
-                startedAt: timestamp,
-                completedAt: timestamp
-            ),
+            provenance: provenance,
             payload: PDKRuleDeckInspectionPayload(
                 isValid: false,
                 assetID: request.assetID,

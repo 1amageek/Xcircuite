@@ -72,6 +72,12 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
 
+        if result.status != .succeeded {
+            let diagnosticMessages: [String] = result.stages
+                .flatMap(\.diagnostics)
+                .map { "\($0.code):\($0.message)" }
+            Issue.record(Comment(rawValue: diagnosticMessages.joined(separator: " | ")))
+        }
         #expect(result.status == .succeeded)
         let layoutStage = try #require(result.stages.first { $0.stageID == "006-layout" })
         let drcStage = try #require(result.stages.first { $0.stageID == "007-drc" })
@@ -81,6 +87,26 @@ extension XcircuiteFlowRuntimeTests {
         #expect(drcInputArtifact.kind == .layout)
         #expect(drcInputArtifact.format == .json)
         #expect(drcInputArtifact.digest.hexadecimalValue.isEmpty == false)
+        #expect(drcInputArtifact.producer?.identifier == "layout-command")
+        #expect(drcInputArtifact.producer?.version == "2")
+        #expect(drcInputArtifact.locator.location.storage == .workspaceRelative)
+        let layoutResultArtifact = try #require(layoutStage.artifacts.first {
+            $0.artifactID == "layout-command-result"
+        })
+        let layoutManifestArtifact = try #require(layoutStage.artifacts.first {
+            $0.artifactID == "layout-command-manifest"
+        })
+        #expect(layoutResultArtifact.producer == drcInputArtifact.producer)
+        #expect(layoutManifestArtifact.producer == drcInputArtifact.producer)
+        #expect(layoutResultArtifact.locator.location.storage == .workspaceRelative)
+        #expect(layoutManifestArtifact.locator.location.storage == .workspaceRelative)
+        let persistedLedger = try await XcircuiteWorkspaceStore(projectRoot: root)
+            .loadRunLedger(runID: "run-1")
+        let persistedLayoutResult = try #require(persistedLedger.artifacts.first {
+            $0.artifactID == "layout-command-result"
+        })
+        #expect(persistedLayoutResult == layoutResultArtifact)
+        #expect(persistedLayoutResult.producer == drcInputArtifact.producer)
         #expect(drcStage.gates.contains { $0.gateID == "drc" && $0.status == .passed })
 
         let drcInputURL = root.appending(path: drcInputArtifact.path)
@@ -213,6 +239,37 @@ extension XcircuiteFlowRuntimeTests {
         #expect(result.diagnostics.contains {
             $0.code == "LAYOUT_COMMAND_RESULT_STATUS_NOT_PASSED"
                 && $0.message.contains("failed")
+        })
+    }
+
+    @Test func layoutCommandExecutorRejectsProducerMismatchBetweenResultAndEvidence() async throws {
+        let root = try makeTemporaryRoot("layout-command-producer-mismatch")
+        defer { removeTemporaryRoot(root) }
+        try await writeLayoutCommandRequest(root: root)
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        let executor = LayoutCommandFlowStageExecutor(
+            stageID: "006-layout",
+            requestURL: root.appending(path: "layout-command-request.json"),
+            runner: ProducerMismatchLayoutCommandRunner()
+        )
+
+        let result = try await executor.execute(
+            stage: FlowStageDefinition(stageID: "006-layout", displayName: "Layout command"),
+            context: FlowExecutionContext(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-1",
+                infrastructure: workspaceStore,
+                toolRegistry: ToolRegistry(),
+                healthResults: [:]
+            )
+        )
+
+        #expect(result.status == .failed)
+        #expect(result.artifacts.isEmpty)
+        #expect(result.diagnostics.contains {
+            $0.code == "LAYOUT_COMMAND_PRODUCER_MISMATCH"
         })
     }
 
@@ -509,7 +566,10 @@ extension XcircuiteFlowRuntimeTests {
             let root = try makeTemporaryRoot("runtime-layout-command-\(layoutCase.name)-lvs")
             defer { removeTemporaryRoot(root) }
             let artifactFormat = try ArtifactFormat(rawValue: layoutCase.artifactFormat.rawValue.lowercased())
-            try await writeLayoutCommandRequest(root: root)
+            try await writeLayoutCommandRequest(
+                root: root,
+                includeShapeProperties: false
+            )
             try await writeStandardLayoutTechnology(root: root)
             let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
             _ = try writeNetlist(
@@ -581,7 +641,13 @@ extension XcircuiteFlowRuntimeTests {
                 )
             )
 
-            #expect(result.status == FlowRunStatus.succeeded)
+            let failureDetails = result.stages.flatMap { stage in
+                stage.diagnostics.map { "\(stage.stageID):\($0.code):\($0.message)" }
+            }.joined(separator: " | ")
+            #expect(
+                result.status == FlowRunStatus.succeeded,
+                "\(layoutCase.displayName) LVS flow failed: \(failureDetails)"
+            )
             let layoutStage = try #require(result.stages.first { $0.stageID == "006-layout" })
             let lvsStage = try #require(result.stages.first { $0.stageID == "008-lvs" })
             let layoutArtifact = try #require(layoutStage.artifacts.first { $0.artifactID == layoutCase.artifactID })
@@ -897,6 +963,34 @@ extension XcircuiteFlowRuntimeTests {
                 commandCount: result.commandCount,
                 appliedCommands: result.appliedCommands,
                 outputArtifact: result.outputArtifact,
+                cellCount: result.cellCount,
+                shapeCount: result.shapeCount,
+                viaCount: result.viaCount,
+                labelCount: result.labelCount,
+                netCount: result.netCount
+            )
+        }
+    }
+
+    private struct ProducerMismatchLayoutCommandRunner: LayoutCommandRunning {
+        func run(request: LayoutCommandRequest, baseURL: URL) throws -> LayoutCommandResult {
+            let result = try LayoutCommandRunner().run(request: request, baseURL: baseURL)
+            let mismatchedArtifact = ArtifactReference(
+                id: result.outputArtifact.id,
+                locator: result.outputArtifact.locator,
+                digest: result.outputArtifact.digest,
+                byteCount: result.outputArtifact.byteCount,
+                producer: try ProducerIdentity(
+                    kind: .tool,
+                    identifier: "different-layout-command",
+                    version: "2"
+                )
+            )
+            return LayoutCommandResult(
+                status: result.status,
+                commandCount: result.commandCount,
+                appliedCommands: result.appliedCommands,
+                outputArtifact: mismatchedArtifact,
                 cellCount: result.cellCount,
                 shapeCount: result.shapeCount,
                 viaCount: result.viaCount,

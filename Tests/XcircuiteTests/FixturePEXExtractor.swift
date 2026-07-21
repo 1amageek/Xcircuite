@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import PEXEngine
 
 struct FixturePEXExtractor: PEXExtracting {
@@ -66,6 +67,7 @@ struct FixturePEXExtractor: PEXExtracting {
         """
         let outputURL = context.rawOutputDirectory.appending(path: "\(context.corner.id.value).spef")
         try Data(spef.utf8).write(to: outputURL, options: .atomic)
+        let executionIdentity = try fixturePEXExecutionIdentity()
         return PEXAdapterExecutionResult(
             rawOutput: PEXRawOutput(
                 format: .spef,
@@ -77,13 +79,38 @@ struct FixturePEXExtractor: PEXExtracting {
                     kind: .rawOutput,
                     stage: .backendExecution,
                     cornerID: context.corner.id,
-                    url: outputURL
+                    url: outputURL,
+                    producer: executionIdentity.producer
                 ),
-            ]
+            ],
+            executionIdentity: executionIdentity
         )
     }
 
     func cleanup(_ context: PEXExecutionContext) async {}
+}
+
+func fixturePEXExecutionIdentity() throws -> PEXBackendExecutionIdentity {
+    let digest = try ContentDigest(
+        algorithm: .sha256,
+        hexadecimalValue: String(repeating: "1", count: 64)
+    )
+    let producer = try ProducerIdentity(
+        kind: .tool,
+        identifier: "pex-test-fixture",
+        version: "unqualified",
+        build: digest.hexadecimalValue
+    )
+    return try PEXBackendExecutionIdentity(
+        producer: producer,
+        binaryDigest: digest,
+        invocation: ExecutionInvocation.inProcess(entryPoint: "XcircuiteTests.FixturePEXExtractor"),
+        environment: ExecutionEnvironmentFingerprint(
+            platform: "test",
+            architecture: "test",
+            toolchain: "test"
+        )
+    )
 }
 
 func makeFixturePEXEngine() -> DefaultPEXEngine {

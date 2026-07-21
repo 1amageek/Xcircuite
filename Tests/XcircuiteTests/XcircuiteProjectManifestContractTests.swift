@@ -1,4 +1,6 @@
 import Foundation
+import CircuiteFoundation
+import DesignFlowKernel
 import Testing
 @testable import Xcircuite
 
@@ -44,6 +46,51 @@ struct XcircuiteProjectManifestContractTests {
         #expect(throws: DecodingError.self) {
             try JSONDecoder().decode(XcircuiteProjectManifest.self, from: obsolete)
         }
+    }
+
+    @Test
+    func sharedPhysicalFileCanHaveDistinctArtifactRoles() throws {
+        let location = try ArtifactLocation(workspaceRelativePath: "waveforms/shared.csv")
+        let digest = try SHA256ContentDigester().digest(
+            data: Data("waveform".utf8),
+            using: .sha256
+        )
+        let input = ArtifactReference(
+            id: try ArtifactID(rawValue: "waveform-input"),
+            locator: ArtifactLocator(
+                location: location,
+                role: .input,
+                kind: .waveform,
+                format: .csv
+            ),
+            digest: digest,
+            byteCount: 8
+        )
+        let output = ArtifactReference(
+            id: try ArtifactID(rawValue: "waveform-output"),
+            locator: ArtifactLocator(
+                location: location,
+                role: .output,
+                kind: .waveform,
+                format: .csv
+            ),
+            digest: digest,
+            byteCount: 8
+        )
+        let manifest = XcircuiteProjectManifest(
+            identity: FlowProjectIdentity(
+                projectID: "shared-role-project",
+                displayName: "Shared role project",
+                topDesignName: "TOP"
+            ),
+            files: [input, output]
+        )
+
+        try manifest.validate()
+        #expect(try JSONDecoder().decode(
+            XcircuiteProjectManifest.self,
+            from: JSONEncoder().encode(manifest)
+        ) == manifest)
     }
 
 }

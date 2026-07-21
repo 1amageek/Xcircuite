@@ -3,9 +3,7 @@ import Foundation
 
 extension XcircuiteWorkspaceStore {
     public func appendRunAction(_ record: FlowRunActionRecord) async throws {
-        try await FlowRunLedgerCoordinator(persistence: self).update(runID: record.runID) { ledger in
-            ledger.actions.append(record)
-        }
+        _ = try appendRunActionAtomically(record)
     }
 
     public func loadRunActions(runID: String) async throws -> [FlowRunActionRecord] {
@@ -15,12 +13,6 @@ extension XcircuiteWorkspaceStore {
     public func loadSuggestedActionSelections(
         runID: String
     ) async throws -> [FlowRunSuggestedActionSelection] {
-        var selections: [FlowRunSuggestedActionSelection] = []
-        for record in try await loadRunActions(runID: runID) {
-            if let selection = try FlowRunSuggestedActionSelection(record: record) {
-                selections.append(selection)
-            }
-        }
-        return selections
+        try await loadRunLedger(runID: runID).suggestedActionSelections
     }
 }

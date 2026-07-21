@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1amageek/Xcircuite/ci-artifacts/schemas/hosted-installed-tool-lane.schema.json",
+  "title": "Hosted Installed Tool Lane Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "status", "generatedAt", "lane", "package", "toolchainManifestSHA256", "process", "tools", "designInputIdentity", "qualifiedCornerIDs", "releaseHandoffTestFilters", "releaseHandoffEvidence", "oracleInvocations", "xcodebuildInvocations", "diagnostics"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "hosted-installed-tool-lane" },
+    "status": { "enum": ["passed", "blocked"] },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "lane": { "type": "string", "minLength": 1 },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision"],
+      "properties": {
+        "repository": { "type": ["string", "null"], "format": "uri" },
+        "revision": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "toolchainManifestSHA256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "process": { "type": ["object", "null"] },
+    "tools": { "type": ["object", "null"] },
+    "designInputIdentity": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["sha256", "designDefinition", "artifacts"],
+          "properties": {
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "designDefinition": { "type": "object" },
+            "artifacts": { "type": "array", "minItems": 5, "items": { "$ref": "#/$defs/inputArtifact" } }
+          }
+        }
+      ]
+    },
+    "qualifiedCornerIDs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "releaseHandoffTestFilters": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "releaseHandoffEvidence": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["designIdentitySHA256", "inputArtifacts", "testFilters", "status"],
+          "properties": {
+            "designIdentitySHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "inputArtifacts": { "type": "array", "minItems": 5, "items": { "$ref": "#/$defs/inputArtifact" } },
+            "testFilters": { "type": "array", "minItems": 3, "items": { "type": "string" } },
+            "status": { "const": "passed" }
+          }
+        }
+      ]
+    },
+    "oracleInvocations": { "type": "array", "items": { "$ref": "#/$defs/oracleInvocation" } },
+    "xcodebuildInvocations": { "type": "array", "items": { "type": "object" } },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "code", "reason", "suggestedAction"]
+      }
+    }
+  },
+  "$defs": {
+    "inputArtifact": {
+      "type": "object",
+      "required": ["role", "path", "sha256", "byteCount"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "byteCount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "oracleInvocation": {
+      "type": "object",
+      "required": ["oracle", "command", "designIdentitySHA256", "cornerID", "consumedInputs"],
+      "properties": {
+        "oracle": { "enum": ["magic-drc", "netgen-lvs", "openroad", "openrcx", "opensta", "ngspice-dc"] },
+        "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "designIdentitySHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "cornerID": { "type": ["string", "null"] },
+        "consumedInputs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/inputArtifact" } },
+        "outputArtifacts": { "type": "array", "items": { "$ref": "#/$defs/inputArtifact" } },
+        "outputArtifact": { "$ref": "#/$defs/inputArtifact" }
+      }
+    }
+  }
+}

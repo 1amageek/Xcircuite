@@ -3,7 +3,6 @@ import CircuiteFoundation
 import Foundation
 import LogicDesign
 import LogicIR
-import DesignFlowKernel
 
 struct LogicDesignFlowStageSupport: Sendable {
     let artifactBuilder: StageArtifactReferenceBuilder
@@ -24,14 +23,16 @@ struct LogicDesignFlowStageSupport: Sendable {
         _ result: Value,
         stageID: String,
         context: FlowExecutionContext,
-        fileName: String
+        fileName: String,
+        producer: ProducerIdentity
     ) async throws -> ArtifactReference {
         try await context.persistJSONArtifact(
             result,
-            artifactID: "\(stageID)-result",
+            artifactID: "\(stageID)-domain-result",
             stageID: stageID,
             fileName: fileName,
             kind: .report,
+            producer: producer,
             mode: .replaceable
         )
     }

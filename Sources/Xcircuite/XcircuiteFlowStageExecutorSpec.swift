@@ -15,9 +15,14 @@ import PDKKit
 import PDKStandardViews
 import PEXEngine
 import PhysicalDesignCore
+import PowerIntent
 import ToolQualification
 
 public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
+    case logicElaboration(LogicElaboration)
+    case logicLowering(LogicLowering)
+    case logicSimulation(LogicSimulation)
+    case powerIntent(PowerIntent)
     case layoutCommand(LayoutCommand)
     case nativeDRC(NativeDRC)
     case nativeLVS(NativeLVS)
@@ -31,13 +36,17 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case dftExecution(DFTExecution)
     case dftOracleCorrelation(DFTOracleCorrelation)
     case processQualificationEvidenceBuild(ProcessQualificationEvidenceBuild)
+    case physicalDesign(PhysicalDesign)
     case physicalReview(PhysicalReview)
+    case timingSTA(TimingSTA)
+    case timingSignalIntegrity(TimingSignalIntegrity)
     case pdkDiscovery(PDKDiscovery)
     case pdkValidation(PDKValidation)
     case pdkCorpus(PDKCorpus)
     case pdkStandardView(PDKStandardView)
     case pdkRuleDeck(PDKRuleDeck)
     case pdkOracle(PDKOracle)
+    case releaseEvidenceAssembly(ReleaseEvidenceAssembly)
     case releaseAuthorization(ReleaseAuthorization)
     case releaseSignoff(ReleaseSignoff)
     case releaseTapeout(ReleaseTapeout)
@@ -45,6 +54,195 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     case electricalSignoff(ElectricalSignoff)
     case electricalSignoffCorpus(ElectricalSignoffCorpus)
     case electricalRepairRevision(ElectricalRepairRevision)
+
+    public struct LogicElaboration: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var sourceInput: XcircuiteFlowInputReference
+        public var topDesignName: String
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.elaborate",
+            sourceInput: XcircuiteFlowInputReference,
+            topDesignName: String,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.sourceInput = sourceInput
+            self.topDesignName = topDesignName
+            self.tool = tool
+        }
+    }
+
+    public struct LogicLowering: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestInput: XcircuiteFlowInputReference?
+        public var designInput: XcircuiteFlowInputReference?
+        public var topDesignName: String?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.lower",
+            requestInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestInput = requestInput
+            self.designInput = nil
+            self.topDesignName = nil
+            self.tool = tool
+        }
+
+        public init(
+            stageID: String = "logic.lower",
+            designInput: XcircuiteFlowInputReference,
+            topDesignName: String,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestInput = nil
+            self.designInput = designInput
+            self.topDesignName = topDesignName
+            self.tool = tool
+        }
+    }
+
+    public struct LogicSimulation: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestInput: XcircuiteFlowInputReference?
+        public var designInput: XcircuiteFlowInputReference?
+        public var pdkInput: XcircuiteFlowInputReference?
+        public var inputLayoutInput: XcircuiteFlowInputReference?
+        public var topDesignName: String?
+        public var stimulusInput: XcircuiteFlowInputReference?
+        public var seed: UInt64?
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.simulate",
+            requestInput: XcircuiteFlowInputReference,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestInput = requestInput
+            self.designInput = nil
+            self.pdkInput = nil
+            self.topDesignName = nil
+            self.stimulusInput = nil
+            self.seed = nil
+            self.tool = tool
+        }
+
+        public init(
+            stageID: String = "logic.simulate",
+            designInput: XcircuiteFlowInputReference,
+            pdkInput: XcircuiteFlowInputReference,
+            topDesignName: String,
+            stimulusInput: XcircuiteFlowInputReference? = nil,
+            seed: UInt64? = nil,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestInput = nil
+            self.designInput = designInput
+            self.pdkInput = pdkInput
+            self.topDesignName = topDesignName
+            self.stimulusInput = stimulusInput
+            self.seed = seed
+            self.tool = tool
+        }
+    }
+
+    public struct PowerIntent: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var sourceInput: XcircuiteFlowInputReference
+        public var designInput: XcircuiteFlowInputReference
+        public var pdkInput: XcircuiteFlowInputReference
+        public var topDesignName: String
+        public var format: PowerIntentFormat
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "logic.power-intent",
+            sourceInput: XcircuiteFlowInputReference,
+            designInput: XcircuiteFlowInputReference,
+            pdkInput: XcircuiteFlowInputReference,
+            topDesignName: String,
+            format: PowerIntentFormat = .upf,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.sourceInput = sourceInput
+            self.designInput = designInput
+            self.pdkInput = pdkInput
+            self.topDesignName = topDesignName
+            self.format = format
+            self.tool = tool
+        }
+    }
+
+    public struct PhysicalDesign: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var requestInput: XcircuiteFlowInputReference
+        public var designInput: XcircuiteFlowInputReference?
+        public var constraintsInput: XcircuiteFlowInputReference?
+        public var pdkInput: XcircuiteFlowInputReference?
+        public var inputLayoutInput: XcircuiteFlowInputReference?
+        public var allowedStages: Set<PhysicalDesignStage>
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String,
+            requestInput: XcircuiteFlowInputReference,
+            designInput: XcircuiteFlowInputReference? = nil,
+            constraintsInput: XcircuiteFlowInputReference? = nil,
+            pdkInput: XcircuiteFlowInputReference? = nil,
+            inputLayoutInput: XcircuiteFlowInputReference? = nil,
+            allowedStages: Set<PhysicalDesignStage>,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.requestInput = requestInput
+            self.designInput = designInput
+            self.constraintsInput = constraintsInput
+            self.pdkInput = pdkInput
+            self.inputLayoutInput = inputLayoutInput
+            self.allowedStages = allowedStages
+            self.tool = tool
+        }
+    }
+
+    public struct TimingSTA: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var inputs: TimingSTAFlowInputs
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "timing.sta",
+            inputs: TimingSTAFlowInputs,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.inputs = inputs
+            self.tool = tool
+        }
+    }
+
+    public struct TimingSignalIntegrity: Sendable, Hashable, Codable {
+        public var stageID: String
+        public var inputs: TimingSIFlowInputs
+        public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String = "timing.signal-integrity",
+            inputs: TimingSIFlowInputs,
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.inputs = inputs
+            self.tool = tool
+        }
+    }
 
     public struct PDKDiscovery: Sendable, Hashable, Codable {
         public var stageID: String
@@ -174,15 +372,18 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
 
     public struct DFTExecution: Sendable, Hashable, Codable {
         public var stageID: String
+        public var operation: DFTOperation
         public var requestPath: String
         public var tool: XcircuiteFlowToolSpec
 
         public init(
             stageID: String,
+            operation: DFTOperation,
             requestPath: String,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
+            self.operation = operation
             self.requestPath = requestPath
             self.tool = tool
         }
@@ -641,9 +842,21 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
 
     public struct CoreSpiceSimulation: Sendable, Hashable, Codable {
         public var stageID: String
-        public var netlistPath: String
+        public var netlistInput: XcircuiteFlowInputReference
         public var expectations: [SimulationMeasurementExpectation]
         public var tool: XcircuiteFlowToolSpec
+
+        public init(
+            stageID: String,
+            netlistInput: XcircuiteFlowInputReference,
+            expectations: [SimulationMeasurementExpectation] = [],
+            tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
+        ) {
+            self.stageID = stageID
+            self.netlistInput = netlistInput
+            self.expectations = expectations
+            self.tool = tool
+        }
 
         public init(
             stageID: String,
@@ -651,10 +864,12 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             expectations: [SimulationMeasurementExpectation] = [],
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
-            self.stageID = stageID
-            self.netlistPath = netlistPath
-            self.expectations = expectations
-            self.tool = tool
+            self.init(
+                stageID: stageID,
+                netlistInput: .path(netlistPath),
+                expectations: expectations,
+                tool: tool
+            )
         }
     }
 
@@ -706,6 +921,10 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     }
 
     private enum Kind: String, Codable {
+        case logicElaboration
+        case logicLowering
+        case logicSimulation
+        case powerIntent
         case layoutCommand
         case nativeDRC
         case nativeLVS
@@ -719,13 +938,17 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case dftExecution
         case dftOracleCorrelation
         case processQualificationEvidenceBuild
+        case physicalDesign
         case physicalReview
+        case timingSTA
+        case timingSignalIntegrity
         case pdkDiscovery
         case pdkValidation
         case pdkCorpus
         case pdkStandardView
         case pdkRuleDeck
         case pdkOracle
+        case releaseEvidenceAssembly
         case releaseAuthorization
         case releaseSignoff
         case releaseTapeout
@@ -737,8 +960,19 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(Kind.self, forKey: .kind)
+        let rawKind = try container.decode(String.self, forKey: .kind)
+        guard let kind = Kind(rawValue: rawKind) else {
+            throw XcircuiteFlowRuntimeSpecError.unknownExecutorKind(rawKind)
+        }
         switch kind {
+        case .logicElaboration:
+            self = .logicElaboration(try container.decode(LogicElaboration.self, forKey: .value))
+        case .logicLowering:
+            self = .logicLowering(try container.decode(LogicLowering.self, forKey: .value))
+        case .logicSimulation:
+            self = .logicSimulation(try container.decode(LogicSimulation.self, forKey: .value))
+        case .powerIntent:
+            self = .powerIntent(try container.decode(PowerIntent.self, forKey: .value))
         case .layoutCommand:
             self = .layoutCommand(try container.decode(LayoutCommand.self, forKey: .value))
         case .nativeDRC:
@@ -765,8 +999,14 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .dftOracleCorrelation(try container.decode(DFTOracleCorrelation.self, forKey: .value))
         case .processQualificationEvidenceBuild:
             self = .processQualificationEvidenceBuild(try container.decode(ProcessQualificationEvidenceBuild.self, forKey: .value))
+        case .physicalDesign:
+            self = .physicalDesign(try container.decode(PhysicalDesign.self, forKey: .value))
         case .physicalReview:
             self = .physicalReview(try container.decode(PhysicalReview.self, forKey: .value))
+        case .timingSTA:
+            self = .timingSTA(try container.decode(TimingSTA.self, forKey: .value))
+        case .timingSignalIntegrity:
+            self = .timingSignalIntegrity(try container.decode(TimingSignalIntegrity.self, forKey: .value))
         case .pdkDiscovery:
             self = .pdkDiscovery(try container.decode(PDKDiscovery.self, forKey: .value))
         case .pdkValidation:
@@ -779,6 +1019,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             self = .pdkRuleDeck(try container.decode(PDKRuleDeck.self, forKey: .value))
         case .pdkOracle:
             self = .pdkOracle(try container.decode(PDKOracle.self, forKey: .value))
+        case .releaseEvidenceAssembly:
+            self = .releaseEvidenceAssembly(try container.decode(ReleaseEvidenceAssembly.self, forKey: .value))
         case .releaseAuthorization:
             self = .releaseAuthorization(try container.decode(ReleaseAuthorization.self, forKey: .value))
         case .releaseSignoff:
@@ -799,6 +1041,18 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case .logicElaboration(let value):
+            try container.encode(Kind.logicElaboration, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .logicLowering(let value):
+            try container.encode(Kind.logicLowering, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .logicSimulation(let value):
+            try container.encode(Kind.logicSimulation, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .powerIntent(let value):
+            try container.encode(Kind.powerIntent, forKey: .kind)
+            try container.encode(value, forKey: .value)
         case .layoutCommand(let value):
             try container.encode(Kind.layoutCommand, forKey: .kind)
             try container.encode(value, forKey: .value)
@@ -838,8 +1092,17 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .processQualificationEvidenceBuild(let value):
             try container.encode(Kind.processQualificationEvidenceBuild, forKey: .kind)
             try container.encode(value, forKey: .value)
+        case .physicalDesign(let value):
+            try container.encode(Kind.physicalDesign, forKey: .kind)
+            try container.encode(value, forKey: .value)
         case .physicalReview(let value):
             try container.encode(Kind.physicalReview, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .timingSTA(let value):
+            try container.encode(Kind.timingSTA, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .timingSignalIntegrity(let value):
+            try container.encode(Kind.timingSignalIntegrity, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .pdkDiscovery(let value):
             try container.encode(Kind.pdkDiscovery, forKey: .kind)
@@ -858,6 +1121,9 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             try container.encode(value, forKey: .value)
         case .pdkOracle(let value):
             try container.encode(Kind.pdkOracle, forKey: .kind)
+            try container.encode(value, forKey: .value)
+        case .releaseEvidenceAssembly(let value):
+            try container.encode(Kind.releaseEvidenceAssembly, forKey: .kind)
             try container.encode(value, forKey: .value)
         case .releaseAuthorization(let value):
             try container.encode(Kind.releaseAuthorization, forKey: .kind)
@@ -888,6 +1154,48 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         toolchainProfile: XcircuiteFlowToolchainProfile? = nil
     ) throws -> any FlowStageExecutor {
         switch self {
+        case .logicElaboration(let spec):
+            return LogicElaborationFlowStageExecutor(
+                stageID: spec.stageID,
+                sourceInput: spec.sourceInput,
+                topDesignName: spec.topDesignName
+            )
+        case .logicLowering(let spec):
+            if let requestInput = spec.requestInput {
+                return LogicLoweringFlowStageExecutor(
+                    stageID: spec.stageID,
+                    requestInput: requestInput
+                )
+            }
+            return LogicLoweringFlowStageExecutor(
+                stageID: spec.stageID,
+                designInput: try required(spec.designInput, stageID: spec.stageID, field: "designInput"),
+                topDesignName: try required(spec.topDesignName, stageID: spec.stageID, field: "topDesignName")
+            )
+        case .logicSimulation(let spec):
+            if let requestInput = spec.requestInput {
+                return LogicSimulationFlowStageExecutor(
+                    stageID: spec.stageID,
+                    requestInput: requestInput
+                )
+            }
+            return LogicSimulationFlowStageExecutor(
+                stageID: spec.stageID,
+                designInput: try required(spec.designInput, stageID: spec.stageID, field: "designInput"),
+                pdkInput: try required(spec.pdkInput, stageID: spec.stageID, field: "pdkInput"),
+                topDesignName: try required(spec.topDesignName, stageID: spec.stageID, field: "topDesignName"),
+                stimulusInput: spec.stimulusInput,
+                seed: spec.seed
+            )
+        case .powerIntent(let spec):
+            return PowerIntentFlowStageExecutor(
+                stageID: spec.stageID,
+                sourceInput: spec.sourceInput,
+                designInput: spec.designInput,
+                pdkInput: spec.pdkInput,
+                topDesignName: spec.topDesignName,
+                format: spec.format
+            )
         case .layoutCommand(let spec):
             return LayoutCommandFlowStageExecutor(
                 stageID: spec.stageID,
@@ -939,7 +1247,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .coreSpiceSimulation(let spec):
             return SimulationFlowStageExecutor(
                 stageID: spec.stageID,
-                netlistURL: try XcircuiteFlowRuntimeSpec.resolvePath(spec.netlistPath, projectRoot: projectRoot),
+                netlistInput: spec.netlistInput,
                 expectations: spec.expectations
             )
         case .postLayoutComparison(let spec):
@@ -959,6 +1267,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 additionalReferenceInputs: spec.additionalReferenceInputs,
                 constraintsInput: spec.constraintsInput,
                 evidenceInput: spec.evidenceInput,
+                pdkInput: spec.pdkInput,
                 topModuleName: spec.topModuleName,
                 policy: spec.policy,
                 frontend: spec.frontend,
@@ -987,7 +1296,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             return DFTFlowStageExecutor(
                 stageID: spec.stageID,
                 toolID: "dft-engine",
-                requestInput: .path(spec.requestPath)
+                requestInput: .path(spec.requestPath),
+                expectedOperation: spec.operation
             )
         case .dftOracleCorrelation(let spec):
             return DFTOracleCorrelationFlowStageExecutor(
@@ -1000,11 +1310,31 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 stageID: spec.stageID,
                 buildRequestInput: spec.buildRequestInput
             )
+        case .physicalDesign(let spec):
+            return PhysicalDesignFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: spec.requestInput,
+                designInput: spec.designInput,
+                constraintsInput: spec.constraintsInput,
+                pdkInput: spec.pdkInput,
+                inputLayoutInput: spec.inputLayoutInput,
+                allowedStages: spec.allowedStages
+            )
         case .physicalReview(let spec):
             return PhysicalDesignReviewFlowStageExecutor(
                 stageID: spec.stageID,
                 manifestInput: spec.manifestInput,
                 reviewScope: spec.reviewScope
+            )
+        case .timingSTA(let spec):
+            return TimingSTAFlowStageExecutor(
+                inputs: spec.inputs,
+                stageID: spec.stageID
+            )
+        case .timingSignalIntegrity(let spec):
+            return TimingSIFlowStageExecutor(
+                inputs: spec.inputs,
+                stageID: spec.stageID
             )
         case .pdkDiscovery(let spec):
             return PDKDiscoveryFlowStageExecutor.local(
@@ -1061,20 +1391,26 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 manifestInput: spec.manifestInput,
                 oracleInput: spec.oracleInput
             )
+        case .releaseEvidenceAssembly(let spec):
+            return ReleaseSignoffEvidenceAssemblyFlowStageExecutor(
+                stageID: spec.stageID,
+                requestInput: spec.requestInput
+            )
         case .releaseAuthorization(let spec):
             return ReleaseAuthorizationFlowStageExecutor(
                 stageID: spec.stageID,
-                requestInput: .path(spec.requestPath)
+                requestInput: spec.requestInput
             )
         case .releaseSignoff(let spec):
             return ReleaseSignoffFlowStageExecutor(
                 stageID: spec.stageID,
-                requestInput: .path(spec.requestPath)
+                requestInput: spec.requestInput
             )
         case .releaseTapeout(let spec):
             return ReleaseTapeoutFlowStageExecutor(
                 stageID: spec.stageID,
-                requestInput: .path(spec.requestPath)
+                requestInput: spec.requestInput,
+                geometricXOR: spec.geometricXOR
             )
         case .electricalStandardLayoutImport(let spec):
             return ElectricalStandardLayoutImportFlowStageExecutor(
@@ -1187,8 +1523,27 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         }
     }
 
+    private func required<Value>(
+        _ value: Value?,
+        stageID: String,
+        field: String
+    ) throws -> Value {
+        guard let value else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(stageID: stageID, field: field)
+        }
+        return value
+    }
+
     public func makeDescriptor() -> ToolDescriptor {
         switch self {
+        case .logicElaboration:
+            LogicToolDescriptors.elaboration()
+        case .logicLowering:
+            LogicToolDescriptors.lowering()
+        case .logicSimulation:
+            LogicToolDescriptors.simulation()
+        case .powerIntent:
+            LogicToolDescriptors.powerIntent()
         case .layoutCommand:
             SignoffToolDescriptors.layoutCommand()
         case .nativeDRC:
@@ -1197,7 +1552,7 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             SignoffToolDescriptors.nativeLVS()
         case .pex(let spec):
             SignoffToolDescriptors.pexBackend(
-                backendID: spec.backendSelection.backendID
+                selection: spec.backendSelection
             )
         case .coreSpiceSimulation:
             SignoffToolDescriptors.coreSpiceSimulation()
@@ -1217,8 +1572,14 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             DFTToolDescriptors.oracleCorrelation()
         case .processQualificationEvidenceBuild:
             ToolQualificationToolDescriptors.processEvidenceBuilder()
+        case .physicalDesign:
+            PhysicalDesignToolDescriptors.engine()
         case .physicalReview:
             PhysicalDesignToolDescriptors.review()
+        case .timingSTA:
+            TimingToolDescriptors.staticTimingAnalysis()
+        case .timingSignalIntegrity:
+            TimingToolDescriptors.signalIntegrity()
         case .pdkDiscovery:
             PDKToolDescriptors.discovery()
         case .pdkValidation:
@@ -1231,6 +1592,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             PDKToolDescriptors.ruleDeck()
         case .pdkOracle:
             PDKToolDescriptors.oracle()
+        case .releaseEvidenceAssembly:
+            ReleaseToolDescriptors.evidenceAssembly()
         case .releaseAuthorization:
             ReleaseToolDescriptors.authorization()
         case .releaseSignoff:
@@ -1287,6 +1650,14 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
 
     private var toolSpec: XcircuiteFlowToolSpec {
         switch self {
+        case .logicElaboration(let spec):
+            spec.tool
+        case .logicLowering(let spec):
+            spec.tool
+        case .logicSimulation(let spec):
+            spec.tool
+        case .powerIntent(let spec):
+            spec.tool
         case .layoutCommand(let spec):
             spec.tool
         case .nativeDRC(let spec):
@@ -1313,7 +1684,13 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             spec.tool
         case .processQualificationEvidenceBuild(let spec):
             spec.tool
+        case .physicalDesign(let spec):
+            spec.tool
         case .physicalReview(let spec):
+            spec.tool
+        case .timingSTA(let spec):
+            spec.tool
+        case .timingSignalIntegrity(let spec):
             spec.tool
         case .pdkDiscovery(let spec):
             spec.tool
@@ -1326,6 +1703,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         case .pdkRuleDeck(let spec):
             spec.tool
         case .pdkOracle(let spec):
+            spec.tool
+        case .releaseEvidenceAssembly(let spec):
             spec.tool
         case .releaseAuthorization(let spec):
             spec.tool

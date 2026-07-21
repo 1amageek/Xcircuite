@@ -1,7 +1,8 @@
+import CircuiteFoundation
 import Foundation
 
 public struct PDKExternalInspectionExecutionRecord: Sendable, Hashable, Codable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var runID: String
@@ -18,6 +19,7 @@ public struct PDKExternalInspectionExecutionRecord: Sendable, Hashable, Codable 
     public var status: String
     public var startedAt: Date
     public var completedAt: Date
+    public var provenance: ExecutionProvenance
     public var diagnostics: [String]
 
     public init(
@@ -35,6 +37,7 @@ public struct PDKExternalInspectionExecutionRecord: Sendable, Hashable, Codable 
         status: String,
         startedAt: Date,
         completedAt: Date,
+        provenance: ExecutionProvenance,
         diagnostics: [String] = []
     ) {
         self.schemaVersion = Self.currentSchemaVersion
@@ -52,6 +55,7 @@ public struct PDKExternalInspectionExecutionRecord: Sendable, Hashable, Codable 
         self.status = status
         self.startedAt = startedAt
         self.completedAt = completedAt
+        self.provenance = provenance
         self.diagnostics = diagnostics
     }
 }

@@ -10,7 +10,7 @@ extension XcircuiteFlowCLICommand {
     public static var helpText: String {
         """
         Usage:
-          xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path>] [--pretty]
+          xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path> --evidence-root <path> [--execute-tests]] [--pretty]
           xcircuite-flow compare-simulation-golden --golden-csv <path> --candidate-csv <path> [--max-absolute-delta <number>] [--max-relative-delta <number>] [--relative-delta-denominator-floor <number>] [--required-variable <name> ...] [--compare-variable <name> ...] [--no-interpolation] [--out <path>] [--pretty]
           xcircuite-flow assess-simulation-golden-corpus --project-root <path> --suite <path> [--artifact-dir <path>] [--out <path>] [--pretty]
           xcircuite-flow run --project-root <path> --run-spec <path> --runtime-config <path> [--pretty]
@@ -79,9 +79,9 @@ extension XcircuiteFlowCLICommand {
     public static var inspectPlatformCapabilitiesHelpText: String {
         """
         Usage:
-          xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path>] [--pretty]
+          xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path> --evidence-root <path> [--execute-tests]] [--pretty]
 
-        Builds the canonical action-domain snapshot and returns milestone readiness for standalone signoff, Agent-operable design loops, human review, standard-format grounding, and post-layout improvement planning. --test-evidence accepts either a test evidence array or a previous platform capability readiness report; evidence without passed executionStatus keeps readiness partial.
+        Builds the canonical action-domain snapshot and returns milestone readiness for standalone signoff, Agent-operable design loops, human review, standard-format grounding, and post-layout improvement planning. Persisted JSON is audit input only and cannot promote itself to passed. --execute-tests runs each bounded xcodebuild declaration, retains its transcript and execution record under --evidence-root, and supplies the non-serializable in-process verification receipt required for passing readiness.
         """
     }
 
@@ -90,7 +90,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow summarize-loop --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
 
-        Builds loop/iterations.jsonl and loop/snapshot.json from the run ledger, action log, approvals, and artifact envelopes.
+        Builds loop iteration and snapshot evidence from the run ledger, action log, approvals, and artifact envelopes. Persisted output is content-addressed and returned as artifact references.
         """
     }
 
@@ -99,7 +99,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow evaluate-run-guard --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
 
-        Builds a loop snapshot, evaluates deterministic guard detectors, writes loop/guard-verdict.json, and emits a structured guard result for external Agent and human review.
+        Builds a loop snapshot, evaluates deterministic guard detectors, and emits a structured guard result for external Agent and human review. Persisted output is content-addressed and returned as artifact references.
         """
     }
 
@@ -108,7 +108,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow compare-artifacts --project-root <path> --run-id <id> [--profile <path>] [--no-persist] [--pretty]
 
-        Builds reports/cross-artifact-evaluation.json from stage results, gates, design diff, artifact envelopes, and an optional FlowEvaluationProfile. The external Agent owns the next edit decision.
+        Builds cross-artifact evaluation evidence from stage results, gates, design diff, artifact envelopes, and an optional FlowEvaluationProfile. Persisted output is content-addressed and returned as an artifact reference; the external Agent owns the next edit decision.
         """
     }
 
@@ -535,7 +535,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow verify-candidate-plan --project-root <path> --run-id <id> [--candidate-plan-artifact-id <id>] [--candidate-plan-path <path>] [--mode <name>] [--pretty]
 
-        Loads planning/candidate-plan.json and writes planning/plan-verification.json with symbolic state, gate results, riskReviews, diagnostics, next actions, and an actions.jsonl record. Approval-required risks synthesize an approval-gate before acceptance. With --mode post-execution, reads planning/plan-execution.json and runs native DRC, native LVS, PEX summary, and simulation metric gates when their inputs are present.
+        Loads the explicitly selected candidate plan, the only retained generated candidate when unambiguous, or planning/candidate-plan.json when no generated candidate exists. Multiple generated candidates require --candidate-plan-artifact-id or --candidate-plan-path. Writes an immutable planning/plan-verification/<sha256>.json artifact with symbolic state, gate results, riskReviews, diagnostics, next actions, and an actions.jsonl record. Approval-required risks synthesize an approval-gate before acceptance. With --mode post-execution, reads the latest action-bound planning/plan-execution/<sha256>.json artifact for the candidate plan and runs native DRC, native LVS, PEX summary, and simulation metric gates when their inputs are present.
         """
     }
 
@@ -553,7 +553,7 @@ extension XcircuiteFlowCLICommand {
         Usage:
           xcircuite-flow execute-candidate-plan --project-root <path> --run-id <id> [--candidate-plan-artifact-id <id>] [--candidate-plan-path <path>] [--actor <id>] [--pretty]
 
-        Loads planning/candidate-plan.json, blocks approval-required risks before design mutation, executes supported design-mutating steps, and writes planning/plan-execution.json, design-diff.json, produced artifacts, and an actions.jsonl record.
+        Loads the explicitly selected candidate plan, the only retained generated candidate when unambiguous, or planning/candidate-plan.json when no generated candidate exists. Multiple generated candidates require --candidate-plan-artifact-id or --candidate-plan-path. Blocks approval-required risks before design mutation, executes supported design-mutating steps, and writes immutable planning/plan-execution/<sha256>.json, design-diffs/<sha256>.json, produced artifacts, and an actions.jsonl record.
         """
     }
 

@@ -46,12 +46,23 @@ extension XcircuiteCandidatePlanExecutor {
     ) async throws -> ArtifactReference {
         let url = try reference.locator.location.resolvedFileURL(relativeTo: workspaceStore.projectRoot)
         let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+        let digest = try SHA256ContentDigester().digest(data: data, using: .sha256)
+        let pathComponents = reference.path.split(separator: "/", omittingEmptySubsequences: false)
+        let directory = pathComponents.dropLast().joined(separator: "/")
+        let fileName = String(pathComponents.last ?? "artifact")
+        let retainedPath = "\(directory)/artifacts/\(digest.hexadecimalValue)/\(fileName)"
+        let retainedLocator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: retainedPath),
+            role: reference.locator.role,
+            kind: reference.locator.kind,
+            format: reference.locator.format
+        )
         return try await workspaceStore.persistArtifact(
             content: data,
             id: reference.id,
-            locator: reference.locator,
+            locator: retainedLocator,
             runID: runID,
-            mode: .replaceable
+            mode: .immutable
         )
     }
 

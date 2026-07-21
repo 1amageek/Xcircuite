@@ -25,6 +25,13 @@ struct XcircuiteDRCRepairLoopTests {
             schematicPath: schematicNetlistPath,
             root: root
         )
+        try await retainLVSInputs(
+            layoutPath: layoutNetlistPath,
+            schematicPath: schematicNetlistPath,
+            runID: runID,
+            store: store,
+            root: root
+        )
 
         let executionResult = try makeNotchExecutionResult(
             runID: runID,
@@ -179,6 +186,13 @@ struct XcircuiteDRCRepairLoopTests {
         try writeMatchingLVSNetlists(
             layoutPath: layoutNetlistPath,
             schematicPath: schematicNetlistPath,
+            root: root
+        )
+        try await retainLVSInputs(
+            layoutPath: layoutNetlistPath,
+            schematicPath: schematicNetlistPath,
+            runID: runID,
+            store: store,
             root: root
         )
 
@@ -352,9 +366,11 @@ struct XcircuiteDRCRepairLoopTests {
         let ledger = try await store.loadRunLedger(runID: "run-1")
         #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "planning-native-drc-summary" })
         #expect(ledger.runManifest.artifacts.contains { $0.artifactID == "planning-native-drc-layout" })
-        #expect(FileManager.default.fileExists(
-            atPath: root.appending(path: ".xcircuite/runs/run-1/design-diff.json").path(percentEncoded: false)
-        ))
+        let designDiffReference = try #require(
+            ledger.runManifest.artifacts.first { $0.locator.kind == .designDiff }
+        )
+        #expect(LocalArtifactVerifier().verify(designDiffReference, relativeTo: root).isVerified)
+        #expect(designDiffReference.path.hasPrefix(".xcircuite/runs/run-1/design-diffs/"))
         let action = try #require((try await store.loadRunActions(runID: "run-1")).last)
         #expect(action.status == .succeeded)
     }
@@ -634,7 +650,7 @@ struct XcircuiteDRCRepairLoopTests {
         root: URL
     ) throws -> DRCExecutionResult {
         let layoutURL = root.appending(path: layoutPath)
-        return DRCExecutionResult(
+        return try DRCExecutionResult.inProcess(
             request: DRCRequest(
                 layoutURL: layoutURL,
                 topCell: "top",

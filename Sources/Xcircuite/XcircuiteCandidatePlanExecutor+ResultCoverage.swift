@@ -278,7 +278,8 @@ extension XcircuiteCandidatePlanExecutor {
             + [designDiffRef].compactMap { $0 }
         try await workspaceStore.appendRunAction(
             FlowRunActionRecord(
-                actionID: "\(execution.planID)-execution",
+                actionID: "\(execution.planID)-\(candidatePlanRef.digest.hexadecimalValue)-"
+                    + "\(executionRef.digest.hexadecimalValue)-execution",
                 runID: execution.runID,
                 actor: FlowRunActor(kind: .cli, identifier: "xcircuite-flow"),
                 actionKind: "planning.execute-candidate-plan",

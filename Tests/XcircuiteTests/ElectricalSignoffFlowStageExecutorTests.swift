@@ -487,7 +487,13 @@ private struct StubElectricalSignoffEngine: ElectricalSignoffExecuting {
             runID: request.runID,
             status: .completed,
             axisResults: results,
-            provenance: metadata
+            provenance: try makeElectricalProvenance(
+                identifier: "stub-electrical-signoff-run",
+                inputs: request.executionInputArtifacts,
+                supportingTools: [metadata.producer],
+                startedAt: 1,
+                completedAt: 1
+            )
         )
     }
 }
@@ -527,7 +533,13 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
             runID: request.runID,
             status: .completed,
             axisResults: results,
-            provenance: metadata
+            provenance: try makeElectricalProvenance(
+                identifier: "repair-stub-run",
+                inputs: request.executionInputArtifacts,
+                supportingTools: [metadata.producer],
+                startedAt: 1,
+                completedAt: 1
+            )
         )
     }
 }
@@ -559,6 +571,7 @@ private func makeFoundationArtifactReference(
 private func makeElectricalProvenance(
     identifier: String,
     inputs: [ArtifactReference] = [],
+    supportingTools: [ProducerIdentity] = [],
     startedAt: TimeInterval,
     completedAt: TimeInterval
 ) throws -> ExecutionProvenance {
@@ -566,9 +579,21 @@ private func makeElectricalProvenance(
         producer: try ProducerIdentity(
             kind: .engine,
             identifier: identifier,
-            version: "1"
+            version: "1",
+            build: String(repeating: "e", count: 64)
         ),
+        supportingTools: supportingTools,
         inputs: inputs,
+        invocation: try .inProcess(entryPoint: "XcircuiteTests.\(identifier)"),
+        environment: try ExecutionEnvironmentFingerprint(
+            platform: "test",
+            architecture: "test",
+            toolchain: "test",
+            environmentDigest: ContentDigest(
+                algorithm: .sha256,
+                hexadecimalValue: String(repeating: "f", count: 64)
+            )
+        ),
         startedAt: Date(timeIntervalSince1970: startedAt),
         completedAt: Date(timeIntervalSince1970: completedAt)
     )

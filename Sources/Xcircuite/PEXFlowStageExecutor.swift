@@ -128,12 +128,40 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 context: context,
                 workingDirectory: rawDirectory
             )
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "pex-request",
+                stageID: stageID,
+                fileName: "pex-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
             try await context.checkCancellation()
             let runResult = try await engine.run(
                 request,
                 cancellationCheck: FlowExecutionCancellationProbe.make(context: context)
             )
+            guard runResult.provenance.producer.identifier == toolID else {
+                throw XcircuiteRuntimeError.invalidConfiguration(
+                    "PEX result producer \(runResult.provenance.producer.identifier) does not match stage tool \(toolID)."
+                )
+            }
+            if let expectedProducer = backendSelection.expectedProducer,
+               runResult.provenance.producer != expectedProducer {
+                throw XcircuiteRuntimeError.invalidConfiguration(
+                    "PEX result producer does not match the configured executable identity."
+                )
+            }
             try await context.checkCancellation()
+            let resultArtifact = try await context.persistJSONArtifact(
+                runResult,
+                artifactID: "pex-run-result",
+                stageID: stageID,
+                fileName: "pex-run-result.json",
+                producer: runResult.provenance.producer,
+                mode: .replaceable
+            )
             let artifactCompleteness = try artifactCompletenessReport(
                 from: runResult,
                 projectRoot: try context.xcircuiteProjectRoot()
@@ -143,11 +171,13 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 artifactCompleteness: artifactCompleteness
             )
             if let blockedKind = blockedErrorKind(from: runResult) {
-                let artifacts = try artifactReferences(
+                var artifacts = try await artifactReferences(
                     from: runResult,
                     summaryURL: nil,
                     context: context
                 )
+                artifacts.append(requestArtifact)
+                artifacts.append(resultArtifact)
                 let flowArtifactGate = StageArtifactManifestCoverageGateBuilder().pexGate(
                     manifestURL: runResult.manifestURL,
                     artifacts: artifacts,
@@ -192,11 +222,13 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 projectRoot: try context.xcircuiteProjectRoot()
             )
             try await context.checkCancellation()
-            var artifacts = try artifactReferences(
+            var artifacts = try await artifactReferences(
                 from: runResult,
                 summaryURL: persistedSummary.url,
                 context: context
             )
+            artifacts.append(requestArtifact)
+            artifacts.append(resultArtifact)
             let overallGateStatus = gateStatus(
                 runStatus: runResult.status,
                 artifactCompletenessStatus: artifactCompleteness.status
@@ -243,6 +275,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 diagnostics: pexDiagnostics,
                 stageID: stage.stageID,
                 toolID: toolID,
+                producer: runResult.provenance.producer,
                 context: context
             )
             artifacts.append(envelopeArtifact)
@@ -386,7 +419,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         switch kind {
         case .adapterUnavailable, .technologyResolutionFailed:
             true
-        case .invalidInput, .backendExecutionFailed, .cancelled, .parseFailed,
+        case .invalidInput, .backendExecutionFailed, .timedOut, .cancelled, .parseFailed,
              .irValidationFailed, .persistenceFailed, .internalInvariantViolation:
             false
         }
@@ -402,6 +435,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             "PEX_INPUT_INVALID"
         case .backendExecutionFailed:
             "PEX_BACKEND_EXECUTION_FAILED"
+        case .timedOut:
+            "PEX_EXECUTION_TIMED_OUT"
         case .cancelled:
             "PEX_EXECUTION_CANCELLED"
         case .parseFailed:
@@ -419,16 +454,26 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext,
         workingDirectory: URL
     ) throws -> PEXRunRequest {
-        PEXRunRequest(
-            layoutURL: try layoutInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
-            ),
+        let projectRoot = try context.xcircuiteProjectRoot()
+        let runDirectory = try context.xcircuiteRunDirectory()
+        let layoutReference = try layoutInput.resolveArtifactReference(
+            projectRoot: projectRoot,
+            runDirectory: runDirectory,
+            artifactID: "pex-layout-input",
+            kind: .layout,
+            format: try artifactFormat(for: layoutFormat)
+        )
+        let sourceNetlistReference = try sourceNetlistInput.resolveArtifactReference(
+            projectRoot: projectRoot,
+            runDirectory: runDirectory,
+            artifactID: "pex-source-netlist-input",
+            kind: .netlist,
+            format: try artifactFormat(for: sourceNetlistFormat)
+        )
+        return PEXRunRequest(
+            layoutURL: try layoutReference.locator.location.resolvedFileURL(relativeTo: projectRoot),
             layoutFormat: layoutFormat,
-            sourceNetlistURL: try sourceNetlistInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
-            ),
+            sourceNetlistURL: try sourceNetlistReference.locator.location.resolvedFileURL(relativeTo: projectRoot),
             sourceNetlistFormat: sourceNetlistFormat,
             topCell: topCell,
             corners: corners,
@@ -443,8 +488,25 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             processProfile: processProfile,
             backendSelection: backendSelection,
             options: options,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            executionInputArtifacts: [layoutReference, sourceNetlistReference]
         )
+    }
+
+    private func artifactFormat(for format: LayoutFormat) throws -> ArtifactFormat {
+        switch format {
+        case .gds: .gdsii
+        case .oas: .oasis
+        case .def: .def
+        }
+    }
+
+    private func artifactFormat(for format: NetlistFormat) throws -> ArtifactFormat {
+        switch format {
+        case .spice: .spice
+        case .cdl: try ArtifactFormat(rawValue: "cdl")
+        case .verilog: .verilog
+        }
     }
 
     private static func technologySpec(from input: TechnologyInput) -> XcircuitePEXTechnologySpec {
@@ -486,14 +548,15 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
         from result: PEXRunResult,
         summaryURL: URL?,
         context: FlowExecutionContext
-    ) throws -> [ArtifactReference] {
+    ) async throws -> [ArtifactReference] {
         let pexRunDirectory = result.manifestURL.deletingLastPathComponent()
         var artifacts = [
             try artifactBuilder.reference(
                 for: result.manifestURL,
                 projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
-                format: .json
+                format: .json,
+                producer: result.provenance.producer
             ),
         ]
         if let summaryURL {
@@ -502,7 +565,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: "pex-summary",
                 kind: .report,
-                format: .json
+                format: .json,
+                producer: result.provenance.producer
             ))
         }
 
@@ -511,11 +575,28 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
                 continue
             }
-            artifacts.append(try artifactReference(
+            let reference = try artifactReference(
                 for: artifact,
                 url: url,
                 context: context
-            ))
+            )
+            artifacts.append(reference)
+            if artifact.locator.kind.rawValue == PEXArtifactKind.spefRoundTrip.foundationRawValue {
+                // A distinct retained file is required because a flow stage cannot
+                // publish two artifact identities for the same storage location.
+                let content = try Data(contentsOf: url, options: [.mappedIfSafe])
+                artifacts.append(try await context.persistArtifact(
+                    content,
+                    artifactID: "canonical-\(reference.id.rawValue)",
+                    stageID: stageID,
+                    directory: "canonical",
+                    fileName: url.lastPathComponent,
+                    kind: .parasitics,
+                    format: .spef,
+                    producer: reference.producer,
+                    mode: .immutable
+                ))
+            }
         }
         return artifacts
     }
@@ -531,7 +612,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
                 projectRoot: try context.xcircuiteProjectRoot(),
                 artifactID: artifact.id.rawValue,
                 kind: artifact.locator.kind,
-                format: artifact.locator.format
+                format: artifact.locator.format,
+                producer: artifact.reference?.producer
             )
         } catch let error as XcircuiteRuntimeError {
             switch error {
@@ -571,7 +653,8 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             id: artifact.id,
             locator: locator,
             digest: declaredReference.digest,
-            byteCount: declaredReference.byteCount
+            byteCount: declaredReference.byteCount,
+            producer: declaredReference.producer
         )
     }
 

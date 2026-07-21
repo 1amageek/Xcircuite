@@ -70,7 +70,9 @@ public struct LogicSynthesisFlowStageExecutor: FlowStageExecutor {
                 fileName: "logic-synthesis-result.json",
                 artifactID: "logic-synthesis-result",
                 stageID: stageID,
-                context: context
+                context: context,
+                producer: result.provenance.producer,
+                mode: .replaceable
             )
             return try support.result(
                 status: result.status,

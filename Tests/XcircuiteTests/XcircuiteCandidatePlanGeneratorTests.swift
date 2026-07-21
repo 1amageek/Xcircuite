@@ -55,8 +55,11 @@ struct XcircuiteCandidatePlanGeneratorTests {
         #expect(result.planID == "run-1-drc-repair-problem-candidate-plan-1")
         #expect(result.problemPath == problemReference.path)
         #expect(result.executionReadiness == "ready")
-        #expect(result.candidatePlanArtifact.id.rawValue == XcircuitePlanningArtifactStore.candidatePlanArtifactID)
-        #expect(result.candidatePlanArtifact.locator.location.value == ".xcircuite/runs/run-1/planning/candidate-plan.json")
+        #expect(result.candidatePlanArtifact.id.rawValue != XcircuitePlanningArtifactStore.candidatePlanArtifactID)
+        #expect(result.candidatePlanArtifact.locator.location.value.hasPrefix(
+            ".xcircuite/runs/run-1/planning/generated-candidate-plans/"
+        ))
+        #expect(result.candidatePlanArtifact.locator.location.value.hasSuffix(".json"))
         #expect(!result.candidatePlanArtifact.digest.hexadecimalValue.isEmpty)
         #expect(result.candidatePlanArtifact.byteCount > 0)
         let translationAuditArtifact = try #require(result.problemTranslationAuditArtifact)
@@ -68,8 +71,11 @@ struct XcircuiteCandidatePlanGeneratorTests {
         #expect(!actionDomainArtifact.digest.hexadecimalValue.isEmpty)
         #expect(actionDomainArtifact.byteCount > 0)
         let traceArtifact = try #require(result.symbolicPlannerTraceArtifact)
-        #expect(traceArtifact.id.rawValue == XcircuitePlanningArtifactStore.symbolicPlannerTraceArtifactID)
-        #expect(traceArtifact.locator.location.value == ".xcircuite/runs/run-1/planning/symbolic-planner-trace.json")
+        #expect(traceArtifact.id.rawValue != XcircuitePlanningArtifactStore.symbolicPlannerTraceArtifactID)
+        #expect(traceArtifact.locator.location.value.hasPrefix(
+            ".xcircuite/runs/run-1/planning/generated-symbolic-planner-traces/"
+        ))
+        #expect(traceArtifact.locator.location.value.hasSuffix(".json"))
         #expect(!traceArtifact.digest.hexadecimalValue.isEmpty)
         #expect(traceArtifact.byteCount > 0)
 
@@ -163,8 +169,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
 
         let ledger = try await store.loadRunLedger(runID: "run-1")
         #expect(ledger.artifacts.contains {
-            $0.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID
-                && $0.path == result.candidatePlanArtifact.path
+            $0 == result.candidatePlanArtifact
         })
         #expect(ledger.artifacts.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.problemTranslationAuditArtifactID
@@ -175,8 +180,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
                 && $0.path == actionDomainArtifact.path
         })
         #expect(ledger.artifacts.contains {
-            $0.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerTraceArtifactID
-                && $0.path == traceArtifact.path
+            $0 == traceArtifact
         })
     }
 
@@ -1045,8 +1049,12 @@ struct XcircuiteCandidatePlanGeneratorTests {
         #expect(result.familyRun.selectedCandidateIndex == 0)
         #expect(result.familyRun.selectedStrategy == "calibrated-first-ready-action-per-objective")
         #expect(result.familyRun.selectedPlanID == "run-global-feedback-symbolic-problem-candidate-plan-1")
-        #expect(result.familyRun.promotedCandidatePlanArtifact.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID)
-        #expect(result.familyRun.promotedSymbolicPlannerTraceArtifact.artifactID == XcircuitePlanningArtifactStore.symbolicPlannerTraceArtifactID)
+        #expect(result.familyRun.promotedCandidatePlanArtifact.path.hasPrefix(
+            ".xcircuite/runs/run-global-feedback/planning/generated-candidate-plans/"
+        ))
+        #expect(result.familyRun.promotedSymbolicPlannerTraceArtifact.path.hasPrefix(
+            ".xcircuite/runs/run-global-feedback/planning/generated-symbolic-planner-traces/"
+        ))
 
         let selectedCandidate = try #require(result.familyRun.candidates.first { $0.selected })
         #expect(selectedCandidate.requestedStrategy == "first-ready-action-per-objective")
@@ -1083,8 +1091,7 @@ struct XcircuiteCandidatePlanGeneratorTests {
         #expect(ledger.artifacts.contains { $0.path == selectedCandidate.candidatePlanArtifact.path })
         #expect(ledger.artifacts.contains { $0.path == selectedCandidate.symbolicPlannerTraceArtifact.path })
         #expect(ledger.artifacts.contains {
-            $0.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID
-                && $0.path == result.familyRun.promotedCandidatePlanArtifact.path
+            $0 == result.familyRun.promotedCandidatePlanArtifact
         })
     }
 

@@ -24,7 +24,7 @@ public enum XcircuiteFlowCLICommand {
         case "inspect-technology-catalog":
             return try inspectTechnologyCatalog(arguments: Array(arguments.dropFirst()))
         case "inspect-platform-capabilities":
-            return try inspectPlatformCapabilities(arguments: Array(arguments.dropFirst()))
+            return try await inspectPlatformCapabilities(arguments: Array(arguments.dropFirst()))
         case "compare-simulation-golden":
             return try compareSimulationGolden(arguments: Array(arguments.dropFirst()))
         case "assess-simulation-golden-corpus":

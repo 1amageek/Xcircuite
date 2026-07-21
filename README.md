@@ -74,23 +74,29 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 
 | Type | Responsibility |
 |---|---|
-| `LayoutCommandFlowStageExecutor` | Applies replayable `LayoutCommands` requests through LayoutCommands' public `LayoutCommandRunning` protocol, verifies the result's canonical `outputArtifact`, writes flow-managed layout/result/manifest artifacts, and can emit DRC-compatible JSON plus standard layout exports for downstream DRC/LVS/PEX stages |
-| `DRCFlowStageExecutor` | Runs DRC through `DRCEngine`, converts the result to stage result / gates / artifacts, indexes `drc-summary`, emits DRC-specific evaluation channels for violation buckets, and verifies output artifact references before stage success |
-| `LVSFlowStageExecutor` | Runs LVS through `LVSEngine`, converts the result to stage result / gates / artifacts, indexes `lvs-summary`, and verifies output artifact references before stage success |
+| `LogicElaborationFlowStageExecutor` / `PowerIntentFlowStageExecutor` / `LogicLoweringFlowStageExecutor` / `LogicSimulationFlowStageExecutor` | Execute the native logic pipeline from source and UPF/CPF through canonical snapshot and lowered execution design; direct input mode consumes the preceding stage's digest-bound artifact without generating mutable handoff requests |
+| `PhysicalDesignFlowStageExecutor` | Executes a typed physical-design request for an explicitly allowed stage and retains the engine's immutable artifacts and diagnostics without promoting geometry-smoke execution to production P&R |
+| `LayoutCommandFlowStageExecutor` | Applies replayable `LayoutCommands` requests through LayoutCommands' public `LayoutCommandRunning` protocol, verifies every runner-declared artifact against its bytes, digest, byte count, and evidence producer, safely normalizes locators to workspace-relative paths without dropping producer lineage, and can emit DRC-compatible JSON plus standard layout exports for downstream DRC/LVS/PEX stages |
+| `DRCFlowStageExecutor` | Resolves and verifies exact DRC inputs, persists an immutable typed request and retry-replaceable producer-bound canonical execution result, indexes `drc-summary`, emits violation evaluation channels, and verifies manifest producer plus output integrity before stage success |
+| `LVSFlowStageExecutor` | Resolves and verifies exact LVS inputs, persists an immutable typed request and retry-replaceable producer-bound canonical execution result, indexes `lvs-summary`, and verifies manifest producer plus output integrity before stage success |
 | `PEXFlowStageExecutor` | Runs PEX through `PEXEngine`, exposes an explicit production factory for the real Magic backend, indexes extraction artifacts and `pex-summary` as `ArtifactReference`s, and blocks unavailable infrastructure without fabricating signoff output |
 | `DFTFlowStageExecutor` / `DFTOracleCorrelationFlowStageExecutor` | Runs typed DFT requests and correlates retained oracle cases into raw, request-bound observations |
 | `ProcessQualificationEvidenceBuilderFlowStageExecutor` | Builds ToolQualification-owned process evidence from independently retained artifact groups |
-| `SimulationFlowStageExecutor` | Runs SPICE simulation, persists netlist/waveform/measurement/`simulation-summary` artifacts, emits a run-level evaluation envelope with measurement residual/tolerance and waveform-variable channels, and gates on measurement expectations plus artifact integrity |
+| `SimulationFlowStageExecutor` | Runs SPICE simulation through the canonical `CoreSpiceSimulationResult` contract, binds its provenance to the persisted netlist input, retains the exact producer on waveform/measurement/result artifacts, emits a run-level evaluation envelope, and gates on measurement expectations plus artifact integrity |
+| `PostLayoutComparisonFlowStageExecutor` | Resolves exact pre/post waveform artifact references, retains them in comparison provenance, and persists the retry-safe canonical report with the comparison producer identity |
 | `TimingSTAFlowStageExecutor` / `TimingSIFlowStageExecutor` | Invoke TimingEngine protocols directly and read every design, library, constraint, PDK, and parasitic input through `LocalArtifactVerifier` before analysis |
-| `PDKStandardViewInspectionFlowStageExecutor` | Inspects a manifest-bound standard view locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
-| `PDKRuleDeckInspectionFlowStageExecutor` | Inspects a manifest-bound rule deck locally or through the typed external process provider, persists the result envelope and process evidence, and preserves blocked/failed contract diagnostics |
+| `PDKDiscoveryFlowStageExecutor` / `PDKValidationFlowStageExecutor` | Discover and validate manifest-bound PDKs, then persist the typed result through the workspace transaction boundary with the domain execution producer retained in the artifact, ledger, and run manifest |
+| `PDKCorpusValidationFlowStageExecutor` / `PDKOracleFlowStageExecutor` | Execute retained-corpus and oracle comparison contracts, preserve blocked/failed semantics, and retain result provenance as retry-safe run evidence |
+| `PDKStandardViewInspectionFlowStageExecutor` / `PDKRuleDeckInspectionFlowStageExecutor` | Inspect manifest-bound standard views and rule decks locally or through the typed external process provider, persist retry-safe result evidence with its measured producer identity, and preserve blocked/failed contract diagnostics |
 | Electrical corpus stage | Persists raw corpus and independent-oracle observations for ToolQualification without issuing trust |
 | `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, and delegates reviewed-artifact integrity validation to `PhysicalDesignArtifactReviewValidator` |
 
 PDK external inspection is selected by adding `externalProcess` to a tagged
 `pdkStandardView` or `pdkRuleDeck` runtime executor. The configuration is
 validated before runtime construction, expands only the documented request,
-result, project, run and asset placeholders, and writes
+result, project, run and asset placeholders, executes the measured canonical
+executable path, redacts configured sensitive argument positions from retained
+records and provenance, and writes
 `.xcircuite/runs/<run-id>/stages/<stage-id>/raw/external-pdk/` artifacts for the
 request, result, stdout, stderr and execution record. The process result is
 still subject to `PDKKit` schema, run, asset, format, source-reference and
@@ -160,14 +166,17 @@ top parasitic nets from the `.xcircuite` run ledger without re-running PEX or
 scraping logs.
 
 `PEXFlowStageExecutor.production(...)` selects `DefaultPEXEngine.withDefaults()`
-and the real backend named by `PEXBackendSelection`. An unavailable Magic
-executable, PDK, or extraction deck is retained as typed `adapterUnavailable`
+and the real backend named by `PEXBackendSelection`. Magic and OpenRCX retain
+the measured executable version and SHA-256 identity in canonical provenance;
+the stage rejects a producer that differs from its `pex-<backend>` tool ID or
+from an explicitly configured expected producer. An unavailable executable,
+PDK, or extraction deck is retained as typed `adapterUnavailable`
 failure evidence and maps to a blocked flow stage; it does not produce a
 `pex-summary` signoff artifact. Test-scoped extractors are injected directly
 into `PEXFlowStageExecutor` from the test target and are not part of the public
 runtime specification.
 
-PEX stages also write `evidence/pex-summary-envelope.json`. The envelope expands
+PEX stages also write a producer-bound `pex-summary` evidence envelope. The envelope expands
 `PEXRunSummaryReport` into Agent-readable observation channels for artifact
 completeness, failed corner count, total net/element count, total ground and
 coupling capacitance, total resistance, per-corner ParasiticIR/SPEF presence,
@@ -190,6 +199,9 @@ DRC stages also write `evidence/drc-summary-envelope.json`. The envelope expands
 fix channels. Failed DRC buckets route feedback to `localSurface` with repair
 planning actions, while missing tool evidence and unqualified calibration remain
 explicit observation states instead of hidden log text.
+Qualified calibration additionally requires a current retained process
+qualification whose implementation identifier, tool version, and binary digest
+exactly match the execution producer identifier, version, and measured build.
 
 LVS stages similarly write `evidence/lvs-summary-envelope.json`. The envelope
 expands `LVSRunSummaryReport` into `lvs-active-mismatch-count`,
@@ -267,12 +279,25 @@ process qualification. The retained Xcircuite regression covers this boundary
 through `PhysicalDesignFlowStageExecutorTests/physicalReviewApprovalResumesFlow`.
 
 The retained `EndToEndDesignFlowTests/retainedMultiEngineRunResumesAfterReview`
-test additionally executes one run through LogicDesign lowering, logic
-simulation, timing STA, physical floorplanning, native DRC/LVS, a PEX stage,
-review-packet integrity, human approval and same-run resume. This is integration
-evidence for the current handoff path; the test-scoped PEX implementation proves
-the stage contract rather than physical signoff, and the run does not promote
-local results to external-oracle or foundry/process qualification.
+test additionally executes one run through SystemVerilog elaboration, lowering,
+logic simulation, timing STA, physical floorplanning, layout materialization,
+native DRC/LVS, a PEX stage, review-packet integrity, human approval and same-run
+resume. Logic lowering consumes the elaboration artifact, logic simulation
+consumes the lowered artifact, and DRC consumes the materialized layout artifact;
+the test asserts the producer digests in downstream provenance/manifests. This is
+integration evidence for the current handoff path; the test-scoped PEX
+implementation proves the stage contract rather than physical signoff, and the
+run does not promote local results to external-oracle or foundry/process
+qualification.
+
+Platform readiness covers LogicDesign, LogicEngine, RTL verification, DFT,
+physical design, STA/SI, electrical signoff, release, and tapeout in addition to
+the simulation/layout/DRC/LVS/PEX domains. Operation declarations alone never
+pass a milestone: retained xcodebuild execution records, artifact integrity,
+execution provenance, and stage gates are required. The
+`production-qualified-release-flow` evidence remains mandatory and is not
+provided by fixture or blocked-stage tests, so local smoke execution cannot be
+reported as production-ready.
 
 Engines emit raw `ObservationRecord` values. Domain-specific assessors derive
 typed assessments from those observations. `ToolQualification` independently
@@ -351,7 +376,7 @@ introducing an Agent wrapper.
 | `generate-planning-problem` | `planning/problem.json` from DRC/LVS/PEX summary inputs with generated assumptions, risk classifications, objectives, constraints, candidate actions, verification gates, and resume contract |
 | `audit-problem-translation` | `planning/problem-translation-audit.json` with source-to-objective/action/constraint/goal/gate coverage, uncovered source refs, orphan problem elements, blocking diagnostics, and next actions before planner execution |
 | `validate-planning-problem` | `planning/problem-validation.json` with schema/reference, assumption/risk, objective/action-domain, verification-gate, and freshly refreshed translation-audit diagnostics before planner execution |
-| `generate-candidate-plan` | `planning/candidate-plan.json` from typed planning problems with selected-step assumptions and risk classifications for review; blocks when the freshly refreshed translation audit is blocking |
+| `generate-candidate-plan` | Immutable, content-addressed `planning/generated-candidate-plans/<sha256>.json` and `planning/generated-symbolic-planner-traces/<sha256>.json` artifacts from typed planning problems with selected-step assumptions and risk classifications for review; blocks when the freshly refreshed translation audit is blocking |
 | `symbolic-planner-feature-matrix` | symbolic planner coverage matrix with required corpus validation tags, implemented/planned coverage tags, evidence refs, and remaining work; corpus assessment validates suite and case coverage tags against implemented matrix entries |
 | `export-symbolic-planner-problem` | `planning/symbolic-planner/domain.pddl`, `planning/symbolic-planner/problem.pddl`, and `planning/symbolic-planner/pddl-export.json` for external symbolic planners; blocks when the freshly refreshed translation audit is blocking |
 | `run-symbolic-planner-solver` | `planning/symbolic-planner/solver-run.json`, `solver-stdout.txt`, `solver-stderr.txt`, `solver-plan.txt`, and imported `planning/candidate-plan.json` from a timeout-bounded external PDDL solver process |
@@ -361,11 +386,17 @@ introducing an Agent wrapper.
 | `generate-parameter-candidates` | `planning/parameter-candidates.jsonl` and `planning/parameter-candidate-search-trace.json` from bounded `parameterBounds` hints, including `adaptive-bounded-refinement` and `feedback-aware-bounded-refinement` ordering |
 | `synthesize-parameter-candidate-plan` | risk-projected `planning/candidate-plan.json` from a selected bounded parameter candidate, skipping rejected candidates from `planning/rejected-plans.jsonl` unless explicitly included and returning a `costModel`-weighted feedback selection trace |
 | `approve-candidate-plan-risk` | `.xcircuite/runs/<run-id>/approvals/<approval-id>.json` using the shared `FlowApprovalRecord` schema |
-| `execute-candidate-plan` | `planning/plan-execution.json`, produced layout/netlist artifacts, `design-diff.json`, and `actions.jsonl`; approval-required risk blocks before design mutation unless the required approval record is approved |
-| `verify-candidate-plan` | `planning/plan-verification.json` with symbolic state, gate results, `riskReviews`, approval review state, `planning/rejected-plans.jsonl` for rejected/blocked plans, plus post-execution DRC/LVS/PEX/simulation metric artifacts when inputs exist |
+| `execute-candidate-plan` | Immutable `planning/plan-execution/<sha256>.json`, produced layout/netlist artifacts, `design-diffs/<sha256>.json`, and `actions.jsonl`; approval-required risk blocks before design mutation unless the required approval record is approved |
+| `verify-candidate-plan` | Immutable `planning/plan-verification/<sha256>.json` with symbolic state, gate results, `riskReviews`, approval review state, `planning/rejected-plans.jsonl` for rejected/blocked plans, plus post-execution DRC/LVS/PEX/simulation metric artifacts when inputs exist |
 | `run-numeric-repair-loop` | `planning/numeric-repair-loop.json` plus per-iteration snapshots under `planning/numeric-repair-loop/iterations/` while generating candidates, synthesizing edits, executing, verifying, and feeding rejected candidates into the next iteration |
 | `assess-verified-improvement-corpus` | `.xcircuite/assessments/verified-improvement/<suite-id>/corpus-suite.json` and `corpus-report.json` with typed DRC/LVS/PEX/numeric-loop outcome assessment; it does not issue tool qualification |
 | `run-selected-suggested-action` | loads the latest ready `review.selectSuggestedAction` record, validates its run binding, then projects the typed semantic operation into this project's `xcircuite-flow --project-root` invocation and dispatches through the typed CLI handler |
+
+`execute-candidate-plan` and `verify-candidate-plan` use the sole retained
+generated candidate when selection is unambiguous, then fall back to the
+canonical `planning/candidate-plan.json`. If multiple immutable generated
+candidates exist, callers must select one with `--candidate-plan-artifact-id`
+or `--candidate-plan-path`; no implicit latest-candidate fallback is applied.
 
 Default platform-readiness test evidence uses exact Xcode test identifiers,
 including the `()` suffix for Swift Testing methods. Every evidence command is

@@ -1,4 +1,5 @@
 import CircuiteFoundation
+import CoreSpice
 import DesignFlowKernel
 import Foundation
 import Testing
@@ -78,7 +79,36 @@ struct SimulationFlowStageExecutorTests {
         #expect(artifacts.contains { $0.kind == .waveform && $0.format == .csv })
         #expect(artifacts.contains { $0.kind == .measurement && $0.format == .json })
         #expect(artifacts.contains { $0.kind == .netlist && $0.format == .spice })
+        let inputNetlist = try #require(artifacts.first {
+            $0.artifactID == "simulation-input-netlist"
+        })
+        let waveformArtifact = try #require(artifacts.first {
+            $0.artifactID == "simulation-waveform"
+        })
+        let measurementsArtifact = try #require(artifacts.first {
+            $0.artifactID == "simulation-measurements"
+        })
+        let canonicalResultArtifact = try #require(artifacts.first {
+            $0.artifactID == "corespice-simulation-result"
+        })
+        let canonicalResult = try JSONDecoder().decode(
+            CoreSpiceSimulationResult.self,
+            from: Data(contentsOf: root.appending(path: canonicalResultArtifact.path))
+        )
+        #expect(canonicalResult.provenance.inputs == [inputNetlist])
+        #expect(canonicalResult.provenance.producer.identifier == "corespice")
+        #expect(canonicalResult.provenance.producer.version == "1.0.0")
+        #expect(canonicalResult.artifacts == [waveformArtifact, measurementsArtifact])
+        #expect(waveformArtifact.producer == canonicalResult.provenance.producer)
+        #expect(measurementsArtifact.producer == canonicalResult.provenance.producer)
+        #expect(canonicalResultArtifact.producer == canonicalResult.provenance.producer)
+        let ledger = try await XcircuiteWorkspaceStore(projectRoot: root)
+            .loadRunLedger(runID: "run-sim")
+        #expect(ledger.artifacts.first {
+            $0.locator == canonicalResultArtifact.locator
+        } == canonicalResultArtifact)
         let summaryArtifact = try #require(artifacts.first { $0.artifactID == "simulation-summary" })
+        #expect(summaryArtifact.producer == canonicalResult.provenance.producer)
         let summary = try decodeSimulationSummary(summaryArtifact, root: root)
         #expect(summary.summary.status == "passed")
         #expect(summary.summary.analysis == "tran")
@@ -87,7 +117,7 @@ struct SimulationFlowStageExecutorTests {
         #expect(summary.summary.expectationCount == 1)
         #expect(summary.summary.failedExpectationCount == 0)
         let envelopeArtifact = try #require(artifacts.first {
-            $0.path.hasSuffix("evidence/simulation-summary-envelope.json")
+            $0.path.hasSuffix("-simulation-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -169,6 +199,44 @@ struct SimulationFlowStageExecutorTests {
         #expect(result.status == .failed)
         #expect(stage.status == .failed)
         #expect(stage.diagnostics.contains { $0.code == "SIMULATION_ANALYSIS_MISSING" })
+        #expect(!stage.artifacts.contains { $0.kind == .waveform })
+    }
+
+    @Test func mismatchedCoreSpiceInputLineageFailsTheStage() async throws {
+        let root = try makeTemporaryRoot("sim-lineage-mismatch")
+        defer { removeTemporaryRoot(root) }
+        let netlistURL = try writeText(rcNetlist, name: "rc.cir", root: root)
+
+        let result = try await makeOrchestrator(root: root).run(
+            request: FlowOperationRequest(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-sim-lineage-mismatch",
+                intent: "Reject unbound simulation evidence",
+                stages: [FlowStageDefinition(stageID: "010-sim", displayName: "Simulation")]
+            ),
+            toolRegistry: ToolRegistry(),
+            healthResults: [:],
+            executors: [
+                SimulationFlowStageExecutor(
+                    stageID: "010-sim",
+                    netlistURL: netlistURL,
+                    expectations: [
+                        SimulationMeasurementExpectation(
+                            name: "vfinal",
+                            target: 1.0,
+                            tolerance: 0.01
+                        ),
+                    ],
+                    engine: UnboundSimulationEngine()
+                ),
+            ]
+        )
+
+        let stage = result.stages[0]
+        #expect(stage.status == .failed)
+        #expect(stage.diagnostics.contains {
+            $0.code == "SIMULATION_ARTIFACT_LINEAGE_INVALID"
+        })
         #expect(!stage.artifacts.contains { $0.kind == .waveform })
     }
 
@@ -375,14 +443,14 @@ struct SimulationFlowStageExecutorTests {
                 stageID: "005-netlist",
                 status: .succeeded,
                 artifacts: [
-                    try artifactReference(try fixtureArtifactReference(
+                    try fixtureArtifactReference(
                         artifactID: "source-netlist",
                         path: netlistPath,
                         kind: .netlist,
                         format: .spice,
                         sha256: String(repeating: "0", count: 64),
                         byteCount: Int64(netlistData.count),
-                    )),
+                    ),
                 ]
             ),
             to: ".xcircuite/runs/run-sim-input-digest/stages/005-netlist/result.json"
@@ -454,7 +522,7 @@ struct SimulationFlowStageExecutorTests {
         #expect(summary.summary.failedExpectationCount == 1)
         #expect(summary.expectations.first?.status == "failed")
         let envelopeArtifact = try #require(stage.artifacts.first {
-            $0.path.hasSuffix("evidence/simulation-summary-envelope.json")
+            $0.path.hasSuffix("-simulation-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -506,7 +574,7 @@ struct SimulationFlowStageExecutorTests {
         #expect(summary.summary.status == "failed")
         #expect(summary.expectations.first?.status == "missing")
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
-            $0.path.hasSuffix("evidence/simulation-summary-envelope.json")
+            $0.path.hasSuffix("-simulation-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -657,7 +725,7 @@ struct SimulationFlowStageExecutorTests {
         await #expect(throws: CoreSpiceSimulationEngine.EngineError.unsupportedAnalysis(
             ".dc source vin did not match any independent source; available sources: v1"
         )) {
-            _ = try await CoreSpiceSimulationEngine().run(
+            _ = try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
                 netlistSource: """
                 * dc sweep request
                 V1 in 0 0
@@ -665,8 +733,9 @@ struct SimulationFlowStageExecutorTests {
                 .dc VIN 0 1 0.5
                 .end
                 """,
-                fileName: "unknown-dc-source.cir"
-            )
+                fileName: "unknown-dc-source.cir",
+                inputs: []
+            ))
         }
     }
 
@@ -674,7 +743,7 @@ struct SimulationFlowStageExecutorTests {
         await #expect(throws: CoreSpiceSimulationEngine.EngineError.unsupportedAnalysis(
             ".dc source r1 resolved to unsupported device type resistor; sweep source must be an independent voltage or current source"
         )) {
-            _ = try await CoreSpiceSimulationEngine().run(
+            _ = try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
                 netlistSource: """
                 * dc sweep request
                 V1 in 0 0
@@ -682,8 +751,9 @@ struct SimulationFlowStageExecutorTests {
                 .dc R1 0 1 0.5
                 .end
                 """,
-                fileName: "non-source-dc-source.cir"
-            )
+                fileName: "non-source-dc-source.cir",
+                inputs: []
+            ))
         }
     }
 
@@ -691,7 +761,7 @@ struct SimulationFlowStageExecutorTests {
         await #expect(throws: CoreSpiceSimulationEngine.EngineError.unsupportedAnalysis(
             ".mc .dc source vin did not match any independent source; available sources: v1"
         )) {
-            _ = try await CoreSpiceSimulationEngine().run(
+            _ = try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
                 netlistSource: """
                 * monte carlo dc sweep request
                 V1 in 0 0
@@ -699,8 +769,9 @@ struct SimulationFlowStageExecutorTests {
                 .mc 2 dc VIN 0 1 0.5 seed=7
                 .end
                 """,
-                fileName: "unknown-mc-dc-source.cir"
-            )
+                fileName: "unknown-mc-dc-source.cir",
+                inputs: []
+            ))
         }
     }
 
@@ -708,7 +779,7 @@ struct SimulationFlowStageExecutorTests {
         await #expect(throws: CoreSpiceSimulationEngine.EngineError.unsupportedAnalysis(
             ".mc .dc source r1 resolved to unsupported device type resistor; sweep source must be an independent voltage or current source"
         )) {
-            _ = try await CoreSpiceSimulationEngine().run(
+            _ = try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
                 netlistSource: """
                 * monte carlo dc sweep request
                 V1 in 0 0
@@ -716,8 +787,9 @@ struct SimulationFlowStageExecutorTests {
                 .mc 2 dc R1 0 1 0.5 seed=7
                 .end
                 """,
-                fileName: "non-source-mc-dc-source.cir"
-            )
+                fileName: "non-source-mc-dc-source.cir",
+                inputs: []
+            ))
         }
     }
 
@@ -1096,7 +1168,7 @@ struct SimulationFlowStageExecutorTests {
         let projectRoot: URL
         let runID: String
 
-        func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome {
+        func execute(_ request: SimulationExecutionRequest) async throws -> SimulationStageOutcome {
             let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
             try await store.createWorkspace()
             let manifest = try await store.loadManifest()
@@ -1108,33 +1180,37 @@ struct SimulationFlowStageExecutorTests {
                 requestedBy: "corespice",
                 reason: "cooperative simulation cancellation checkpoint"
             )
-            return SimulationStageOutcome(
-                analysisLabel: "tran",
-                measurements: [
-                    SimulationMeasurementValue(name: "vfinal", value: 1.0, unit: "V"),
-                ],
-                waveformCSV: "time,V(out)\n0,1\n"
-            )
+            return try await CoreSpiceSimulationEngine().execute(request)
+        }
+    }
+
+    private struct UnboundSimulationEngine: SimulationExecuting {
+        func execute(_ request: SimulationExecutionRequest) async throws -> SimulationStageOutcome {
+            try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
+                netlistSource: request.netlistSource,
+                fileName: request.fileName,
+                inputs: []
+            ))
         }
     }
 
     private struct FlakySimulationEngine: SimulationExecuting {
         let state: FlakySimulationEngineState
 
-        func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome {
-            try await state.run(netlistSource: netlistSource, fileName: fileName)
+        func execute(_ request: SimulationExecutionRequest) async throws -> SimulationStageOutcome {
+            try await state.execute(request)
         }
     }
 
     private actor FlakySimulationEngineState {
         private var runCount = 0
 
-        func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome {
+        func execute(_ request: SimulationExecutionRequest) async throws -> SimulationStageOutcome {
             runCount += 1
             if runCount == 1 {
                 throw TransientSimulationError()
             }
-            return try await CoreSpiceSimulationEngine().run(netlistSource: netlistSource, fileName: fileName)
+            return try await CoreSpiceSimulationEngine().execute(request)
         }
 
         func executionCount() -> Int {

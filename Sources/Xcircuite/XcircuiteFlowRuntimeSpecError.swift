@@ -2,6 +2,7 @@ import Foundation
 
 public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
     case unsupportedSchemaVersion(Int)
+    case unknownExecutorKind(String)
     case invalidPath(String)
     case emptyRunIntent
     case emptyRunStageList
@@ -12,6 +13,7 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
     case missingToolchainProfileField(String)
     case invalidToolchainProfileField(String)
     case missingExecutorInput(stageID: String, field: String)
+    case invalidExecutorConfiguration(stageID: String, reason: String)
     case conflictingExecutorInputs(stageID: String, fields: [String])
     case conflictingRuntimeToolDescriptor(toolID: String, stageIDs: [String])
     case conflictingRuntimeToolHealth(toolID: String, stageIDs: [String])
@@ -24,6 +26,8 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
         switch self {
         case .unsupportedSchemaVersion(let version):
             "Unsupported runtime spec schema version: \(version)"
+        case .unknownExecutorKind(let kind):
+            "Unknown runtime executor kind: \(kind)"
         case .invalidPath(let path):
             "Invalid runtime spec path: \(path)"
         case .emptyRunIntent:
@@ -44,6 +48,8 @@ public enum XcircuiteFlowRuntimeSpecError: Error, Equatable, LocalizedError {
             "Runtime spec toolchainProfile contains invalid field: \(field)"
         case .missingExecutorInput(let stageID, let field):
             "Runtime spec executor \(stageID) is missing required input: \(field)"
+        case .invalidExecutorConfiguration(let stageID, let reason):
+            "Runtime spec executor \(stageID) has invalid configuration: \(reason)"
         case .conflictingExecutorInputs(let stageID, let fields):
             "Runtime spec executor \(stageID) has conflicting inputs: \(fields.joined(separator: ", "))"
         case .conflictingRuntimeToolDescriptor(let toolID, let stageIDs):

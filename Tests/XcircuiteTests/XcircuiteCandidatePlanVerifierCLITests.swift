@@ -41,7 +41,10 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(result.status == "blocked")
         #expect(result.accepted == false)
         #expect(result.planVerificationArtifact.artifactID == XcircuitePlanningArtifactStore.planVerificationArtifactID)
-        #expect(result.planVerificationArtifact.path == ".xcircuite/runs/run-1/planning/plan-verification.json")
+        #expect(result.planVerificationArtifact.path.hasPrefix(
+            ".xcircuite/runs/run-1/planning/plan-verification/"
+        ))
+        #expect(result.planVerificationArtifact.path.hasSuffix(".json"))
         #expect(result.nextActions.contains("bind-operation-input-ref:document-ref"))
         #expect(result.nextActions.contains("bind-operation-input-ref:cell-ref"))
         #expect(result.nextActions.contains("bind-operation-input-ref:layer-ref"))
@@ -56,7 +59,9 @@ extension XcircuiteCandidatePlanVerifierTests {
             XcircuitePlanVerification.self,
             from: result.planVerificationArtifact.path
         )
-        #expect(verification.candidatePlanRef.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID)
+        #expect(verification.candidatePlanRef.locator.location.value.hasPrefix(
+            ".xcircuite/runs/run-1/planning/candidate-plans/"
+        ))
         #expect(verification.artifactRefs.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
         })
@@ -120,9 +125,9 @@ extension XcircuiteCandidatePlanVerifierTests {
         let action = try #require(actions.last)
         #expect(action.actionKind == "planning.verify-candidate-plan")
         #expect(action.status == .blocked)
-        #expect(action.inputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.candidatePlanArtifactID))
-        #expect(action.outputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.planVerificationArtifactID))
-        #expect(action.outputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.rejectedPlansArtifactID))
+        #expect(action.inputs.contains(verification.candidatePlanRef))
+        #expect(action.outputs.map(\.artifactID) == [XcircuitePlanningArtifactStore.planVerificationArtifactID])
+        #expect(result.rejectedPlansArtifact?.artifactID == XcircuitePlanningArtifactStore.rejectedPlansArtifactID)
         #expect(action.diagnostics.contains { $0.code == "unbound-operation-input-refs" })
         #expect(action.diagnostics.contains { $0.code == "unproven-operation-preconditions" })
 
@@ -159,14 +164,83 @@ extension XcircuiteCandidatePlanVerifierTests {
                 "run-1",
             ])
             Issue.record("Expected tampered candidate plan artifact to fail integrity verification.")
-        } catch let error as XcircuiteCandidatePlanVerificationError {
-            guard case .artifactIntegrityFailed(let path, let status, _) = error else {
-                Issue.record("Unexpected candidate plan verification error: \(error)")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .artifactIntegrityFailure(let path, let reason) = error else {
+                Issue.record("Unexpected ledger persistence error: \(error)")
                 return
             }
             #expect(path == generation.candidatePlanArtifact.path)
-            #expect(status == .byteCountMismatch || status == .sha256Mismatch)
+            #expect(reason.contains("byteCountMismatch") || reason.contains("digestMismatch"))
         }
+    }
+
+    @Test func concurrentIdenticalVerificationReusesOneExactActionRecord() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-concurrent-idempotent-verification")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-concurrent-verification"
+        let plan = XcircuiteCandidatePlan(
+            planID: "concurrent-plan",
+            problemID: "concurrent-problem",
+            runID: runID,
+            strategy: "verify-empty-completed-plan",
+            executionReadiness: "ready",
+            sourceProblemRef: XcircuitePlanningReference(
+                refID: "planning-problem",
+                kind: "planning-problem",
+                path: ".xcircuite/runs/\(runID)/planning/problem.json",
+                artifactID: XcircuitePlanningArtifactStore.problemArtifactID
+            ),
+            steps: [],
+            verificationGates: [],
+            constraints: [],
+            unresolvedObjectives: [],
+            blockers: []
+        )
+        let setupStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await setupStore.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: setupStore)
+        let setupArtifactStore = XcircuitePlanningArtifactStore(workspaceStore: setupStore)
+        _ = try await setupArtifactStore.persistPlanningProblem(
+            makeRetainedPlanningProblem(for: plan),
+            runID: runID,
+            projectRoot: root
+        )
+        _ = try await setupArtifactStore.persistCandidatePlan(
+            plan,
+            runID: runID,
+            projectRoot: root
+        )
+        _ = try await setupArtifactStore.persistActionDomainSnapshot(
+            runID: runID,
+            projectRoot: root,
+            generatedAt: "2026-07-19T00:00:00Z"
+        )
+
+        try await withThrowingTaskGroup(of: XcircuiteCandidatePlanVerificationResult.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    let store = try XcircuiteWorkspaceStore(projectRoot: root)
+                    return try await XcircuiteCandidatePlanVerifier(
+                        workspaceStore: store,
+                        artifactStore: XcircuitePlanningArtifactStore(workspaceStore: store)
+                    ).verifyCandidatePlan(
+                        request: XcircuiteCandidatePlanVerificationRequest(runID: runID),
+                        projectRoot: root
+                    )
+                }
+            }
+            for try await result in group {
+                #expect(result.status == "accepted")
+            }
+        }
+
+        let verificationActions = try await setupStore.loadRunActions(runID: runID).filter {
+            $0.actionKind == "planning.verify-candidate-plan"
+        }
+        #expect(verificationActions.count == 1)
+        let action = try #require(verificationActions.first)
+        #expect(action.inputs.count == 1)
+        #expect(action.outputs.count == 1)
     }
 
     @Test func runSelectedSuggestedActionDispatchesReadyVerifyCandidatePlan() async throws {
@@ -299,7 +373,12 @@ extension XcircuiteCandidatePlanVerifierTests {
         let data = try #require(json.data(using: .utf8))
         let result = try JSONDecoder().decode(XcircuiteCandidatePlanGenerationResult.self, from: data)
 
-        #expect(result.candidatePlanArtifact.artifactID == XcircuitePlanningArtifactStore.candidatePlanArtifactID)
+        #expect(result.candidatePlanArtifact.path.hasPrefix(
+            ".xcircuite/runs/run-1/planning/generated-candidate-plans/"
+        ))
+        #expect(result.candidatePlanArtifact.path.hasSuffix(
+            "/\(result.candidatePlanArtifact.digest.hexadecimalValue).json"
+        ))
         let trace = try #require(result.symbolicPlannerTrace)
         #expect(trace.rejectedPlansPath == ".xcircuite/runs/run-1/planning/rejected-plans.jsonl")
         #expect(trace.rejectedPlanFeedbackRecordCount == 1)

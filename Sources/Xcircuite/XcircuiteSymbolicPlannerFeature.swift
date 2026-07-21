@@ -2,7 +2,7 @@ public struct XcircuiteSymbolicPlannerFeature: Codable, Sendable, Hashable {
     public var coverageTag: String
     public var category: String
     public var capability: String
-    public var maturity: String
+    public var maturity: XcircuiteOperationMaturity
     public var requiredForCorpusTrust: Bool
     public var evidence: [String]
     public var remainingWork: [String]
@@ -11,7 +11,7 @@ public struct XcircuiteSymbolicPlannerFeature: Codable, Sendable, Hashable {
         coverageTag: String,
         category: String,
         capability: String,
-        maturity: String,
+        maturity: XcircuiteOperationMaturity,
         requiredForCorpusTrust: Bool,
         evidence: [String] = [],
         remainingWork: [String] = []

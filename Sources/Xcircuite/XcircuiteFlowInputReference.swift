@@ -138,6 +138,14 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
 
     func resolveExisting(projectRoot: URL, runDirectory: URL) throws -> URL {
         let url = try resolve(projectRoot: projectRoot, runDirectory: runDirectory)
+        if case .path(let path) = self {
+            return try Self.validateExistingFile(
+                url,
+                containedBy: [projectRoot],
+                missingPath: url.path(percentEncoded: false),
+                invalidReference: path
+            )
+        }
         if case .stageRawArtifact(let artifact) = self {
             return try Self.validateExistingFile(
                 url,
@@ -153,6 +161,48 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
             throw XcircuiteRuntimeError.inputReferenceMissing(url.path(percentEncoded: false))
         }
         return url
+    }
+
+    func resolveArtifactReference(
+        projectRoot: URL,
+        runDirectory: URL,
+        artifactID: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat? = nil
+    ) throws -> ArtifactReference {
+        let reference: ArtifactReference
+        switch self {
+        case .artifact(let providedReference):
+            _ = try resolveVerifiedArtifact(providedReference, projectRoot: projectRoot)
+            reference = providedReference
+        case .stageArtifact(let selector):
+            reference = try resolveStageArtifactReference(
+                selector,
+                projectRoot: projectRoot,
+                runDirectory: runDirectory
+            )
+        case .path, .stageRawArtifact:
+            let url = try resolveExisting(projectRoot: projectRoot, runDirectory: runDirectory)
+            reference = try StageArtifactReferenceBuilder().reference(
+                for: url,
+                projectRoot: projectRoot,
+                artifactID: artifactID,
+                role: .input,
+                kind: kind,
+                format: format ?? .unknown
+            )
+        }
+        guard reference.kind == kind else {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "\(reference.path) must be \(kind.rawValue), but is \(reference.kind.rawValue)"
+            )
+        }
+        if let format, reference.format != format {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "\(reference.path) must be \(kind.rawValue)/\(format.rawValue), but is \(reference.kind.rawValue)/\(reference.format.rawValue)"
+            )
+        }
+        return reference
     }
 
     private static func validatedRelativePathComponents(_ path: String) throws -> [String] {
@@ -174,6 +224,19 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         projectRoot: URL,
         runDirectory: URL
     ) throws -> URL {
+        let reference = try resolveStageArtifactReference(
+            selector,
+            projectRoot: projectRoot,
+            runDirectory: runDirectory
+        )
+        return try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
+    }
+
+    private func resolveStageArtifactReference(
+        _ selector: StageArtifact,
+        projectRoot: URL,
+        runDirectory: URL
+    ) throws -> ArtifactReference {
         try FlowIdentifierValidator().validate(selector.stageID, kind: .stageID)
         if let artifactID = selector.artifactID {
             try FlowIdentifierValidator().validate(artifactID, kind: .artifactID)
@@ -217,7 +280,8 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
                 matchCount: matches.count
             )
         }
-        return try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
+        _ = try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
+        return reference
     }
 
     private static func stageDirectory(runDirectory: URL, stageID: String) -> URL {

@@ -1,0 +1,144 @@
+name: Hosted Installed-Tool Matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-installed-tool-matrix-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LOCK_FILE: ci-artifacts/contracts/hosted-installed-tool-lock.json
+  MATRIX_RUNNER: scripts/ci/hosted_installed_tool_matrix.py
+
+jobs:
+  acquire-toolchain:
+    runs-on: macos-26
+    timeout-minutes: 240
+    steps:
+      - name: Check out Xcircuite
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Acquire pinned tools and PDK
+        run: >-
+          python3 "$MATRIX_RUNNER" acquire
+          --lock "$LOCK_FILE"
+          --toolchain-root "$RUNNER_TEMP/hosted-toolchain"
+          --evidence "ci-artifacts/hosted-installed-tool-matrix/acquisition/toolchain-evidence.json"
+          --archive "$RUNNER_TEMP/hosted-toolchain.tar.gz"
+
+      - name: Retain acquisition evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-toolchain-acquisition-evidence
+          path: ci-artifacts/hosted-installed-tool-matrix/acquisition
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish qualified toolchain to matrix jobs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-qualified-toolchain
+          path: ${{ runner.temp }}/hosted-toolchain.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  package-lanes:
+    needs: acquire-toolchain
+    runs-on: macos-26
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - drc
+          - lvs
+          - pex
+          - physical-design
+          - timing
+          - electrical-signoff
+          - xcircuite
+    steps:
+      - name: Check out Xcircuite workflow revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Download the single qualified toolchain
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: hosted-qualified-toolchain
+          path: ${{ runner.temp }}/toolchain-download
+
+      - name: Run real tool and package lane
+        run: >-
+          python3 "$MATRIX_RUNNER" run-lane
+          --lock "$LOCK_FILE"
+          --lane "${{ matrix.lane }}"
+          --archive "$RUNNER_TEMP/toolchain-download/hosted-toolchain.tar.gz"
+          --toolchain-root "$RUNNER_TEMP/hosted-toolchain"
+          --host-checkout "$GITHUB_WORKSPACE"
+          --work-root "$RUNNER_TEMP/package-checkouts"
+          --evidence-root "ci-artifacts/hosted-installed-tool-matrix/lanes/${{ matrix.lane }}"
+
+      - name: Retain lane evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-lane-${{ matrix.lane }}
+          path: |
+            ci-artifacts/hosted-installed-tool-matrix/lanes/${{ matrix.lane }}
+            !ci-artifacts/hosted-installed-tool-matrix/lanes/${{ matrix.lane }}/derived-data
+          if-no-files-found: error
+          retention-days: 90
+
+  publication-readiness:
+    if: always()
+    needs:
+      - acquire-toolchain
+      - package-lanes
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - name: Check out Xcircuite workflow revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Download all lane evidence
+        # Missing artifacts are converted into blocked evidence by the final gate.
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: hosted-lane-*
+          path: ci-artifacts/hosted-installed-tool-matrix/downloaded-lanes
+
+      - name: Assemble publication readiness
+        run: >-
+          python3 "$MATRIX_RUNNER" finalize
+          --lock "$LOCK_FILE"
+          --input-root "ci-artifacts/hosted-installed-tool-matrix/downloaded-lanes"
+          --output "ci-artifacts/hosted-installed-tool-matrix/publication-readiness.json"
+
+      - name: Retain publication readiness
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-installed-tool-publication-readiness
+          path: ci-artifacts/hosted-installed-tool-matrix/publication-readiness.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Enforce publication gate
+        run: >-
+          python3 "$MATRIX_RUNNER" gate
+          --evidence "ci-artifacts/hosted-installed-tool-matrix/publication-readiness.json"

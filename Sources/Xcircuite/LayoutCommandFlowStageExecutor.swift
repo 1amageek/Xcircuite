@@ -74,6 +74,11 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 baseURL: requestURL.deletingLastPathComponent()
             )
             try validateResult(result, expectedPaths: expectedPaths, projectRoot: try context.xcircuiteProjectRoot())
+            let runnerEvidence = try loadAndValidateRunnerEvidence(
+                result: result,
+                expectedPaths: expectedPaths,
+                projectRoot: try context.xcircuiteProjectRoot()
+            )
             try await context.checkCancellation()
             let document = try loadOutputDocument(at: expectedPaths.outputDocumentURL)
             let drcLayoutURL = try drcExport.map {
@@ -88,10 +93,10 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
                 )
             }
             let artifacts = try artifactReferences(
-                result: result,
                 expectedPaths: expectedPaths,
                 drcLayoutURL: drcLayoutURL,
                 standardLayoutArtifacts: standardLayoutArtifacts,
+                runnerEvidence: runnerEvidence,
                 context: context
             )
             let diagnostic = FlowDiagnostic(
@@ -258,6 +263,83 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         )
     }
 
+    private func loadAndValidateRunnerEvidence(
+        result: LayoutCommandResult,
+        expectedPaths: LayoutCommandArtifactPaths,
+        projectRoot: URL
+    ) throws -> EvidenceManifest {
+        let manifest: EvidenceManifest
+        do {
+            let data = try Data(contentsOf: expectedPaths.artifactManifestURL)
+            manifest = try decoder.decode(EvidenceManifest.self, from: data)
+        } catch {
+            throw LayoutCommandFlowStageExecutorError.invalidEvidenceManifest(
+                path: canonicalPath(expectedPaths.artifactManifestURL),
+                reason: error.localizedDescription
+            )
+        }
+
+        guard result.outputArtifact.producer == manifest.provenance.producer else {
+            throw LayoutCommandFlowStageExecutorError.runnerProducerMismatch(
+                path: canonicalPath(expectedPaths.outputDocumentURL)
+            )
+        }
+
+        var artifactsByPath: [String: ArtifactReference] = [:]
+        for artifact in manifest.artifacts {
+            let artifactURL = try artifact.locator.location.resolvedFileURL(relativeTo: projectRoot)
+            let relativePath = try ProjectPathBoundary().relativePath(
+                for: artifactURL,
+                projectRoot: projectRoot
+            )
+            let path = canonicalPath(artifactURL)
+            guard artifactsByPath[path] == nil else {
+                throw LayoutCommandFlowStageExecutorError.duplicateEvidenceArtifactPath(path)
+            }
+            let isInput = manifest.provenance.inputs.contains(artifact)
+            if !isInput, artifact.producer != manifest.provenance.producer {
+                throw LayoutCommandFlowStageExecutorError.runnerProducerMismatch(path: path)
+            }
+            let normalized = try artifactBuilder.reference(
+                for: artifactURL,
+                projectRoot: projectRoot,
+                role: artifact.locator.role,
+                kind: artifact.kind,
+                format: artifact.format,
+                producer: artifact.producer
+            )
+            guard normalized.digest == artifact.digest else {
+                throw LayoutCommandFlowStageExecutorError.runnerArtifactDigestMismatch(
+                    path: relativePath,
+                    expected: artifact.digest.hexadecimalValue,
+                    actual: normalized.digest.hexadecimalValue
+                )
+            }
+            guard normalized.byteCount == artifact.byteCount else {
+                throw LayoutCommandFlowStageExecutorError.runnerArtifactByteCountMismatch(
+                    path: relativePath,
+                    expected: artifact.byteCount,
+                    actual: normalized.byteCount
+                )
+            }
+            artifactsByPath[path] = artifact
+        }
+
+        let outputPath = canonicalPath(expectedPaths.outputDocumentURL)
+        guard let manifestOutput = artifactsByPath[outputPath] else {
+            throw LayoutCommandFlowStageExecutorError.missingEvidenceArtifact(path: outputPath)
+        }
+        guard manifestOutput == result.outputArtifact else {
+            throw LayoutCommandFlowStageExecutorError.resultEvidenceMismatch(path: outputPath)
+        }
+
+        let resultPath = canonicalPath(expectedPaths.resultURL)
+        guard artifactsByPath[resultPath] != nil else {
+            throw LayoutCommandFlowStageExecutorError.missingEvidenceArtifact(path: resultPath)
+        }
+        return manifest
+    }
+
     private func exportDRCLayout(
         from document: LayoutDocument,
         spec: LayoutCommandDRCExportSpec,
@@ -345,8 +427,10 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
             return .gdsii
         case .oasis:
             return .oasis
-        case .cif, .dxf:
-            return .raw
+        case .cif:
+            return .cif
+        case .dxf:
+            return .dxf
         case .json, .lef, .def, .odb:
             throw LayoutCommandStandardLayoutExportError.unsupportedFormat(format.rawValue)
         }
@@ -470,58 +554,75 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
     }
 
     private func artifactReferences(
-        result: LayoutCommandResult,
         expectedPaths: LayoutCommandArtifactPaths,
         drcLayoutURL: URL?,
         standardLayoutArtifacts: [StandardLayoutArtifact],
+        runnerEvidence: EvidenceManifest,
         context: FlowExecutionContext
     ) throws -> [ArtifactReference] {
-        var artifacts = [
-            try artifactBuilder.reference(
-                for: expectedPaths.outputDocumentURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
-                artifactID: "layout-document",
-                kind: ArtifactKind.layout,
-                format: ArtifactFormat.json
-            ),
+        let projectRoot = try context.xcircuiteProjectRoot()
+        let inputArtifacts = Set(runnerEvidence.provenance.inputs)
+        var artifacts = try runnerEvidence.artifacts.compactMap { source -> ArtifactReference? in
+            guard !inputArtifacts.contains(source) else {
+                return nil
+            }
+            let url = try source.locator.location.resolvedFileURL(relativeTo: projectRoot)
+            let path = canonicalPath(url)
+            let artifactID: String
+            if path == canonicalPath(expectedPaths.outputDocumentURL) {
+                artifactID = "layout-document"
+            } else if path == canonicalPath(expectedPaths.resultURL) {
+                artifactID = "layout-command-result"
+            } else {
+                artifactID = source.id.rawValue
+            }
+            return try artifactBuilder.reference(
+                for: url,
+                projectRoot: projectRoot,
+                artifactID: artifactID,
+                role: source.locator.role,
+                kind: source.kind,
+                format: source.format,
+                producer: source.producer
+            )
+        }
+        artifacts.append(contentsOf: [
             try artifactBuilder.reference(
                 for: expectedPaths.artifactManifestURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
+                projectRoot: projectRoot,
                 artifactID: "layout-command-manifest",
+                role: try ArtifactRole(validatingRawValue: "evidence-manifest"),
                 kind: ArtifactKind.report,
-                format: ArtifactFormat.json
-            ),
-            try artifactBuilder.reference(
-                for: expectedPaths.resultURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
-                artifactID: "layout-command-result",
-                kind: ArtifactKind.report,
-                format: ArtifactFormat.json
+                format: ArtifactFormat.json,
+                producer: runnerEvidence.provenance.producer
             ),
             try artifactBuilder.reference(
                 for: expectedPaths.effectiveRequestURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
+                projectRoot: projectRoot,
                 artifactID: "layout-command-effective-request",
+                role: .input,
                 kind: ArtifactKind.other,
                 format: ArtifactFormat.json
             ),
-        ]
+        ])
         if let drcLayoutURL {
             artifacts.append(try artifactBuilder.reference(
                 for: drcLayoutURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
+                projectRoot: projectRoot,
                 artifactID: "drc-layout",
                 kind: ArtifactKind.layout,
-                format: ArtifactFormat.json
+                format: ArtifactFormat.json,
+                producer: runnerEvidence.provenance.producer
             ))
         }
         for artifact in standardLayoutArtifacts {
             artifacts.append(try artifactBuilder.reference(
                 for: artifact.url,
-                projectRoot: try context.xcircuiteProjectRoot(),
+                projectRoot: projectRoot,
                 artifactID: artifact.artifactID,
                 kind: ArtifactKind.layout,
-                format: artifact.format
+                format: artifact.format,
+                producer: runnerEvidence.provenance.producer
             ))
         }
         return artifacts
@@ -588,6 +689,13 @@ private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {
     case outputDocumentByteCountMismatch(path: String, expected: Int64, actual: Int64)
     case outputDocumentDigestMismatch(path: String, expected: String, actual: String)
     case outputDocumentIntegrityFailure(path: String, issue: String)
+    case invalidEvidenceManifest(path: String, reason: String)
+    case duplicateEvidenceArtifactPath(String)
+    case missingEvidenceArtifact(path: String)
+    case resultEvidenceMismatch(path: String)
+    case runnerProducerMismatch(path: String)
+    case runnerArtifactByteCountMismatch(path: String, expected: UInt64, actual: UInt64)
+    case runnerArtifactDigestMismatch(path: String, expected: String, actual: String)
 
     var diagnosticCode: String {
         switch self {
@@ -603,6 +711,20 @@ private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {
             "LAYOUT_COMMAND_OUTPUT_SHA256_MISMATCH"
         case .outputDocumentIntegrityFailure:
             "LAYOUT_COMMAND_OUTPUT_INTEGRITY_FAILURE"
+        case .invalidEvidenceManifest:
+            "LAYOUT_COMMAND_EVIDENCE_MANIFEST_INVALID"
+        case .duplicateEvidenceArtifactPath:
+            "LAYOUT_COMMAND_EVIDENCE_ARTIFACT_DUPLICATE"
+        case .missingEvidenceArtifact:
+            "LAYOUT_COMMAND_EVIDENCE_ARTIFACT_MISSING"
+        case .resultEvidenceMismatch:
+            "LAYOUT_COMMAND_RESULT_EVIDENCE_MISMATCH"
+        case .runnerProducerMismatch:
+            "LAYOUT_COMMAND_PRODUCER_MISMATCH"
+        case .runnerArtifactByteCountMismatch:
+            "LAYOUT_COMMAND_EVIDENCE_BYTE_COUNT_MISMATCH"
+        case .runnerArtifactDigestMismatch:
+            "LAYOUT_COMMAND_EVIDENCE_DIGEST_MISMATCH"
         }
     }
 
@@ -620,6 +742,20 @@ private enum LayoutCommandFlowStageExecutorError: LocalizedError, Equatable {
             "Layout command output SHA-256 mismatch for \(path): expected \(expected), got \(actual)."
         case .outputDocumentIntegrityFailure(let path, let issue):
             "Layout command output integrity verification failed for \(path): \(issue)."
+        case .invalidEvidenceManifest(let path, let reason):
+            "Layout command evidence manifest at \(path) is invalid: \(reason)."
+        case .duplicateEvidenceArtifactPath(let path):
+            "Layout command evidence manifest contains duplicate artifact path \(path)."
+        case .missingEvidenceArtifact(let path):
+            "Layout command evidence manifest does not contain required artifact \(path)."
+        case .resultEvidenceMismatch(let path):
+            "Layout command result and evidence manifest disagree for \(path)."
+        case .runnerProducerMismatch(let path):
+            "Layout command artifact producer does not match execution provenance for \(path)."
+        case .runnerArtifactByteCountMismatch(let path, let expected, let actual):
+            "Layout command evidence byte count mismatch for \(path): expected \(expected), got \(actual)."
+        case .runnerArtifactDigestMismatch(let path, let expected, let actual):
+            "Layout command evidence digest mismatch for \(path): expected \(expected), got \(actual)."
         }
     }
 }

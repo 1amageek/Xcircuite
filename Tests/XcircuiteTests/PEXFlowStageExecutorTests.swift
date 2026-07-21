@@ -16,7 +16,9 @@ struct PEXFlowStageExecutorTests {
         _ = try writeText("tt-deck", name: "deck-tt.rc", root: root)
         _ = try writeText("ss-deck", name: "deck-ss.rc", root: root)
         let qualification = try await QualifiedToolFixtures.qualificationRecord(
-            for: SignoffToolDescriptors.pexBackend(backendID: "test-fixture"),
+            for: SignoffToolDescriptors.pexBackend(
+                selection: PEXBackendSelection(backendID: "test-fixture")
+            ),
             level: .smokeChecked,
             projectRoot: root
         )
@@ -75,9 +77,15 @@ struct PEXFlowStageExecutorTests {
         #expect(result.stages[0].gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.stages[0].diagnostics.contains { $0.code == "PEX_WARNING" })
         #expect(artifacts.contains { $0.path.hasSuffix("manifest.json") })
+        let canonicalResultArtifact = try #require(
+            artifacts.first { $0.artifactID == "pex-run-result" }
+        )
+        #expect(canonicalResultArtifact.producer?.identifier == "pex-test-fixture")
+        #expect(canonicalResultArtifact.producer?.build == String(repeating: "1", count: 64))
         let summaryArtifact = try #require(artifacts.first { $0.artifactID == "pex-summary" })
         #expect(summaryArtifact.kind == .report)
         #expect(summaryArtifact.format == .json)
+        #expect(summaryArtifact.producer == canonicalResultArtifact.producer)
         let summaryURL = root.appending(path: summaryArtifact.path)
         let summary = try JSONDecoder().decode(
             PEXRunSummaryReport.self,
@@ -94,7 +102,7 @@ struct PEXFlowStageExecutorTests {
         #expect(summary.summary.multiCorner.totalResistance.spread > 0)
         #expect(summary.summary.multiCorner.topNetSpreads.isEmpty == false)
         let envelopeArtifact = try #require(artifacts.first {
-            $0.path.hasSuffix("evidence/pex-summary-envelope.json")
+            $0.path.hasSuffix("-pex-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -234,7 +242,7 @@ struct PEXFlowStageExecutorTests {
         let pexSummary = try #require(pexStage.artifacts.first { $0.artifactID == "pex-summary" })
         let comparison = try #require(comparisonStage.artifacts.first { $0.artifactID == "post-layout-comparison" })
         let envelopeArtifact = try #require(pexStage.artifacts.first {
-            $0.path.hasSuffix("evidence/pex-summary-envelope.json")
+            $0.path.hasSuffix("-pex-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -349,7 +357,8 @@ struct PEXFlowStageExecutorTests {
                 PEXArtifactCorner(cornerID: cornerID, status: .success, artifactIDs: [irRecord.id, rawRecord.id]),
             ],
             artifacts: [irRecord, rawRecord],
-            warnings: []
+            warnings: [],
+            provenance: try pexTestProvenance(startedAt: now, finishedAt: now)
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -511,7 +520,7 @@ struct PEXFlowStageExecutorTests {
             $0.path.contains(".xcircuite/runs/run-pex/stages/009-pex/raw")
         })
         #expect(result.stages[0].artifacts.contains {
-            $0.path.hasSuffix("evidence/pex-summary-envelope.json")
+            $0.path.hasSuffix("-pex-summary-envelope.json")
         })
         #expect(directoryIsEmpty(externalDirectory))
     }
@@ -613,7 +622,7 @@ struct PEXFlowStageExecutorTests {
         #expect(stage.artifacts.contains { $0.path.hasSuffix("manifest.json") })
         #expect(!stage.artifacts.contains { $0.path.hasSuffix("tt.spef") })
         let envelopeArtifact = try #require(stage.artifacts.first {
-            $0.path.hasSuffix("evidence/pex-summary-envelope.json")
+            $0.path.hasSuffix("-pex-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -691,45 +700,43 @@ struct PEXFlowStageExecutorTests {
             root: externalRoot
         )
 
-        let result = try await makeOrchestrator(root: root).run(
-            request: FlowOperationRequest(
-                workspaceID: try await workspaceID(projectRoot: root),
-                runID: "run-pex",
-                intent: "Run PEX",
-                stages: [
-                    FlowStageDefinition(stageID: "009-pex", displayName: "PEX"),
-                ]
-            ),
-            toolRegistry: ToolRegistry(),
-            healthResults: [:],
-            executors: [
-                PEXFlowStageExecutor(
-                    stageID: "009-pex",
-                    toolID: "pex-test-fixture",
-                    request: PEXRunRequest(
-                        layoutURL: layoutURL,
-                        layoutFormat: .gds,
-                        sourceNetlistURL: netlistURL,
-                        sourceNetlistFormat: .spice,
-                        topCell: "TESTCELL",
-                        corners: [PEXCorner(id: "tt")],
-                        technology: .inline(makeTestTech()),
-                        backendSelection: PEXBackendSelection(backendID: "test-fixture"),
-                        options: .default
-                    ),
-                    engine: EscapingArtifactPEXEngine(externalArtifactURL: externalArtifactURL)
+        await #expect(throws: FlowExecutionError.artifactIntegrityFailure(
+            stageID: "009-pex",
+            artifactID: "raw-tt",
+            artifactPath: ".xcircuite/runs/run-pex/stages/009-pex/raw/raw/tt/tt.spef",
+            issues: ["invalidLocation"]
+        )) {
+            try await makeOrchestrator(root: root).run(
+                request: FlowOperationRequest(
+                    workspaceID: try await workspaceID(projectRoot: root),
+                    runID: "run-pex",
+                    intent: "Run PEX",
+                    stages: [
+                        FlowStageDefinition(stageID: "009-pex", displayName: "PEX"),
+                    ]
                 ),
-            ]
-        )
-
-        let stage = result.stages[0]
-        #expect(result.status == .failed)
-        #expect(stage.gates.contains { $0.gateID == "pex-artifacts" && $0.status == .failed })
-        #expect(stage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .failed })
-        #expect(stage.diagnostics.contains { $0.code == "PEX_ARTIFACT_pathEscapesRunDirectory" })
-        #expect(stage.diagnostics.contains { $0.code == "ARTIFACT_INTEGRITY_INVALID_PATH" })
-        #expect(stage.artifacts.contains { $0.path.hasSuffix("tt.spef") })
-        #expect(!stage.artifacts.contains { $0.path.hasSuffix("evidence/pex-summary-envelope.json") })
+                toolRegistry: ToolRegistry(),
+                healthResults: [:],
+                executors: [
+                    PEXFlowStageExecutor(
+                        stageID: "009-pex",
+                        toolID: "pex-test-fixture",
+                        request: PEXRunRequest(
+                            layoutURL: layoutURL,
+                            layoutFormat: .gds,
+                            sourceNetlistURL: netlistURL,
+                            sourceNetlistFormat: .spice,
+                            topCell: "TESTCELL",
+                            corners: [PEXCorner(id: "tt")],
+                            technology: .inline(makeTestTech()),
+                            backendSelection: PEXBackendSelection(backendID: "test-fixture"),
+                            options: .default
+                        ),
+                        engine: EscapingArtifactPEXEngine(externalArtifactURL: externalArtifactURL)
+                    ),
+                ]
+            )
+        }
     }
 
     @Test func pexExecutorRejectsExternalManifestBeforeReadingSummarySource() async throws {
@@ -970,7 +977,8 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ],
                 artifacts: [rawRecord, omittedIRRecord],
-                warnings: []
+                warnings: [],
+                provenance: try pexTestProvenance(startedAt: now, finishedAt: now)
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -1154,7 +1162,8 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ],
                 artifacts: [rawRecord, omittedIRRecord],
-                warnings: []
+                warnings: [],
+                provenance: try pexTestProvenance(startedAt: now, finishedAt: now)
             )
             let persistedManifest = PEXArtifactManifest(
                 runID: runID,
@@ -1165,7 +1174,8 @@ struct PEXFlowStageExecutorTests {
                 finishedAt: now,
                 corners: returnedManifest.corners,
                 artifacts: [rawRecord, omittedIRRecord, extraRecord],
-                warnings: []
+                warnings: [],
+                provenance: try pexTestProvenance(startedAt: now, finishedAt: now)
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -1276,7 +1286,8 @@ struct PEXFlowStageExecutorTests {
                     ),
                 ],
                 artifacts: [rawRecord, omittedIRRecord],
-                warnings: []
+                warnings: [],
+                provenance: try pexTestProvenance(startedAt: now, finishedAt: now)
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -1329,7 +1340,8 @@ struct PEXFlowStageExecutorTests {
                 finishedAt: now,
                 corners: [],
                 artifacts: [],
-                warnings: []
+                warnings: [],
+                provenance: try pexTestProvenance(startedAt: now, finishedAt: now)
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -1355,5 +1367,30 @@ struct PEXFlowStageExecutorTests {
             )
         }
     }
+}
+
+private func pexTestProvenance(
+    startedAt: Date,
+    finishedAt: Date,
+    inputs: [ArtifactReference] = []
+) throws -> ExecutionProvenance {
+    let binaryDigest = String(repeating: "1", count: 64)
+    return try ExecutionProvenance(
+        producer: ProducerIdentity(
+            kind: .tool,
+            identifier: "pex-test-fixture",
+            version: "unqualified",
+            build: binaryDigest
+        ),
+        inputs: inputs,
+        invocation: ExecutionInvocation.inProcess(entryPoint: "XcircuiteTests.PEXFixture"),
+        environment: ExecutionEnvironmentFingerprint(
+            platform: "test",
+            architecture: "test",
+            toolchain: "test"
+        ),
+        startedAt: startedAt,
+        completedAt: finishedAt
+    )
 }
 import CircuiteFoundation

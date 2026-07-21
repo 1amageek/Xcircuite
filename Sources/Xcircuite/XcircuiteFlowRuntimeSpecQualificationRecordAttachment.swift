@@ -26,6 +26,10 @@ public extension XcircuiteFlowRuntimeSpec {
 public extension XcircuiteFlowStageExecutorSpec {
     var stageID: String {
         switch self {
+        case .logicElaboration(let spec): spec.stageID
+        case .logicLowering(let spec): spec.stageID
+        case .logicSimulation(let spec): spec.stageID
+        case .powerIntent(let spec): spec.stageID
         case .layoutCommand(let spec): spec.stageID
         case .nativeDRC(let spec): spec.stageID
         case .nativeLVS(let spec): spec.stageID
@@ -39,13 +43,17 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .dftExecution(let spec): spec.stageID
         case .dftOracleCorrelation(let spec): spec.stageID
         case .processQualificationEvidenceBuild(let spec): spec.stageID
+        case .physicalDesign(let spec): spec.stageID
         case .physicalReview(let spec): spec.stageID
+        case .timingSTA(let spec): spec.stageID
+        case .timingSignalIntegrity(let spec): spec.stageID
         case .pdkDiscovery(let spec): spec.stageID
         case .pdkValidation(let spec): spec.stageID
         case .pdkCorpus(let spec): spec.stageID
         case .pdkStandardView(let spec): spec.stageID
         case .pdkRuleDeck(let spec): spec.stageID
         case .pdkOracle(let spec): spec.stageID
+        case .releaseEvidenceAssembly(let spec): spec.stageID
         case .releaseAuthorization(let spec): spec.stageID
         case .releaseSignoff(let spec): spec.stageID
         case .releaseTapeout(let spec): spec.stageID
@@ -58,6 +66,10 @@ public extension XcircuiteFlowStageExecutorSpec {
 
     func attachingQualificationRecord(_ reference: ArtifactReference) -> Self {
         switch self {
+        case .logicElaboration(var spec): spec.tool.qualificationRecord = reference; return .logicElaboration(spec)
+        case .logicLowering(var spec): spec.tool.qualificationRecord = reference; return .logicLowering(spec)
+        case .logicSimulation(var spec): spec.tool.qualificationRecord = reference; return .logicSimulation(spec)
+        case .powerIntent(var spec): spec.tool.qualificationRecord = reference; return .powerIntent(spec)
         case .layoutCommand(var spec): spec.tool.qualificationRecord = reference; return .layoutCommand(spec)
         case .nativeDRC(var spec): spec.tool.qualificationRecord = reference; return .nativeDRC(spec)
         case .nativeLVS(var spec): spec.tool.qualificationRecord = reference; return .nativeLVS(spec)
@@ -71,13 +83,17 @@ public extension XcircuiteFlowStageExecutorSpec {
         case .dftExecution(var spec): spec.tool.qualificationRecord = reference; return .dftExecution(spec)
         case .dftOracleCorrelation(var spec): spec.tool.qualificationRecord = reference; return .dftOracleCorrelation(spec)
         case .processQualificationEvidenceBuild(var spec): spec.tool.qualificationRecord = reference; return .processQualificationEvidenceBuild(spec)
+        case .physicalDesign(var spec): spec.tool.qualificationRecord = reference; return .physicalDesign(spec)
         case .physicalReview(var spec): spec.tool.qualificationRecord = reference; return .physicalReview(spec)
+        case .timingSTA(var spec): spec.tool.qualificationRecord = reference; return .timingSTA(spec)
+        case .timingSignalIntegrity(var spec): spec.tool.qualificationRecord = reference; return .timingSignalIntegrity(spec)
         case .pdkDiscovery(var spec): spec.tool.qualificationRecord = reference; return .pdkDiscovery(spec)
         case .pdkValidation(var spec): spec.tool.qualificationRecord = reference; return .pdkValidation(spec)
         case .pdkCorpus(var spec): spec.tool.qualificationRecord = reference; return .pdkCorpus(spec)
         case .pdkStandardView(var spec): spec.tool.qualificationRecord = reference; return .pdkStandardView(spec)
         case .pdkRuleDeck(var spec): spec.tool.qualificationRecord = reference; return .pdkRuleDeck(spec)
         case .pdkOracle(var spec): spec.tool.qualificationRecord = reference; return .pdkOracle(spec)
+        case .releaseEvidenceAssembly(var spec): spec.tool.qualificationRecord = reference; return .releaseEvidenceAssembly(spec)
         case .releaseAuthorization(var spec): spec.tool.qualificationRecord = reference; return .releaseAuthorization(spec)
         case .releaseSignoff(var spec): spec.tool.qualificationRecord = reference; return .releaseSignoff(spec)
         case .releaseTapeout(var spec): spec.tool.qualificationRecord = reference; return .releaseTapeout(spec)

@@ -239,21 +239,19 @@ extension XcircuiteCandidatePlanVerifier {
 
     func sourcePlanningProblem(
         for plan: XcircuiteCandidatePlan,
-        manifest: FlowRunManifest,
-        projectRoot: URL
-    ) throws -> XcircuiteCircuitPlanningProblem? {
-        let problemURL: URL
-        if let path = plan.sourceProblemRef.path {
-            problemURL = try projectURL(for: path, projectRoot: projectRoot)
-        } else if let artifactID = plan.sourceProblemRef.artifactID,
-                  let artifact = manifest.artifacts.first(where: { $0.artifactID == artifactID }) {
-            problemURL = try projectURL(for: artifact.path, projectRoot: projectRoot)
-        } else {
+        manifest: FlowRunManifest
+    ) async throws -> XcircuiteCircuitPlanningProblem? {
+        guard plan.sourceProblemRef.path != nil || plan.sourceProblemRef.artifactID != nil else {
             return nil
         }
-        let problem = try JSONDecoder().decode(
-            XcircuiteCircuitPlanningProblem.self,
-            from: Data(contentsOf: problemURL)
+        let reference = try requiredSourceProblemReference(
+            plan.sourceProblemRef,
+            manifest: manifest,
+            runID: plan.runID
+        )
+        let problem: XcircuiteCircuitPlanningProblem = try await decodeRetainedArtifact(
+            reference,
+            as: XcircuiteCircuitPlanningProblem.self
         )
         guard problem.runID == plan.runID else {
             throw CandidatePlanGateExecutionError.sourceProblemRunMismatch(
@@ -262,21 +260,6 @@ extension XcircuiteCandidatePlanVerifier {
             )
         }
         return problem
-    }
-
-    func url(
-        for reference: XcircuitePlanningReference,
-        manifest: FlowRunManifest,
-        projectRoot: URL
-    ) throws -> URL {
-        if let path = reference.path {
-            return try projectURL(for: path, projectRoot: projectRoot)
-        }
-        if let artifactID = reference.artifactID,
-           let artifact = manifest.artifacts.first(where: { $0.artifactID == artifactID }) {
-            return try projectURL(for: artifact.path, projectRoot: projectRoot)
-        }
-        throw CandidatePlanGateExecutionError.planningReferencePathMissing(reference.refID)
     }
 
     func lvsLayoutFormat(from value: String?) throws -> LVSLayoutFormat? {

@@ -208,7 +208,7 @@ extension XcircuiteCandidatePlanGenerator {
 
     func scoreComponents(
         for action: XcircuitePlanningCandidateAction,
-        effectiveMaturity: String,
+        effectiveMaturity: XcircuiteOperationMaturity,
         verificationGates: [String],
         operation: XcircuiteActionDomainOperation?,
         missingRefs: [String],

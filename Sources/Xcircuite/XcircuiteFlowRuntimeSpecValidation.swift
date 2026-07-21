@@ -37,12 +37,100 @@ public extension XcircuiteFlowRuntimeSpec {
 private extension XcircuiteFlowStageExecutorSpec {
     func validateRequiredInputs(toolchainProfile: XcircuiteFlowToolchainProfile?) throws {
         switch self {
-        case .nativeDRC(let spec):
-            if spec.layoutPath == nil && spec.layoutInput == nil {
+        case .logicElaboration(let spec):
+            try validateInput(spec.sourceInput, stageID: spec.stageID, field: "sourceInput")
+            guard !spec.topDesignName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
-                    field: "layoutPath or layoutInput"
+                    field: "topDesignName"
                 )
+            }
+        case .logicLowering(let spec):
+            try validateLogicInputMode(
+                requestInput: spec.requestInput,
+                designInput: spec.designInput,
+                topDesignName: spec.topDesignName,
+                stageID: spec.stageID
+            )
+        case .logicSimulation(let spec):
+            try validateLogicInputMode(
+                requestInput: spec.requestInput,
+                designInput: spec.designInput,
+                topDesignName: spec.topDesignName,
+                stageID: spec.stageID
+            )
+            if let stimulusInput = spec.stimulusInput {
+                try validateInput(stimulusInput, stageID: spec.stageID, field: "stimulusInput")
+            }
+            if spec.requestInput == nil {
+                try validateInput(
+                    try requiredRuntimeInput(spec.pdkInput, stageID: spec.stageID, field: "pdkInput"),
+                    stageID: spec.stageID,
+                    field: "pdkInput"
+                )
+            }
+        case .powerIntent(let spec):
+            try validateInput(spec.sourceInput, stageID: spec.stageID, field: "sourceInput")
+            try validateInput(spec.designInput, stageID: spec.stageID, field: "designInput")
+            try validateInput(spec.pdkInput, stageID: spec.stageID, field: "pdkInput")
+            guard !spec.topDesignName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "topDesignName"
+                )
+            }
+        case .layoutCommand(let spec):
+            try validateRequestPath(spec.requestPath, stageID: spec.stageID)
+        case .nativeDRC(let spec):
+            let layoutFields = [
+                ("layoutPath", spec.layoutPath != nil),
+                ("layoutInput", spec.layoutInput != nil),
+            ].compactMap { field, isPresent in
+                isPresent ? field : nil
+            }
+            guard layoutFields.count == 1 else {
+                if layoutFields.isEmpty {
+                    throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                        stageID: spec.stageID,
+                        field: "layoutPath or layoutInput"
+                    )
+                }
+                throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
+                    stageID: spec.stageID,
+                    fields: layoutFields
+                )
+            }
+            if let layoutPath = spec.layoutPath,
+               layoutPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "layoutPath"
+                )
+            }
+            if let layoutInput = spec.layoutInput {
+                try validateInput(layoutInput, stageID: spec.stageID, field: "layoutInput")
+            }
+            guard !spec.topCell.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "topCell"
+                )
+            }
+            if spec.technologyPath != nil, spec.technologyInput != nil {
+                throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
+                    stageID: spec.stageID,
+                    fields: ["technologyPath", "technologyInput"]
+                )
+            }
+            if let technologyPath = spec.technologyPath,
+               technologyPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "technologyPath"
+                )
+            }
+            if let technologyInput = spec.technologyInput {
+                try validateInput(technologyInput, stageID: spec.stageID, field: "technologyInput")
             }
         case .nativeLVS(let spec):
             try spec.validateLayoutInputs()
@@ -58,8 +146,11 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .postLayoutComparison(let spec):
             try spec.validatePreLayoutWaveformInputs()
             try spec.validatePostLayoutWaveformInputs()
+        case .coreSpiceSimulation(let spec):
+            try validateInput(spec.netlistInput, stageID: spec.stageID, field: "netlistInput")
         case .rtlVerification(let spec):
             try validateInput(spec.rtlInput, stageID: spec.stageID, field: "rtlInput")
+            try validateInput(spec.pdkInput, stageID: spec.stageID, field: "pdkInput")
             for (index, input) in spec.additionalRTLInputs.enumerated() {
                 try validateInput(input, stageID: spec.stageID, field: "additionalRTLInputs[\(index)]")
             }
@@ -126,6 +217,26 @@ private extension XcircuiteFlowStageExecutorSpec {
             try validateInput(spec.observationsInput, stageID: spec.stageID, field: "observationsInput")
         case .processQualificationEvidenceBuild(let spec):
             try validateInput(spec.buildRequestInput, stageID: spec.stageID, field: "buildRequestInput")
+        case .physicalDesign(let spec):
+            try validateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
+            if let designInput = spec.designInput {
+                try validateInput(designInput, stageID: spec.stageID, field: "designInput")
+            }
+            if let constraintsInput = spec.constraintsInput {
+                try validateInput(constraintsInput, stageID: spec.stageID, field: "constraintsInput")
+            }
+            if let pdkInput = spec.pdkInput {
+                try validateInput(pdkInput, stageID: spec.stageID, field: "pdkInput")
+            }
+            if let inputLayoutInput = spec.inputLayoutInput {
+                try validateInput(inputLayoutInput, stageID: spec.stageID, field: "inputLayoutInput")
+            }
+            guard !spec.allowedStages.isEmpty else {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "allowedStages"
+                )
+            }
         case .physicalReview(let spec):
             try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
             guard !spec.reviewScope.isEmpty,
@@ -135,11 +246,25 @@ private extension XcircuiteFlowStageExecutorSpec {
                     field: "reviewScope"
                 )
             }
+        case .timingSTA(let spec):
+            try validateTimingSTAInputs(spec.inputs, stageID: spec.stageID)
+        case .timingSignalIntegrity(let spec):
+            try validateTimingSignalIntegrityInputs(spec.inputs, stageID: spec.stageID)
         case .pdkDiscovery(let spec):
             guard !spec.searchRoots.isEmpty else {
                 throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
                     stageID: spec.stageID,
                     field: "searchRoots"
+                )
+            }
+            for (index, input) in spec.searchRoots.enumerated() {
+                try validateInput(input, stageID: spec.stageID, field: "searchRoots[\(index)]")
+            }
+            if let requiredProcessID = spec.requiredProcessID,
+               requiredProcessID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                    stageID: spec.stageID,
+                    field: "requiredProcessID"
                 )
             }
         case .pdkValidation(let spec):
@@ -172,12 +297,37 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .pdkOracle(let spec):
             try validateInput(spec.manifestInput, stageID: spec.stageID, field: "manifestInput")
             try validateInput(spec.oracleInput, stageID: spec.stageID, field: "oracleInput")
+        case .releaseEvidenceAssembly(let spec):
+            try validateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
         case .releaseAuthorization(let spec):
-            try validateRequestPath(spec.requestPath, stageID: spec.stageID)
+            try validateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
         case .releaseSignoff(let spec):
-            try validateRequestPath(spec.requestPath, stageID: spec.stageID)
+            try validateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
         case .releaseTapeout(let spec):
-            try validateRequestPath(spec.requestPath, stageID: spec.stageID)
+            try validateInput(spec.requestInput, stageID: spec.stageID, field: "requestInput")
+            if let geometricXOR = spec.geometricXOR {
+                try validateInput(
+                    geometricXOR.qualificationInput,
+                    stageID: spec.stageID,
+                    field: "geometricXOR.qualificationInput"
+                )
+                guard geometricXOR.reportOutput.location.storage == .workspaceRelative,
+                      geometricXOR.reportOutput.role == .output,
+                      geometricXOR.reportOutput.kind == .report,
+                      geometricXOR.reportOutput.format == .json else {
+                    throw XcircuiteFlowRuntimeSpecError.invalidExecutorConfiguration(
+                        stageID: spec.stageID,
+                        reason: "geometricXOR.reportOutput must be a workspace-relative output report in JSON format"
+                    )
+                }
+                guard geometricXOR.timeoutSeconds.isFinite,
+                      geometricXOR.timeoutSeconds > 0 else {
+                    throw XcircuiteFlowRuntimeSpecError.invalidExecutorConfiguration(
+                        stageID: spec.stageID,
+                        reason: "geometricXOR.timeoutSeconds must be finite and positive"
+                    )
+                }
+            }
         case .electricalStandardLayoutImport(let spec):
             try validateElectricalInput(spec.layoutInput, stageID: spec.stageID, field: "layoutInput")
             try validateElectricalInput(spec.technologyInput, stageID: spec.stageID, field: "technologyInput")
@@ -243,8 +393,144 @@ private extension XcircuiteFlowStageExecutorSpec {
             try spec.oracleProcess?.validate()
         case .electricalRepairRevision(let spec):
             try validateRequestPath(spec.requestPath, stageID: spec.stageID)
-        case .layoutCommand, .coreSpiceSimulation:
+        }
+    }
+
+    private func requiredRuntimeInput<Value>(
+        _ value: Value?,
+        stageID: String,
+        field: String
+    ) throws -> Value {
+        guard let value else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(stageID: stageID, field: field)
+        }
+        return value
+    }
+
+    func validateTimingSTAInputs(_ inputs: TimingSTAFlowInputs, stageID: String) throws {
+        try validateInput(inputs.design, stageID: stageID, field: "inputs.design")
+        guard !inputs.libraries.isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "inputs.libraries"
+            )
+        }
+        for (index, input) in inputs.libraries.enumerated() {
+            try validateInput(input, stageID: stageID, field: "inputs.libraries[\(index)]")
+        }
+        try validateInput(inputs.constraints, stageID: stageID, field: "inputs.constraints")
+        try validateInput(inputs.pdkManifest, stageID: stageID, field: "inputs.pdkManifest")
+        if let parasitics = inputs.parasitics {
+            try validateInput(parasitics, stageID: stageID, field: "inputs.parasitics")
+        }
+        try validateTimingIdentity(
+            topDesignName: inputs.topDesignName,
+            processID: inputs.processID,
+            pdkVersion: inputs.pdkVersion,
+            pdkDigest: inputs.pdkDigest,
+            modeIDs: inputs.modeIDs,
+            stageID: stageID
+        )
+        guard !inputs.cornerIDs.isEmpty, !inputs.analysisKinds.isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "inputs.cornerIDs and inputs.analysisKinds"
+            )
+        }
+        if inputs.requiresPostLayoutInputs, inputs.parasitics == nil {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "inputs.parasitics is required for post-layout STA"
+            )
+        }
+    }
+
+    func validateLogicInputMode(
+        requestInput: XcircuiteFlowInputReference?,
+        designInput: XcircuiteFlowInputReference?,
+        topDesignName: String?,
+        stageID: String
+    ) throws {
+        let hasRequest = requestInput != nil
+        let hasDirectDesign = designInput != nil || topDesignName != nil
+        guard hasRequest || hasDirectDesign else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "requestInput or designInput/topDesignName"
+            )
+        }
+        guard !(hasRequest && hasDirectDesign) else {
+            throw XcircuiteFlowRuntimeSpecError.conflictingExecutorInputs(
+                stageID: stageID,
+                fields: ["requestInput", "designInput/topDesignName"]
+            )
+        }
+        if let requestInput {
+            try validateInput(requestInput, stageID: stageID, field: "requestInput")
             return
+        }
+        guard let designInput,
+              let topDesignName,
+              !topDesignName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "designInput and topDesignName"
+            )
+        }
+        try validateInput(designInput, stageID: stageID, field: "designInput")
+    }
+
+    func validateTimingSignalIntegrityInputs(_ inputs: TimingSIFlowInputs, stageID: String) throws {
+        try validateInput(inputs.design, stageID: stageID, field: "inputs.design")
+        try validateInput(inputs.constraints, stageID: stageID, field: "inputs.constraints")
+        try validateInput(inputs.pdkManifest, stageID: stageID, field: "inputs.pdkManifest")
+        try validateInput(inputs.parasitics, stageID: stageID, field: "inputs.parasitics")
+        try validateTimingIdentity(
+            topDesignName: inputs.topDesignName,
+            processID: inputs.processID,
+            pdkVersion: inputs.pdkVersion,
+            pdkDigest: inputs.pdkDigest,
+            modeIDs: inputs.modeIDs,
+            stageID: stageID
+        )
+        guard inputs.maxDeltaDelay.isFinite,
+              inputs.maxDeltaDelay >= 0,
+              inputs.maxNoiseRatio.isFinite,
+              inputs.maxNoiseRatio >= 0 else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "inputs.maxDeltaDelay and inputs.maxNoiseRatio"
+            )
+        }
+    }
+
+    func validateTimingIdentity(
+        topDesignName: String,
+        processID: String,
+        pdkVersion: String,
+        pdkDigest: String,
+        modeIDs: [String],
+        stageID: String
+    ) throws {
+        let requiredValues = [
+            ("inputs.topDesignName", topDesignName),
+            ("inputs.processID", processID),
+            ("inputs.pdkVersion", pdkVersion),
+            ("inputs.pdkDigest", pdkDigest),
+        ]
+        for (field, value) in requiredValues where value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(stageID: stageID, field: field)
+        }
+        guard !modeIDs.isEmpty else {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(stageID: stageID, field: "inputs.modeIDs")
+        }
+        do {
+            _ = try ContentDigest(algorithm: .sha256, hexadecimalValue: pdkDigest)
+        } catch {
+            throw XcircuiteFlowRuntimeSpecError.missingExecutorInput(
+                stageID: stageID,
+                field: "inputs.pdkDigest must be a SHA-256 digest"
+            )
         }
     }
 
@@ -353,6 +639,14 @@ private extension XcircuiteFlowStageExecutorSpec {
 
     var toolSpec: XcircuiteFlowToolSpec {
         switch self {
+        case .logicElaboration(let spec):
+            spec.tool
+        case .logicLowering(let spec):
+            spec.tool
+        case .logicSimulation(let spec):
+            spec.tool
+        case .powerIntent(let spec):
+            spec.tool
         case .layoutCommand(let spec):
             spec.tool
         case .nativeDRC(let spec):
@@ -379,7 +673,13 @@ private extension XcircuiteFlowStageExecutorSpec {
             spec.tool
         case .processQualificationEvidenceBuild(let spec):
             spec.tool
+        case .physicalDesign(let spec):
+            spec.tool
         case .physicalReview(let spec):
+            spec.tool
+        case .timingSTA(let spec):
+            spec.tool
+        case .timingSignalIntegrity(let spec):
             spec.tool
         case .pdkDiscovery(let spec):
             spec.tool
@@ -392,6 +692,8 @@ private extension XcircuiteFlowStageExecutorSpec {
         case .pdkRuleDeck(let spec):
             spec.tool
         case .pdkOracle(let spec):
+            spec.tool
+        case .releaseEvidenceAssembly(let spec):
             spec.tool
         case .releaseAuthorization(let spec):
             spec.tool

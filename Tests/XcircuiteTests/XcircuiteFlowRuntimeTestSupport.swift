@@ -11,30 +11,10 @@ import ToolQualification
 @testable import Xcircuite
 import XcircuiteFlowCLISupport
 
-/// Applies the requested role while preserving canonical artifact identity.
-func artifactReference(
-    _ reference: ArtifactReference,
-    role: ArtifactRole = .input
-) throws -> ArtifactReference {
-    guard reference.locator.role != role else { return reference }
-    return ArtifactReference(
-        id: reference.id,
-        locator: ArtifactLocator(
-            location: reference.locator.location,
-            role: role,
-            kind: reference.locator.kind,
-            format: reference.locator.format
-        ),
-        digest: reference.digest,
-        byteCount: reference.byteCount,
-        producer: reference.producer
-    )
-}
-
 extension XcircuiteFlowRuntimeTests {
     struct NoopDRCEngine: DRCEngine.DRCExecuting {
         func run(_ request: DRCRequest) async throws -> DRCExecutionResult {
-            DRCExecutionResult(
+            try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "noop",
@@ -133,7 +113,7 @@ extension XcircuiteFlowRuntimeTests {
                 gates: [
                     FlowGateResult(gateID: "waveform-artifact", status: .passed),
                 ],
-                artifacts: [try artifactReference(reference)]
+                artifacts: [reference]
             )
         }
     }
@@ -233,7 +213,7 @@ extension XcircuiteFlowRuntimeTests {
                 displayName: "CIF",
                 artifactID: "layout-cif",
                 exportFormat: .cif,
-                artifactFormat: .raw,
+                artifactFormat: .cif,
                 lvsFormat: .cif,
                 fileSuffix: ".cif"
             ),
@@ -242,7 +222,7 @@ extension XcircuiteFlowRuntimeTests {
                 displayName: "DXF",
                 artifactID: "layout-dxf",
                 exportFormat: .dxf,
-                artifactFormat: .raw,
+                artifactFormat: .dxf,
                 lvsFormat: .dxf,
                 fileSuffix: ".dxf"
             ),
@@ -354,7 +334,13 @@ extension XcircuiteFlowRuntimeTests {
         try await writeJSON(catalog, to: url)
     }
 
-    func writeLayoutCommandRequest(root: URL) async throws {
+    func writeLayoutCommandRequest(
+        root: URL,
+        includeShapeProperties: Bool = true
+    ) async throws {
+        let shapeProperties = includeShapeProperties
+            ? "\"properties\" : { \"role\" : \"wire\" },"
+            : "\"properties\" : {},"
         let request = """
         {
           "artifactManifestPath" : "ignored/manifest.json",
@@ -387,9 +373,7 @@ extension XcircuiteFlowRuntimeTests {
                   "x" : 0,
                   "y" : 0
                 },
-                "properties" : {
-                  "role" : "wire"
-                },
+                \(shapeProperties)
                 "shapeID" : "20000000-0000-0000-0000-000000000003",
                 "size" : {
                   "height" : 2,

@@ -197,8 +197,13 @@ struct XcircuiteCandidatePlanExecutorTests {
 
         #expect(result.status == "executed")
         #expect(result.planExecutionArtifact.artifactID == XcircuitePlanningArtifactStore.planExecutionArtifactID)
-        #expect(result.planExecutionArtifact.path == ".xcircuite/runs/run-1/planning/plan-execution.json")
-        #expect(result.designDiffArtifact?.path == ".xcircuite/runs/run-1/design-diff.json")
+        #expect(result.planExecutionArtifact.path.hasPrefix(
+            ".xcircuite/runs/run-1/planning/plan-execution/"
+        ))
+        #expect(result.planExecutionArtifact.path.hasSuffix(".json"))
+        #expect(result.designDiffArtifact?.path.hasPrefix(
+            ".xcircuite/runs/run-1/design-diffs/"
+        ) == true)
         #expect(result.producedArtifacts.contains { $0.artifactID == "candidate-step-1-layout-document" })
         #expect(result.producedArtifacts.contains { $0.artifactID == "candidate-step-1-layout-result" })
         #expect(result.nextActions.contains("run-verification-gate:native-drc"))
@@ -229,7 +234,15 @@ struct XcircuiteCandidatePlanExecutorTests {
         let action = try #require(actions.last)
         #expect(action.actionKind == "planning.execute-candidate-plan")
         #expect(action.status == .succeeded)
-        #expect(action.inputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.candidatePlanArtifactID))
+        #expect(action.inputs.contains {
+            $0.artifactID == execution.candidatePlanRef.id.rawValue
+                && $0.path == execution.candidatePlanRef.locator.location.value
+                && $0.digest == execution.candidatePlanRef.digest
+                && $0.byteCount == execution.candidatePlanRef.byteCount
+        })
+        #expect(execution.candidatePlanRef.locator.location.value.hasPrefix(
+            ".xcircuite/runs/run-1/planning/candidate-plans/"
+        ))
         #expect(action.outputs.map(\.artifactID).contains(XcircuitePlanningArtifactStore.planExecutionArtifactID))
         #expect(action.outputs.map(\.artifactID).contains("candidate-step-1-layout-document"))
 
@@ -279,6 +292,50 @@ struct XcircuiteCandidatePlanExecutorTests {
             }
             #expect(path == generation.candidatePlanArtifact.path)
             #expect(status == .byteCountMismatch || status == .sha256Mismatch)
+        }
+    }
+
+    @Test func defaultCandidatePlanSelectionRejectsMultipleGeneratedPlans() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-execute-ambiguous")
+        defer { removeTemporaryRoot(root) }
+        try await prepareRun(root: root, runID: "run-1", problem: makeDRCPlanningProblem())
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        let generation = try await XcircuiteCandidatePlanGenerator(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).generateCandidatePlan(
+            request: XcircuiteCandidatePlanGenerationRequest(runID: "run-1"),
+            projectRoot: root
+        )
+        var alternatePlan = try await store.readJSON(
+            XcircuiteCandidatePlan.self,
+            from: generation.candidatePlanArtifact.path
+        )
+        alternatePlan.planID += "-alternate"
+        alternatePlan.strategy = "alternate-test-strategy"
+        _ = try await artifactStore.persistGeneratedCandidatePlan(
+            alternatePlan,
+            runID: "run-1",
+            projectRoot: root
+        )
+
+        do {
+            _ = try await XcircuiteCandidatePlanExecutor(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).executeCandidatePlan(
+                request: XcircuiteCandidatePlanExecutionRequest(runID: "run-1"),
+                projectRoot: root
+            )
+            Issue.record("Expected ambiguous generated candidate plans to require explicit selection.")
+        } catch let error as XcircuiteCandidatePlanExecutionError {
+            guard case .invalidArtifactReference(let path, let reason) = error else {
+                Issue.record("Unexpected candidate plan selection error: \(error)")
+                return
+            }
+            #expect(path == XcircuitePlanningArtifactStore.generatedCandidatePlanDirectory)
+            #expect(reason.contains("specify an artifact ID or path"))
         }
     }
 
@@ -365,9 +422,21 @@ struct XcircuiteCandidatePlanExecutorTests {
         try await store.ensureWorkspace()
         try await prepareTestRun(runID: "run-risk", store: store)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        _ = try await artifactStore.persistPlanningProblem(
+            makeApprovalRequiredPlanningProblem(),
+            runID: "run-risk",
+            projectRoot: root
+        )
         try await artifactStore.persistCandidatePlan(
             makeApprovalRequiredLayoutPlan(),
             runID: "run-risk",
+            projectRoot: root
+        )
+        _ = try await XcircuiteCandidatePlanVerifier(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).verifyCandidatePlan(
+            request: XcircuiteCandidatePlanVerificationRequest(runID: "run-risk"),
             projectRoot: root
         )
 
@@ -1035,6 +1104,69 @@ struct XcircuiteCandidatePlanExecutorTests {
             constraints: [],
             unresolvedObjectives: [],
             blockers: []
+        )
+    }
+
+    private func makeApprovalRequiredPlanningProblem() -> XcircuiteCircuitPlanningProblem {
+        XcircuiteCircuitPlanningProblem(
+            problemID: "run-risk-approval-problem",
+            runID: "run-risk",
+            sourceRefs: [],
+            initialStateRefs: [],
+            riskClassifications: [
+                XcircuitePlanningRiskClassification(
+                    riskID: "policy-mutation-risk",
+                    category: "lvs-policy",
+                    severity: "high",
+                    scope: "candidate-plan",
+                    description: "Policy mutation requires explicit review before execution.",
+                    affectedObjectiveIDs: ["layout-chain-objective"],
+                    affectedActionIDs: ["layout-action-1"],
+                    requiredApprovals: ["policy-repair-approval"],
+                    mitigationActions: ["approval-gate", "native-lvs"]
+                ),
+            ],
+            objectives: [
+                XcircuitePlanningObjective(
+                    objectiveID: "layout-chain-objective",
+                    kind: "satisfy",
+                    domain: "layout",
+                    priority: "error",
+                    sourceRefIDs: [],
+                    target: "reviewed-layout-state",
+                    description: "Create the reviewed layout state."
+                ),
+            ],
+            constraints: [],
+            actionDomainRefs: ["layout-edit"],
+            candidateActions: [
+                XcircuitePlanningCandidateAction(
+                    actionID: "layout-action-1",
+                    domainID: "layout-edit",
+                    operationID: "layout.create-cell",
+                    maturity: "implemented",
+                    reason: "Create the reviewed layout state.",
+                    sourceObjectiveIDs: ["layout-chain-objective"],
+                    requiredInputRefs: [],
+                    verificationGates: ["artifact-integrity"]
+                ),
+            ],
+            costModel: XcircuitePlanningCostModel(
+                strategy: "minimize-risk-then-churn",
+                terms: []
+            ),
+            verificationGates: [
+                XcircuitePlanningVerificationGate(
+                    gateID: "artifact-integrity",
+                    required: true,
+                    description: "Candidate plan artifact must remain inspectable."
+                ),
+            ],
+            resumeContract: XcircuitePlanningResumeContract(
+                mode: "run-ledger",
+                requiredArtifacts: ["planning/problem.json"],
+                blockedStates: ["approval-required"]
+            )
         )
     }
 

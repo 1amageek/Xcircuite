@@ -17,6 +17,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
     private let additionalReferenceInputs: [XcircuiteFlowInputReference]
     private let constraintsInput: XcircuiteFlowInputReference?
     private let evidenceInput: XcircuiteFlowInputReference?
+    private let pdkInput: XcircuiteFlowInputReference?
     private let topModuleName: String
     private let policy: RTLVerificationPolicy
     private let frontend: RTLVerificationFrontendOptions
@@ -40,6 +41,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         additionalReferenceInputs: [XcircuiteFlowInputReference] = [],
         constraintsInput: XcircuiteFlowInputReference? = nil,
         evidenceInput: XcircuiteFlowInputReference? = nil,
+        pdkInput: XcircuiteFlowInputReference? = nil,
         topModuleName: String,
         policy: RTLVerificationPolicy = RTLVerificationPolicy(),
         frontend: RTLVerificationFrontendOptions = RTLVerificationFrontendOptions(),
@@ -61,6 +63,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         self.additionalReferenceInputs = additionalReferenceInputs
         self.constraintsInput = constraintsInput
         self.evidenceInput = evidenceInput
+        self.pdkInput = pdkInput
         self.topModuleName = topModuleName
         self.policy = policy
         self.frontend = frontend
@@ -229,6 +232,15 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             }
             if let evidenceArtifact {
                 requestInputs.append(evidenceArtifact)
+            }
+            if let pdkInput {
+                requestInputs.append(try pdkInput.resolveArtifactReference(
+                    projectRoot: try context.xcircuiteProjectRoot(),
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    artifactID: "rtl-pdk-input",
+                    kind: .technology,
+                    format: .json
+                ))
             }
             let request = RTLVerificationRequest(
                 runID: context.runID,
@@ -628,12 +640,22 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         request: RTLVerificationRequest,
         context: FlowExecutionContext
     ) async throws -> [ArtifactReference] {
+        let requestReference = try await context.persistJSONArtifact(
+            request,
+            artifactID: "rtl-verification-request",
+            stageID: stageID,
+            fileName: "rtl-verification-request.json",
+            role: .input,
+            kind: .request,
+            mode: .immutable
+        )
         let resultReference = try await context.persistJSONArtifact(
             envelope,
             artifactID: "rtl-verification-result",
             stageID: stageID,
             fileName: "rtl-verification-result.json",
             kind: ArtifactKind.report,
+            producer: envelope.provenance.producer,
             mode: .replaceable
         )
         let assessmentReference = try await context.persistJSONArtifact(
@@ -670,7 +692,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             kind: ArtifactKind.report,
             mode: .replaceable
         )
-        return [resultReference, assessmentReference, auditReference]
+        return [requestReference, resultReference, assessmentReference, auditReference]
     }
 
     private func loadEvidenceInput(from url: URL) throws -> RTLVerificationEvidenceInput {
@@ -705,8 +727,14 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         }
         guard let auditData = contents["rtl-verification-audit"],
               let resultData = contents["rtl-verification-result"],
+              let requestData = contents["rtl-verification-request"],
               let assessmentData = contents["rtl-verification-evidence-assessment"] else {
             return nil
+        }
+        guard try JSONDecoder().decode(RTLVerificationRequest.self, from: requestData) == request else {
+            throw RTLVerificationExecutionError.invalidArtifact(
+                "The persisted RTL verification request does not match the resumed request."
+            )
         }
         let audit = try JSONDecoder().decode(RTLVerificationStageAuditRecord.self, from: auditData)
         guard audit.stageID == stageID,
@@ -741,7 +769,13 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             envelope: envelope,
             artifacts: try definitions.compactMap { definition in
                 guard let data = contents[definition.artifactID] else { return nil }
-                return try artifactReference(definition: definition, content: data)
+                return try artifactReference(
+                    definition: definition,
+                    content: data,
+                    producer: definition.artifactID == "rtl-verification-result"
+                        ? envelope.provenance.producer
+                        : nil
+                )
             }
         )
     }
@@ -755,6 +789,7 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext
     ) throws -> [PersistedArtifactDefinition] {
         let definitions: [(String, String, String)] = [
+            ("raw", "rtl-verification-request.json", "rtl-verification-request"),
             ("raw", "rtl-verification-result.json", "rtl-verification-result"),
             ("raw", "evidence-assessment.json", "rtl-verification-evidence-assessment"),
             ("audit", "rtl-verification-audit.json", "rtl-verification-audit")
@@ -766,8 +801,8 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                     location: try ArtifactLocation(
                         workspaceRelativePath: ".xcircuite/runs/\(context.runID)/stages/\(stageID)/\(directory)/\(fileName)"
                     ),
-                    role: .output,
-                    kind: ArtifactKind.report,
+                    role: artifactID == "rtl-verification-request" ? .input : .output,
+                    kind: artifactID == "rtl-verification-request" ? .request : .report,
                     format: ArtifactFormat.json
                 )
             )
@@ -776,13 +811,15 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
 
     private func artifactReference(
         definition: PersistedArtifactDefinition,
-        content: Data
+        content: Data,
+        producer: ProducerIdentity?
     ) throws -> ArtifactReference {
         ArtifactReference(
             id: try ArtifactID(rawValue: definition.artifactID),
             locator: definition.locator,
             digest: try SHA256ContentDigester().digest(data: content),
-            byteCount: UInt64(content.count)
+            byteCount: UInt64(content.count),
+            producer: producer
         )
     }
 

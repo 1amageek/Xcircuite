@@ -35,10 +35,8 @@ extension XcircuiteCandidatePlanExecutor {
         )
 
         let outputNetlistURL = executionDirectory.appending(path: "netlist.spice")
-        let outputNetlistPath = try projectRelativePath(for: outputNetlistURL, projectRoot: projectRoot)
         let serialized = SPICESerializer().serialize(edited.netlist, options: .default)
         try await writeWorkspaceText(serialized, to: outputNetlistURL, projectRoot: projectRoot)
-        context.latestNetlistPath = outputNetlistPath
         let outputNetlistRef = try artifactBuilder.reference(
             for: outputNetlistURL,
             projectRoot: projectRoot,
@@ -46,6 +44,11 @@ extension XcircuiteCandidatePlanExecutor {
             kind: .netlist,
             format: .spice
         )
+        let retainedNetlist = try await retainRunArtifact(
+            outputNetlistRef,
+            runID: plan.runID
+        )
+        context.latestNetlistPath = retainedNetlist.path
 
         let reportURL = executionDirectory.appending(path: "netlist-parameter-edit-report.json")
         let report = XcircuiteNetlistParameterEditReport(
@@ -55,8 +58,8 @@ extension XcircuiteCandidatePlanExecutor {
             stepID: step.stepID,
             sourceParameterCandidateID: stringHint("sourceParameterCandidateID", step: step),
             sourceNetlistPath: sourceNetlistPath,
-            outputNetlistPath: outputNetlistPath,
-            outputNetlistArtifactID: outputNetlistRef.artifactID,
+            outputNetlistPath: retainedNetlist.path,
+            outputNetlistArtifactID: retainedNetlist.artifactID,
             edits: edited.edits
         )
         try await writeWorkspaceJSON(report, to: reportURL, projectRoot: projectRoot)
@@ -67,10 +70,8 @@ extension XcircuiteCandidatePlanExecutor {
             kind: .report,
             format: .json
         )
-        let artifacts = try await retainRunArtifacts(
-            [outputNetlistRef, reportRef],
-            runID: plan.runID
-        )
+        let retainedReport = try await retainRunArtifact(reportRef, runID: plan.runID)
+        let artifacts = [retainedNetlist, retainedReport]
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
             order: step.order,

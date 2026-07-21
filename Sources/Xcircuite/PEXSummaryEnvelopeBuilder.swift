@@ -25,6 +25,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         stageID: String,
         toolID: String,
+        producer: ProducerIdentity,
         context: FlowExecutionContext
     ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
@@ -80,7 +81,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
             role: "pex-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: FlowArtifactProducer(producerID: toolID, toolID: toolID),
+            producer: FlowArtifactProducer(identity: producer),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
             evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",
@@ -114,7 +115,7 @@ struct PEXSummaryEnvelopeBuilder: Sendable {
             )
         )
 
-        return try await context.persistArtifactEnvelope(envelope)
+        return try await context.persistArtifactEnvelope(envelope, producer: producer)
     }
 
     private func baseCriteria(artifactID: String) -> [FlowEvaluationCriterion] {

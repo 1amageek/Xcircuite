@@ -85,6 +85,30 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
     }
 
+    func retainProjectInput(
+        path: String,
+        artifactID: String,
+        kind: ArtifactKind,
+        format: ArtifactFormat,
+        runID: String,
+        store: XcircuiteWorkspaceStore,
+        projectRoot: URL
+    ) async throws {
+        let reference = try await store.makeArtifactReference(
+            forProjectRelativePath: path,
+            artifactID: artifactID,
+            role: .input,
+            kind: kind,
+            format: format
+        )
+        _ = try await retainTestArtifact(
+            reference,
+            runID: runID,
+            store: store,
+            projectRoot: projectRoot
+        )
+    }
+
     func candidatePlanRef(runID: String) throws -> ArtifactReference {
         try fixtureArtifactReference(
             artifactID: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
@@ -100,7 +124,7 @@ extension XcircuiteCandidatePlanVerifierTests {
         runID: String,
         domainID: String,
         operationID: String,
-        maturity: String
+        maturity: XcircuiteOperationMaturity
     ) -> XcircuiteCandidatePlan {
         XcircuiteCandidatePlan(
             planID: "\(runID)-candidate-plan-1",
@@ -281,6 +305,71 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
     }
 
+    func makeRetainedPlanningProblem(
+        for plan: XcircuiteCandidatePlan
+    ) -> XcircuiteCircuitPlanningProblem {
+        XcircuiteCircuitPlanningProblem(
+            problemID: plan.problemID,
+            runID: plan.runID,
+            sourceRefs: [],
+            initialStateRefs: [],
+            riskClassifications: plan.riskClassifications,
+            objectives: [],
+            constraints: plan.constraints,
+            actionDomainRefs: Array(Set(plan.steps.map(\.domainID))).sorted(),
+            candidateActions: plan.steps.map { step in
+                XcircuitePlanningCandidateAction(
+                    actionID: step.actionID,
+                    domainID: step.domainID,
+                    operationID: step.operationID,
+                    maturity: step.maturity,
+                    reason: step.reason,
+                    sourceObjectiveIDs: step.sourceObjectiveIDs,
+                    requiredInputRefs: step.requiredInputRefs,
+                    verificationGates: step.verificationGates,
+                    parameterHints: step.parameterHints
+                )
+            },
+            costModel: XcircuitePlanningCostModel(
+                strategy: "minimize-risk-then-churn",
+                terms: []
+            ),
+            verificationGates: plan.verificationGates,
+            resumeContract: XcircuitePlanningResumeContract(
+                mode: "run-ledger",
+                requiredArtifacts: [XcircuitePlanningArtifactStore.problemRelativePath],
+                blockedStates: ["candidate-rejected"]
+            )
+        )
+    }
+
+    func prepareExecutableDRCRun(
+        root: URL,
+        runID: String,
+        width: Double,
+        requiredWidth: Double,
+        store: XcircuiteWorkspaceStore,
+        artifactStore: XcircuitePlanningArtifactStore
+    ) async throws {
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        let plan = makeExecutableDRCPlan(
+            runID: runID,
+            width: width,
+            requiredWidth: requiredWidth
+        )
+        _ = try await artifactStore.persistPlanningProblem(
+            makeRetainedPlanningProblem(for: plan),
+            runID: runID,
+            projectRoot: root
+        )
+        _ = try await artifactStore.persistCandidatePlan(
+            plan,
+            runID: runID,
+            projectRoot: root
+        )
+    }
+
     func prepareExecutableLVSRun(
         root: URL,
         runID: String,
@@ -293,6 +382,24 @@ extension XcircuiteCandidatePlanVerifierTests {
         try await prepareTestRun(runID: runID, store: store)
         try await writeText(layoutNetlist, path: "circuits/layout.spice", root: root)
         try await writeText(schematicNetlist, path: "circuits/schematic.spice", root: root)
+        try await retainProjectInput(
+            path: "circuits/layout.spice",
+            artifactID: "planning-input-layout-netlist",
+            kind: .netlist,
+            format: .spice,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: "circuits/schematic.spice",
+            artifactID: "planning-input-schematic-netlist",
+            kind: .netlist,
+            format: .spice,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
         _ = try await artifactStore.persistPlanningProblem(
             makeExecutableLVSProblem(runID: runID),
             runID: runID,
@@ -322,6 +429,42 @@ extension XcircuiteCandidatePlanVerifierTests {
         )
         try await writeJSON(LayoutTechDatabase.sampleProcess(), path: "tech/layout-tech.json", root: root)
         let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
+        try await retainProjectInput(
+            path: "circuits/standard-layout-schematic.spice",
+            artifactID: "planning-input-standard-layout-schematic",
+            kind: .netlist,
+            format: .spice,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: "tech/layout-tech.json",
+            artifactID: "planning-input-layout-technology",
+            kind: .technology,
+            format: .json,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: lvsExtraction.profilePath,
+            artifactID: "planning-input-lvs-extraction-profile",
+            kind: .technology,
+            format: .json,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: lvsExtraction.deckPath,
+            artifactID: "planning-input-lvs-extraction-deck",
+            kind: .technology,
+            format: .text,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
         let problem = makeProducedStandardLayoutLVSProblem(
             runID: runID,
             lvsExtraction: lvsExtraction
@@ -332,7 +475,12 @@ extension XcircuiteCandidatePlanVerifierTests {
             lvsExtraction: lvsExtraction
         )
         _ = try await artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
-        let candidatePlanRef = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
+        _ = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
+        let candidatePlanRef = try await artifactStore.persistCandidatePlanSnapshot(
+            plan,
+            runID: runID,
+            projectRoot: root
+        )
         let layoutRef = try await writeProducedLayoutArtifact(
             root: root,
             runID: runID,
@@ -389,10 +537,33 @@ extension XcircuiteCandidatePlanVerifierTests {
             root: root
         )
         try await writeJSON(makeTestPEXTechnology(), path: "tech/pex-technology.json", root: root)
+        try await retainProjectInput(
+            path: "circuits/source.spice",
+            artifactID: "planning-input-pex-source-netlist",
+            kind: .netlist,
+            format: .spice,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: "tech/pex-technology.json",
+            artifactID: "planning-input-pex-technology",
+            kind: .technology,
+            format: .json,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
         let problem = makeProducedStandardLayoutPEXProblem(runID: runID)
         let plan = makeProducedStandardLayoutPEXPlan(runID: runID, layoutCase: layoutCase)
         _ = try await artifactStore.persistPlanningProblem(problem, runID: runID, projectRoot: root)
-        let candidatePlanRef = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
+        _ = try await artifactStore.persistCandidatePlan(plan, runID: runID, projectRoot: root)
+        let candidatePlanRef = try await artifactStore.persistCandidatePlanSnapshot(
+            plan,
+            runID: runID,
+            projectRoot: root
+        )
         let layoutRef = try await writeProducedLayoutArtifact(
             root: root,
             runID: runID,
@@ -684,6 +855,15 @@ extension XcircuiteCandidatePlanVerifierTests {
             path: "circuits/rc.cir",
             root: root
         )
+        try await retainProjectInput(
+            path: "circuits/rc.cir",
+            artifactID: "planning-input-simulation-netlist",
+            kind: .netlist,
+            format: .spice,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
         _ = try await artifactStore.persistPlanningProblem(
             makeExecutableSimulationProblem(runID: runID),
             runID: runID,
@@ -819,6 +999,33 @@ extension XcircuiteCandidatePlanVerifierTests {
             root: root
         )
         try await writeJSON(makeTestPEXTechnology(), path: "tech/pex-technology.json", root: root)
+        try await retainProjectInput(
+            path: "layout/top.gds",
+            artifactID: "planning-input-pex-layout",
+            kind: .layout,
+            format: .gdsii,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: "circuits/source.spice",
+            artifactID: "planning-input-pex-source-netlist",
+            kind: .netlist,
+            format: .spice,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
+        try await retainProjectInput(
+            path: "tech/pex-technology.json",
+            artifactID: "planning-input-pex-technology",
+            kind: .technology,
+            format: .json,
+            runID: runID,
+            store: store,
+            projectRoot: root
+        )
         _ = try await artifactStore.persistPlanningProblem(
             makeExecutablePEXProblem(runID: runID),
             runID: runID,

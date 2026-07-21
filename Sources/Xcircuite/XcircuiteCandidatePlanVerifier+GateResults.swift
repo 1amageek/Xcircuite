@@ -353,8 +353,10 @@ extension XcircuiteCandidatePlanVerifier {
                 .appending(path: "verification")
                 .appending(path: "native-drc")
             try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
-            let layoutURL = try projectURL(for: layoutRef.path, projectRoot: projectRoot)
-            let documentData = try Data(contentsOf: layoutURL)
+            let documentData = try await attestedArtifactContent(
+                for: layoutRef,
+                runID: plan.runID
+            )
             let document = try layoutDocumentSerializer.decodeDocument(documentData)
             let drcLayout = try nativeDRCLayout(from: document, spec: spec)
             let drcLayoutURL = verificationDirectory.appending(path: "drc-layout.json")
@@ -396,6 +398,12 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
                 artifactReferences: artifacts
             )
+        } catch let error as XcircuiteCandidatePlanVerificationError {
+            throw error
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
+        } catch let error as FlowRunLedgerPersistenceError {
+            throw error
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
                 severity: "error",
@@ -445,10 +453,9 @@ extension XcircuiteCandidatePlanVerifier {
         manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
-        guard let problem = try sourcePlanningProblem(
+        guard let problem = try await sourcePlanningProblem(
             for: plan,
-            manifest: manifest,
-            projectRoot: projectRoot
+            manifest: manifest
         ) else {
             return GateExecutionEvaluation(
                 gateResult: nativeLVSMissingInputGateResult(
@@ -514,42 +521,58 @@ extension XcircuiteCandidatePlanVerifier {
                 .appending(path: "verification")
                 .appending(path: "native-lvs")
             try await ensureWorkspaceDirectory(at: verificationDirectory, projectRoot: projectRoot)
+            let layoutNetlistURL = try await verifiedOptionalInputURL(
+                for: executionSpec.layoutNetlistRef,
+                runID: plan.runID
+            )
+            let layoutGDSURL = try await verifiedOptionalInputURL(
+                for: executionSpec.layoutGDSRef,
+                runID: plan.runID
+            )
+            let schematicNetlistURL = try await verifiedInputURL(
+                for: executionSpec.schematicNetlistRef,
+                runID: plan.runID
+            )
+            let technologyURL = try await verifiedOptionalInputURL(
+                for: executionSpec.technologyRef,
+                runID: plan.runID
+            )
+            let extractionProfileURL = try await verifiedOptionalInputURL(
+                for: executionSpec.extractionProfileRef,
+                runID: plan.runID
+            )
+            let extractionDeckURL = try await verifiedOptionalInputURL(
+                for: executionSpec.extractionDeckRef,
+                runID: plan.runID
+            )
+            let waiverURL = try await verifiedOptionalInputURL(
+                for: executionSpec.waiverRef,
+                runID: plan.runID
+            )
+            let modelEquivalenceURL = try await verifiedOptionalInputURL(
+                for: executionSpec.modelEquivalenceRef,
+                runID: plan.runID
+            )
+            let terminalEquivalenceURL = try await verifiedOptionalInputURL(
+                for: executionSpec.terminalEquivalenceRef,
+                runID: plan.runID
+            )
             let executionResult = try await DefaultLVSEngine(
                 backend: nil,
                 layoutNetlistExtractor: nil
             ).run(LVSRequest(
-                layoutNetlistURL: try executionSpec.layoutNetlistRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
-                layoutGDSURL: try executionSpec.layoutGDSRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
+                layoutNetlistURL: layoutNetlistURL,
+                layoutGDSURL: layoutGDSURL,
                 layoutFormat: executionSpec.layoutFormat,
-                schematicNetlistURL: try url(
-                    for: executionSpec.schematicNetlistRef,
-                    manifest: manifest,
-                    projectRoot: projectRoot
-                ),
+                schematicNetlistURL: schematicNetlistURL,
                 topCell: executionSpec.topCell,
-                technologyURL: try executionSpec.technologyRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
-                extractionProfileURL: try executionSpec.extractionProfileRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
-                extractionDeckURL: try executionSpec.extractionDeckRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
+                technologyURL: technologyURL,
+                extractionProfileURL: extractionProfileURL,
+                extractionDeckURL: extractionDeckURL,
                 processProfileID: executionSpec.processProfileID,
-                waiverURL: try executionSpec.waiverRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
-                modelEquivalenceURL: try executionSpec.modelEquivalenceRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
-                terminalEquivalenceURL: try executionSpec.terminalEquivalenceRef.map {
-                    try url(for: $0, manifest: manifest, projectRoot: projectRoot)
-                },
+                waiverURL: waiverURL,
+                modelEquivalenceURL: modelEquivalenceURL,
+                terminalEquivalenceURL: terminalEquivalenceURL,
                 workingDirectory: verificationDirectory,
                 backendSelection: LVSBackendSelection(backendID: executionSpec.backendID)
             ))
@@ -582,6 +605,12 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
                 artifactReferences: artifacts
             )
+        } catch let error as XcircuiteCandidatePlanVerificationError {
+            throw error
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
+        } catch let error as FlowRunLedgerPersistenceError {
+            throw error
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
                 severity: "error",
@@ -724,10 +753,9 @@ extension XcircuiteCandidatePlanVerifier {
         manifest: FlowRunManifest,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
-        guard let problem = try sourcePlanningProblem(
+        guard let problem = try await sourcePlanningProblem(
             for: plan,
-            manifest: manifest,
-            projectRoot: projectRoot
+            manifest: manifest
         ) else {
             return GateExecutionEvaluation(
                 gateResult: simulationMetricMissingInputGateResult(
@@ -766,7 +794,6 @@ extension XcircuiteCandidatePlanVerifier {
                     sourceStepIDs: sourceStepIDs,
                     spec: spec,
                     netlistRef: executionNetlistRef ?? netlistRef,
-                    manifest: manifest,
                     verificationDirectory: verificationDirectory,
                     runID: plan.runID,
                     projectRoot: projectRoot
@@ -778,7 +805,6 @@ extension XcircuiteCandidatePlanVerifier {
                     required: required,
                     sourceStepIDs: sourceStepIDs,
                     metricReportRef: metricReportRef,
-                    manifest: manifest,
                     verificationDirectory: verificationDirectory,
                     runID: plan.runID,
                     projectRoot: projectRoot
@@ -792,6 +818,12 @@ extension XcircuiteCandidatePlanVerifier {
                 ),
                 artifactReferences: []
             )
+        } catch let error as XcircuiteCandidatePlanVerificationError {
+            throw error
+        } catch let error as XcircuiteWorkspaceStoreError {
+            throw error
+        } catch let error as FlowRunLedgerPersistenceError {
+            throw error
         } catch {
             let diagnostic = XcircuitePlanVerificationDiagnostic(
                 severity: "error",

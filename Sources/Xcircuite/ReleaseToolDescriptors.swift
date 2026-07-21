@@ -3,6 +3,14 @@ import ToolQualification
 import DesignFlowKernel
 
 public enum ReleaseToolDescriptors {
+    public static func evidenceAssembly() -> ToolDescriptor {
+        descriptor(
+            toolID: "xcircuite.release-evidence-assembler",
+            displayName: "Release evidence assembly",
+            operationID: "release-assemble-evidence"
+        )
+    }
+
     public static func authorization() -> ToolDescriptor {
         descriptor(
             toolID: "native-release-authorization",

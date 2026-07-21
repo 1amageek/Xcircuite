@@ -1,17 +1,28 @@
 import Foundation
+import CircuiteFoundation
 
 public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
     public init() {}
 
     public func assess(
         actionDomainSnapshot: XcircuitePlanningActionDomainSnapshot,
-        testEvidence: [XcircuitePlatformCapabilityTestEvidence]? = nil
+        testEvidence: [XcircuitePlatformCapabilityTestEvidence]? = nil,
+        evidenceRoot: URL? = nil,
+        verifications: [XcircuitePlatformCapabilityTestEvidenceVerification] = []
     ) -> XcircuitePlatformCapabilityReadinessReport {
         let effectiveTestEvidence = testEvidence ?? defaultTestEvidence()
+        let verificationIndex = Dictionary(
+            uniqueKeysWithValues: Dictionary(grouping: verifications, by: \.evidenceID)
+                .compactMap { evidenceID, values in
+                    values.count == 1 ? (evidenceID, values[0]) : nil
+                }
+        )
         let specs = milestoneSpecs()
         let evidenceAudit = audit(
             testEvidence: effectiveTestEvidence,
-            milestoneIDs: Set(specs.map(\.milestoneID))
+            milestoneIDs: Set(specs.map(\.milestoneID)),
+            evidenceRoot: evidenceRoot,
+            verifications: verificationIndex
         )
         let milestones = specs.map { spec in
             readiness(
@@ -21,7 +32,16 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 testEvidenceDiagnostics: evidenceAudit.milestoneDiagnosticsByMilestone[spec.milestoneID, default: []]
             )
         }
-        let executionStatusCounts = Dictionary(grouping: effectiveTestEvidence.map(\.executionStatus), by: { $0 })
+        let executionStatusCounts = Dictionary(
+            grouping: effectiveTestEvidence.map {
+                retainedExecutionStatus(
+                    for: $0,
+                    evidenceRoot: evidenceRoot,
+                    verification: verificationIndex[$0.evidenceID]
+                )
+            },
+            by: { $0 }
+        )
             .mapValues(\.count)
         let diagnostics = evidenceAudit.diagnostics + milestones.flatMap(\.diagnostics)
         let status = reportStatus(from: milestones, diagnostics: diagnostics)
@@ -37,7 +57,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 failedCount: milestones.filter { $0.status == .failed }.count,
                 domainCount: actionDomainSnapshot.domains.count,
                 operationCount: operations.count,
-                implementedOperationCount: operations.filter { $0.maturity == "implemented" }.count,
+                implementedOperationCount: operations.filter { $0.maturity == .implemented }.count,
                 testEvidenceCount: effectiveTestEvidence.count,
                 validTestEvidenceCount: evidenceAudit.validEvidenceCount,
                 invalidTestEvidenceCount: effectiveTestEvidence.count - evidenceAudit.validEvidenceCount,
@@ -53,9 +73,13 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         )
     }
 
-    public func assess(runID: String, generatedAt: String) throws -> XcircuitePlatformCapabilityReadinessReport {
+    public func assess(
+        runID: String,
+        generatedAt: String,
+        evidenceRoot: URL? = nil
+    ) throws -> XcircuitePlatformCapabilityReadinessReport {
         let snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(runID: runID, generatedAt: generatedAt)
-        return assess(actionDomainSnapshot: snapshot)
+        return assess(actionDomainSnapshot: snapshot, evidenceRoot: evidenceRoot)
     }
 
     private func readiness(
@@ -77,11 +101,11 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
 
         let presentOperations = spec.requiredOperations.compactMap { operationPairs[$0] }
         let plannedOperations = presentOperations
-            .filter { $0.maturity == "planned" }
+            .filter { $0.maturity == .planned }
             .map(\.operationID)
             .sorted()
         let partialOperations = presentOperations
-            .filter { $0.maturity == "partial" }
+            .filter { $0.maturity != .implemented && $0.maturity != .planned }
             .map(\.operationID)
             .sorted()
 
@@ -251,7 +275,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
 
     private func audit(
         testEvidence: [XcircuitePlatformCapabilityTestEvidence],
-        milestoneIDs: Set<String>
+        milestoneIDs: Set<String>,
+        evidenceRoot: URL?,
+        verifications: [String: XcircuitePlatformCapabilityTestEvidenceVerification]
     ) -> TestEvidenceAudit {
         let evidenceIDCounts = Dictionary(grouping: testEvidence.map(\.evidenceID), by: { $0 })
             .mapValues(\.count)
@@ -345,16 +371,30 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                     message: "Test evidence requirement kind coverage is missing: \(subject)."
                 )
             }
-            if evidence.evidenceArtifacts.isEmpty || evidence.evidenceArtifacts.contains(where: \.isEmpty) {
+            if evidence.coveredArtifactKinds.isEmpty
+                || evidence.coveredArtifactKinds.contains(where: \.isEmpty)
+                || Set(evidence.coveredArtifactKinds).count != evidence.coveredArtifactKinds.count {
                 appendDiagnostic(
                     code: "test-evidence-artifact-missing",
-                    message: "Test evidence artifact coverage is missing: \(subject)."
+                    message: "Test evidence artifact coverage must be non-empty and unique: \(subject)."
                 )
             }
-            switch evidence.executionStatus {
+            let retainedStatus: XcircuitePlatformCapabilityTestEvidenceExecutionStatus
+            if isValid {
+                retainedStatus = retainedExecutionStatus(
+                    for: evidence,
+                    evidenceRoot: evidenceRoot,
+                    verification: verifications[evidence.evidenceID],
+                    appendDiagnostic: appendDiagnostic
+                )
+            } else {
+                retainedStatus = evidence.executionStatus
+            }
+            switch retainedStatus {
             case .passed:
                 break
             case .unverified:
+                isValid = false
                 appendExecutionDiagnostics(
                     severity: "warning",
                     code: "test-evidence-execution-unverified",
@@ -395,6 +435,176 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
         )
     }
 
+    private func retainedExecutionStatus(
+        for evidence: XcircuitePlatformCapabilityTestEvidence,
+        evidenceRoot: URL?,
+        verification: XcircuitePlatformCapabilityTestEvidenceVerification?
+    ) -> XcircuitePlatformCapabilityTestEvidenceExecutionStatus {
+        retainedExecutionStatus(
+            for: evidence,
+            evidenceRoot: evidenceRoot,
+            verification: verification
+        ) { _, _ in }
+    }
+
+    private func retainedExecutionStatus(
+        for evidence: XcircuitePlatformCapabilityTestEvidence,
+        evidenceRoot: URL?,
+        verification: XcircuitePlatformCapabilityTestEvidenceVerification?,
+        appendDiagnostic: (String, String) -> Void
+    ) -> XcircuitePlatformCapabilityTestEvidenceExecutionStatus {
+        guard evidence.executionStatus != .unverified else {
+            return .unverified
+        }
+        guard let evidenceRoot else {
+            appendDiagnostic(
+                "test-evidence-root-missing",
+                "A retained evidence root is required to verify test evidence: \(evidence.evidenceID)."
+            )
+            return evidence.executionStatus == .failed ? .failed : .unverified
+        }
+        guard let resultArtifact = evidence.resultArtifact,
+              let provenance = evidence.provenance,
+              let exitStatus = evidence.exitStatus else {
+            appendDiagnostic(
+                "test-evidence-retained-contract-missing",
+                "Test evidence must retain a result ArtifactReference, ExecutionProvenance, and exit status: \(evidence.evidenceID)."
+            )
+            return .unverified
+        }
+        guard let verification,
+              verification.evidenceID == evidence.evidenceID,
+              verification.resultArtifactID == resultArtifact.id,
+              verification.resultDigest == resultArtifact.digest,
+              verification.exitStatus == exitStatus else {
+            appendDiagnostic(
+                "test-evidence-independent-verification-required",
+                "Persisted test evidence requires an in-process receipt from XcircuitePlatformCapabilityTestRunner: \(evidence.evidenceID)."
+            )
+            return .unverified
+        }
+        let encodedEvidenceDigest: ContentDigest
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            encodedEvidenceDigest = try SHA256ContentDigester().digest(
+                data: encoder.encode(evidence),
+                using: .sha256
+            )
+        } catch {
+            appendDiagnostic(
+                "test-evidence-receipt-binding-failed",
+                "Test evidence could not be bound to its runner receipt: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard verification.evidenceDigest == encodedEvidenceDigest else {
+            appendDiagnostic(
+                "test-evidence-receipt-mismatch",
+                "Test evidence was modified after its runner receipt was issued: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        let artifacts = [resultArtifact] + evidence.retainedArtifacts
+        guard artifacts.allSatisfy({ $0.locator.location.storage == .workspaceRelative }) else {
+            appendDiagnostic(
+                "test-evidence-artifact-location-invalid",
+                "Retained test evidence artifacts must be workspace-relative: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard evidence.retainedArtifacts.allSatisfy({ $0.locator.role == .output }) else {
+            appendDiagnostic(
+                "test-evidence-artifact-role-invalid",
+                "Retained test outputs must use the output artifact role: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard artifacts.allSatisfy({
+            $0.digest.algorithm == .sha256
+                && $0.digest.hexadecimalValue.count == 64
+                && $0.byteCount > 0
+        }) else {
+            appendDiagnostic(
+                "test-evidence-artifact-reference-invalid",
+                "Retained test evidence must use non-empty SHA-256-bound artifact references: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard artifacts.allSatisfy({ LocalArtifactVerifier().verify($0, relativeTo: evidenceRoot).isVerified }) else {
+            appendDiagnostic(
+                "test-evidence-artifact-integrity-failed",
+                "Retained test evidence digest or byte count verification failed: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard let resultProducer = resultArtifact.producer,
+              resultProducer == provenance.producer else {
+            appendDiagnostic(
+                "test-evidence-producer-mismatch",
+                "Retained test evidence producer identity does not match execution provenance: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard let invocation = provenance.invocation,
+              invocation.mode == .externalProcess,
+              invocationContainsBoundedXcodebuildTest(invocation, filter: evidence.testFilter) else {
+            appendDiagnostic(
+                "test-evidence-invocation-invalid",
+                "Execution provenance must retain the bounded xcodebuild test invocation and declared filter: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        let resultURL: URL
+        do {
+            resultURL = try resultArtifact.locator.location.resolvedFileURL(relativeTo: evidenceRoot)
+        } catch {
+            appendDiagnostic(
+                "test-evidence-result-location-invalid",
+                "Retained test evidence result could not be resolved: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        let record: XcircuitePlatformCapabilityTestExecutionRecord
+        do {
+            let data = try Data(contentsOf: resultURL, options: [.mappedIfSafe])
+            record = try JSONDecoder().decode(XcircuitePlatformCapabilityTestExecutionRecord.self, from: data)
+        } catch {
+            appendDiagnostic(
+                "test-evidence-result-invalid",
+                "Retained test evidence result is not a valid execution record: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        guard record.evidenceID == evidence.evidenceID,
+              record.testFilter == evidence.testFilter,
+              record.command == evidence.command,
+              record.startedAt == provenance.startedAt,
+              record.completedAt == provenance.completedAt,
+              record.exitStatus == exitStatus,
+              record.transcriptArtifact.producer == provenance.producer,
+              evidence.retainedArtifacts == [record.transcriptArtifact],
+              provenance.inputs.isEmpty else {
+            appendDiagnostic(
+                "test-evidence-result-binding-mismatch",
+                "Retained execution record does not bind the declared evidence identity, command, timing, transcript, and exit status: \(evidence.evidenceID)."
+            )
+            return .failed
+        }
+        return exitStatus == 0 ? .passed : .failed
+    }
+
+    private func invocationContainsBoundedXcodebuildTest(
+        _ invocation: ExecutionInvocation,
+        filter: String
+    ) -> Bool {
+        guard let executable = invocation.executable else { return false }
+        let command = [URL(fileURLWithPath: executable).lastPathComponent] + invocation.arguments
+        return usesTimeoutWrapper(command)
+            && usesXcodebuildTest(command)
+            && self.command(command, containsTestFilter: filter)
+    }
+
     private func appendExecutionDiagnostics(
         severity: String,
         code: String,
@@ -427,7 +637,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
     }
 
     private func usesXcodebuildTest(_ command: [String]) -> Bool {
-        guard let xcodebuildIndex = command.firstIndex(of: "xcodebuild") else { return false }
+        guard let xcodebuildIndex = command.firstIndex(where: { argument in
+            URL(fileURLWithPath: argument).lastPathComponent == "xcodebuild"
+        }) else { return false }
         return command[(xcodebuildIndex + 1)...].contains("test")
     }
 
@@ -455,72 +667,162 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                 milestoneID: "standalone-local-signoff",
                 title: "Standalone local simulation, layout, DRC, LVS, and PEX execution",
                 requiredDomains: [
+                    "dft",
                     "drc-signoff",
+                    "electrical-signoff",
                     "layout-edit",
+                    "logic-design",
+                    "logic-execution",
                     "lvs-signoff",
                     "pex-extraction",
+                    "physical-design",
+                    "release",
+                    "rtl-verification",
                     "simulation-analysis",
+                    "timing-signoff",
                 ],
                 requiredOperations: [
+                    "dft.scan",
                     "drc.run-native",
+                    "electrical.signoff",
                     "layout-command-replay",
+                    "logic.elaborate",
+                    "logic.lower",
+                    "logic.simulate",
+                    "logic.synthesize",
                     "lvs.run-native",
                     "pex.extract",
+                    "physical.floorplan",
+                    "physical.place",
+                    "physical.detailed-route",
+                    "release.authorization",
+                    "release.signoff",
+                    "release.tapeout",
+                    "rtl.lint",
                     "simulation.run-analysis",
+                    "timing.signal-integrity",
+                    "timing.sta",
                 ],
                 requiredArtifacts: [
+                    "electrical-signoff-report",
                     "drc-artifact-manifest",
                     "layout-command-manifest",
+                    "logic-execution-design",
+                    "logic-simulation-report",
+                    "mapped-design",
                     "lvs-artifact-manifest",
                     "parasitic-ir",
+                    "physical-design",
+                    "rtl-lint-report",
                     "simulation-summary",
+                    "signoff-bundle",
+                    "tapeout-release",
+                    "test-design",
+                    "timing-signal-integrity-result",
+                    "timing-sta-result",
                 ],
                 requiredVerificationGates: [
                     "artifact-integrity",
                     "drc-artifacts",
+                    "electrical.signoff",
+                    "execution-provenance",
+                    "logic.elaborate",
+                    "logic.lower",
+                    "logic.simulate",
+                    "logic.synthesize",
                     "lvs-artifacts",
                     "pex-flow-artifacts",
+                    "physical.floorplan",
+                    "physical.place",
+                    "physical.detailed-route",
+                    "release.authorization",
+                    "release.signoff",
+                    "release.tapeout",
+                    "rtl.lint",
                     "simulation-summary",
+                    "timing.signal-integrity",
+                    "timing.sta",
                 ],
                 requiredTestEvidence: [
+                    "xci-dft-stage-evidence",
+                    "xci-electrical-signoff-stage-evidence",
+                    "xci-logic-stage-evidence",
+                    "xci-physical-stage-evidence",
+                    "xci-release-stage-evidence",
+                    "xci-rtl-verification-stage-evidence",
                     "xci-runtime-local-signoff-flow",
                     "xci-signoff-stage-artifact-gates",
+                    "xci-timing-stage-evidence",
+                    "production-qualified-release-flow",
                 ]
             ),
             MilestoneSpec(
                 milestoneID: "agent-operable-design-loop",
                 title: "Agent-readable planning, command, evidence, and repair loop",
                 requiredDomains: [
+                    "electrical-signoff",
                     "drc-signoff",
                     "layout-edit",
+                    "logic-design",
+                    "logic-execution",
                     "lvs-signoff",
                     "pex-extraction",
+                    "physical-design",
+                    "rtl-verification",
                     "simulation-analysis",
+                    "timing-signoff",
                 ],
                 requiredOperations: [
                     "drc.export-repair-hints",
+                    "electrical.signoff",
                     "layout-command-replay",
+                    "logic.elaborate",
+                    "logic.lower",
+                    "logic.simulate",
+                    "logic.synthesize",
                     "lvs.export-repair-hints",
                     "pex.export-evidence-packet",
+                    "physical.eco",
+                    "rtl.lint",
                     "simulation.export-metric-report",
+                    "timing.sta",
                 ],
                 requiredArtifacts: [
                     "drc-repair-hints",
+                    "electrical-signoff-report",
                     "layout-command-result",
+                    "logic-execution-design",
+                    "logic-simulation-report",
                     "lvs-repair-hints",
+                    "mapped-design",
                     "pex-evidence-packet",
+                    "physical-design-diff",
+                    "rtl-lint-report",
                     "simulation-metric-report",
+                    "timing-sta-result",
                 ],
                 requiredVerificationGates: [
                     "artifact-integrity",
+                    "execution-provenance",
+                    "logic.elaborate",
+                    "logic.lower",
+                    "logic.simulate",
+                    "logic.synthesize",
                     "native-drc",
                     "native-lvs",
+                    "physical.eco",
+                    "rtl.lint",
                     "schema-validation",
                     "simulation-metric-gate",
+                    "timing.sta",
                 ],
                 requiredTestEvidence: [
                     "xci-candidate-plan-verification-contract",
+                    "xci-logic-stage-evidence",
                     "xci-numeric-repair-loop-feedback",
+                    "xci-physical-stage-evidence",
+                    "xci-rtl-verification-stage-evidence",
+                    "xci-timing-stage-evidence",
                 ]
             ),
             MilestoneSpec(
@@ -531,6 +833,7 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                     "layout-edit",
                     "lvs-signoff",
                     "pex-extraction",
+                    "release",
                     "simulation-analysis",
                 ],
                 requiredOperations: [
@@ -538,6 +841,9 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                     "layout-command-replay",
                     "lvs.waiver-review",
                     "pex.summarize-run",
+                    "release.authorization",
+                    "release.signoff",
+                    "release.tapeout",
                     "simulation.summarize-run",
                 ],
                 requiredArtifacts: [
@@ -545,18 +851,26 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                     "layout-command-result",
                     "lvs-summary",
                     "pex-summary",
+                    "release-authorization-decision",
                     "simulation-summary",
+                    "signoff-bundle",
+                    "tapeout-release",
                 ],
                 requiredVerificationGates: [
                     "approval-gate",
                     "artifact-integrity",
                     "human-review",
                     "pex-flow-artifacts",
+                    "release.authorization",
+                    "release.signoff",
+                    "release.tapeout",
                     "simulation-summary",
                 ],
                 requiredTestEvidence: [
                     "xci-candidate-plan-verification-contract",
+                    "xci-release-stage-evidence",
                     "xci-risk-approval-review-contract",
+                    "production-qualified-release-flow",
                 ]
             ),
             MilestoneSpec(
@@ -567,57 +881,79 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
                     "layout-edit",
                     "pex-extraction",
                     "simulation-analysis",
+                    "timing-signoff",
                 ],
                 requiredOperations: [
                     "drc.import-foundry-rule-seed",
                     "layout-command-replay",
                     "pex.parse-spef",
                     "simulation.import-spice",
+                    "timing.sta",
                 ],
                 requiredArtifacts: [
                     "drc-foundry-rule-import-report",
                     "layout-document",
                     "parasitic-ir",
                     "simulation-netlist",
+                    "timing-sta-result",
                 ],
                 requiredVerificationGates: [
                     "artifact-integrity",
                     "deck-readiness",
                     "import-coverage",
                     "schema-validation",
+                    "timing.sta",
                 ],
                 requiredTestEvidence: [
                     "drc-foundry-rule-import-agent-envelope",
                     "xci-platform-readiness-contract",
+                    "xci-timing-stage-evidence",
                 ]
             ),
             MilestoneSpec(
                 milestoneID: "post-layout-improvement-loop",
                 title: "Post-layout degradation analysis and improvement planning",
                 requiredDomains: [
+                    "electrical-signoff",
                     "layout-edit",
                     "pex-extraction",
+                    "physical-design",
                     "simulation-analysis",
+                    "timing-signoff",
                 ],
                 requiredOperations: [
                     "layout-command-replay",
+                    "electrical.signoff",
                     "pex.metric-recovery-objective",
+                    "physical.eco",
                     "simulation.compare-post-layout",
+                    "timing.signal-integrity",
+                    "timing.sta",
                 ],
                 requiredArtifacts: [
                     "layout-command-result",
+                    "electrical-signoff-report",
                     "parasitic-ir",
                     "planning-problem",
                     "post-layout-comparison",
+                    "physical-design-diff",
+                    "timing-signal-integrity-result",
+                    "timing-sta-result",
                 ],
                 requiredVerificationGates: [
                     "artifact-integrity",
                     "pex-flow-artifacts",
+                    "physical.eco",
                     "simulation-metric-gate",
+                    "timing.signal-integrity",
+                    "timing.sta",
                 ],
                 requiredTestEvidence: [
                     "xci-post-layout-comparison-gate",
                     "xci-numeric-repair-loop-feedback",
+                    "xci-electrical-signoff-stage-evidence",
+                    "xci-physical-stage-evidence",
+                    "xci-timing-stage-evidence",
                 ]
             ),
         ]
@@ -626,116 +962,198 @@ public struct XcircuitePlatformCapabilityReadinessAssessor: Sendable {
     private func defaultTestEvidence() -> [XcircuitePlatformCapabilityTestEvidence] {
         [
             XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-logic-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/LogicEngineFlowStageExecutorTests"
+                ),
+                testFilter: "LogicEngineFlowStageExecutorTests",
+                coveredMilestoneIDs: ["standalone-local-signoff", "agent-operable-design-loop"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate"],
+                coveredArtifactKinds: ["logic-execution-design", "logic-simulation-report", "mapped-design", "logic-equivalence-evidence"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-rtl-verification-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/RTLVerificationFlowStageExecutorTests"
+                ),
+                testFilter: "RTLVerificationFlowStageExecutorTests",
+                coveredMilestoneIDs: ["standalone-local-signoff", "agent-operable-design-loop"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate"],
+                coveredArtifactKinds: ["rtl-lint-report", "rtl-verification-evidence"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-dft-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/DFTFlowStageExecutorTests"
+                ),
+                testFilter: "DFTFlowStageExecutorTests",
+                coveredMilestoneIDs: ["standalone-local-signoff"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate"],
+                coveredArtifactKinds: ["test-design", "scan-report", "dft-oracle-correlation"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-physical-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/PhysicalDesignFlowStageExecutorTests"
+                ),
+                testFilter: "PhysicalDesignFlowStageExecutorTests",
+                coveredMilestoneIDs: ["standalone-local-signoff", "agent-operable-design-loop", "post-layout-improvement-loop"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate"],
+                coveredArtifactKinds: ["physical-design", "physical-report", "physical-design-review-packet"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-timing-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/TimingHeadlessFlowTests"
+                ),
+                testFilter: "TimingHeadlessFlowTests",
+                coveredMilestoneIDs: ["standalone-local-signoff", "agent-operable-design-loop", "standard-format-grounding", "post-layout-improvement-loop"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate"],
+                coveredArtifactKinds: ["timing-sta-result", "timing-signal-integrity-result"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-electrical-signoff-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/ElectricalSignoffFlowStageExecutorTests"
+                ),
+                testFilter: "ElectricalSignoffFlowStageExecutorTests",
+                coveredMilestoneIDs: ["standalone-local-signoff", "post-layout-improvement-loop"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate"],
+                coveredArtifactKinds: ["electrical-signoff-report", "electrical-corpus-report"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
+                evidenceID: "xci-release-stage-evidence",
+                packagePath: "Xcircuite",
+                invocation: xcodebuildTestInvocation(
+                    scheme: "Xcircuite-Package",
+                    onlyTesting: "XcircuiteTests/ReleaseFlowStageExecutorTests"
+                ),
+                testFilter: "ReleaseFlowStageExecutorTests",
+                coveredMilestoneIDs: ["standalone-local-signoff", "human-review-audit"],
+                coveredRequirementKinds: ["successful-stage-execution", "artifact", "execution-provenance", "verification-gate", "human-review"],
+                coveredArtifactKinds: ["release-authorization-decision", "signoff-bundle", "tapeout-release"]
+            ),
+            XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-runtime-local-signoff-flow",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages()"
                 ),
                 testFilter: "XcircuiteFlowRuntimeTests/runtimeProgressFollowStreamsLayoutDRCLVSPEXStages()",
                 coveredMilestoneIDs: ["standalone-local-signoff"],
                 coveredRequirementKinds: ["operation", "artifact", "verification-gate"],
-                evidenceArtifacts: ["run-manifest", "progress-events", "stage-artifacts"]
+                coveredArtifactKinds: ["run-manifest", "progress-events", "stage-artifacts"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-signoff-stage-artifact-gates",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/SignoffFlowStageExecutorTests"
                 ),
                 testFilter: "SignoffFlowStageExecutorTests",
                 coveredMilestoneIDs: ["standalone-local-signoff"],
                 coveredRequirementKinds: ["artifact", "verification-gate"],
-                evidenceArtifacts: ["drc-summary", "lvs-summary", "artifact-manifest"]
+                coveredArtifactKinds: ["drc-summary", "lvs-summary", "artifact-manifest"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-candidate-plan-verification-contract",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord()"
                 ),
                 testFilter: "XcircuiteCandidatePlanVerifierTests/verifyCandidatePlanCLIWritesPlanVerificationAndActionRecord()",
                 coveredMilestoneIDs: ["agent-operable-design-loop", "human-review-audit"],
                 coveredRequirementKinds: ["operation", "artifact", "verification-gate", "human-review"],
-                evidenceArtifacts: ["planning/plan-verification.json", "actions.jsonl"]
+                coveredArtifactKinds: ["planning/plan-verification/<sha256>.json", "actions.jsonl"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-risk-approval-review-contract",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate()"
                 ),
                 testFilter: "XcircuiteCandidatePlanVerifierTests/recordedRiskApprovalPassesSyntheticApprovalGate()",
                 coveredMilestoneIDs: ["human-review-audit"],
                 coveredRequirementKinds: ["approval-gate", "human-review"],
-                evidenceArtifacts: ["approval-record", "planning/plan-verification.json"]
+                coveredArtifactKinds: ["approval-record", "planning/plan-verification/<sha256>.json"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "drc-foundry-rule-import-agent-envelope",
                 packagePath: "DRCEngine",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "DRCEngine-Package",
                     onlyTesting: "DRCCLICoreTests/DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()"
                 ),
                 testFilter: "DRCCLIOptionsTests/foundryRuleImportCLIEmitsDecodableAgentEnvelope()",
                 coveredMilestoneIDs: ["standard-format-grounding"],
                 coveredRequirementKinds: ["standard-format", "artifact", "cli-json"],
-                evidenceArtifacts: ["layout-tech-database", "drc-foundry-rule-import-report"]
+                coveredArtifactKinds: ["layout-tech-database", "drc-foundry-rule-import-report"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-platform-readiness-contract",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/XcircuitePlatformCapabilityReadinessTests"
                 ),
                 testFilter: "XcircuitePlatformCapabilityReadinessTests",
                 coveredMilestoneIDs: ["standard-format-grounding"],
                 coveredRequirementKinds: ["readiness", "cli-json", "regression-gate"],
-                evidenceArtifacts: ["platform-capability-readiness-report"]
+                coveredArtifactKinds: ["platform-capability-readiness-report"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-post-layout-comparison-gate",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass()"
                 ),
                 testFilter: "PostLayoutComparisonFlowStageExecutorTests/comparisonReportArtifactAndGatePass()",
                 coveredMilestoneIDs: ["post-layout-improvement-loop"],
                 coveredRequirementKinds: ["post-layout", "artifact", "verification-gate"],
-                evidenceArtifacts: ["post-layout-comparison"]
+                coveredArtifactKinds: ["post-layout-comparison"]
             ),
             XcircuitePlatformCapabilityTestEvidence(
                 evidenceID: "xci-numeric-repair-loop-feedback",
                 packagePath: "Xcircuite",
-                command: xcodebuildTestCommand(
+                invocation: xcodebuildTestInvocation(
                     scheme: "Xcircuite-Package",
                     onlyTesting: "XcircuiteTests/XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses()"
                 ),
                 testFilter: "XcircuiteNumericRepairLoopRunnerTests/numericRepairLoopCLIExecutesRejectedFeedbackLoopUntilSimulationMetricPasses()",
                 coveredMilestoneIDs: ["agent-operable-design-loop", "post-layout-improvement-loop"],
                 coveredRequirementKinds: ["repair-loop", "feedback", "simulation-metric-gate"],
-                evidenceArtifacts: ["planning/numeric-repair-loop.json", "planning/rejected-plans.jsonl"]
+                coveredArtifactKinds: ["planning/numeric-repair-loop.json", "planning/rejected-plans.jsonl"]
             ),
         ]
     }
 
-    private func xcodebuildTestCommand(
+    private func xcodebuildTestInvocation(
         timeoutSeconds: Int = 120,
         scheme: String,
         onlyTesting: String
-    ) -> [String] {
-        [
-            "perl", "-e", "alarm shift; exec @ARGV", "\(timeoutSeconds)",
-            "xcodebuild", "test",
-            "-scheme", scheme,
-            "-destination", "platform=macOS",
-            "-only-testing:\(onlyTesting)",
-        ]
+    ) -> XcircuiteXcodebuildTestInvocation {
+        XcircuiteXcodebuildTestInvocation(
+            timeoutSeconds: timeoutSeconds,
+            scheme: scheme,
+            onlyTesting: onlyTesting
+        )
     }
 
     private struct MilestoneSpec: Sendable, Hashable {

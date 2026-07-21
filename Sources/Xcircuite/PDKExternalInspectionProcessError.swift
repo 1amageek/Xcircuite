@@ -5,6 +5,7 @@ public enum PDKExternalInspectionProcessError: Error, Sendable, Hashable, Locali
     case invalidStageID(String)
     case invalidRunID(String)
     case invalidAssetID(String)
+    case executableMeasurementFailed(path: String, reason: String)
     case artifactPreparationFailed(path: String, reason: String)
     case resultMissing(path: String)
     case resultReadFailed(path: String, reason: String)
@@ -23,6 +24,8 @@ public enum PDKExternalInspectionProcessError: Error, Sendable, Hashable, Locali
             "External PDK inspection run ID is invalid: \(runID)."
         case .invalidAssetID(let assetID):
             "External PDK inspection asset ID is invalid: \(assetID)."
+        case .executableMeasurementFailed(let path, let reason):
+            "External PDK inspection executable could not be measured at \(path): \(reason)"
         case .artifactPreparationFailed(let path, let reason):
             "External PDK inspection artifact preparation failed at \(path): \(reason)"
         case .resultMissing(let path):

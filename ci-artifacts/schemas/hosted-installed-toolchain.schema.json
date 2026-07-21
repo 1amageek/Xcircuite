@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1amageek/Xcircuite/ci-artifacts/schemas/hosted-installed-toolchain.schema.json",
+  "title": "Hosted Installed Toolchain Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "status", "generatedAt", "runner", "process", "tools", "diagnostics"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "hosted-installed-toolchain" },
+    "status": { "enum": ["passed", "blocked"] },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "runner": { "type": "object" },
+    "process": { "type": ["object", "null"] },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["repository", "sourceRevision", "executable", "executableSHA256", "executableByteCount", "versionInvocation", "versionOutput"],
+        "properties": {
+          "repository": { "type": "string", "format": "uri" },
+          "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "executable": { "type": "string" },
+          "executableSHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "executableByteCount": { "type": "integer", "minimum": 1 },
+          "versionInvocation": { "type": "object" },
+          "versionOutput": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/diagnostic" }
+    }
+  },
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "reason", "suggestedAction"],
+      "properties": {
+        "severity": { "const": "error" },
+        "code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "suggestedAction": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

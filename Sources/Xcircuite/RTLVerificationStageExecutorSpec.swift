@@ -11,6 +11,7 @@ public extension XcircuiteFlowStageExecutorSpec {
         public var additionalReferenceInputs: [XcircuiteFlowInputReference]
         public var constraintsInput: XcircuiteFlowInputReference?
         public var evidenceInput: XcircuiteFlowInputReference?
+        public var pdkInput: XcircuiteFlowInputReference
         public var topModuleName: String
         public var policy: RTLVerificationPolicy
         public var frontend: RTLVerificationFrontendOptions
@@ -28,6 +29,7 @@ public extension XcircuiteFlowStageExecutorSpec {
             additionalReferenceInputs: [XcircuiteFlowInputReference] = [],
             constraintsInput: XcircuiteFlowInputReference? = nil,
             evidenceInput: XcircuiteFlowInputReference? = nil,
+            pdkInput: XcircuiteFlowInputReference,
             topModuleName: String,
             policy: RTLVerificationPolicy = RTLVerificationPolicy(),
             frontend: RTLVerificationFrontendOptions = RTLVerificationFrontendOptions(),
@@ -44,6 +46,7 @@ public extension XcircuiteFlowStageExecutorSpec {
             self.additionalReferenceInputs = additionalReferenceInputs
             self.constraintsInput = constraintsInput
             self.evidenceInput = evidenceInput
+            self.pdkInput = pdkInput
             self.topModuleName = topModuleName
             self.policy = policy
             self.frontend = frontend

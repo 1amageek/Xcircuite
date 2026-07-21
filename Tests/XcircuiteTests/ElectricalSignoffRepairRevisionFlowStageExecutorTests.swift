@@ -92,7 +92,7 @@ struct ElectricalSignoffRepairRevisionFlowStageExecutorTests {
             digest: String(repeating: "c", count: 64),
             byteCount: 1
         )
-        let layoutFoundationReference = try artifactReference(layoutReference)
+        let layoutFoundationReference = layoutReference
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [],

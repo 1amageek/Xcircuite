@@ -77,7 +77,7 @@ public struct XcircuiteSymbolicPlannerFeatureMatrixProvider: Sendable {
                 requiredForCorpusTrust: true,
                 evidence: [
                     "XcircuiteCandidatePlanVerifier",
-                    "planning/plan-verification.json",
+                    "planning/plan-verification/<sha256>.json",
                 ]
             ),
             XcircuiteSymbolicPlannerFeature(

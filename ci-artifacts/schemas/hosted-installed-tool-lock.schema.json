@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1amageek/Xcircuite/ci-artifacts/schemas/hosted-installed-tool-lock.schema.json",
+  "title": "Hosted Installed Tool Matrix Lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runner", "retentionDays", "process", "tools", "lanes", "timeouts"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runner": { "const": "macos-26" },
+    "retentionDays": { "type": "integer", "minimum": 1 },
+    "process": {
+      "type": "object",
+      "required": ["name", "revision", "acquisitionClient", "assets", "corners"],
+      "properties": {
+        "name": { "const": "sky130A" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "acquisitionClient": { "type": "object" },
+        "assets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/asset" } },
+        "corners": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "classification", "ngspiceSection", "supplyVoltage", "assets"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "classification": { "enum": ["typical", "slow", "fast"] },
+              "ngspiceSection": { "enum": ["tt", "ss", "ff"] },
+              "supplyVoltage": { "type": "number", "exclusiveMinimum": 0 },
+              "assets": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": { "$ref": "#/$defs/cornerAsset" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tools": { "type": "object", "minProperties": 6 },
+    "lanes": { "type": "object", "minProperties": 7 },
+    "timeouts": { "type": "object" }
+  },
+  "$defs": {
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "cornerAsset": {
+      "allOf": [
+        { "$ref": "#/$defs/asset" },
+        {
+          "type": "object",
+          "properties": {
+            "role": { "enum": ["timingLibrary", "openRCXRules", "ngspiceModelLibrary"] }
+          }
+        }
+      ]
+    }
+  }
+}

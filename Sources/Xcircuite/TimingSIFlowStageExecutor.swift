@@ -34,6 +34,15 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try validate(stage: stage)
             let request = try makeRequest(context: context)
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "timing-signal-integrity-request",
+                stageID: stageID,
+                fileName: "timing-signal-integrity-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
             let executingEngine: any SignalIntegrityExecuting
             if let engine {
                 executingEngine = engine
@@ -48,7 +57,11 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             let result = try await executingEngine.execute(request)
             try await context.checkCancellation()
             let resultArtifact = try await persistResult(result, context: context)
-            return makeStageResult(result: result, resultArtifact: resultArtifact)
+            return makeStageResult(
+                result: result,
+                requestArtifact: requestArtifact,
+                resultArtifact: resultArtifact
+            )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
         } catch {
@@ -102,19 +115,12 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         kind: ArtifactKind,
         fallback: ArtifactFormat
     ) throws -> ArtifactReference {
-        let url = try input.resolveExisting(projectRoot: try context.xcircuiteProjectRoot(), runDirectory: try context.xcircuiteRunDirectory())
-        let path = try ProjectPathBoundary().relativePath(for: url, projectRoot: try context.xcircuiteProjectRoot())
-        let data = try Data(contentsOf: url)
-        return ArtifactReference(
-            id: try ArtifactID(rawValue: artifactID),
-            locator: ArtifactLocator(
-                location: try ArtifactLocation(workspaceRelativePath: path),
-                role: .input,
-                kind: kind,
-                format: format(for: url, fallback: fallback)
-            ),
-            digest: try SHA256ContentDigester().digest(data: data),
-            byteCount: UInt64(data.count)
+        try input.resolveArtifactReference(
+            projectRoot: try context.xcircuiteProjectRoot(),
+            runDirectory: try context.xcircuiteRunDirectory(),
+            artifactID: artifactID,
+            kind: kind,
+            format: fallback
         )
     }
 
@@ -130,12 +136,15 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             stageID: stageID,
             fileName: "timing-signal-integrity-result.json",
             kind: .report,
-            format: .json
+            format: .json,
+            producer: result.evidence.provenance.producer,
+            mode: .replaceable
         )
     }
 
     private func makeStageResult(
         result: SignalIntegrityExecutionResult,
+        requestArtifact: ArtifactReference,
         resultArtifact: ArtifactReference
     ) -> FlowStageResult {
         let diagnostics = result.diagnostics.map {
@@ -159,7 +168,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
             status: stageStatus,
             diagnostics: diagnostics,
             gates: [FlowGateResult(gateID: stageID, status: gateStatus, diagnostics: diagnostics)],
-            artifacts: [resultArtifact]
+            artifacts: [requestArtifact] + result.artifacts + [resultArtifact]
         )
     }
 
@@ -171,14 +180,6 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func format(for url: URL, fallback: ArtifactFormat) -> ArtifactFormat {
-        switch url.pathExtension.lowercased() {
-        case "spef": return .spef
-        case "sdc": return .sdc
-        case "json": return .json
-        default: return fallback
-        }
-    }
 }
 
 private struct ProjectSITimingArtifactReader: TimingArtifactReading {

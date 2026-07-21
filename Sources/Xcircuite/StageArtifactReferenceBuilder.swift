@@ -20,7 +20,8 @@ struct StageArtifactReferenceBuilder: Sendable {
         artifactID: String? = nil,
         role: ArtifactRole = .output,
         kind: ArtifactKind,
-        format: ArtifactFormat
+        format: ArtifactFormat,
+        producer: ProducerIdentity? = nil
     ) throws -> ArtifactReference {
         let relativePath = try pathBoundary.relativePath(for: url, projectRoot: projectRoot)
         let locator = ArtifactLocator(
@@ -32,7 +33,7 @@ struct StageArtifactReferenceBuilder: Sendable {
         return try LocalArtifactReferencer().reference(
             locator,
             relativeTo: projectRoot,
-            producer: nil
+            producer: producer
         ).withArtifactID(artifactID)
     }
 
@@ -42,7 +43,8 @@ struct StageArtifactReferenceBuilder: Sendable {
         artifactID: String? = nil,
         role: ArtifactRole = .output,
         kind: ArtifactKind,
-        format: ArtifactFormat
+        format: ArtifactFormat,
+        producer: ProducerIdentity? = nil
     ) throws -> ArtifactReference? {
         guard !path.isEmpty else {
             return nil
@@ -57,7 +59,8 @@ struct StageArtifactReferenceBuilder: Sendable {
             artifactID: artifactID,
             role: role,
             kind: kind,
-            format: format
+            format: format,
+            producer: producer
         )
     }
 

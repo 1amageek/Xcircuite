@@ -34,6 +34,11 @@ public enum RTLToolDescriptors {
                     operationID: "rtl.equivalence.rtlToMappedExecutionStructural",
                     inputFormats: [.systemVerilog, .verilog, .json],
                     outputFormats: [.json]
+                ),
+                ToolCapability(
+                    operationID: "logic-equivalence",
+                    inputFormats: [.json],
+                    outputFormats: [.json]
                 )
             ],
             trustProfile: ToolTrustProfile(level: .unknown),

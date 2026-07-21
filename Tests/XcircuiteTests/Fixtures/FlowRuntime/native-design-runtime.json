@@ -1,0 +1,154 @@
+{
+  "schemaVersion" : 7,
+  "executors" : [
+    {
+      "kind" : "logicElaboration",
+      "value" : {
+        "sourceInput" : { "kind" : "path", "value" : "rtl/top.sv" },
+        "stageID" : "logic.elaborate",
+        "tool" : { "qualificationRecord" : null },
+        "topDesignName" : "top"
+      }
+    },
+    {
+      "kind" : "powerIntent",
+      "value" : {
+        "designInput" : {
+          "kind" : "stageArtifact",
+          "value" : {
+            "artifactID" : "logic-design",
+            "format" : "json",
+            "kind" : "rtl",
+            "stageID" : "logic.elaborate"
+          }
+        },
+        "format" : "upf",
+        "pdkInput" : { "kind" : "path", "value" : "pdk/manifest.json" },
+        "sourceInput" : { "kind" : "path", "value" : "power/top.upf" },
+        "stageID" : "logic.power-intent",
+        "tool" : { "qualificationRecord" : null },
+        "topDesignName" : "top"
+      }
+    },
+    {
+      "kind" : "logicLowering",
+      "value" : {
+        "designInput" : {
+          "kind" : "stageArtifact",
+          "value" : {
+            "artifactID" : "logic-design",
+            "format" : "json",
+            "kind" : "rtl",
+            "stageID" : "logic.elaborate"
+          }
+        },
+        "stageID" : "logic.lower",
+        "tool" : { "qualificationRecord" : null },
+        "topDesignName" : "top"
+      }
+    },
+    {
+      "kind" : "logicSimulation",
+      "value" : {
+        "designInput" : {
+          "kind" : "stageArtifact",
+          "value" : {
+            "artifactID" : "logic-execution-design",
+            "format" : "json",
+            "kind" : "netlist",
+            "stageID" : "logic.lower"
+          }
+        },
+        "seed" : 7,
+        "pdkInput" : { "kind" : "path", "value" : "pdk/manifest.json" },
+        "stageID" : "logic.simulate",
+        "stimulusInput" : { "kind" : "path", "value" : "logic/stimulus.json" },
+        "tool" : { "qualificationRecord" : null },
+        "topDesignName" : "top"
+      }
+    },
+    {
+      "kind" : "physicalDesign",
+      "value" : {
+        "allowedStages" : [ "floorplan" ],
+        "requestInput" : { "kind" : "path", "value" : "requests/floorplan.json" },
+        "stageID" : "physical.floorplan",
+        "tool" : { "qualificationRecord" : null }
+      }
+    },
+    {
+      "kind" : "timingSTA",
+      "value" : {
+        "inputs" : {
+          "analysisKinds" : [ "setup", "hold" ],
+          "cornerIDs" : [ "tt" ],
+          "design" : {
+            "kind" : "stageArtifact",
+            "value" : {
+              "artifactID" : "logic-execution-design",
+              "format" : "json",
+              "kind" : "netlist",
+              "stageID" : "logic.lower"
+            }
+          },
+          "libraries" : [ { "kind" : "path", "value" : "timing/cells.lib" } ],
+          "modeIDs" : [ "functional" ],
+          "parasitics" : {
+            "kind" : "stageArtifact",
+            "value" : {
+              "format" : "spef",
+              "kind" : "parasitics",
+              "pathSuffix" : "tt.spef",
+              "stageID" : "signoff.pex"
+            }
+          },
+          "pdkDigest" : "0000000000000000000000000000000000000000000000000000000000000000",
+          "pdkManifest" : { "kind" : "path", "value" : "pdk/manifest.json" },
+          "pdkVersion" : "1",
+          "processID" : "fixture-process",
+          "requiresPostLayoutInputs" : true,
+          "constraints" : { "kind" : "path", "value" : "timing/top.sdc" },
+          "topDesignName" : "top"
+        },
+        "stageID" : "timing.sta",
+        "tool" : { "qualificationRecord" : null }
+      }
+    },
+    {
+      "kind" : "timingSignalIntegrity",
+      "value" : {
+        "inputs" : {
+          "constraints" : { "kind" : "path", "value" : "timing/top.sdc" },
+          "design" : {
+            "kind" : "stageArtifact",
+            "value" : {
+              "artifactID" : "logic-execution-design",
+              "format" : "json",
+              "kind" : "netlist",
+              "stageID" : "logic.lower"
+            }
+          },
+          "maxDeltaDelay" : 0.5,
+          "maxNoiseRatio" : 0.1,
+          "modeIDs" : [ "functional" ],
+          "parasitics" : {
+            "kind" : "stageArtifact",
+            "value" : {
+              "format" : "spef",
+              "kind" : "parasitics",
+              "pathSuffix" : "tt.spef",
+              "stageID" : "signoff.pex"
+            }
+          },
+          "pdkDigest" : "0000000000000000000000000000000000000000000000000000000000000000",
+          "pdkManifest" : { "kind" : "path", "value" : "pdk/manifest.json" },
+          "pdkVersion" : "1",
+          "processID" : "fixture-process",
+          "topDesignName" : "top"
+        },
+        "stageID" : "timing.signal-integrity",
+        "tool" : { "qualificationRecord" : null }
+      }
+    }
+  ]
+}

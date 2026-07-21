@@ -22,10 +22,11 @@ public struct OpAmpSimulationDeckRunner: Sendable {
             }
 
             do {
-                let outcome = try await engine.run(
+                let outcome = try await engine.execute(SimulationExecutionRequest(
                     netlistSource: deck.netlist,
-                    fileName: "\(deck.deckID).cir"
-                )
+                    fileName: "\(deck.deckID).cir",
+                    inputs: []
+                ))
                 waveforms.append(.init(
                     deckID: deck.deckID,
                     analysisKind: outcome.analysisLabel,

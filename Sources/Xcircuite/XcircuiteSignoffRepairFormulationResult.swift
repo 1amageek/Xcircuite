@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import Foundation
 
 public struct XcircuiteSignoffRepairFormulationResult: Codable, Sendable, Hashable {
@@ -50,15 +51,17 @@ public struct XcircuiteSignoffRepairFormulationResult: Codable, Sendable, Hashab
     public var formulationID: String
     public var problemID: String
     public var sourceReports: [SourceReport]
+    public var actionDomainArtifact: ArtifactReference
     public var compilation: XcircuiteRepairPlanFormulationCompilationResult
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         status: String,
         runID: String,
         formulationID: String,
         problemID: String,
         sourceReports: [SourceReport],
+        actionDomainArtifact: ArtifactReference,
         compilation: XcircuiteRepairPlanFormulationCompilationResult
     ) {
         self.schemaVersion = schemaVersion
@@ -67,6 +70,7 @@ public struct XcircuiteSignoffRepairFormulationResult: Codable, Sendable, Hashab
         self.formulationID = formulationID
         self.problemID = problemID
         self.sourceReports = sourceReports
+        self.actionDomainArtifact = actionDomainArtifact
         self.compilation = compilation
     }
 }

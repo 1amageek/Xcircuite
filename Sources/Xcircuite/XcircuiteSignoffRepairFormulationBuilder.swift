@@ -68,6 +68,7 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
             formulationID: formulation.formulationID,
             problemID: compilation.problemID,
             sourceReports: sourceReports(from: loadedReports),
+            actionDomainArtifact: actionDomainArtifact,
             compilation: compilation
         )
     }

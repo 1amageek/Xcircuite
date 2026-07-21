@@ -10,8 +10,11 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
     private let topCell: String
     private let layoutFormat: DRCLayoutFormat?
     private let technologyInput: XcircuiteFlowInputReference?
+    private let waiverInput: XcircuiteFlowInputReference?
     private let backendSelection: DRCBackendSelection
     private let options: DRCOptions
+    private let designRevision: String?
+    private let canonicalStateDigest: String?
     private let engine: any DRCEngine.DRCExecuting
     private let artifactBuilder: StageArtifactReferenceBuilder
 
@@ -27,8 +30,11 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         self.topCell = request.topCell
         self.layoutFormat = request.layoutFormat
         self.technologyInput = request.technologyURL.map { .path($0.path(percentEncoded: false)) }
+        self.waiverInput = request.waiverURL.map { .path($0.path(percentEncoded: false)) }
         self.backendSelection = request.backendSelection
         self.options = request.options
+        self.designRevision = request.designRevision
+        self.canonicalStateDigest = request.canonicalStateDigest
         self.engine = engine
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
@@ -40,8 +46,11 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         topCell: String,
         layoutFormat: DRCLayoutFormat? = nil,
         technologyInput: XcircuiteFlowInputReference? = nil,
+        waiverInput: XcircuiteFlowInputReference? = nil,
         backendSelection: DRCBackendSelection = DRCBackendSelection(backendID: "magic"),
         options: DRCOptions = DRCOptions(),
+        designRevision: String? = nil,
+        canonicalStateDigest: String? = nil,
         engine: any DRCEngine.DRCExecuting
     ) {
         self.stageID = stageID
@@ -50,8 +59,11 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         self.topCell = topCell
         self.layoutFormat = layoutFormat
         self.technologyInput = technologyInput
+        self.waiverInput = waiverInput
         self.backendSelection = backendSelection
         self.options = options
+        self.designRevision = designRevision
+        self.canonicalStateDigest = canonicalStateDigest
         self.engine = engine
         self.artifactBuilder = StageArtifactReferenceBuilder()
     }
@@ -123,12 +135,40 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
                 context: context,
                 workingDirectory: rawDirectory
             )
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "drc-request",
+                stageID: stage.stageID,
+                fileName: "drc-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
             try await context.checkCancellation()
             let executionResult = try await engine.run(
                 request,
                 cancellationCheck: FlowExecutionCancellationProbe.make(context: context)
             )
+            guard executionResult.request == request else {
+                throw DRCError.backendFailed(
+                    "DRC execution result does not retain the verified flow request."
+                )
+            }
+            try validateExecutionProvenance(
+                executionResult.provenance,
+                request: request,
+                projectRoot: try context.xcircuiteProjectRoot()
+            )
             try await context.checkCancellation()
+            let executionResultArtifact = try await context.persistJSONArtifact(
+                executionResult,
+                artifactID: "drc-execution-result",
+                stageID: stage.stageID,
+                fileName: "drc-execution-result.json",
+                kind: .report,
+                producer: executionResult.provenance.producer,
+                mode: .replaceable
+            )
             let persistedSummary = try persistSummaryArtifact(
                 from: executionResult,
                 projectRoot: try context.xcircuiteProjectRoot()
@@ -139,6 +179,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
                 summaryURL: persistedSummary.url,
                 context: context
             )
+            artifacts.append(requestArtifact)
+            artifacts.append(executionResultArtifact)
             let gateStatus = gateStatus(from: executionResult.result)
             let flowDiagnostics = executionResult.result.diagnostics.map(flowDiagnostic)
             let envelopeArtifact = try await DRCSummaryEnvelopeBuilder().envelopeReference(
@@ -149,6 +191,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
                 diagnostics: flowDiagnostics,
                 stageID: stage.stageID,
                 toolID: toolID,
+                producer: executionResult.provenance.producer,
                 context: context
             )
             artifacts.append(envelopeArtifact)
@@ -159,7 +202,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             let artifactManifestGate = StageArtifactManifestCoverageGateBuilder().drcGate(
                 manifestURL: executionResult.artifactManifestURL,
                 artifacts: artifacts,
-                projectRoot: try context.xcircuiteProjectRoot()
+                projectRoot: try context.xcircuiteProjectRoot(),
+                expectedProducer: executionResult.provenance.producer
             )
             let diagnostics = flowDiagnostics
                 + artifactManifestGate.diagnostics
@@ -255,21 +299,58 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         context: FlowExecutionContext,
         workingDirectory: URL
     ) throws -> DRCRequest {
-        DRCRequest(
-            layoutURL: try layoutInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
-            ),
+        let projectRoot = try context.xcircuiteProjectRoot()
+        let runDirectory = try context.xcircuiteRunDirectory()
+        let layoutArtifact = try layoutInput.resolveArtifactReference(
+            projectRoot: projectRoot,
+            runDirectory: runDirectory,
+            artifactID: "drc-layout-input",
+            kind: .layout,
+            format: try artifactFormat(for: layoutFormat)
+        )
+        let technologyArtifact = try technologyInput.map {
+            try $0.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "drc-technology-input",
+                kind: .technology,
+                format: .json
+            )
+        }
+        let waiverArtifact = try waiverInput.map {
+            try $0.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "drc-waiver-input",
+                kind: .constraint,
+                format: .json
+            )
+        }
+        return DRCRequest(
+            layoutURL: try layoutArtifact.locator.location.resolvedFileURL(relativeTo: projectRoot),
             topCell: topCell,
             layoutFormat: layoutFormat,
-            technologyURL: try technologyInput?.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
-            ),
+            technologyURL: try technologyArtifact?.locator.location.resolvedFileURL(relativeTo: projectRoot),
+            waiverURL: try waiverArtifact?.locator.location.resolvedFileURL(relativeTo: projectRoot),
             workingDirectory: workingDirectory,
             backendSelection: backendSelection,
-            options: options
+            options: options,
+            designRevision: designRevision,
+            canonicalStateDigest: canonicalStateDigest,
+            executionInputArtifacts: [layoutArtifact] + [technologyArtifact, waiverArtifact].compactMap { $0 }
         )
+    }
+
+    private func artifactFormat(for format: DRCLayoutFormat?) throws -> ArtifactFormat? {
+        switch format {
+        case .gds: .gdsii
+        case .oasis: .oasis
+        case .nativeJSON: .json
+        case .cif: try ArtifactFormat(rawValue: "cif")
+        case .dxf: try ArtifactFormat(rawValue: "dxf")
+        case .magicLayout: try ArtifactFormat(rawValue: "magic-layout")
+        case .auto, nil: nil
+        }
     }
 
     private func validate(stage: FlowStageDefinition) throws {
@@ -278,6 +359,34 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
         }
         try FlowIdentifierValidator().validate(stage.stageID, kind: .stageID)
         try FlowIdentifierValidator().validate(toolID, kind: .toolID)
+    }
+
+    private func validateExecutionProvenance(
+        _ provenance: ExecutionProvenance,
+        request: DRCRequest,
+        projectRoot: URL
+    ) throws {
+        guard provenance.producer.kind == .engine,
+              let build = provenance.producer.build,
+              isSHA256(build),
+              provenance.invocation != nil,
+              provenance.environment != nil,
+              provenance.inputs == request.executionInputArtifacts,
+              provenance.inputs.allSatisfy({
+                  LocalArtifactVerifier().verify($0, relativeTo: projectRoot).isVerified
+              }) else {
+            throw DRCError.backendFailed(
+                "DRC execution provenance does not match the verified request inputs and executable identity."
+            )
+        }
+    }
+
+    private func isSHA256(_ value: String) -> Bool {
+        value.utf8.count == 64 && value.utf8.allSatisfy { byte in
+            (byte >= 48 && byte <= 57)
+                || (byte >= 65 && byte <= 70)
+                || (byte >= 97 && byte <= 102)
+        }
     }
 
     private func artifactReferences(
@@ -291,7 +400,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
                 for: reportURL,
                 projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
-                format: .json
+                format: .json,
+                producer: executionResult.provenance.producer
             ))
         }
         if let manifestURL = executionResult.artifactManifestURL {
@@ -299,7 +409,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
                 for: manifestURL,
                 projectRoot: try context.xcircuiteProjectRoot(),
                 kind: .report,
-                format: .json
+                format: .json,
+                producer: executionResult.provenance.producer
             ))
         }
         artifacts.append(try artifactBuilder.reference(
@@ -307,7 +418,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "drc-summary",
             kind: .report,
-            format: .json
+            format: .json,
+            producer: executionResult.provenance.producer
         ))
         artifacts.append(try persistRepairHintArtifact(
             from: executionResult,
@@ -318,7 +430,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             for: executionResult.result.logPath,
             projectRoot: try context.xcircuiteProjectRoot(),
             kind: .report,
-            format: .text
+            format: .text,
+            producer: executionResult.provenance.producer
         ) {
             artifacts.append(log)
         }
@@ -365,7 +478,8 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "drc-repair-hints",
             kind: .report,
-            format: .json
+            format: .json,
+            producer: executionResult.provenance.producer
         )
     }
 

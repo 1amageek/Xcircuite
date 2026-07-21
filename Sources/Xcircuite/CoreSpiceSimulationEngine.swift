@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import Foundation
 import CoreSpice
 import CoreSpiceIO
@@ -9,6 +10,8 @@ import CoreSpiceWaveform
 /// `.pz`, `.four`, or `.mc`; nothing defaults to `.op`)
 /// → evaluate the netlist's `.measure` statements.
 public struct CoreSpiceSimulationEngine: SimulationExecuting {
+    private let producerIdentifier: String
+    private let producerVersion: String
 
     public enum EngineError: Error, LocalizedError, Equatable {
         case missingAnalysisDirective
@@ -27,9 +30,57 @@ public struct CoreSpiceSimulationEngine: SimulationExecuting {
         }
     }
 
-    public init() {}
+    public init(
+        producerIdentifier: String = "corespice",
+        producerVersion: String = "1.0.0"
+    ) {
+        self.producerIdentifier = producerIdentifier
+        self.producerVersion = producerVersion
+    }
 
-    public func run(netlistSource: String, fileName: String?) async throws -> SimulationStageOutcome {
+    public func execute(_ request: SimulationExecutionRequest) async throws -> SimulationStageOutcome {
+        let startedAt = Date()
+        let analysis = try await runAnalysis(
+            netlistSource: request.netlistSource,
+            fileName: request.fileName
+        )
+        let completedAt = Date()
+        let execution = try CoreSpiceSimulationExecution(
+            artifacts: [],
+            invocation: ExecutionInvocation.inProcess(
+                entryPoint: "CoreSpiceSimulationEngine.execute"
+            ),
+            environment: ExecutionEnvironmentFingerprint(
+                platform: "macOS",
+                architecture: Self.architecture,
+                toolchain: "Swift"
+            ),
+            startedAt: startedAt,
+            completedAt: completedAt
+        )
+        let executableIdentity = try XcircuiteRuntimeProducerIdentity.current()
+        let result = try CoreSpiceSimulationResult(
+            request: CoreSpiceSimulationRequest(inputs: request.inputs),
+            execution: execution,
+            producer: ProducerIdentity(
+                kind: .engine,
+                identifier: producerIdentifier,
+                version: producerVersion,
+                build: executableIdentity.build
+            )
+        )
+        return SimulationStageOutcome(
+            analysisLabel: analysis.analysisLabel,
+            measurements: analysis.measurements,
+            waveformCSV: analysis.waveformCSV,
+            coreSpiceResult: result
+        )
+    }
+
+    private func runAnalysis(
+        netlistSource: String,
+        fileName: String?
+    ) async throws -> SimulationAnalysisOutput {
         let csvExporter = SimulationWaveformCSVExporter()
         let netlist = try await SPICEIO.parse(netlistSource, fileName: fileName).get()
         let options = try SPICEAnalysisOptions.resolve(from: netlist)
@@ -228,7 +279,7 @@ public struct CoreSpiceSimulationEngine: SimulationExecuting {
                 options: options,
                 cancellation: cancellation
             )
-            return SimulationStageOutcome(
+            return SimulationAnalysisOutput(
                 analysisLabel: "mc",
                 measurements: [],
                 waveformCSV: try csvExporter.csv(from: parametric)
@@ -243,7 +294,7 @@ public struct CoreSpiceSimulationEngine: SimulationExecuting {
             .evaluate(measures: measures, waveform: waveform)
             .map { SimulationMeasurementValue(name: $0.name, value: $0.value, unit: $0.unit) }
 
-        return SimulationStageOutcome(
+        return SimulationAnalysisOutput(
             analysisLabel: label,
             measurements: measurements,
             waveformCSV: try csvExporter.csv(from: waveform)
@@ -263,6 +314,22 @@ public struct CoreSpiceSimulationEngine: SimulationExecuting {
         case poleZero(PoleZeroSpec)
         case fourier(FourierSpec, TransientAnalysisSpec)
         case monteCarlo(MonteCarloSpec)
+    }
+
+    private struct SimulationAnalysisOutput: Sendable {
+        let analysisLabel: String
+        let measurements: [SimulationMeasurementValue]
+        let waveformCSV: String
+    }
+
+    private static var architecture: String {
+#if arch(arm64)
+        "arm64"
+#elseif arch(x86_64)
+        "x86_64"
+#else
+        "unknown"
+#endif
     }
 
     private func numeric(_ value: ParsedParameterValue?) -> Double? {

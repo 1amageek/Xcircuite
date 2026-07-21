@@ -973,7 +973,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         }
     }
 
-    @Test func artifactRegistrationReplacesDuplicateIdentityBeforePlanning() async throws {
+    @Test func artifactRegistrationPreservesDistinctLocatorsAndRejectsAmbiguousPlanningInput() async throws {
         let root = try makeTemporaryRoot("drc-planning-duplicate-artifact")
         defer { removeTemporaryRoot(root) }
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
@@ -1002,20 +1002,26 @@ struct XcircuiteDiagnosticPlanningProblemBuilderTests {
         )
         let ledger = try await store.loadRunLedger(runID: "run-duplicate")
         let retained = ledger.artifacts.filter { $0.id.rawValue == "drc-summary" }
-        #expect(retained.count == 1)
-        #expect(retained.first?.path == duplicatePath)
+        #expect(retained.count == 2)
+        #expect(Set(retained.map(\.path)) == Set([summaryPath, duplicatePath]))
 
-        let result = try await XcircuitePlanningProblemGenerator(
+        let generator = XcircuitePlanningProblemGenerator(
             workspaceStore: store,
             artifactStore: artifactStore
-        ).generateRepairProblem(
-            request: XcircuitePlanningProblemGenerationRequest(
-                runID: "run-duplicate",
-                source: .drcSummary
-            ),
-            projectRoot: root
         )
-        #expect(result.summaryPath == duplicatePath)
+        await #expect(throws: XcircuitePlanningProblemGenerationError.duplicateArtifactReference(
+            runID: "run-duplicate",
+            artifactID: "drc-summary",
+            count: 2
+        )) {
+            try await generator.generateRepairProblem(
+                request: XcircuitePlanningProblemGenerationRequest(
+                    runID: "run-duplicate",
+                    source: .drcSummary
+                ),
+                projectRoot: root
+            )
+        }
     }
 
     @Test func generatePlanningProblemCLIReadsLVSSummaryFromExplicitPath() async throws {

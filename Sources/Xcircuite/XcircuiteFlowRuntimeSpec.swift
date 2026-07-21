@@ -4,7 +4,7 @@ import Foundation
 import ToolQualification
 
 public struct XcircuiteFlowRuntimeSpec: Sendable, Hashable, Codable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 7
 
     public var schemaVersion: Int
     public var toolchainProfile: XcircuiteFlowToolchainProfile?

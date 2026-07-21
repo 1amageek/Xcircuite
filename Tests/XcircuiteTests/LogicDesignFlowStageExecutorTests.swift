@@ -89,11 +89,14 @@ struct LogicDesignFlowStageExecutorTests {
         ))
         let designURL = root.appending(path: "design.json")
         try LogicDesignSnapshotCodec.encode(snapshot).write(to: designURL, options: [.atomic])
+        let pdkURL = root.appending(path: "pdk.json")
+        try Data("{\"processID\":\"fixture\"}".utf8).write(to: pdkURL, options: [.atomic])
         let context = try await makeContext(root: root, runID: "logic-power-adapter")
 
         let result = try await PowerIntentFlowStageExecutor(
             sourceInput: .path(sourceURL.path),
             designInput: .path(designURL.path),
+            pdkInput: .path(pdkURL.path),
             topDesignName: "top"
         ).execute(
             stage: FlowStageDefinition(stageID: "logic.power-intent", displayName: "Power intent"),
@@ -101,7 +104,7 @@ struct LogicDesignFlowStageExecutorTests {
         )
 
         #expect(result.status == .succeeded)
-        #expect(result.artifacts.count == 4)
+        #expect(result.artifacts.count == 6)
         #expect(result.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.artifacts.allSatisfy {
             LocalArtifactVerifier().verify($0, relativeTo: root).isVerified

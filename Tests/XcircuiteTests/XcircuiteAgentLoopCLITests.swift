@@ -74,7 +74,19 @@ struct XcircuiteAgentLoopCLITests {
         let result = try JSONDecoder().decode(FlowRunCrossArtifactEvaluationResult.self, from: data)
 
         #expect(result.evaluation.status == .accepted)
-        #expect(fileExists(".xcircuite/runs/\(runID)/reports/cross-artifact-evaluation.json", in: root))
+        let evaluationArtifact = try #require(result.artifactReferences.first)
+        #expect(evaluationArtifact.id.rawValue == "cross-artifact-evaluation")
+        #expect(evaluationArtifact.locator.location.value.hasPrefix(
+            ".xcircuite/runs/\(runID)/reports/cross-artifact-evaluation-sha256-"
+        ))
+        #expect(evaluationArtifact.locator.location.value.hasSuffix(".json"))
+        #expect(fileExists(evaluationArtifact.locator.location.value, in: root))
+        let retainedContent = try await store.loadArtifactContent(for: evaluationArtifact)
+        let retainedEvaluation = try JSONDecoder().decode(
+            FlowCrossArtifactEvaluation.self,
+            from: retainedContent
+        )
+        #expect(retainedEvaluation == result.evaluation)
     }
 
     @Test func writeOpAmpEvaluationProfileProducesDeveloperUsableProfile() async throws {
@@ -121,7 +133,7 @@ struct XcircuiteAgentLoopCLITests {
         let envelope = FlowArtifactEnvelope(
             artifactID: "simulation-summary",
             role: "simulation-summary",
-            reference: try artifactReference(reference),
+            reference: reference,
             evaluationResult: FlowEvaluationResult(
                 evaluationID: "simulation-evaluation",
                 specID: "opamp-spec",

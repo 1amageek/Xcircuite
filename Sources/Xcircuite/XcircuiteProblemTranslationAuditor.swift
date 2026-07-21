@@ -73,7 +73,8 @@ public struct XcircuiteProblemTranslationAuditor: Sendable {
         let auditRef = try await artifactStore.persistProblemTranslationAudit(
             audit,
             runID: request.runID,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            mode: manifest.status.isTerminal ? .immutable : .replaceable
         )
         return XcircuiteProblemTranslationAuditResult(
             status: audit.status,

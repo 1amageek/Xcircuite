@@ -5,7 +5,7 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
     public var actionID: String
     public var domainID: String
     public var operationID: String
-    public var maturity: String
+    public var maturity: XcircuiteOperationMaturity
     public var score: Int
     public var scoreBeforeRejectedFeedback: Int
     public var rejectedFeedbackScoreDelta: Int
@@ -17,7 +17,7 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
     public var verificationGates: [String]
     public var actionDomainSupported: Bool
     public var operationSupported: Bool
-    public var operationMaturity: String?
+    public var operationMaturity: XcircuiteOperationMaturity?
     public var operationReversible: Bool?
     public var operationPreconditions: [String]
     public var operationEffects: [String]
@@ -40,7 +40,7 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
         actionID: String,
         domainID: String,
         operationID: String,
-        maturity: String,
+        maturity: XcircuiteOperationMaturity,
         score: Int,
         scoreBeforeRejectedFeedback: Int? = nil,
         rejectedFeedbackScoreDelta: Int = 0,
@@ -52,7 +52,7 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
         verificationGates: [String],
         actionDomainSupported: Bool,
         operationSupported: Bool,
-        operationMaturity: String? = nil,
+        operationMaturity: XcircuiteOperationMaturity? = nil,
         operationReversible: Bool? = nil,
         operationPreconditions: [String] = [],
         operationEffects: [String] = [],
@@ -147,7 +147,7 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
         self.actionID = try container.decode(String.self, forKey: .actionID)
         self.domainID = try container.decode(String.self, forKey: .domainID)
         self.operationID = try container.decode(String.self, forKey: .operationID)
-        self.maturity = try container.decode(String.self, forKey: .maturity)
+        self.maturity = try container.decode(XcircuiteOperationMaturity.self, forKey: .maturity)
         self.score = try container.decode(Int.self, forKey: .score)
         self.scoreBeforeRejectedFeedback = try container.decode(Int.self, forKey: .scoreBeforeRejectedFeedback)
         self.rejectedFeedbackScoreDelta = try container.decode(Int.self, forKey: .rejectedFeedbackScoreDelta)
@@ -159,7 +159,7 @@ public struct XcircuiteSymbolicPlannerActionTrace: Codable, Sendable, Hashable {
         self.verificationGates = try container.decode([String].self, forKey: .verificationGates)
         self.actionDomainSupported = try container.decode(Bool.self, forKey: .actionDomainSupported)
         self.operationSupported = try container.decode(Bool.self, forKey: .operationSupported)
-        self.operationMaturity = try container.decodeIfPresent(String.self, forKey: .operationMaturity)
+        self.operationMaturity = try container.decodeIfPresent(XcircuiteOperationMaturity.self, forKey: .operationMaturity)
         self.operationReversible = try container.decodeIfPresent(Bool.self, forKey: .operationReversible)
         self.operationPreconditions = try container.decode([String].self, forKey: .operationPreconditions)
         self.operationEffects = try container.decode([String].self, forKey: .operationEffects)

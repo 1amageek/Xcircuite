@@ -1,4 +1,5 @@
 import CircuiteFoundation
+import DesignFlowKernel
 import Foundation
 import LayoutAutoGen
 import LayoutCore
@@ -15,12 +16,13 @@ extension XcircuiteCandidatePlanVerifierTests {
         defer { removeTemporaryRoot(root) }
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
-        try await store.ensureWorkspace()
-        try await prepareTestRun(runID: "run-3", store: store)
-        _ = try await artifactStore.persistCandidatePlan(
-            makeExecutableDRCPlan(runID: "run-3", width: 2, requiredWidth: 1),
+        try await prepareExecutableDRCRun(
+            root: root,
             runID: "run-3",
-            projectRoot: root
+            width: 2,
+            requiredWidth: 1,
+            store: store,
+            artifactStore: artifactStore
         )
         _ = try await XcircuiteCandidatePlanExecutor(
             workspaceStore: store,
@@ -71,12 +73,13 @@ extension XcircuiteCandidatePlanVerifierTests {
         defer { removeTemporaryRoot(root) }
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
-        try await store.ensureWorkspace()
-        try await prepareTestRun(runID: "run-4", store: store)
-        _ = try await artifactStore.persistCandidatePlan(
-            makeExecutableDRCPlan(runID: "run-4", width: 0.5, requiredWidth: 1),
+        try await prepareExecutableDRCRun(
+            root: root,
             runID: "run-4",
-            projectRoot: root
+            width: 0.5,
+            requiredWidth: 1,
+            store: store,
+            artifactStore: artifactStore
         )
         _ = try await XcircuiteCandidatePlanExecutor(
             workspaceStore: store,
@@ -117,10 +120,15 @@ extension XcircuiteCandidatePlanVerifierTests {
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
         let runID = "run-drc-missing-top"
-        try await store.ensureWorkspace()
-        try await prepareTestRun(runID: runID, store: store)
         var plan = makeExecutableDRCPlan(runID: runID, width: 2, requiredWidth: 1)
         plan.steps[0].parameterHints["topCell"] = .text("missing_top")
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        _ = try await artifactStore.persistPlanningProblem(
+            makeRetainedPlanningProblem(for: plan),
+            runID: runID,
+            projectRoot: root
+        )
         _ = try await artifactStore.persistCandidatePlan(
             plan,
             runID: runID,
@@ -155,6 +163,97 @@ extension XcircuiteCandidatePlanVerifierTests {
         #expect(gate.status == "failed")
         #expect(gate.diagnostics.contains { $0.code == "native-drc-execution-failed" })
         #expect(verification.artifactRefs.contains { $0.artifactID == "planning-native-drc-summary" } == false)
+    }
+
+    @Test func candidatePlanVerificationFailsWhenSourceProblemArtifactIsDeleted() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-source-problem-deleted")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-source-problem-deleted"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableDRCRun(
+            root: root,
+            runID: runID,
+            width: 2,
+            requiredWidth: 1,
+            store: store,
+            artifactStore: artifactStore
+        )
+        let ledger = try await store.loadRunLedger(runID: runID)
+        let problemReference = try #require(ledger.artifacts.first {
+            $0.artifactID == XcircuitePlanningArtifactStore.problemArtifactID
+        })
+        try FileManager.default.removeItem(
+            at: root.appending(path: problemReference.path)
+        )
+
+        do {
+            _ = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
+                request: XcircuiteCandidatePlanVerificationRequest(runID: runID),
+                projectRoot: root
+            )
+            Issue.record("Deleted source planning problem must not be accepted.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .artifactIntegrityFailure(let path, _) = error else {
+                Issue.record("Expected artifactIntegrityFailure, got \(error).")
+                return
+            }
+            #expect(path == problemReference.path)
+        }
+    }
+
+    @Test func postExecutionVerificationFailsWhenPlanExecutionArtifactIsTampered() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-execution-tampered")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-plan-execution-tampered"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableDRCRun(
+            root: root,
+            runID: runID,
+            width: 2,
+            requiredWidth: 1,
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
+            request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
+            projectRoot: root
+        )
+        let ledger = try await store.loadRunLedger(runID: runID)
+        let executionReference = try #require(ledger.artifacts.first {
+            $0.artifactID == XcircuitePlanningArtifactStore.planExecutionArtifactID
+        })
+        let executionURL = root.appending(path: executionReference.path)
+        var content = try Data(contentsOf: executionURL)
+        content.append(0x0A)
+        try content.write(to: executionURL, options: .atomic)
+
+        do {
+            _ = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
+                request: XcircuiteCandidatePlanVerificationRequest(
+                    runID: runID,
+                    verificationMode: "post-execution"
+                ),
+                projectRoot: root
+            )
+            Issue.record("Tampered plan execution must not be accepted.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .artifactIntegrityFailure(let path, _) = error else {
+                Issue.record("Expected artifactIntegrityFailure, got \(error).")
+                return
+            }
+            #expect(path == executionReference.path)
+        }
     }
 
     @Test func postExecutionVerificationRunsNativeLVSGateAndAcceptsMatchingNetlists() async throws {
@@ -594,10 +693,113 @@ extension XcircuiteCandidatePlanVerifierTests {
         })
         let action = try #require((try await store.loadRunActions(runID: "run-9")).last)
         #expect(action.status == .failed)
-        #expect(action.outputs.contains {
+        #expect(!action.outputs.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.rejectedPlansArtifactID
                 && $0.path == rejectedPlansArtifact.path
         })
+    }
+
+    @Test func postExecutionVerificationFailsWhenSimulationGateInputIsTampered() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-simulation-input-tampered")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-simulation-input-tampered"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await prepareExecutableSimulationRun(
+            root: root,
+            runID: runID,
+            target: 0.99,
+            store: store,
+            artifactStore: artifactStore
+        )
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
+            request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
+            projectRoot: root
+        )
+        let ledger = try await store.loadRunLedger(runID: runID)
+        let inputReference = try #require(ledger.artifacts.first {
+            $0.path == "circuits/rc.cir"
+        })
+        try Data("tampered simulation input".utf8).write(
+            to: root.appending(path: inputReference.path),
+            options: .atomic
+        )
+
+        do {
+            _ = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
+                request: XcircuiteCandidatePlanVerificationRequest(
+                    runID: runID,
+                    verificationMode: "post-execution"
+                ),
+                projectRoot: root
+            )
+            Issue.record("Tampered simulation gate input must not be consumed.")
+        } catch let error as FlowRunLedgerPersistenceError {
+            guard case .artifactIntegrityFailure(let path, _) = error else {
+                Issue.record("Expected artifactIntegrityFailure, got \(error).")
+                return
+            }
+            #expect(path == inputReference.path)
+        }
+    }
+
+    @Test func postExecutionVerificationRejectsUnretainedPathOnlyGateInput() async throws {
+        let root = try makeTemporaryRoot("candidate-plan-unretained-gate-input")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-unretained-gate-input"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let artifactStore = XcircuitePlanningArtifactStore(workspaceStore: store)
+        try await store.ensureWorkspace()
+        try await prepareTestRun(runID: runID, store: store)
+        try await writeText(
+            "V1 1 0 1\n.tran 1n 1u\n.end\n",
+            path: "circuits/rc.cir",
+            root: root
+        )
+        _ = try await artifactStore.persistPlanningProblem(
+            makeExecutableSimulationProblem(runID: runID),
+            runID: runID,
+            projectRoot: root
+        )
+        _ = try await artifactStore.persistCandidatePlan(
+            makeExecutableSimulationPlan(runID: runID, target: 1),
+            runID: runID,
+            projectRoot: root
+        )
+        _ = try await XcircuiteCandidatePlanExecutor(
+            workspaceStore: store,
+            artifactStore: artifactStore
+        ).executeCandidatePlan(
+            request: XcircuiteCandidatePlanExecutionRequest(runID: runID),
+            projectRoot: root
+        )
+
+        do {
+            _ = try await XcircuiteCandidatePlanVerifier(
+                workspaceStore: store,
+                artifactStore: artifactStore
+            ).verifyCandidatePlan(
+                request: XcircuiteCandidatePlanVerificationRequest(
+                    runID: runID,
+                    verificationMode: "post-execution"
+                ),
+                projectRoot: root
+            )
+            Issue.record("Unretained path-only gate input must not be consumed.")
+        } catch let error as XcircuiteCandidatePlanVerificationError {
+            guard case .invalidArtifactReference(let path, let reason) = error else {
+                Issue.record("Expected invalidArtifactReference, got \(error).")
+                return
+            }
+            #expect(path == "circuits/rc.cir")
+            #expect(reason.contains("exactly one attested artifact"))
+        }
     }
 
     @Test func postExecutionRejectedPlanRecordsSourceParameterCandidateIDFromEditReport() async throws {
@@ -648,7 +850,17 @@ extension XcircuiteCandidatePlanVerifierTests {
             unresolvedObjectives: [],
             blockers: []
         )
-        let candidatePlanRef = try await artifactStore.persistCandidatePlan(
+        _ = try await artifactStore.persistPlanningProblem(
+            makeRetainedPlanningProblem(for: plan),
+            runID: "run-10",
+            projectRoot: root
+        )
+        _ = try await artifactStore.persistCandidatePlan(
+            plan,
+            runID: "run-10",
+            projectRoot: root
+        )
+        let candidatePlanRef = try await artifactStore.persistCandidatePlanSnapshot(
             plan,
             runID: "run-10",
             projectRoot: root

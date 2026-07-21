@@ -39,6 +39,11 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         do {
             try FlowIdentifierValidator().validate(stageID, kind: .stageID)
             try FlowIdentifierValidator().validate(toolID, kind: .toolID)
+            guard !axes.isEmpty, Set(axes).count == axes.count else {
+                throw ElectricalSignoffError.invalidConfiguration(
+                    "electrical signoff axes must be non-empty and unique"
+                )
+            }
         } catch {
             return failureResult(stageID: stage.stageID, code: "ELECTRICAL_SIGNOFF_IDENTIFIER_INVALID", message: error.localizedDescription)
         }
@@ -46,6 +51,7 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         let runResult: ElectricalSignoffRunResult
         do {
             runResult = try await engine.execute(request, axes: axes)
+            try runResult.validate()
             try await context.checkCancellation()
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError
@@ -55,8 +61,9 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
 
         var diagnostics: [FlowDiagnostic] = []
         var gates: [FlowGateResult] = []
+        let requestArtifact = try await persistRequest(context: context)
         let persistedRunResult = try await persistRunResult(runResult, context: context)
-        var artifacts = runResult.artifacts + [persistedRunResult]
+        var artifacts = runResult.artifacts + [requestArtifact, persistedRunResult]
         for axis in axes {
             guard let envelope = runResult.axisResults[axis] else {
                 let diagnostic = FlowDiagnostic(severity: .error, code: "ELECTRICAL_SIGNOFF_AXIS_MISSING", message: "The electrical signoff result did not contain the requested axis \(axis.rawValue).")
@@ -82,9 +89,34 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
                     )
                 }
             }
-            let gateStatus = gateStatus(for: envelope)
             diagnostics.append(contentsOf: evidenceDiagnostics.isEmpty ? axisDiagnostics : evidenceDiagnostics)
-            gates.append(FlowGateResult(gateID: axis.rawValue, status: gateStatus, diagnostics: evidenceDiagnostics.isEmpty ? axisDiagnostics : evidenceDiagnostics))
+            let gateDiagnostics = evidenceDiagnostics.isEmpty ? axisDiagnostics : evidenceDiagnostics
+            if axis == .powerIntegrity {
+                gates.append(FlowGateResult(
+                    gateID: "electromigration",
+                    status: powerIntegrityGateStatus(
+                        for: evidenceEnvelopes,
+                        metricNames: ["segment-current-density", "via-current-density"],
+                        findingPrefix: "electrical.em."
+                    ),
+                    diagnostics: gateDiagnostics.filter { $0.code.hasPrefix("electrical.em.") }
+                ))
+                gates.append(FlowGateResult(
+                    gateID: "ir-drop",
+                    status: powerIntegrityGateStatus(
+                        for: evidenceEnvelopes,
+                        metricNames: ["static-ir-drop", "dynamic-ir-drop"],
+                        findingPrefix: "electrical.ir."
+                    ),
+                    diagnostics: gateDiagnostics.filter { $0.code.hasPrefix("electrical.ir.") }
+                ))
+            } else {
+                gates.append(FlowGateResult(
+                    gateID: axis.rawValue,
+                    status: gateStatus(for: envelope),
+                    diagnostics: gateDiagnostics
+                ))
+            }
         }
 
         var seenArtifactPaths = Set<String>()
@@ -141,6 +173,30 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         }
     }
 
+    private func powerIntegrityGateStatus(
+        for results: [ElectricalSignoffResult],
+        metricNames: Set<String>,
+        findingPrefix: String
+    ) -> FlowGateStatus {
+        if results.contains(where: { $0.status == .blocked || $0.status == .cancelled }) {
+            return .blocked
+        }
+        if results.contains(where: { $0.status == .failed }) {
+            return .failed
+        }
+        for result in results {
+            let metrics = result.payload.metrics.filter { metricNames.contains($0.name) }
+            guard Set(metrics.map(\.name)) == metricNames else {
+                return .blocked
+            }
+            if metrics.contains(where: { $0.passed != true })
+                || result.payload.findings.contains(where: { $0.code.hasPrefix(findingPrefix) }) {
+                return .failed
+            }
+        }
+        return .passed
+    }
+
     private func flowSeverity(for severity: DiagnosticSeverity) -> FlowDiagnosticSeverity {
         switch severity {
         case .information: return .info
@@ -169,7 +225,23 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
             runResult,
             artifactID: "electrical-signoff-run-result",
             fileName: "run-result.json",
-            context: context
+            context: context,
+            producer: runResult.provenance.producer,
+            mode: .replaceable
+        )
+    }
+
+    private func persistRequest(
+        context: FlowExecutionContext
+    ) async throws -> ArtifactReference {
+        try await persist(
+            request,
+            artifactID: "electrical-signoff-request",
+            fileName: "request.json",
+            context: context,
+            mode: .immutable,
+            role: .input,
+            kind: .request
         )
     }
 
@@ -177,23 +249,39 @@ public struct ElectricalSignoffFlowStageExecutor: FlowStageExecutor {
         _ value: Value,
         artifactID: String,
         fileName: String,
-        context: FlowExecutionContext
+        context: FlowExecutionContext,
+        producer: ProducerIdentity? = nil,
+        mode: FlowArtifactPersistenceMode = .replaceable,
+        role: ArtifactRole = .output,
+        kind: ArtifactKind = .report
     ) async throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try await context.infrastructure.persistArtifact(
-            content: encoder.encode(value),
-            id: ArtifactID(rawValue: artifactID),
-            locator: ArtifactLocator(
-                location: try ArtifactLocation(
-                    workspaceRelativePath: ".xcircuite/runs/\(context.runID)/electrical-signoff/\(fileName)"
-                ),
-                role: .output,
-                kind: .report,
-                format: .json
+        let content = try encoder.encode(value)
+        let locator = ArtifactLocator(
+            location: try ArtifactLocation(
+                workspaceRelativePath: ".xcircuite/runs/\(context.runID)/electrical-signoff/\(fileName)"
             ),
+            role: role,
+            kind: kind,
+            format: .json
+        )
+        if let producer {
+            return try await context.infrastructure.persistArtifact(
+                content: content,
+                id: ArtifactID(rawValue: artifactID),
+                locator: locator,
+                runID: context.runID,
+                producer: producer,
+                mode: mode
+            )
+        }
+        return try await context.infrastructure.persistArtifact(
+            content: content,
+            id: ArtifactID(rawValue: artifactID),
+            locator: locator,
             runID: context.runID,
-            mode: .replaceable
+            mode: mode
         )
     }
 

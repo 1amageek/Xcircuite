@@ -2,25 +2,24 @@ import DesignFlowKernel
 import Foundation
 import ReleaseCore
 import SignoffEngine
-import DesignFlowKernel
 
 public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
     public let stageID: String
     public let toolID: String
     private let requestInput: XcircuiteFlowInputReference
-    private let engine: any SignoffEvaluating
+    private let injectedEngine: (any SignoffEvaluating)?
     private let support: ReleaseStageExecutionSupport
 
     public init(
         stageID: String = "release.signoff",
         toolID: String = "native-release-signoff",
         requestInput: XcircuiteFlowInputReference,
-        engine: any SignoffEvaluating = DefaultSignoffEvaluator()
+        engine: (any SignoffEvaluating)? = nil
     ) {
         self.stageID = stageID
         self.toolID = toolID
         self.requestInput = requestInput
-        self.engine = engine
+        self.injectedEngine = engine
         self.support = ReleaseStageExecutionSupport()
     }
 
@@ -47,18 +46,46 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
                 return support.failureResult(stageID: stage.stageID, code: "RELEASE_SIGNOFF_PROJECT_ROOT_MISMATCH", message: "Signoff request project root does not match the flow context.")
             }
             request.projectRoot = try context.xcircuiteProjectRoot().path
-            let result = try await engine.execute(request)
+            let requestArtifact = try await support.persistRequest(
+                try support.encodeRequest(request),
+                stageID: stageID,
+                artifactID: "release-signoff-request",
+                context: context
+            )
+            let engine: any SignoffEvaluating
+            if let injectedEngine {
+                engine = injectedEngine
+            } else {
+                let workspaceStore = try XcircuiteWorkspaceStore(
+                    projectRoot: try context.xcircuiteProjectRoot()
+                )
+                engine = DefaultSignoffEvaluator(artifactPersister: workspaceStore)
+            }
+            let engineResult = try await engine.execute(request)
+            let result = SignoffResult(
+                schemaVersion: engineResult.schemaVersion,
+                runID: engineResult.runID,
+                status: engineResult.status,
+                diagnostics: engineResult.diagnostics,
+                artifacts: engineResult.artifacts,
+                metadata: try support.provenance(
+                    engineResult.provenance,
+                    retaining: requestArtifact
+                ),
+                payload: engineResult.payload
+            )
             try await context.checkCancellation()
             let artifact = try await support.persistResult(
                 result,
                 stageID: stageID,
                 artifactID: "release-signoff-result",
-                context: context
+                context: context,
+                producer: result.provenance.producer
             )
             return support.stageResult(
                 result: result,
                 stageID: stageID,
-                artifacts: [artifact],
+                artifacts: result.artifacts + [requestArtifact, artifact],
                 approved: result.payload.passed
             )
         } catch let cancellationError as FlowRunCancellationError {

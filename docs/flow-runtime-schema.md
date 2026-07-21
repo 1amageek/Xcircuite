@@ -5,7 +5,7 @@ The schema is intentionally explicit because Agent / CLI / CI callers must be
 able to run the same flow without reading Swift source or driving the UI.
 
 Current schema versions: `XcircuiteFlowRunSpec` is `1` and
-`XcircuiteFlowRuntimeSpec` is `2`.
+`XcircuiteFlowRuntimeSpec` is `6`.
 
 ## Contract Boundary
 
@@ -53,13 +53,34 @@ symlink containment, SHA-256 digest, and byte count. DRC and LVS stages also add
 `drc-artifacts` and `lvs-artifacts` gates. Those gates decode the engine
 artifact manifest and verify that every declared output appears in
 `FlowStageResult.artifacts`, with matching manifest SHA-256 and byte count when
-the engine manifest records them. PEX keeps `pex-artifacts` for
+the engine manifest records them. They also require the manifest producer to
+match the canonical execution result producer. Each DRC/LVS stage persists an
+immutable `drc-request.json` or `lvs-request.json` containing the verified
+input references, followed by a retry-replaceable `drc-execution-result.json`
+or `lvs-execution-result.json`. The canonical result, summary, envelope,
+manifest, report, and auxiliary outputs retain the backend producer rather
+than the Xcircuite tool selector. The producer `build` is the measured
+executable SHA-256 used to compare runtime evidence with a
+`ToolQualificationScope.binaryDigest`; a missing or different build cannot be
+promoted as qualified production evidence. Summary confidence also fails closed
+when the retained process qualification is absent, expired, structurally
+invalid, or scoped to a different implementation identifier, version, or
+binary digest. PEX keeps `pex-artifacts` for
 `PEXArtifactCompletenessReport` and adds `pex-flow-artifacts`, which decodes the
 persisted PEX manifest and verifies that every available artifact appears in
 `FlowStageResult.artifacts`. Simulation does not have an engine artifact
-manifest gate yet, but it indexes netlist, waveform, measurement, and
-`simulation-summary` artifacts and applies `artifact-integrity` to the complete
-set.
+manifest gate yet, but it indexes the persisted netlist input, producer-bound
+waveform and measurement outputs, canonical `CoreSpiceSimulationResult`, and
+`simulation-summary`, then applies `artifact-integrity` to the complete set.
+The canonical result provenance must contain the exact persisted netlist
+reference and its producer identifier must match the stage tool ID.
+
+PEX `backendSelection.expectedProducer`, when present, is the exact measured
+external-tool identity expected at execution: identifier, semantic version,
+and executable SHA-256 in `build`. The backend hashes the executable before and
+after use and the stage rejects any observed identity that differs. An omitted
+expected producer does not create a default version; the unqualified descriptor
+remains ineligible until a qualification record supplies the measured identity.
 
 Each DRC/LVS/PEX/simulation stage writes a summary artifact plus a run-level
 `evidence/<summary-artifact-id>-envelope.json` that binds the summary payload to
@@ -201,13 +222,13 @@ and `SimulationFlowStageExecutorTests/simulationExecutorRetriesTransientFailureA
 | `maximumEvidenceAgeSeconds` | number or null | no | Maximum age for required evidence; evidence without `checkedAt` is stale when this is set |
 | `requirePassingHealthCheck` | boolean | no | Defaults to true when omitted |
 
-## XcircuiteFlowRuntimeSpec v2
+## XcircuiteFlowRuntimeSpec v7
 
 Top-level fields:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `schemaVersion` | integer | yes | Must be `3` |
+| `schemaVersion` | integer | yes | Must be `7` |
 | `toolchainProfile` | object or null | no | Shared signoff technology/catalog defaults used by DRC/LVS/PEX stages when a stage does not declare its own technology input |
 | `executors` | array of executor specs | yes | Stage executor configurations |
 
@@ -255,14 +276,20 @@ typed Xcircuite process provider is selected after configuration validation.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `schemaVersion` | integer | yes | Current value is `1` |
+| `schemaVersion` | integer | yes | Current value is `2` |
 | `executablePath` | absolute string | yes | Executable to launch |
 | `arguments` | array of strings | no | Arguments passed in order |
+| `redactedArgumentIndexes` | array of integers | no | Unique, sorted argument indexes replaced by `<redacted>` in retained records and provenance |
 | `workingDirectoryPath` | string or null | no | Optional process working directory |
 | `timeoutSeconds` | positive number | no | Timeout; defaults to `300` |
 
 Arguments may contain only these substitutions: `{{requestPath}}`,
 `{{resultPath}}`, `{{projectRoot}}`, `{{runID}}`, and `{{assetID}}`. The process
+receives the expanded arguments, while `execution.json` and
+`ExecutionProvenance` retain the redacted projection. The provider measures the
+resolved executable before execution, invokes that same resolved path, and
+fails the run if the executable cannot be reverified or changes before
+completion. The process
 boundary writes the following immutable raw evidence before the stage envelope
 is persisted:
 
@@ -281,6 +308,14 @@ result produces structured failed/cancelled evidence and retains the raw files.
 The returned envelope then passes through PDKKit's fail-closed schema, run,
 asset, format, source-reference and digest checks. Process execution evidence
 does not imply ToolQualification or foundry/process qualification.
+
+All six PDK executors (`pdkDiscovery`, `pdkValidation`, `pdkCorpus`,
+`pdkStandardView`, `pdkRuleDeck`, and `pdkOracle`) persist their typed result at
+`.xcircuite/runs/<run-id>/stages/<stage-id>/raw/pdk-result.json` through the
+workspace transaction boundary. The retry-safe artifact carries the exact
+`ExecutionProvenance.producer` emitted by PDKKit. The returned stage
+artifact, run ledger entry, and run manifest entry therefore identify the same
+producer, digest, byte count, and workspace-relative path.
 
 `toolchainProfile` is a run-level technology contract, not an Agent wrapper. It
 lets Agent / CI / Human-authored runtime configs pin the PDK/catalog provenance
@@ -409,15 +444,79 @@ Supported `kind` values:
 
 | Kind | Executor | Required value fields |
 |---|---|---|
+| `logicElaboration` | `LogicElaborationFlowStageExecutor` | `stageID`, `sourceInput`, `topDesignName`, `tool` |
+| `powerIntent` | `PowerIntentFlowStageExecutor` | `stageID`, `sourceInput`, `designInput`, `pdkInput`, `topDesignName`, `format`, `tool` |
+| `logicLowering` | `LogicLoweringFlowStageExecutor` | `stageID`, `tool`, and either `requestInput` or `designInput` plus `topDesignName` |
+| `logicSimulation` | `LogicSimulationFlowStageExecutor` | `stageID`, `tool`, and either `requestInput` or `designInput` plus `pdkInput` and `topDesignName`; optional `stimulusInput`, `seed` |
 | `layoutCommand` | `LayoutCommandFlowStageExecutor` | `stageID`, `requestPath`, `tool`; optional `drcExport`, `standardLayoutExports` |
 | `nativeDRC` | `DRCFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `topCell`, `tool` |
 | `nativeLVS` | `LVSFlowStageExecutor` | `stageID`, schematic netlist input, `topCell`, `tool` plus exactly one layout input |
 | `pex` | `PEXFlowStageExecutor` | `stageID`, `layoutPath` or `layoutInput`, `layoutFormat`, `sourceNetlistPath` or `sourceNetlistInput`, `topCell`, `corners`, `backendSelection`, `tool`, plus `technology` or `toolchainProfile.pexTechnology` |
-| `coreSpiceSimulation` | `SimulationFlowStageExecutor` | `stageID`, `netlistPath`, `tool` |
+| `coreSpiceSimulation` | `SimulationFlowStageExecutor` | `stageID`, `netlistInput`, `expectations`, `tool` |
 | `postLayoutComparison` | `PostLayoutComparisonFlowStageExecutor` | `stageID`, `preLayoutWaveformPath`, `postLayoutWaveformPath`, `options`, `tool` |
-| `dftExecution` | `DFTFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
+| `rtlVerification` | `RTLVerificationFlowStageExecutor` | `stageID`, `analysis`, `rtlInput`, `pdkInput`, `topModuleName`, `policy`, `frontend`, `proofView`, `assumptions`, `tool`; optional reference, constraint, evidence, and oracle inputs |
+| `logicSynthesis` | `LogicSynthesisFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
+| `logicEquivalence` | `LogicEquivalenceFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
+| `logicEvidenceValidation` | `LogicEvidenceValidationFlowStageExecutor` | `stageID`, `reportPath`, `tool` |
+| `dftExecution` | `DFTFlowStageExecutor` | `stageID`, `operation`, `requestPath`, `tool` |
 | `dftOracleCorrelation` | `DFTOracleCorrelationFlowStageExecutor` | `stageID`, `corpusInput`, `observationsInput`, `tool` |
 | `processQualificationEvidenceBuild` | `ProcessQualificationEvidenceBuilderFlowStageExecutor` | `stageID`, `buildRequestInput`, `tool` |
+| `physicalDesign` | `PhysicalDesignFlowStageExecutor` | `stageID`, `requestInput`, non-empty `allowedStages`, `tool` |
+| `physicalReview` | `PhysicalDesignReviewFlowStageExecutor` | `stageID`, `manifestInput`, non-empty unique `reviewScope`, `tool` |
+| `timingSTA` | `TimingSTAFlowStageExecutor` | `stageID`, typed `inputs`, `tool` |
+| `timingSignalIntegrity` | `TimingSIFlowStageExecutor` | `stageID`, typed `inputs`, `tool` |
+| `pdkDiscovery` | `PDKDiscoveryFlowStageExecutor` | `stageID`, non-empty `searchRoots`, `tool`; optional `requiredProcessID` |
+| `pdkValidation` | `PDKValidationFlowStageExecutor` | `stageID`, `manifestInput`, `requiredAssetRoles`, `validateCrossViews`, `tool` |
+| `pdkCorpus` | `PDKCorpusValidationFlowStageExecutor` | `stageID`, `suiteInput`, `rootInput`, `tool` |
+| `pdkStandardView` | `PDKStandardViewInspectionFlowStageExecutor` | `stageID`, `manifestInput`, `assetID`, `format`, `tool`; optional external process configuration |
+| `pdkRuleDeck` | `PDKRuleDeckInspectionFlowStageExecutor` | `stageID`, `manifestInput`, `assetID`, `tool`; optional external process configuration |
+| `pdkOracle` | `PDKOracleFlowStageExecutor` | `stageID`, `manifestInput`, `oracleInput`, `tool` |
+| `releaseEvidenceAssembly` | `ReleaseSignoffEvidenceAssemblyFlowStageExecutor` | `stageID`, `requestInput`, `tool` |
+| `releaseAuthorization` | `ReleaseAuthorizationFlowStageExecutor` | `stageID`, `requestInput`, `tool` |
+| `releaseSignoff` | `ReleaseSignoffFlowStageExecutor` | `stageID`, `requestInput`, `tool` |
+| `releaseTapeout` | `ReleaseTapeoutFlowStageExecutor` | `stageID`, `requestInput`, `tool`; optional qualified `geometricXOR` configuration |
+| `electricalStandardLayoutImport` | `ElectricalStandardLayoutImportFlowStageExecutor` | `stageID`, digest-bound `layoutInput`, `layoutFormat`, digest-bound `technologyInput`, `technologyFormat`, `tool`; conditional layer map and connectivity inputs |
+| `electricalSignoff` | `ElectricalSignoffFlowStageExecutor` | `stageID`, `requestPath`, non-empty unique non-aggregate `axes`, `tool` |
+| `electricalSignoffCorpus` | `ElectricalSignoffCorpusFlowStageExecutor` | `stageID`, `specPath`, `tool`; at most one of `oraclePath` and `oracleProcess` |
+| `electricalRepairRevision` | `ElectricalSignoffRepairRevisionFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
+
+Schema version 7 has exactly 35 executor discriminators. Each discriminator is
+decoded into its typed value, validated, mapped to a tool descriptor, and
+constructed through the runtime executor factory. An unknown `kind` fails with
+`XcircuiteFlowRuntimeSpecError.unknownExecutorKind`; it is never ignored or
+mapped to a default executor.
+
+The design and timing executor kinds are first-class runtime contracts. Agent,
+CLI, and CI callers can therefore select the same in-process executors as Swift
+API callers. `requestInput`, direct logic inputs, and all timing artifact fields use
+`XcircuiteFlowInputReference`; downstream stages should select producer output
+with `stageArtifact`, including an `artifactID` or a sufficiently specific
+kind/format/path suffix. Resolution reads the producing stage's retained
+`result.json` and verifies digest, byte count, and project containment before
+the consumer executes. A successful fixture run does not elevate tool or
+process qualification.
+
+`releaseTapeout.geometricXOR` binds a canonical process-qualification evidence
+artifact, a workspace-relative output report locator, deterministic arguments
+and environment, and a finite positive timeout. When it is present, the runtime
+constructs `QualifiedGeometricXORExecutor` directly and retains the raw XOR
+report and the complete qualification artifact graph in execution provenance
+and the foundry handoff. When it is absent, byte identity remains diagnostic
+only and tapeout cannot become release-qualified.
+
+Direct logic input mode closes the in-run producer lineage without generating
+mutable request files between stages. `logicLowering.designInput` can select the
+`logic-design` artifact from `logicElaboration`; `logicSimulation.designInput`
+can select `logic-execution-design` from `logicLowering`. Xcircuite reuses the
+producer artifact reference, verifies its digest and byte count, and constructs
+the engine request with the current run ID. Request-file mode remains available
+for independently prepared standalone engine requests, but the two modes are
+mutually exclusive and invalid combinations fail validation.
+
+`powerIntent.designInput` can select the same producer-bound `logic-design`
+artifact. Its UPF or CPF source and canonical design are both integrity-checked,
+and their original producer identities remain attached to parsing provenance and
+the resulting stage artifacts.
 
 `pex` is the only serialized PEX executor kind. Its `backendSelection`
 identifies a backend registered by `PEXEngine`; unavailable executables or
@@ -455,9 +554,17 @@ output paths into the flow-managed raw stage directory:
   layout-command-artifact-manifest.json
 ```
 
-The stage result indexes these files as `ArtifactReference`s with SHA-256
-digests, so downstream verification stages can consume produced artifacts without
-depending on UI state. DRC consumption is implemented for `drc-layout.json`; LVS
+Before indexing, Xcircuite decodes the runner's `EvidenceManifest`, requires the
+returned output reference and every declared output producer to match its
+execution provenance, and verifies each declared file's byte count and SHA-256.
+All accepted locators are then rebuilt through the project boundary as
+workspace-relative references while preserving the exact producer. Missing,
+duplicate, outside-project, or mismatched evidence fails the stage without a
+partial artifact result.
+
+The stage result indexes these verified files as `ArtifactReference`s, so
+downstream verification stages can consume produced artifacts without depending
+on UI state. DRC consumption is implemented for `drc-layout.json`; LVS
 consumption is implemented for GDSII/OASIS/CIF/DXF standard layout exports
 through `layoutGDSInput.stageArtifact`; PEX consumption is implemented for
 GDSII/OASIS standard layout exports through `layoutInput.stageArtifact`, with
@@ -465,7 +572,8 @@ GDSII/OASIS/CIF/DXF generation delegated to `LayoutIO.MaskDataFormatConverter`.
 
 `LayoutCommandResult` schema version 2 carries its output document as
 `outputArtifact: ArtifactReference`. Xcircuite verifies its location, semantic
-role, kind, format, byte count, and digest through `LocalArtifactVerifier`.
+role, kind, format, byte count, digest, and producer through the result and
+evidence-manifest boundary.
 The removed scalar output path, SHA-256, byte-count, and manifest-path result
 fields are not accepted.
 

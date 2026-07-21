@@ -77,8 +77,14 @@ struct LVSSummaryEnvelopeBuilderTests {
             locator: capturedSummary.locator,
             digest: capturedSummary.digest,
             byteCount: capturedSummary.byteCount,
-            producer: capturedSummary.producer
+            producer: try ProducerIdentity(
+                kind: .engine,
+                identifier: "lvsengine-native",
+                version: LVSExecutionProvenance.nativeImplementationVersion,
+                build: LVSExecutionProvenance.currentExecutableDigest()
+            )
         )
+        let producer = try #require(summaryReference.producer)
 
         let envelopeReference = try await LVSSummaryEnvelopeBuilder().envelopeReference(
             summary: summary,
@@ -88,6 +94,7 @@ struct LVSSummaryEnvelopeBuilderTests {
             diagnostics: [],
             stageID: "008-lvs",
             toolID: "native-lvs",
+            producer: producer,
             context: FlowExecutionContext(
                 workspaceID: try FlowWorkspaceID(rawValue: manifest.identity.projectID),
                 runID: runID,

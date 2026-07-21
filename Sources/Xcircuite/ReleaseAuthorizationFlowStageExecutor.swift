@@ -1,6 +1,7 @@
 import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
+import ReleaseCore
 import ReleaseEngine
 import ToolQualification
 
@@ -37,11 +38,39 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
                 projectRoot: try context.xcircuiteProjectRoot(),
                 runDirectory: try context.xcircuiteRunDirectory()
             )
+            let requestData = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let request = try decoder.decode(
+            let decodedRequest = try decoder.decode(
                 ReleaseAuthorizationRequest.self,
-                from: Data(contentsOf: requestURL)
+                from: requestData
+            )
+            let projectRoot = try context.xcircuiteProjectRoot()
+            if let requestedProjectRoot = decodedRequest.projectRoot,
+               URL(fileURLWithPath: requestedProjectRoot).standardizedFileURL
+                != projectRoot.standardizedFileURL {
+                return support.failureResult(
+                    stageID: stage.stageID,
+                    code: "RELEASE_AUTHORIZATION_PROJECT_ROOT_MISMATCH",
+                    message: "Release authorization request project root does not match the flow context."
+                )
+            }
+            let request = ReleaseAuthorizationRequest(
+                runID: decodedRequest.runID,
+                stageID: decodedRequest.stageID,
+                signoffBundle: decodedRequest.signoffBundle,
+                approval: decodedRequest.approval,
+                toolTrustDecisions: decodedRequest.toolTrustDecisions,
+                toolQualificationRequests: decodedRequest.toolQualificationRequests,
+                requiredToolIDs: decodedRequest.requiredToolIDs,
+                evaluatedAt: decodedRequest.evaluatedAt,
+                projectRoot: projectRoot.path
+            )
+            let requestArtifact = try await support.persistRequest(
+                try support.encodeRequest(request),
+                stageID: stageID,
+                artifactID: "release-authorization-request",
+                context: context
             )
             guard request.runID == context.runID else {
                 return support.failureResult(
@@ -58,13 +87,26 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
                 )
             }
 
-            let result = try await authorizerFactory(try context.xcircuiteProjectRoot()).execute(request)
+            let engineResult = try await authorizerFactory(
+                projectRoot
+            ).execute(request)
+            let result = ReleaseAuthorizationResult(
+                status: engineResult.status,
+                signoffBundle: engineResult.signoffBundle,
+                approval: engineResult.approval,
+                diagnostics: engineResult.diagnostics,
+                provenance: try support.provenance(
+                    engineResult.evidence.provenance,
+                    retaining: requestArtifact
+                )
+            )
             try await context.checkCancellation()
             let resultArtifact = try await support.persistResult(
                 result,
                 stageID: stageID,
                 artifactID: "release-authorization-result",
-                context: context
+                context: context,
+                producer: result.evidence.provenance.producer
             )
             let diagnostics = result.diagnostics.map(Self.flowDiagnostic)
             let authorized = result.status == .authorized
@@ -78,7 +120,7 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
                     status: gateStatus,
                     diagnostics: diagnostics
                 )],
-                artifacts: [resultArtifact] + result.artifacts
+                artifacts: [requestArtifact, resultArtifact] + result.artifacts
             )
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

@@ -62,7 +62,9 @@ struct PhysicalDesignFlowStageExecutorTests {
         )
 
         #expect(result.status == .succeeded)
-        #expect(result.artifacts.count == 4)
+        #expect(result.artifacts.count == 6)
+        #expect(result.artifacts.contains { $0.artifactID == "physical.floorplan-request" })
+        #expect(result.artifacts.contains { $0.artifactID == "physical.floorplan-domain-result" })
         #expect(result.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.artifacts.allSatisfy { FileManager.default.fileExists(atPath: root.appending(path: $0.path).path) })
     }
@@ -205,7 +207,8 @@ struct PhysicalDesignFlowStageExecutorTests {
         _ = try await DefaultFlowGateApprovalRecorder(
             loader: workspaceStore,
             inspector: ledgerInspector,
-            ledgerPersistence: workspaceStore
+            approvalPersistence: workspaceStore,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).recordApproval(
             FlowGateApprovalRequest(
                 workspaceID: workspaceID,
@@ -220,7 +223,8 @@ struct PhysicalDesignFlowStageExecutorTests {
             loader: workspaceStore,
             orchestrator: orchestrator,
             inspector: ledgerInspector,
-            artifactPersistence: workspaceStore
+            artifactPersistence: workspaceStore,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).resumeRun(
             request: FlowRunResumeRequest(workspaceID: workspaceID, runID: runID),
             toolRegistry: ToolRegistry(),

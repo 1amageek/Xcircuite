@@ -72,7 +72,7 @@ public struct PDKOracleFlowStageExecutor: FlowStageExecutor {
             )
             let result = try await engine.execute(request)
             try await context.checkCancellation()
-            let artifact = try support.persistResult(result, stageID: stageID, context: context)
+            let artifact = try await support.persistResult(result, stageID: stageID, context: context)
             return support.stageResult(result: result, stageID: stageID, artifact: artifact)
         } catch let cancellationError as FlowRunCancellationError {
             throw cancellationError

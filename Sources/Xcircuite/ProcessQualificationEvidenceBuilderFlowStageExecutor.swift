@@ -54,13 +54,20 @@ public struct ProcessQualificationEvidenceBuilderFlowStageExecutor: FlowStageExe
                 kind: .request,
                 format: .json
             )
+            let producer = try ProducerIdentity(
+                kind: .engine,
+                identifier: "xcircuite-process-qualification-evidence-builder",
+                version: "1"
+            )
             let evidenceArtifact = try await context.persistJSONArtifact(
                 evidence,
                 artifactID: "tool-process-qualification-evidence",
                 stageID: stageID,
                 fileName: "tool-process-qualification-evidence.json",
                 role: .output,
-                kind: .release
+                kind: .release,
+                producer: producer,
+                mode: .immutable
             )
             return FlowStageResult(
                 stageID: stageID,

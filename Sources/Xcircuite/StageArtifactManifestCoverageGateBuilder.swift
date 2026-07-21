@@ -11,15 +11,21 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
     func drcGate(
         manifestURL: URL?,
         artifacts: [ArtifactReference],
-        projectRoot: URL
+        projectRoot: URL,
+        expectedProducer: ProducerIdentity
     ) -> FlowGateResult {
-        foundationManifestGate(
+        let coverageGate = foundationManifestGate(
             gateID: "drc-artifacts",
             manifestURL: manifestURL,
             artifacts: artifacts,
             projectRoot: projectRoot
         ) { data in
             let manifest = try JSONDecoder().decode(DRCArtifactManifest.self, from: data)
+            guard manifest.schemaVersion == DRCArtifactManifest.currentSchemaVersion else {
+                throw XcircuiteRuntimeError.invalidInputReference(
+                    "DRC artifact manifest schemaVersion must be \(DRCArtifactManifest.currentSchemaVersion)."
+                )
+            }
             return manifest.outputs.map { record in
                 ManifestOutputRecord(
                     id: record.id,
@@ -30,12 +36,20 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
                 )
             }
         }
+        return producerGate(
+            coverageGate,
+            manifestURL: manifestURL,
+            expectedProducer: expectedProducer,
+            projectRoot: projectRoot,
+            decodeProducer: { try JSONDecoder().decode(DRCArtifactManifest.self, from: $0).producer }
+        )
     }
 
     func lvsGate(
         manifestURL: URL?,
         artifacts: [ArtifactReference],
-        projectRoot: URL
+        projectRoot: URL,
+        expectedProducer: ProducerIdentity
     ) -> FlowGateResult {
         let coverageGate = foundationManifestGate(
             gateID: "lvs-artifacts",
@@ -56,7 +70,13 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
         }
         guard let manifestURL,
               pathBoundary.contains(manifestURL, projectRoot: projectRoot) else {
-            return coverageGate
+            return producerGate(
+                coverageGate,
+                manifestURL: manifestURL,
+                expectedProducer: expectedProducer,
+                projectRoot: projectRoot,
+                decodeProducer: { try JSONDecoder().decode(LVSArtifactManifest.self, from: $0).producer }
+            )
         }
 
         let manifest: LVSArtifactManifest
@@ -75,10 +95,49 @@ struct StageArtifactManifestCoverageGateBuilder: Sendable {
             artifacts: artifacts,
             projectRoot: projectRoot
         )
-        return FlowGateResult(
+        let schemaGate = FlowGateResult(
             gateID: coverageGate.gateID,
             status: diagnostics.isEmpty ? .passed : .failed,
             diagnostics: diagnostics
+        )
+        return producerGate(
+            schemaGate,
+            manifestURL: manifestURL,
+            expectedProducer: expectedProducer,
+            projectRoot: projectRoot,
+            decodeProducer: { try JSONDecoder().decode(LVSArtifactManifest.self, from: $0).producer }
+        )
+    }
+
+    private func producerGate(
+        _ gate: FlowGateResult,
+        manifestURL: URL?,
+        expectedProducer: ProducerIdentity,
+        projectRoot: URL,
+        decodeProducer: (Data) throws -> ProducerIdentity
+    ) -> FlowGateResult {
+        guard let manifestURL,
+              pathBoundary.contains(manifestURL, projectRoot: projectRoot) else {
+            return gate
+        }
+        let actualProducer: ProducerIdentity
+        do {
+            actualProducer = try decodeProducer(Data(contentsOf: manifestURL))
+        } catch {
+            return gate
+        }
+        guard actualProducer != expectedProducer else {
+            return gate
+        }
+        let diagnostic = FlowDiagnostic(
+            severity: .error,
+            code: "ARTIFACT_MANIFEST_PRODUCER_MISMATCH",
+            message: "Artifact manifest producer does not match the execution result producer."
+        )
+        return FlowGateResult(
+            gateID: gate.gateID,
+            status: .failed,
+            diagnostics: gate.diagnostics + [diagnostic]
         )
     }
 

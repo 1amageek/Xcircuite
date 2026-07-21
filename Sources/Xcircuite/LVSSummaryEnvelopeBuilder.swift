@@ -12,6 +12,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         diagnostics: [FlowDiagnostic],
         stageID: String,
         toolID: String,
+        producer: ProducerIdentity,
         context: FlowExecutionContext
     ) async throws -> ArtifactReference {
         guard let summaryArtifact = stageArtifacts.first(where: { $0.artifactID == summaryArtifactID }) else {
@@ -19,7 +20,11 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
         }
         let artifactID = summaryArtifact.artifactID
 
-        let hasQualifiedEvidence = hasQualifiedEvidence(context: context, toolID: toolID)
+        let hasQualifiedEvidence = hasQualifiedEvidence(
+            context: context,
+            toolID: toolID,
+            producer: producer
+        )
         let toolEvidenceCount = context.healthResults[toolID]?.evidence.count ?? 0
         let confidence = confidence(hasQualifiedEvidence: hasQualifiedEvidence)
         let criteria = baseCriteria(artifactID: artifactID) + bucketCriteria(summary: summary)
@@ -46,7 +51,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             role: "lvs-summary",
             stageID: stageID,
             reference: summaryArtifact,
-            producer: FlowArtifactProducer(producerID: toolID, toolID: toolID),
+            producer: FlowArtifactProducer(identity: producer),
             dependencies: dependencies(from: stageArtifacts, excluding: summaryArtifact),
             evaluationSpec: FlowEvaluationSpec(
                 specID: "\(artifactID)-evaluation-spec",
@@ -79,7 +84,7 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             )
         )
 
-        return try await context.persistArtifactEnvelope(envelope)
+        return try await context.persistArtifactEnvelope(envelope, producer: producer)
     }
 
     private func baseCriteria(artifactID: String) -> [FlowEvaluationCriterion] {
@@ -555,10 +560,21 @@ struct LVSSummaryEnvelopeBuilder: Sendable {
             }
     }
 
-    private func hasQualifiedEvidence(context: FlowExecutionContext, toolID: String) -> Bool {
+    private func hasQualifiedEvidence(
+        context: FlowExecutionContext,
+        toolID: String,
+        producer: ProducerIdentity
+    ) -> Bool {
         guard let descriptor = context.toolRegistry.descriptor(toolID: toolID),
               descriptor.trustProfile.level >= .corpusChecked,
-              context.healthResults[toolID]?.status == .passed else {
+              context.healthResults[toolID]?.status == .passed,
+              let qualification = descriptor.trustProfile.processQualification,
+              qualification.toolID == toolID,
+              qualification.isQualified(at: Date()),
+              qualification.scope.implementationID == producer.identifier,
+              qualification.scope.toolVersion == producer.version,
+              let build = producer.build,
+              qualification.scope.binaryDigest.caseInsensitiveCompare(build) == .orderedSame else {
             return false
         }
         return descriptor.trustProfile.evidence.contains { $0.hasVerifiableArtifactBinding }

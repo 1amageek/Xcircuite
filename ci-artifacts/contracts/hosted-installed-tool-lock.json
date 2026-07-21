@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "runner": "macos-26",
+  "retentionDays": 90,
+  "process": {
+    "name": "sky130A",
+    "revision": "c6d73a35f524070e85faff4a6a9eef49553ebc2b",
+    "acquisitionClient": {
+      "name": "volare",
+      "version": "0.20.6"
+    },
+    "assets": [
+      { "role": "magicTechnology", "path": "sky130A/libs.tech/magic/sky130A.tech" },
+      { "role": "magicStartup", "path": "sky130A/libs.tech/magic/sky130A.magicrc" },
+      { "role": "netgenSetup", "path": "sky130A/libs.tech/netgen/sky130A_setup.tcl" },
+      { "role": "technologyLEF", "path": "sky130A/libs.ref/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__nom.tlef" },
+      { "role": "libraryLEF", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef" },
+      { "role": "standardCellGDS", "path": "sky130A/libs.ref/sky130_fd_sc_hd/gds/sky130_fd_sc_hd.gds" },
+      { "role": "standardCellSPICE", "path": "sky130A/libs.ref/sky130_fd_sc_hd/spice/sky130_fd_sc_hd.spice" }
+    ],
+    "corners": [
+      {
+        "id": "tt_025C_1v80",
+        "classification": "typical",
+        "ngspiceSection": "tt",
+        "supplyVoltage": 1.8,
+        "assets": [
+          { "role": "timingLibrary", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib" },
+          { "role": "openRCXRules", "path": "sky130A/libs.tech/openlane/rules.openrcx.sky130A.nom.magic" },
+          { "role": "ngspiceModelLibrary", "path": "sky130A/libs.tech/ngspice/sky130.lib.spice" }
+        ]
+      },
+      {
+        "id": "ss_100C_1v60",
+        "classification": "slow",
+        "ngspiceSection": "ss",
+        "supplyVoltage": 1.6,
+        "assets": [
+          { "role": "timingLibrary", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__ss_100C_1v60.lib" },
+          { "role": "openRCXRules", "path": "sky130A/libs.tech/openlane/rules.openrcx.sky130A.max.magic" },
+          { "role": "ngspiceModelLibrary", "path": "sky130A/libs.tech/ngspice/sky130.lib.spice" }
+        ]
+      },
+      {
+        "id": "ff_n40C_1v95",
+        "classification": "fast",
+        "ngspiceSection": "ff",
+        "supplyVoltage": 1.95,
+        "assets": [
+          { "role": "timingLibrary", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__ff_n40C_1v95.lib" },
+          { "role": "openRCXRules", "path": "sky130A/libs.tech/openlane/rules.openrcx.sky130A.min.magic" },
+          { "role": "ngspiceModelLibrary", "path": "sky130A/libs.tech/ngspice/sky130.lib.spice" }
+        ]
+      }
+    ]
+  },
+  "tools": {
+    "magic": {
+      "repository": "https://github.com/RTimothyEdwards/magic.git",
+      "revision": "a22b7508acfe46593c6994847f213a39c4272f72",
+      "executable": "installed/bin/magic",
+      "versionArguments": ["--version"]
+    },
+    "netgen": {
+      "repository": "https://github.com/RTimothyEdwards/netgen.git",
+      "revision": "e1528a797cdb155d6ebf8d91c5a55ed7d1713156",
+      "executable": "installed/bin/netgen",
+      "versionArguments": ["-batch", "version"]
+    },
+    "openroad": {
+      "repository": "https://github.com/The-OpenROAD-Project/OpenROAD.git",
+      "revision": "f9a281cbef559fa804558075ceefd38f9f16bf5f",
+      "executable": "installed/bin/openroad",
+      "versionArguments": ["-version"]
+    },
+    "openrcx": {
+      "repository": "https://github.com/The-OpenROAD-Project/OpenROAD.git",
+      "revision": "f9a281cbef559fa804558075ceefd38f9f16bf5f",
+      "executable": "installed/bin/openroad",
+      "versionArguments": ["-version"],
+      "aliasOf": "openroad"
+    },
+    "opensta": {
+      "repository": "https://github.com/parallaxsw/OpenSTA.git",
+      "revision": "dc5ccd2d6941289a6a7d3c918b10b493f44a7f56",
+      "executable": "installed/bin/sta",
+      "versionArguments": ["-version"]
+    },
+    "ngspice": {
+      "repository": "https://github.com/ngspice/ngspice.git",
+      "revision": "032b1c32c4dbad45ff132bcfac1dbecadbd8abb0",
+      "executable": "installed/bin/ngspice",
+      "versionArguments": ["--version"]
+    }
+  },
+  "lanes": {
+    "drc": {
+      "repository": "https://github.com/1amageek/DRCEngine.git",
+      "revision": "e6a0fa2c5b64de1b4ef81e651bd1bb77ecc77299",
+      "scheme": "DRCEngine-Package",
+      "tests": ["DRCAdaptersTests/MagicDRCAdapterTests"],
+      "oracles": ["magic-drc"]
+    },
+    "lvs": {
+      "repository": "https://github.com/1amageek/LVSEngine.git",
+      "revision": "f79b52da83146c108e0a122f4581fe93fae59527",
+      "scheme": "LVSEngine-Package",
+      "tests": [
+        "LVSAdaptersTests/NetgenLVSAdapterTests",
+        "LVSExtractionAdaptersTests/MagicLayoutNetlistExtractorTests"
+      ],
+      "oracles": ["magic-drc", "netgen-lvs"]
+    },
+    "pex": {
+      "repository": "https://github.com/1amageek/PEXEngine.git",
+      "revision": "ba10c1fe0b847d5816faef4eae67c64a19d61e1e",
+      "scheme": "PEXEngine-Package",
+      "tests": [
+        "PEXAdaptersTests/MagicPEXAdapterTests",
+        "PEXAdaptersTests/MagicResistanceExtractionTests",
+        "PEXAdaptersTests/OpenRCXPEXAdapterTests"
+      ],
+      "oracles": ["magic-drc", "openrcx"]
+    },
+    "physical-design": {
+      "repository": "https://github.com/1amageek/PhysicalDesignEngine.git",
+      "revision": "a2b64a3f9f1651be0601496a7423a211c1438c49",
+      "scheme": "PhysicalDesignEngine-Package",
+      "tests": ["PhysicalDesignEngineTests/OpenROADPhysicalDesignExecutorTests"],
+      "oracles": ["openroad"]
+    },
+    "timing": {
+      "repository": "https://github.com/1amageek/TimingEngine.git",
+      "revision": "2b8f0df3e359fca274edc8ede176457de40e1648",
+      "scheme": "TimingEngine-Package",
+      "tests": ["TimingEngineTests/TimingCLIProcessTests"],
+      "oracles": ["opensta"]
+    },
+    "electrical-signoff": {
+      "repository": "https://github.com/1amageek/ElectricalSignoffEngine.git",
+      "revision": "5eb111a3c35dfc54285a6b95e72b8f98b2828648",
+      "scheme": "ElectricalSignoffEngine-Package",
+      "tests": [
+        "ElectricalSignoffEngineTests",
+        "ElectricalSignoffEvidenceTests"
+      ],
+      "oracles": ["ngspice-dc"]
+    },
+    "xcircuite": {
+      "repository": "https://github.com/1amageek/Xcircuite.git",
+      "revision": "$GITHUB_SHA",
+      "scheme": "Xcircuite-Package",
+      "tests": [
+        "XcircuiteTests/EndToEndDesignFlowTests",
+        "XcircuiteTests/ReleaseFlowStageExecutorTests",
+        "XcircuiteTests/ReleaseSignoffRawEvidenceValidatorTests"
+      ],
+      "oracles": ["magic-drc", "netgen-lvs", "openrcx", "openroad", "opensta", "ngspice-dc"]
+    }
+  },
+  "timeouts": {
+    "acquisitionSeconds": 7200,
+    "oracleSeconds": 120,
+    "dependencyResolutionSeconds": 600,
+    "buildForTestingSeconds": 1800,
+    "testWithoutBuildingSeconds": 300
+  }
+}

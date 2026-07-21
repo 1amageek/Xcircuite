@@ -3,6 +3,8 @@ import CircuiteFoundation
 import DRCEngine
 import Foundation
 import LVSEngine
+import LayoutIO
+import LayoutTech
 import LogicEngineCore
 import LogicIR
 import LogicLowering
@@ -10,6 +12,7 @@ import LogicSimulation
 import PDKCore
 import PEXEngine
 import PhysicalDesignCore
+import STAEngine
 import Testing
 import TimingCore
 import ToolQualification
@@ -43,51 +46,11 @@ struct EndToEndDesignFlowTests {
         let ledgerInspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
 
         let runID = "end-to-end-design-flow"
-        let snapshot = try LogicDesignSnapshotCodec.finalized(LogicDesignSnapshot(
-            rtl: RTLDesign(
-                topModuleName: "e2e_top",
-                modules: [RTLModule(
-                    id: "module-e2e-top",
-                    name: "e2e_top",
-                    ports: [
-                        RTLPort(id: "a", name: "a", direction: .input),
-                        RTLPort(id: "b", name: "b", direction: .input),
-                        RTLPort(id: "y", name: "y", direction: .output),
-                    ],
-                    assignments: [RTLAssignment(
-                        id: "assignment-y",
-                        target: .identifier("y"),
-                        value: .binary(
-                            operator: "&&",
-                            left: .identifier("a"),
-                            right: .identifier("b")
-                        )
-                    )]
-                )]
-            )
-        ))
-        let snapshotReference = try writeJSON(
-            snapshot,
-            name: "rtl-snapshot.json",
-            root: root,
-            kind: .rtl
+        try await writeText(
+            "module e2e_top(input logic a, input logic b, output logic y); assign y = a && b; endmodule",
+            name: "e2e-top.sv",
+            root: root
         )
-        let snapshotDigest = try #require(snapshot.designDigest)
-        let loweringRequest = LogicLoweringRequest(
-            runID: runID,
-            inputs: [snapshotReference],
-            design: LogicDesignReference(
-                artifact: snapshotReference,
-                topDesignName: "e2e_top",
-                designDigest: snapshotDigest
-            )
-        )
-        let loweringRequestPath = try writeJSON(
-            loweringRequest,
-            name: "logic-lowering-request.json",
-            root: root,
-            kind: .other
-        ).locator.location.value
 
         let logicDocument = LogicDesignDocument(
             topDesignName: "e2e_top",
@@ -130,25 +93,9 @@ struct EndToEndDesignFlowTests {
             root: root,
             kind: .testPattern
         )
-        let simulationRequest = LogicSimulationRequest(
-            runID: runID,
-            inputs: [logicDesignReference, stimulusReference],
-            design: LogicDesignReference(
-                artifact: logicDesignReference,
-                topDesignName: "e2e_top",
-                designRevision: logicDesignReference.digest
-            ),
-            stimulus: stimulusReference,
-            seed: 7
-        )
-        let simulationRequestPath = try writeJSON(
-            simulationRequest,
-            name: "logic-simulation-request.json",
-            root: root,
-            kind: .other
-        ).locator.location.value
-
         try await writeSTAInputs(to: root)
+        try await writeStandardLayoutTechnology(root: root)
+        let lvsExtraction = try writeStandardLVSExtractionArtifacts(to: root)
         let pdkReference = try writeJSON(
             ["processID": "fixture-process", "version": "1"],
             name: "pdk.json",
@@ -161,7 +108,7 @@ struct EndToEndDesignFlowTests {
             kind: .constraint,
             format: .sdc,
         )
-        let constraintsReference = try artifactReference(storedConstraintsReference)
+        let constraintsReference = storedConstraintsReference
         let physicalRequest = PhysicalDesignRequest(
             runID: runID,
             inputs: [logicDesignReference, constraintsReference, pdkReference],
@@ -191,95 +138,129 @@ struct EndToEndDesignFlowTests {
             kind: .other
         ).locator.location.value
 
-        let drcLayoutURL = root.appending(path: "drc-layout.json")
-        _ = try writeJSON(
-            NativeDRCLayout(
-                technologyID: "e2e-technology",
-                topCell: "TOP",
-                rectangles: [
-                    NativeDRCRectangle(
-                        id: "m1-a",
-                        layer: "met1",
-                        xMin: 0,
-                        yMin: 0,
-                        xMax: 1,
-                        yMax: 1
-                    ),
-                    NativeDRCRectangle(
-                        id: "m1-b",
-                        layer: "met1",
-                        xMin: 2,
-                        yMin: 0,
-                        xMax: 3,
-                        yMax: 1
-                    ),
-                ],
-                rules: [
-                    NativeDRCRule(
-                        id: "met1-width",
-                        kind: .minimumWidth,
-                        layer: "met1",
-                        value: 0.5
-                    ),
-                    NativeDRCRule(
-                        id: "met1-spacing",
-                        kind: .minimumSpacing,
-                        layer: "met1",
-                        value: 0.5
-                    ),
-                ]
-            ),
-            name: "drc-layout.json",
-            root: root,
-            kind: .layout
-        )
-        let schematicNetlistURL = root.appending(path: "schematic.spice")
-        let layoutNetlistURL = root.appending(path: "layout.spice")
+        try await writeText(layoutCommandRequest(), name: "layout-command-request.json", root: root)
         try await writeText(matchingNetlist(), name: "schematic.spice", root: root)
-        try await writeText(matchingNetlist(), name: "layout.spice", root: root)
-        try await writeText("layout", name: "pex-layout.gds", root: root)
-        try await writeText(".subckt TESTCELL\n.ends TESTCELL\n", name: "pex-source.spice", root: root)
 
         let staInputs = TimingSTAFlowInputs(
             design: .path("sta-design.json"),
             libraries: [.path("library.lib")],
             constraints: .path("constraints.sdc"),
             pdkManifest: .path("pdk.json"),
+            parasitics: .stageArtifact(.init(
+                stageID: "signoff.pex",
+                kind: .parasitics,
+                format: .spef,
+                pathSuffix: "tt.spef"
+            )),
             topDesignName: "top",
             processID: "fixture-process",
             pdkVersion: "1",
-            pdkDigest: String(repeating: "0", count: 64),
+            pdkDigest: pdkReference.digest.hexadecimalValue,
             modeIDs: ["functional"],
             cornerIDs: ["typical"],
-            analysisKinds: [.setup]
+            analysisKinds: [.setup],
+            requiresPostLayoutInputs: true
         )
         let reviewManifestPath = "runs/\(runID)/physical-design/floorplan/run-manifest.json"
         let executors: [any FlowStageExecutor] = [
-            LogicLoweringFlowStageExecutor(requestInput: .path(loweringRequestPath)),
-            LogicSimulationFlowStageExecutor(requestInput: .path(simulationRequestPath)),
-            TimingSTAFlowStageExecutor(inputs: staInputs),
+            LogicElaborationFlowStageExecutor(
+                sourceInput: .path("e2e-top.sv"),
+                topDesignName: "e2e_top"
+            ),
+            LogicLoweringFlowStageExecutor(
+                designInput: .stageArtifact(.init(
+                    stageID: "logic.elaborate",
+                    artifactID: "logic-design",
+                    kind: .rtl,
+                    format: .json
+                )),
+                topDesignName: "e2e_top"
+            ),
+            LogicSimulationFlowStageExecutor(
+                designInput: .stageArtifact(.init(
+                    stageID: "logic.lower",
+                    artifactID: "logic-execution-design",
+                    kind: .netlist,
+                    format: .json
+                )),
+                pdkInput: .artifact(pdkReference),
+                topDesignName: "e2e_top",
+                stimulusInput: .artifact(stimulusReference),
+                seed: 7
+            ),
+            LayoutCommandFlowStageExecutor(
+                stageID: "physical.layout",
+                requestURL: root.appending(path: "layout-command-request.json"),
+                drcExport: LayoutCommandDRCExportSpec(
+                    technologyID: "e2e-technology",
+                    topCell: "top",
+                    rules: [
+                        NativeDRCRule(
+                            id: "M1.width",
+                            kind: .minimumWidth,
+                            layer: "M1",
+                            value: 0.5
+                        ),
+                    ]
+                ),
+                standardLayoutExports: [
+                    LayoutCommandStandardLayoutExportSpec(
+                        artifactID: "layout-gds",
+                        format: .gds,
+                        technologyInput: .path("tech/process.json")
+                    ),
+                ]
+            ),
             PhysicalDesignFlowStageExecutor.local(
                 stageID: "physical.floorplan",
-                requestInput: .path(physicalRequestPath)
+                requestInput: .path(physicalRequestPath),
+                designInput: .stageArtifact(.init(
+                    stageID: "logic.lower",
+                    artifactID: "logic-execution-design",
+                    kind: .netlist,
+                    format: .json
+                )),
+                constraintsInput: .artifact(constraintsReference),
+                pdkInput: .artifact(pdkReference)
             ),
             DRCFlowStageExecutor.native(
                 stageID: "signoff.drc",
-                layoutURL: drcLayoutURL,
-                topCell: "TOP"
+                layoutInput: .stageArtifact(.init(
+                    stageID: "physical.layout",
+                    artifactID: "drc-layout",
+                    kind: .layout,
+                    format: .json
+                )),
+                topCell: "top"
             ),
             LVSFlowStageExecutor.native(
                 stageID: "signoff.lvs",
-                layoutNetlistURL: layoutNetlistURL,
-                schematicNetlistURL: schematicNetlistURL,
-                topCell: "TOP"
+                layoutGDSInput: .stageArtifact(.init(
+                    stageID: "physical.layout",
+                    artifactID: "layout-gds",
+                    kind: .layout,
+                    format: .gdsii
+                )),
+                layoutFormat: .gds,
+                schematicNetlistInput: .path("schematic.spice"),
+                topCell: "top",
+                technologyInput: .path("tech/process.json"),
+                extractionProfileInput: .path(lvsExtraction.profilePath),
+                extractionDeckInput: .path(lvsExtraction.deckPath),
+                processProfileID: lvsExtraction.processProfileID
             ),
             PEXFlowStageExecutor(
                 stageID: "signoff.pex",
                 toolID: SignoffToolDescriptors.pexToolID(backendID: "test-fixture"),
-                layoutInput: .path("pex-layout.gds"),
+                layoutInput: .stageArtifact(.init(
+                    stageID: "physical.layout",
+                    artifactID: "layout-gds",
+                    kind: .layout,
+                    format: .gdsii
+                )),
                 layoutFormat: .gds,
-                sourceNetlistInput: .path("pex-source.spice"),
-                topCell: "TESTCELL",
+                sourceNetlistInput: .path("schematic.spice"),
+                topCell: "top",
                 corners: [
                     PEXCorner(id: PEXCornerID("tt"), name: "tt", temperature: 25),
                     PEXCorner(id: PEXCornerID("ss"), name: "ss", temperature: 125),
@@ -289,16 +270,19 @@ struct EndToEndDesignFlowTests {
                 backendSelection: PEXBackendSelection(backendID: "test-fixture"),
                 engine: makeFixturePEXEngine()
             ),
+            TimingSTAFlowStageExecutor(inputs: staInputs),
             PhysicalDesignReviewFlowStageExecutor(manifestInput: .path(reviewManifestPath)),
         ]
         let stages = [
+            FlowStageDefinition(stageID: "logic.elaborate", displayName: "Logic elaboration"),
             FlowStageDefinition(stageID: "logic.lower", displayName: "Logic lowering"),
             FlowStageDefinition(stageID: "logic.simulate", displayName: "Logic simulation"),
-            FlowStageDefinition(stageID: "timing.sta", displayName: "Timing STA"),
+            FlowStageDefinition(stageID: "physical.layout", displayName: "Physical layout materialization"),
             FlowStageDefinition(stageID: "physical.floorplan", displayName: "Physical floorplan"),
             FlowStageDefinition(stageID: "signoff.drc", displayName: "DRC"),
             FlowStageDefinition(stageID: "signoff.lvs", displayName: "LVS"),
             FlowStageDefinition(stageID: "signoff.pex", displayName: "PEX"),
+            FlowStageDefinition(stageID: "timing.sta", displayName: "Post-layout timing STA"),
             FlowStageDefinition(
                 stageID: "physical.review",
                 displayName: "Physical design review",
@@ -318,6 +302,15 @@ struct EndToEndDesignFlowTests {
             executors: executors
         )
 
+        if initial.stages.count != stages.count {
+            let stageSummaries: [String] = initial.stages.map { stage in
+                let diagnostics = stage.diagnostics
+                    .map { "\($0.code):\($0.message)" }
+                    .joined(separator: ",")
+                return "\(stage.stageID)[\(stage.status.rawValue)]:\(diagnostics)"
+            }
+            Issue.record(Comment(rawValue: stageSummaries.joined(separator: " | ")))
+        }
         #expect(initial.status == .blocked, "Initial multi-engine stages: \(initial.stages)")
         #expect(initial.stages.count == stages.count)
         #expect(initial.stages.dropLast().allSatisfy { $0.status == .succeeded })
@@ -331,18 +324,101 @@ struct EndToEndDesignFlowTests {
             runID: runID,
             workspaceID: workspaceID
         )
-        #expect(reviewBundle.artifacts.first(where: { $0.stageID == "logic.lower" }) != nil)
-        #expect(reviewBundle.artifacts.first(where: { $0.stageID == "logic.simulate" }) != nil)
+        let elaboratedDesign = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "logic.elaborate" && $0.reference.artifactID == "logic-design"
+        }))
+        let loweredDesign = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "logic.lower" && $0.reference.artifactID == "logic-execution-design"
+        }))
+        let loweringResultReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "logic.lower" && $0.reference.artifactID == "logic-lowering-result"
+        })?.reference)
+        let loweringResult = try JSONDecoder().decode(
+            LogicLoweringResult.self,
+            from: Data(contentsOf: root.appending(path: loweringResultReference.path))
+        )
+        #expect(loweringResult.provenance.inputs.contains(elaboratedDesign.reference))
+        let simulationResultReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "logic.simulate" && $0.reference.artifactID == "logic-simulation-result"
+        })?.reference)
+        let simulationResult = try JSONDecoder().decode(
+            LogicSimulationResult.self,
+            from: Data(contentsOf: root.appending(path: simulationResultReference.path))
+        )
+        #expect(simulationResult.provenance.inputs.contains(loweredDesign.reference))
         #expect(reviewBundle.artifacts.first(where: { $0.stageID == "timing.sta" }) != nil)
+        let producedDRCLayout = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "physical.layout" && $0.reference.artifactID == "drc-layout"
+        }))
+        let producedGDSLayout = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "physical.layout" && $0.reference.artifactID == "layout-gds"
+        }))
+        #expect(producedDRCLayout.integrity?.status == .verified)
+        #expect(producedGDSLayout.integrity?.status == .verified)
+        let physicalRequestReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "physical.floorplan"
+                && $0.reference.artifactID == "physical.floorplan-request"
+        })?.reference)
+        let retainedPhysicalRequest = try JSONDecoder().decode(
+            PhysicalDesignRequest.self,
+            from: Data(contentsOf: root.appending(path: physicalRequestReference.path))
+        )
+        #expect(retainedPhysicalRequest.design.artifact == loweredDesign.reference)
+        #expect(retainedPhysicalRequest.inputLayout == nil)
+        #expect(retainedPhysicalRequest.initialSnapshot?.topCell == "e2e_top")
         #expect(reviewBundle.artifacts.first(where: {
             $0.stageID == "signoff.drc" && $0.reference.artifactID == "drc-summary"
         }) != nil)
+        let drcManifestReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "signoff.drc"
+                && $0.reference.path.contains("drc-artifact-manifest-")
+                && $0.reference.path.hasSuffix(".json")
+        })?.reference)
+        let drcManifest = try JSONDecoder().decode(
+            DRCArtifactManifest.self,
+            from: Data(contentsOf: root.appending(path: drcManifestReference.path))
+        )
+        #expect(drcManifest.inputs.contains {
+            $0.kind == .layout
+                && $0.sha256 == producedDRCLayout.reference.digest.hexadecimalValue
+        })
         #expect(reviewBundle.artifacts.first(where: {
             $0.stageID == "signoff.lvs" && $0.reference.artifactID == "lvs-summary"
         }) != nil)
+        let lvsExecutionReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "signoff.lvs" && $0.reference.artifactID == "lvs-execution-result"
+        })?.reference)
+        let lvsExecution = try JSONDecoder().decode(
+            LVSExecutionResult.self,
+            from: Data(contentsOf: root.appending(path: lvsExecutionReference.path))
+        )
+        #expect(lvsExecution.provenance.inputs.contains(producedGDSLayout.reference))
         #expect(reviewBundle.artifacts.first(where: {
             $0.stageID == "signoff.pex" && $0.reference.artifactID == "pex-summary"
         }) != nil)
+        let pexExecutionReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "signoff.pex" && $0.reference.artifactID == "pex-run-result"
+        })?.reference)
+        let pexExecution = try JSONDecoder().decode(
+            PEXRunResult.self,
+            from: Data(contentsOf: root.appending(path: pexExecutionReference.path))
+        )
+        #expect(pexExecution.provenance.inputs.contains(producedGDSLayout.reference))
+        let pexTimingArtifactCandidate = reviewBundle.artifacts.first { artifact in
+            guard artifact.stageID == "signoff.pex" else { return false }
+            guard artifact.reference.kind == .parasitics else { return false }
+            guard artifact.reference.format == .spef else { return false }
+            return artifact.reference.path.hasSuffix("tt.spef")
+        }
+        let pexTimingArtifact = try #require(pexTimingArtifactCandidate)
+        let timingExecutionReference = try #require(reviewBundle.artifacts.first(where: {
+            $0.stageID == "timing.sta" && $0.reference.artifactID == "timing-sta-result"
+        })?.reference)
+        let timingExecution = try JSONDecoder().decode(
+            STAExecutionResult.self,
+            from: Data(contentsOf: root.appending(path: timingExecutionReference.path))
+        )
+        #expect(timingExecution.evidence.provenance.inputs.contains(pexTimingArtifact.reference))
         #expect(reviewBundle.artifacts.first(where: {
             $0.stageID == "physical.review"
                 && $0.reference.artifactID == "physical-design-review-packet"
@@ -355,7 +431,8 @@ struct EndToEndDesignFlowTests {
         _ = try await DefaultFlowGateApprovalRecorder(
             loader: workspaceStore,
             inspector: ledgerInspector,
-            ledgerPersistence: workspaceStore
+            approvalPersistence: workspaceStore,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).recordApproval(
             FlowGateApprovalRequest(
                 workspaceID: workspaceID,
@@ -370,7 +447,8 @@ struct EndToEndDesignFlowTests {
             loader: workspaceStore,
             orchestrator: orchestrator,
             inspector: ledgerInspector,
-            artifactPersistence: workspaceStore
+            artifactPersistence: workspaceStore,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).resumeRun(
             request: FlowRunResumeRequest(workspaceID: workspaceID, runID: runID),
             toolRegistry: ToolRegistry(),
@@ -390,11 +468,16 @@ struct EndToEndDesignFlowTests {
         )
         #expect(retainedBundle.status == .succeeded)
         #expect(retainedBundle.approvals.count == 1)
-        #expect(retainedBundle.artifacts.first(where: {
-            $0.purpose == .approval
+        #expect(retainedBundle.decisionActions?.contains {
+            $0.decisionKind == .approval
                 && $0.stageID == "physical.review"
-                && $0.integrity?.status == .verified
-        }) != nil)
+                && $0.status == .succeeded
+        } == true)
+        #expect(retainedBundle.coverageRefs?.contains {
+            $0.domain == "approval"
+                && $0.stageID == "physical.review"
+                && $0.role == "approval-record"
+        } == true)
         #expect(retainedBundle.artifacts.first(where: {
             $0.stageID == "physical.review"
                 && $0.reference.artifactID == "physical-design-review-packet"
@@ -443,12 +526,67 @@ struct EndToEndDesignFlowTests {
         )
     }
 
+    private func writeStandardLayoutTechnology(root: URL) async throws {
+        let url = root.appending(path: "tech/process.json")
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(LayoutTechDatabase.standard()).write(
+            to: url,
+            options: [.atomic]
+        )
+    }
+
     private func matchingNetlist() -> String {
         """
-        .subckt TOP in out vdd vss
-        M1 out in vdd vdd pmos
-        M2 out in vss vss nmos
-        .ends TOP
+        .subckt top
+        .ends top
+        """
+    }
+
+    private func layoutCommandRequest() -> String {
+        """
+        {
+          "artifactManifestPath" : "ignored/manifest.json",
+          "commands" : [
+            {
+              "createCell" : {
+                "cellID" : "20000000-0000-0000-0000-000000000001",
+                "makeTop" : true,
+                "name" : "top"
+              },
+              "kind" : "createCell"
+            },
+            {
+              "addNet" : {
+                "cellID" : "20000000-0000-0000-0000-000000000001",
+                "name" : "out",
+                "netID" : "20000000-0000-0000-0000-000000000002"
+              },
+              "kind" : "addNet"
+            },
+            {
+              "addRect" : {
+                "cellID" : "20000000-0000-0000-0000-000000000001",
+                "layer" : { "name" : "M1", "purpose" : "drawing" },
+                "netID" : "20000000-0000-0000-0000-000000000002",
+                "origin" : { "x" : 0, "y" : 0 },
+                "properties" : { "role" : "wire" },
+                "shapeID" : "20000000-0000-0000-0000-000000000003",
+                "size" : { "height" : 2, "width" : 10 }
+              },
+              "kind" : "addRect"
+            }
+          ],
+          "documentID" : "20000000-0000-0000-0000-000000000000",
+          "documentName" : "flow-layout",
+          "outputDocumentPath" : "ignored/layout.json",
+          "resultPath" : "ignored/result.json",
+          "schemaVersion" : 1
+        }
         """
     }
 

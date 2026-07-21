@@ -25,6 +25,13 @@ struct XcircuiteLVSRepairLoopTests {
             schematicPath: schematicNetlistPath,
             root: root
         )
+        try await retainLVSInputs(
+            layoutPath: layoutNetlistPath,
+            schematicPath: schematicNetlistPath,
+            runID: runID,
+            store: store,
+            root: root
+        )
         try await registerJSONArtifact(
             makePortSummary(),
             artifactID: "lvs-summary",
@@ -181,6 +188,13 @@ struct XcircuiteLVSRepairLoopTests {
             schematicPath: schematicNetlistPath,
             root: root
         )
+        try await retainLVSInputs(
+            layoutPath: layoutNetlistPath,
+            schematicPath: schematicNetlistPath,
+            runID: runID,
+            store: store,
+            root: root
+        )
         try await registerJSONArtifact(
             makeModelPolicySummary(),
             artifactID: "lvs-summary",
@@ -248,6 +262,15 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(blockedExecution.status == "blocked")
         #expect(blockedExecution.nextActions == ["request-human-approval:policy-repair-approval"])
 
+        _ = try await XcircuiteFlowCLICommand.run(
+            arguments: [
+                "verify-candidate-plan",
+                "--project-root",
+                root.path(percentEncoded: false),
+                "--run-id",
+                runID,
+            ]
+        )
         _ = try await XcircuiteFlowCLICommand.run(
             arguments: [
                 "approve-candidate-plan-risk",
@@ -364,7 +387,7 @@ struct XcircuiteLVSRepairLoopTests {
             runID: runID
         )
         try await registerJSONArtifact(
-            makeTerminalPolicyRepairHints(),
+            try makeTerminalPolicyRepairHints(),
             artifactID: "lvs-repair-hints",
             path: repairHintPath,
             kind: .report,
@@ -437,6 +460,15 @@ struct XcircuiteLVSRepairLoopTests {
         #expect(blockedExecution.status == "blocked")
         #expect(blockedExecution.nextActions == ["request-human-approval:policy-repair-approval"])
 
+        _ = try await XcircuiteFlowCLICommand.run(
+            arguments: [
+                "verify-candidate-plan",
+                "--project-root",
+                root.path(percentEncoded: false),
+                "--run-id",
+                runID,
+            ]
+        )
         _ = try await XcircuiteFlowCLICommand.run(
             arguments: [
                 "approve-candidate-plan-risk",
@@ -670,6 +702,13 @@ struct XcircuiteLVSRepairLoopTests {
             .ends inv
             """,
             path: "circuits/schematic.spice",
+            root: root
+        )
+        try await retainLVSInputs(
+            layoutPath: "circuits/layout.spice",
+            schematicPath: "circuits/schematic.spice",
+            runID: runID,
+            store: store,
             root: root
         )
         _ = try await artifactStore.persistPlanningProblem(
@@ -1007,12 +1046,12 @@ struct XcircuiteLVSRepairLoopTests {
         )
     }
 
-    private func makeTerminalPolicyRepairHints() -> LVSRepairHintReport {
-        LVSRepairHintBuilder().build(result: makeTerminalPolicyExecutionResult())
+    private func makeTerminalPolicyRepairHints() throws -> LVSRepairHintReport {
+        LVSRepairHintBuilder().build(result: try makeTerminalPolicyExecutionResult())
     }
 
-    private func makeTerminalPolicyExecutionResult() -> LVSExecutionResult {
-        LVSExecutionResult(
+    private func makeTerminalPolicyExecutionResult() throws -> LVSExecutionResult {
+        try LVSExecutionResult.inProcess(
             request: LVSRequest(
                 layoutNetlistURL: URL(filePath: "/tmp/terminal-layout.spice"),
                 schematicNetlistURL: URL(filePath: "/tmp/terminal-schematic.spice"),

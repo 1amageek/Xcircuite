@@ -1,3 +1,4 @@
+import CircuiteFoundation
 import Foundation
 import LVSEngine
 import Testing
@@ -13,11 +14,35 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
             manifestURL: fixture.manifestURL,
             artifacts: fixture.artifacts,
-            projectRoot: fixture.root
+            projectRoot: fixture.root,
+            expectedProducer: fixture.producer
         )
 
         #expect(gate.status == .passed, "Unexpected diagnostics: \(gate.diagnostics)")
         #expect(gate.diagnostics.isEmpty)
+    }
+
+    @Test func producerBuildMustMatchExecutionIdentity() async throws {
+        let fixture = try makeFixture()
+        defer { removeTemporaryRoot(fixture.root) }
+        let differentProducer = try ProducerIdentity(
+            kind: .engine,
+            identifier: fixture.producer.identifier,
+            version: fixture.producer.version,
+            build: String(repeating: "0", count: 64)
+        )
+
+        let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
+            manifestURL: fixture.manifestURL,
+            artifacts: fixture.artifacts,
+            projectRoot: fixture.root,
+            expectedProducer: differentProducer
+        )
+
+        #expect(gate.status == .failed)
+        #expect(gate.diagnostics.contains {
+            $0.code == "ARTIFACT_MANIFEST_PRODUCER_MISMATCH"
+        })
     }
 
     @Test func missingCorrespondenceFailsClosed() async throws {
@@ -27,7 +52,8 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
             manifestURL: fixture.manifestURL,
             artifacts: fixture.artifacts,
-            projectRoot: fixture.root
+            projectRoot: fixture.root,
+            expectedProducer: fixture.producer
         )
 
         #expect(gate.status == .failed)
@@ -43,7 +69,8 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
             manifestURL: fixture.manifestURL,
             artifacts: fixture.artifacts,
-            projectRoot: fixture.root
+            projectRoot: fixture.root,
+            expectedProducer: fixture.producer
         )
 
         #expect(gate.status == .failed)
@@ -74,7 +101,8 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
             manifestURL: fixture.manifestURL,
             artifacts: fixture.artifacts,
-            projectRoot: fixture.root
+            projectRoot: fixture.root,
+            expectedProducer: fixture.producer
         )
 
         #expect(gate.status == .failed)
@@ -118,6 +146,7 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             generatedAt: manifest.generatedAt,
             backendID: manifest.backendID,
             toolName: manifest.toolName,
+            producer: manifest.producer,
             executionStatus: manifest.executionStatus,
             verdict: manifest.verdict,
             readiness: manifest.readiness,
@@ -133,7 +162,8 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
             manifestURL: fixture.manifestURL,
             artifacts: fixture.artifacts,
-            projectRoot: fixture.root
+            projectRoot: fixture.root,
+            expectedProducer: fixture.producer
         )
 
         #expect(gate.status == .failed)
@@ -158,7 +188,8 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let gate = StageArtifactManifestCoverageGateBuilder().lvsGate(
             manifestURL: fixture.manifestURL,
             artifacts: fixture.artifacts,
-            projectRoot: fixture.root
+            projectRoot: fixture.root,
+            expectedProducer: fixture.producer
         )
 
         #expect(gate.status == .failed)
@@ -213,6 +244,12 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             generatedAt: "2026-07-12T00:00:00Z",
             backendID: "native",
             toolName: "NativeLVS",
+            producer: try ProducerIdentity(
+                kind: .engine,
+                identifier: "lvsengine-native",
+                version: LVSExecutionProvenance.nativeImplementationVersion,
+                build: LVSExecutionProvenance.currentExecutableDigest()
+            ),
             executionStatus: .completed,
             verdict: .match,
             readiness: .ready,
@@ -288,6 +325,7 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
             root: root,
             runID: runID,
             manifestURL: manifestURL,
+            producer: manifest.producer,
             artifacts: artifacts
         )
     }
@@ -325,7 +363,7 @@ struct LVSStageArtifactManifestCoverageGateBuilderTests {
         let root: URL
         let runID: String
         let manifestURL: URL
+        let producer: ProducerIdentity
         var artifacts: [ArtifactReference]
     }
 }
-import CircuiteFoundation

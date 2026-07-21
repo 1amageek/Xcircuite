@@ -272,10 +272,18 @@ extension XcircuiteFlowRuntimeTests {
         #expect(snapshot.runID == "run-1")
         #expect(Set(snapshot.domains.map(\.domainID)) == Set([
             "drc-signoff",
+            "dft",
+            "electrical-signoff",
             "layout-edit",
+            "logic-design",
+            "logic-execution",
             "lvs-signoff",
             "pex-extraction",
+            "physical-design",
+            "release",
+            "rtl-verification",
             "simulation-analysis",
+            "timing-signoff",
         ]))
         #expect(snapshot.domains.allSatisfy { $0.schemaVersion == 1 })
         #expect(snapshot.domains.allSatisfy { !$0.ownerPackages.isEmpty })
@@ -285,7 +293,7 @@ extension XcircuiteFlowRuntimeTests {
             let operationIDs = domain.operations.map(\.operationID)
             #expect(operationIDs.count == Set(operationIDs).count, "\(domain.domainID) must not duplicate operation IDs")
             for operation in domain.operations {
-                #expect(!operation.maturity.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose maturity")
+                #expect(!operation.maturity.rawValue.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose maturity")
                 #expect(!operation.inputRefs.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose input refs")
                 #expect(!operation.preconditions.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose preconditions")
                 #expect(!operation.effects.isEmpty, "\(domain.domainID)/\(operation.operationID) must expose effects")
@@ -353,7 +361,8 @@ extension XcircuiteFlowRuntimeTests {
         #expect(metricImprovement.producedArtifacts.contains("parameter-candidates"))
         #expect(metricImprovement.producedArtifacts.contains("numeric-repair-loop"))
 
-        let manifest = try await store.loadRunLedger(runID: "run-1").runManifest
+        let terminalLedger = try await store.loadRunLedger(runID: "run-1")
+        let manifest = terminalLedger.runManifest
         let planningArtifact = try #require(manifest.artifacts.first {
             $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
         })
@@ -362,6 +371,9 @@ extension XcircuiteFlowRuntimeTests {
         #expect(planningArtifact.format == .json)
         #expect(planningArtifact.digest.hexadecimalValue.isEmpty == false)
         #expect(planningArtifact.byteCount > 0)
+        let evidence = try #require(terminalLedger.evidence)
+        #expect(evidence.artifacts.contains { $0.id.rawValue == XcircuitePlanningArtifactStore.actionDomainArtifactID })
+        #expect(terminalLedger.artifacts == evidence.artifacts)
 
         let bundle = try await DefaultFlowRunReviewBundler(
             loader: store,
@@ -419,13 +431,21 @@ extension XcircuiteFlowRuntimeTests {
             )
         )
         #expect(initial.status == .blocked)
+        let blockedLedger = try await store.loadRunLedger(runID: "run-1")
+        let originalActionDomainReference = try #require(blockedLedger.artifacts.first {
+            $0.id.rawValue == XcircuitePlanningArtifactStore.actionDomainArtifactID
+        })
+        let originalActionDomainData = try await store.loadArtifactContent(
+            for: originalActionDomainReference
+        )
 
         let reviewBundler = DefaultFlowRunReviewBundler(loader: store, persistence: store)
         let inspector = DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler)
         _ = try await DefaultFlowGateApprovalRecorder(
             loader: store,
             inspector: inspector,
-            ledgerPersistence: store
+            approvalPersistence: store,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).recordApproval(
             FlowGateApprovalRequest(
                 workspaceID: try await workspaceID(projectRoot: root),
@@ -457,6 +477,20 @@ extension XcircuiteFlowRuntimeTests {
             from: ".xcircuite/runs/run-1/toolchain-profile.json"
         )
         #expect(persistedProfile.profileID == "resume-profile")
+        let terminalLedger = try await store.loadRunLedger(runID: "run-1")
+        let evidence = try #require(terminalLedger.evidence)
+        #expect(evidence.artifacts.contains {
+            $0.locator.location.value == ".xcircuite/runs/run-1/toolchain-profile.json"
+        })
+        #expect(terminalLedger.artifacts == evidence.artifacts)
+        let resumedActionDomainReference = try #require(terminalLedger.artifacts.first {
+            $0.id.rawValue == XcircuitePlanningArtifactStore.actionDomainArtifactID
+        })
+        #expect(resumedActionDomainReference == originalActionDomainReference)
+        #expect(
+            try await store.loadArtifactContent(for: resumedActionDomainReference)
+                == originalActionDomainData
+        )
     }
 
     @Test func runtimeResumesPersistedPlanAfterWaiverWithAuditableDiagnostic() async throws {
@@ -497,7 +531,8 @@ extension XcircuiteFlowRuntimeTests {
         _ = try await DefaultFlowGateApprovalRecorder(
             loader: store,
             inspector: inspector,
-            ledgerPersistence: store
+            approvalPersistence: store,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).recordApproval(
             FlowGateApprovalRequest(
                 workspaceID: try await workspaceID(projectRoot: root),
@@ -564,7 +599,8 @@ extension XcircuiteFlowRuntimeTests {
         _ = try await DefaultFlowGateApprovalRecorder(
             loader: store,
             inspector: inspector,
-            ledgerPersistence: store
+            approvalPersistence: store,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).recordApproval(
             FlowGateApprovalRequest(
                 workspaceID: try await workspaceID(projectRoot: root),
@@ -574,12 +610,9 @@ extension XcircuiteFlowRuntimeTests {
                 reviewer: "reviewer-1"
             )
         )
-        let ledger = try await store.loadRunLedger(runID: "run-tampered")
-        let retained = try #require(ledger.artifacts.first {
-            $0.id.rawValue == "action-ledger"
-        })
+        let retainedPath = ".xcircuite/runs/run-tampered/actions.jsonl"
         try Data("tampered".utf8).write(
-            to: root.appending(path: retained.path),
+            to: root.appending(path: retainedPath),
             options: .atomic
         )
 
@@ -596,7 +629,7 @@ extension XcircuiteFlowRuntimeTests {
                 Issue.record("Unexpected ledger error: \(error.localizedDescription)")
                 return
             }
-            #expect(path == retained.path)
+            #expect(path == retainedPath)
         }
     }
 

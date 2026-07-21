@@ -72,12 +72,44 @@ struct SignoffFlowStageExecutorTests {
         #expect(result.stages[0].gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.stages[0].artifacts.contains { $0.path.contains("drc-report") })
         #expect(result.stages[0].artifacts.contains { $0.path.contains("drc-artifact-manifest") })
+        let requestArtifact = try #require(result.stages[0].artifacts.first {
+            $0.artifactID == "drc-request"
+        })
+        #expect(requestArtifact.locator.role == .input)
+        let executionArtifact = try #require(result.stages[0].artifacts.first {
+            $0.artifactID == "drc-execution-result"
+        })
+        let executionURL = try executionArtifact.locator.location.resolvedFileURL(relativeTo: root)
+        let execution = try JSONDecoder().decode(
+            DRCExecutionResult.self,
+            from: Data(contentsOf: executionURL)
+        )
+        #expect(execution.provenance.producer.identifier == "layout-verify")
+        #expect(execution.provenance.producer.version == DRCExecutionProvenance.nativeImplementationVersion)
+        #expect(execution.provenance.producer.build?.count == 64)
+        #expect(execution.provenance.inputs.count == 1)
+        let layoutDigest = try requestArtifactDigest(for: layoutURL)
+        #expect(execution.provenance.inputs[0].digest == layoutDigest)
+        #expect(execution.provenance.invocation != nil)
+        #expect(execution.provenance.environment != nil)
+        #expect(executionArtifact.producer == execution.provenance.producer)
+        let manifestURL = try #require(execution.artifactManifestURL)
+        let manifest = try JSONDecoder().decode(
+            DRCArtifactManifest.self,
+            from: Data(contentsOf: manifestURL)
+        )
+        #expect(manifest.producer == execution.provenance.producer)
+        let manifestArtifact = try #require(result.stages[0].artifacts.first {
+            $0.path.contains("drc-artifact-manifest")
+        })
+        #expect(manifestArtifact.producer == execution.provenance.producer)
         let summaryArtifact = try #require(result.stages[0].artifacts.first { $0.artifactID == "drc-summary" })
+        #expect(summaryArtifact.producer == execution.provenance.producer)
         let summary = try decodeDRCSummary(summaryArtifact, root: root)
         #expect(summary.summary.status == "passed")
         #expect(summary.summary.activeViolationCount == 0)
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
-            $0.path.hasSuffix("evidence/drc-summary-envelope.json")
+            $0.path.hasSuffix("-drc-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -287,38 +319,34 @@ struct SignoffFlowStageExecutorTests {
 
         let layoutURL = try writeText("layout", name: "layout.oas", root: root)
 
-        let result = try await services.orchestrator.run(
-            request: FlowOperationRequest(
-                workspaceID: services.workspaceID,
-                runID: "run-drc",
-                intent: "Run DRC",
-                stages: [
-                    FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
-                ]
-            ),
-            toolRegistry: ToolRegistry(),
-            healthResults: [:],
-            executors: [
-                DRCFlowStageExecutor(
-                    stageID: "007-drc",
-                    toolID: "native-drc",
-                    request: DRCRequest(
-                        layoutURL: layoutURL,
-                        topCell: "TOP",
-                        layoutFormat: .oasis,
-                        backendSelection: DRCBackendSelection(backendID: "native-gds")
-                    ),
-                    engine: DuplicateArtifactPathDRCStubEngine()
+        await #expect(throws: FlowExecutionError.invalidStageResult(
+            stageID: "007-drc",
+            issue: .duplicateArtifactIdentity
+        )) {
+            try await services.orchestrator.run(
+                request: FlowOperationRequest(
+                    workspaceID: services.workspaceID,
+                    runID: "run-drc",
+                    intent: "Run DRC",
+                    stages: [FlowStageDefinition(stageID: "007-drc", displayName: "DRC")]
                 ),
-            ]
-        )
-
-        let stage = result.stages[0]
-        #expect(result.status == .failed)
-        #expect(stage.gates.contains { $0.gateID == "drc" && $0.status == .passed })
-        #expect(stage.gates.contains { $0.gateID == "drc-artifacts" && $0.status == .failed })
-        #expect(stage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
-        #expect(stage.diagnostics.contains { $0.code == "ARTIFACT_MANIFEST_DUPLICATE_FLOW_ARTIFACT_PATH" })
+                toolRegistry: ToolRegistry(),
+                healthResults: [:],
+                executors: [
+                    DRCFlowStageExecutor(
+                        stageID: "007-drc",
+                        toolID: "native-drc",
+                        request: DRCRequest(
+                            layoutURL: layoutURL,
+                            topCell: "TOP",
+                            layoutFormat: .oasis,
+                            backendSelection: DRCBackendSelection(backendID: "native-gds")
+                        ),
+                        engine: DuplicateArtifactPathDRCStubEngine()
+                    ),
+                ]
+            )
+        }
     }
 
     @Test func drcExecutorFailsArtifactIntegrityGateWhenArtifactEscapesProject() async throws {
@@ -458,7 +486,7 @@ struct SignoffFlowStageExecutorTests {
         #expect(summary.summary.activeViolationCount == 1)
         #expect(summary.summary.violationBuckets.first?.ruleID == "met1.width")
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
-            $0.path.hasSuffix("evidence/drc-summary-envelope.json")
+            $0.path.hasSuffix("-drc-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -638,14 +666,50 @@ struct SignoffFlowStageExecutorTests {
         #expect(result.stages[0].gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
         #expect(result.stages[0].artifacts.contains { $0.path.contains("lvs-report") })
         #expect(result.stages[0].artifacts.contains { $0.path.contains("lvs-artifact-manifest") })
+        let requestArtifact = try #require(result.stages[0].artifacts.first {
+            $0.artifactID == "lvs-request"
+        })
+        #expect(requestArtifact.locator.role == .input)
+        let executionArtifact = try #require(result.stages[0].artifacts.first {
+            $0.artifactID == "lvs-execution-result"
+        })
+        let executionURL = try executionArtifact.locator.location.resolvedFileURL(relativeTo: root)
+        let execution = try JSONDecoder().decode(
+            LVSExecutionResult.self,
+            from: Data(contentsOf: executionURL)
+        )
+        #expect(execution.provenance.producer.identifier == "lvsengine-native")
+        #expect(execution.provenance.producer.version == LVSExecutionProvenance.nativeImplementationVersion)
+        #expect(execution.provenance.producer.build?.count == 64)
+        #expect(execution.provenance.inputs.count == 2)
+        let executionInputDigests = Set(execution.provenance.inputs.map(\.digest))
+        let expectedInputDigests = Set([
+            try requestArtifactDigest(for: layoutURL),
+            try requestArtifactDigest(for: schematicURL),
+        ])
+        #expect(executionInputDigests == expectedInputDigests)
+        #expect(execution.provenance.invocation != nil)
+        #expect(execution.provenance.environment != nil)
+        #expect(executionArtifact.producer == execution.provenance.producer)
+        let manifestURL = try #require(execution.artifactManifestURL)
+        let manifest = try JSONDecoder().decode(
+            LVSArtifactManifest.self,
+            from: Data(contentsOf: manifestURL)
+        )
+        #expect(manifest.producer == execution.provenance.producer)
+        let manifestArtifact = try #require(result.stages[0].artifacts.first {
+            $0.path.contains("lvs-artifact-manifest")
+        })
+        #expect(manifestArtifact.producer == execution.provenance.producer)
         let summaryArtifact = try #require(result.stages[0].artifacts.first { $0.artifactID == "lvs-summary" })
+        #expect(summaryArtifact.producer == execution.provenance.producer)
         let summary = try decodeLVSSummary(summaryArtifact, root: root)
         #expect(summary.summary.executionStatus == .completed)
         #expect(summary.summary.verdict == .match)
         #expect(summary.summary.readiness == .ready)
         #expect(summary.summary.activeMismatchCount == 0)
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
-            $0.path.hasSuffix("evidence/lvs-summary-envelope.json")
+            $0.path.hasSuffix("-lvs-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -770,7 +834,7 @@ struct SignoffFlowStageExecutorTests {
         #expect(summary.summary.devicePolicySummary?.unobservedRuleCount == 1)
 
         let envelopeArtifact = try #require(stage.artifacts.first {
-            $0.path.hasSuffix("evidence/lvs-summary-envelope.json")
+            $0.path.hasSuffix("-lvs-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         #expect(envelope.dependencies.contains {
@@ -850,7 +914,7 @@ struct SignoffFlowStageExecutorTests {
         #expect(summary.summary.activeMismatchCount == 1)
         #expect(summary.summary.mismatchBuckets.first?.ruleID == "LVS_MODEL_MISMATCH")
         let envelopeArtifact = try #require(result.stages[0].artifacts.first {
-            $0.path.hasSuffix("evidence/lvs-summary-envelope.json")
+            $0.path.hasSuffix("-lvs-summary-envelope.json")
         })
         let envelope = try decodeArtifactEnvelope(envelopeArtifact, root: root)
         let observations = try #require(envelope.observationSet)
@@ -1097,39 +1161,35 @@ struct SignoffFlowStageExecutorTests {
         let layoutURL = try writeText("layout", name: "layout.gds", root: root)
         let schematicURL = try writeNetlist(matchingNetlist(), name: "schematic.spice", root: root)
 
-        let result = try await services.orchestrator.run(
-            request: FlowOperationRequest(
-                workspaceID: services.workspaceID,
-                runID: "run-lvs",
-                intent: "Run LVS",
-                stages: [
-                    FlowStageDefinition(stageID: "008-lvs", displayName: "LVS"),
-                ]
-            ),
-            toolRegistry: ToolRegistry(),
-            healthResults: [:],
-            executors: [
-                LVSFlowStageExecutor(
-                    stageID: "008-lvs",
-                    toolID: "native-lvs",
-                    request: LVSRequest(
-                        layoutGDSURL: layoutURL,
-                        layoutFormat: .gds,
-                        schematicNetlistURL: schematicURL,
-                        topCell: "TOP",
-                        backendSelection: LVSBackendSelection(backendID: "native-gds")
-                    ),
-                    engine: DuplicateArtifactPathLVSStubEngine()
+        await #expect(throws: FlowExecutionError.invalidStageResult(
+            stageID: "008-lvs",
+            issue: .duplicateArtifactIdentity
+        )) {
+            try await services.orchestrator.run(
+                request: FlowOperationRequest(
+                    workspaceID: services.workspaceID,
+                    runID: "run-lvs",
+                    intent: "Run LVS",
+                    stages: [FlowStageDefinition(stageID: "008-lvs", displayName: "LVS")]
                 ),
-            ]
-        )
-
-        let stage = result.stages[0]
-        #expect(result.status == .failed)
-        #expect(stage.gates.contains { $0.gateID == "lvs" && $0.status == .passed })
-        #expect(stage.gates.contains { $0.gateID == "lvs-artifacts" && $0.status == .failed })
-        #expect(stage.gates.contains { $0.gateID == "artifact-integrity" && $0.status == .passed })
-        #expect(stage.diagnostics.contains { $0.code == "ARTIFACT_MANIFEST_DUPLICATE_FLOW_ARTIFACT_PATH" })
+                toolRegistry: ToolRegistry(),
+                healthResults: [:],
+                executors: [
+                    LVSFlowStageExecutor(
+                        stageID: "008-lvs",
+                        toolID: "native-lvs",
+                        request: LVSRequest(
+                            layoutGDSURL: layoutURL,
+                            layoutFormat: .gds,
+                            schematicNetlistURL: schematicURL,
+                            topCell: "TOP",
+                            backendSelection: LVSBackendSelection(backendID: "native-gds")
+                        ),
+                        engine: DuplicateArtifactPathLVSStubEngine()
+                    ),
+                ]
+            )
+        }
     }
 
     @Test func lvsExecutorFailsArtifactIntegrityGateWhenArtifactEscapesProject() async throws {
@@ -1291,6 +1351,10 @@ struct SignoffFlowStageExecutorTests {
         return url
     }
 
+    private func requestArtifactDigest(for url: URL) throws -> ContentDigest {
+        try SHA256ContentDigester().digest(fileAt: url, using: .sha256)
+    }
+
     private func decodeDRCSummary(
         _ reference: ArtifactReference,
         root: URL
@@ -1413,7 +1477,7 @@ struct SignoffFlowStageExecutorTests {
                 logURL: logURL,
                 extraOutputs: []
             )
-            return DRCExecutionResult(
+            return try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "native-gds",
@@ -1460,6 +1524,7 @@ struct SignoffFlowStageExecutorTests {
             let manifest = DRCArtifactManifest(
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
+                producer: try nativeDRCProducer(),
                 toolName: "StandardDRCStub",
                 passed: true,
                 completed: true,
@@ -1495,6 +1560,7 @@ struct SignoffFlowStageExecutorTests {
             let manifest = DRCArtifactManifest(
                 generatedAt: "2026-06-23T00:00:00Z",
                 backendID: "native-gds",
+                producer: try nativeDRCProducer(),
                 toolName: "CancellingDRCStub",
                 passed: true,
                 completed: true,
@@ -1528,7 +1594,7 @@ struct SignoffFlowStageExecutorTests {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return DRCExecutionResult(
+            return try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "native-gds",
@@ -1556,6 +1622,7 @@ struct SignoffFlowStageExecutorTests {
             let manifest = DRCArtifactManifest(
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
+                producer: try nativeDRCProducer(),
                 toolName: "UnindexedManifestOutputDRCStub",
                 passed: true,
                 completed: true,
@@ -1596,7 +1663,7 @@ struct SignoffFlowStageExecutorTests {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return DRCExecutionResult(
+            return try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "native-gds",
@@ -1620,6 +1687,7 @@ struct SignoffFlowStageExecutorTests {
             let manifest = DRCArtifactManifest(
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
+                producer: try nativeDRCProducer(),
                 toolName: "DuplicateArtifactPathDRCStub",
                 passed: true,
                 completed: true,
@@ -1646,7 +1714,7 @@ struct SignoffFlowStageExecutorTests {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return DRCExecutionResult(
+            return try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "native-gds",
@@ -1676,7 +1744,7 @@ struct SignoffFlowStageExecutorTests {
                 withDestinationURL: externalManifestURL
             )
             try "log".write(to: logURL, atomically: true, encoding: .utf8)
-            return DRCExecutionResult(
+            return try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "native-gds",
@@ -1701,7 +1769,7 @@ struct SignoffFlowStageExecutorTests {
             try "report".write(to: reportURL, atomically: true, encoding: .utf8)
             try "log".write(to: logURL, atomically: true, encoding: .utf8)
             try "{}".write(to: externalManifestURL, atomically: true, encoding: .utf8)
-            return DRCExecutionResult(
+            return try DRCExecutionResult.inProcess(
                 request: request,
                 result: DRCResult(
                     backendID: "native-gds",
@@ -1773,6 +1841,7 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "StandardLVSStub",
+                producer: try nativeLVSProducer(),
                 executionStatus: .completed,
                 verdict: .match,
                 readiness: .ready,
@@ -1812,7 +1881,7 @@ struct SignoffFlowStageExecutorTests {
             )
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native-gds",
@@ -1860,6 +1929,7 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-29T00:00:00Z",
                 backendID: "native",
                 toolName: "DevicePolicyReportLVSStub",
+                producer: try nativeLVSProducer(),
                 executionStatus: .completed,
                 verdict: .match,
                 readiness: .ready,
@@ -1900,7 +1970,7 @@ struct SignoffFlowStageExecutorTests {
             )
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native",
@@ -1940,6 +2010,7 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-23T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "CancellingLVSStub",
+                producer: try nativeLVSProducer(),
                 executionStatus: .completed,
                 verdict: .match,
                 readiness: .ready,
@@ -1974,7 +2045,7 @@ struct SignoffFlowStageExecutorTests {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native-gds",
@@ -2028,6 +2099,7 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "UnindexedManifestOutputLVSStub",
+                producer: try nativeLVSProducer(),
                 executionStatus: .completed,
                 verdict: .match,
                 readiness: .ready,
@@ -2069,7 +2141,7 @@ struct SignoffFlowStageExecutorTests {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native-gds",
@@ -2095,6 +2167,7 @@ struct SignoffFlowStageExecutorTests {
                 generatedAt: "2026-06-19T00:00:00Z",
                 backendID: "native-gds",
                 toolName: "DuplicateArtifactPathLVSStub",
+                producer: try nativeLVSProducer(),
                 executionStatus: .completed,
                 verdict: .match,
                 readiness: .ready,
@@ -2122,7 +2195,7 @@ struct SignoffFlowStageExecutorTests {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(manifest)
             try data.write(to: manifestURL, options: .atomic)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native-gds",
@@ -2153,7 +2226,7 @@ struct SignoffFlowStageExecutorTests {
                 withDestinationURL: externalManifestURL
             )
             try "log".write(to: logURL, atomically: true, encoding: .utf8)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native-gds",
@@ -2179,7 +2252,7 @@ struct SignoffFlowStageExecutorTests {
             try "report".write(to: reportURL, atomically: true, encoding: .utf8)
             try "log".write(to: logURL, atomically: true, encoding: .utf8)
             try "{}".write(to: externalManifestURL, atomically: true, encoding: .utf8)
-            return LVSExecutionResult(
+            return try LVSExecutionResult.inProcess(
                 request: request,
                 result: LVSResult(
                     backendID: "native-gds",
@@ -2194,4 +2267,22 @@ struct SignoffFlowStageExecutorTests {
             )
         }
     }
+}
+
+private func nativeDRCProducer() throws -> ProducerIdentity {
+    try ProducerIdentity(
+        kind: .engine,
+        identifier: "layout-verify",
+        version: DRCExecutionProvenance.nativeImplementationVersion,
+        build: DRCExecutionProvenance.currentExecutableDigest()
+    )
+}
+
+private func nativeLVSProducer() throws -> ProducerIdentity {
+    try ProducerIdentity(
+        kind: .engine,
+        identifier: "lvsengine-native",
+        version: LVSExecutionProvenance.nativeImplementationVersion,
+        build: LVSExecutionProvenance.currentExecutableDigest()
+    )
 }

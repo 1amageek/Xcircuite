@@ -139,7 +139,7 @@ public struct XcircuiteSymbolicPlannerContract: Sendable {
                 )
             )
         }
-        if operation.maturity != "implemented" {
+        if operation.maturity != .implemented {
             diagnostics.append(
                 XcircuitePlanVerificationDiagnostic(
                     severity: "warning",

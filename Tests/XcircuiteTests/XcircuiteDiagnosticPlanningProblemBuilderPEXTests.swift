@@ -1,4 +1,5 @@
 import Foundation
+import CircuiteFoundation
 import PEXEngine
 import Testing
 @testable import Xcircuite
@@ -9,7 +10,7 @@ import DesignFlowKernel
 struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
     @Test func pexSummaryCreatesMetricRecoveryProblem() async throws {
         let summary = makePEXSummary()
-        let metricReport = makePostLayoutMetricReport()
+        let metricReport = try makePostLayoutMetricReport()
 
         let problem = try XcircuiteDiagnosticPlanningProblemBuilder().makePEXRecoveryProblem(
             runID: "run-3",
@@ -152,7 +153,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         let metricReportURL = root.appending(path: "reports/post-layout-metrics.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(makePostLayoutMetricReport()).write(to: metricReportURL, options: .atomic)
+        try encoder.encode(try makePostLayoutMetricReport()).write(to: metricReportURL, options: .atomic)
 
         let json = try await XcircuiteFlowCLICommand.run(
             arguments: [
@@ -296,7 +297,7 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
         )
     }
 
-    private func makePostLayoutMetricReport() -> PostLayoutComparisonReport {
+    private func makePostLayoutMetricReport() throws -> PostLayoutComparisonReport {
         PostLayoutComparisonReport(
             status: "completed",
             preLayoutPointCount: 100,
@@ -342,7 +343,21 @@ struct XcircuiteDiagnosticPlanningProblemBuilderPEXTests {
             addedInPostLayout: [],
             diagnostics: ["post-layout waveform delta exceeded tolerance"],
             gateStatus: "failed",
-            gateViolations: ["vout relative delta exceeded tolerance"]
+            gateViolations: ["vout relative delta exceeded tolerance"],
+            provenance: try comparisonProvenance()
+        )
+    }
+
+    private func comparisonProvenance() throws -> ExecutionProvenance {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        return try ExecutionProvenance(
+            producer: ProducerIdentity(
+                kind: .engine,
+                identifier: "post-layout-comparison",
+                version: "1.0.0"
+            ),
+            startedAt: timestamp,
+            completedAt: timestamp
         )
     }
 

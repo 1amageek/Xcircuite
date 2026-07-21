@@ -353,8 +353,8 @@ extension XcircuiteDiagnosticPlanningProblemBuilder {
         return "lvs-signoff"
     }
 
-    func lvsMaturity(forOperationID _: String) -> String {
-        "implemented"
+    func lvsMaturity(forOperationID _: String) -> XcircuiteOperationMaturity {
+        .implemented
     }
 
     func lvsRequiredInputRefs(forOperationID operationID: String) -> [String] {

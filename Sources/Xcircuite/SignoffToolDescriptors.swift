@@ -1,4 +1,5 @@
 import Foundation
+import PEXEngine
 import ToolQualification
 import DesignFlowKernel
 
@@ -16,7 +17,7 @@ public enum SignoffToolDescriptors {
             capabilities: [
                 ToolCapability(
                     operationID: "run-drc",
-                    inputFormats: [.json, .gdsii, .oasis, .raw],
+                    inputFormats: [.json, .gdsii, .oasis, .cif, .dxf, .raw],
                     outputFormats: [.json, .text]
                 ),
             ],
@@ -37,7 +38,7 @@ public enum SignoffToolDescriptors {
             capabilities: [
                 ToolCapability(
                     operationID: "run-lvs",
-                    inputFormats: [.spice, .gdsii, .oasis, .raw],
+                    inputFormats: [.spice, .gdsii, .oasis, .cif, .dxf, .raw],
                     outputFormats: [.json, .text]
                 ),
             ],
@@ -50,14 +51,14 @@ public enum SignoffToolDescriptors {
     }
 
     public static func pexBackend(
-        backendID: String
+        selection: PEXBackendSelection
     ) -> ToolDescriptor {
-        let normalizedBackendID = backendID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBackendID = selection.backendID.trimmingCharacters(in: .whitespacesAndNewlines)
         return ToolDescriptor(
             toolID: pexToolID(backendID: normalizedBackendID),
             displayName: "PEX Backend \(normalizedBackendID)",
             kind: .pex,
-            version: "1.0.0",
+            version: selection.expectedProducer?.version ?? "unqualified",
             capabilities: [
                 ToolCapability(
                     operationID: "run-pex",
@@ -67,7 +68,7 @@ public enum SignoffToolDescriptors {
             ],
             trustProfile: ToolTrustProfile(level: .unknown),
             environment: ToolEnvironment(
-                executablePath: normalizedBackendID,
+                executablePath: selection.executablePath ?? "unresolved",
                 platform: "macOS"
             )
         )
@@ -130,7 +131,7 @@ public enum SignoffToolDescriptors {
                 ToolCapability(
                     operationID: "edit-layout",
                     inputFormats: [.json],
-                    outputFormats: [.json, .gdsii, .oasis, .raw]
+                    outputFormats: [.json, .gdsii, .oasis, .cif, .dxf, .raw]
                 ),
             ],
             trustProfile: ToolTrustProfile(level: .unknown),

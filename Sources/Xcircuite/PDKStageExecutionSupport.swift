@@ -9,6 +9,7 @@ import PDKValidation
 protocol PDKStageExecutionResult: Sendable {
     var status: PDKExecutionStatus { get }
     var diagnostics: [DesignDiagnostic] { get }
+    var provenance: ExecutionProvenance { get }
 }
 
 extension PDKDiscoveryResult: PDKStageExecutionResult {}
@@ -25,26 +26,19 @@ struct PDKStageExecutionSupport: Sendable {
         self.artifactBuilder = artifactBuilder
     }
 
-    func persistResult<Result: Encodable>(
+    func persistResult<Result: Encodable & PDKStageExecutionResult>(
         _ result: Result,
         stageID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
-        let stageDirectory = try context.xcircuiteRunDirectory()
-            .appending(path: "stages")
-            .appending(path: stageID)
-            .appending(path: "raw")
-        try FileManager.default.createDirectory(at: stageDirectory, withIntermediateDirectories: true)
-        let outputURL = stageDirectory.appending(path: "pdk-result.json")
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(result).write(to: outputURL, options: .atomic)
-        return try artifactBuilder.reference(
-            for: outputURL,
-            projectRoot: try context.xcircuiteProjectRoot(),
-            artifactID: "pdk-result",
+    ) async throws -> ArtifactReference {
+        try await context.persistJSONArtifact(
+            result,
+            artifactID: "\(stageID)-domain-result",
+            stageID: stageID,
+            fileName: "pdk-result.json",
             kind: .report,
-            format: .json
+            producer: result.provenance.producer,
+            mode: .replaceable
         )
     }
 

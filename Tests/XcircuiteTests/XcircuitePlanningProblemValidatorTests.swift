@@ -198,7 +198,7 @@ struct XcircuitePlanningProblemValidatorTests {
         )
         let metricEncoder = JSONEncoder()
         metricEncoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try metricEncoder.encode(makePostLayoutMetricReport()).write(
+        try metricEncoder.encode(try makePostLayoutMetricReport()).write(
             to: metricReportURL,
             options: .atomic
         )
@@ -422,7 +422,7 @@ struct XcircuitePlanningProblemValidatorTests {
             sourceNetlistPath: "circuits/top.postpex.spice",
             technologyArtifactPath: "tech/pex-technology.json",
             metricReportPath: "reports/post-layout-metrics.json",
-            metricReport: makePostLayoutMetricReport()
+            metricReport: try makePostLayoutMetricReport()
         )
         var snapshot = try XcircuiteActionDomainSnapshotBuilder().snapshot(
             runID: "run-pex",
@@ -603,7 +603,7 @@ struct XcircuitePlanningProblemValidatorTests {
         )
     }
 
-    private func makePostLayoutMetricReport() -> PostLayoutComparisonReport {
+    private func makePostLayoutMetricReport() throws -> PostLayoutComparisonReport {
         PostLayoutComparisonReport(
             status: "completed",
             preLayoutPointCount: 100,
@@ -649,7 +649,21 @@ struct XcircuitePlanningProblemValidatorTests {
             addedInPostLayout: [],
             diagnostics: ["post-layout waveform delta exceeded tolerance"],
             gateStatus: "failed",
-            gateViolations: ["vout relative delta exceeded tolerance"]
+            gateViolations: ["vout relative delta exceeded tolerance"],
+            provenance: try comparisonProvenance()
+        )
+    }
+
+    private func comparisonProvenance() throws -> ExecutionProvenance {
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        return try ExecutionProvenance(
+            producer: ProducerIdentity(
+                kind: .engine,
+                identifier: "post-layout-comparison",
+                version: "1.0.0"
+            ),
+            startedAt: timestamp,
+            completedAt: timestamp
         )
     }
 

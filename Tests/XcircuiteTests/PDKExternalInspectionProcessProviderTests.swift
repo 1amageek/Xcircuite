@@ -36,14 +36,21 @@ struct PDKExternalInspectionProcessProviderTests {
             at: root.appending(path: "external-standard-view-tool.sh"),
             text: """
             #!/bin/sh
-            cp "$1" "$2"
+            test "$1" = "fixture-secret-token" || exit 9
+            cp "$2" "$3"
             printf 'external standard-view stderr\\n' >&2
             """
         )
+        let executableAliasURL = root.appending(path: "external-standard-view-tool-link.sh")
+        try FileManager.default.createSymbolicLink(
+            at: executableAliasURL,
+            withDestinationURL: executableURL
+        )
         let provider = ExternalPDKStandardViewProcessProvider(
             configuration: PDKExternalInspectionProcessConfiguration(
-                executablePath: executableURL.path,
-                arguments: [sourceURL.path, "{{resultPath}}"],
+                executablePath: executableAliasURL.path,
+                arguments: ["fixture-secret-token", sourceURL.path, "{{resultPath}}"],
+                redactedArgumentIndexes: [0],
                 timeoutSeconds: 10
             ),
             stageID: "pdk.external-standard-view"
@@ -55,6 +62,10 @@ struct PDKExternalInspectionProcessProviderTests {
         #expect(envelope.artifacts.count >= 5)
         #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/execution.json") })
         #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/stderr.txt") })
+        #expect(envelope.provenance.producer.identifier == executableURL.lastPathComponent)
+        #expect(envelope.provenance.producer.version.hasPrefix("sha256-"))
+        #expect(envelope.provenance.invocation?.executable == executableURL.path)
+        #expect(envelope.provenance.environment?.environmentDigest != nil)
 
         let executionURL = root
             .appending(path: ".xcircuite/runs/pdk-external-standard-view/stages/pdk.external-standard-view/raw/external-pdk/execution.json")
@@ -66,6 +77,13 @@ struct PDKExternalInspectionProcessProviderTests {
         #expect(execution.exitCode == 0)
         #expect(execution.arguments.contains { $0 == sourceURL.path })
         #expect(execution.arguments.contains { $0.hasSuffix("/result.json") })
+        #expect(execution.arguments.first == "<redacted>")
+        #expect(execution.executablePath == executableURL.path)
+        #expect(execution.provenance.invocation?.arguments.first == "<redacted>")
+        let encodedExecution = try JSONEncoder().encode(execution)
+        #expect(!encodedExecution.contains(Data("fixture-secret-token".utf8)))
+        #expect(execution.schemaVersion == PDKExternalInspectionExecutionRecord.currentSchemaVersion)
+        #expect(execution.provenance == envelope.provenance)
     }
 
     @Test("rule-deck process failure preserves structured diagnostics and logs", .timeLimit(.minutes(1)))
@@ -107,6 +125,9 @@ struct PDKExternalInspectionProcessProviderTests {
             $0.code == "pdk.external.process-execution-failed"
         })
         #expect(envelope.artifacts.count == 5)
+        #expect(envelope.provenance.producer.identifier == executableURL.lastPathComponent)
+        #expect(envelope.provenance.producer.version.hasPrefix("sha256-"))
+        #expect(envelope.provenance.invocation?.executable == executableURL.path)
 
         let stderrURL = root
             .appending(path: ".xcircuite/runs/pdk-external-rule-deck-failure/stages/pdk.external-rule-deck/raw/external-pdk/stderr.txt")
@@ -119,6 +140,7 @@ struct PDKExternalInspectionProcessProviderTests {
         )
         #expect(execution.status == "failed")
         #expect(execution.exitCode == 7)
+        #expect(execution.provenance == envelope.provenance)
     }
 
     @Test("external standard-view provider is executable through the typed PDK stage", .timeLimit(.minutes(1)))
@@ -180,6 +202,15 @@ struct PDKExternalInspectionProcessProviderTests {
         )
         #expect(envelope.status == .completed)
         #expect(envelope.artifacts.contains { $0.locator.location.value.hasSuffix("/execution.json") })
+        let resultArtifact = try #require(result.artifacts.first {
+            $0.locator.location.value.hasSuffix("/pdk-result.json")
+        })
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let ledger = try await store.loadRunLedger(runID: runID)
+        #expect(resultArtifact.producer == envelope.provenance.producer)
+        #expect(ledger.runManifest.artifacts.first {
+            $0.locator == resultArtifact.locator
+        } == resultArtifact)
         #expect(FileManager.default.fileExists(atPath: runDirectory
             .appending(path: "stages")
             .appending(path: stageID)
@@ -218,6 +249,29 @@ struct PDKExternalInspectionProcessProviderTests {
             let executor = try decoded.makeExecutor(projectRoot: URL(filePath: "/tmp/pdk-runtime-spec"))
             #expect(executor.toolID.hasPrefix("pdk-"))
             #expect(executor.toolID.contains("inspection"))
+        }
+    }
+
+    @Test("redacted argument indexes must reference configured arguments")
+    func redactedArgumentIndexesMustBeValid() {
+        let outOfRange = PDKExternalInspectionProcessConfiguration(
+            executablePath: "/bin/sh",
+            arguments: ["secret"],
+            redactedArgumentIndexes: [1]
+        )
+        let duplicated = PDKExternalInspectionProcessConfiguration(
+            executablePath: "/bin/sh",
+            arguments: ["first", "second"],
+            redactedArgumentIndexes: [1, 1]
+        )
+
+        #expect(throws: PDKExternalInspectionProcessConfigurationError
+            .invalidRedactedArgumentIndexes([1])) {
+            try outOfRange.validate()
+        }
+        #expect(throws: PDKExternalInspectionProcessConfigurationError
+            .invalidRedactedArgumentIndexes([1, 1])) {
+            try duplicated.validate()
         }
     }
 

@@ -1,4 +1,3 @@
-import DesignFlowKernel
 import Foundation
 import Xcircuite
 import DesignFlowKernel
@@ -12,9 +11,13 @@ extension XcircuiteFlowCLICommand {
         let profile = try loadAgentLoopProfile(from: options.profileURL)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
         let workspaceID = try await workspaceID(for: store)
+        let actionPersistence = RunActionArtifactStore(
+            store: store,
+            actionKind: "review.summarize-loop"
+        )
         let result = try await DefaultFlowRunLoopSnapshotBuilder(
             loader: store,
-            evidencePersistence: store
+            evidencePersistence: actionPersistence
         ).summarizeLoop(
             runID: options.runID,
             workspaceID: workspaceID,
@@ -32,13 +35,17 @@ extension XcircuiteFlowCLICommand {
         let profile = try loadAgentLoopProfile(from: options.profileURL)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
         let workspaceID = try await workspaceID(for: store)
+        let actionPersistence = RunActionArtifactStore(
+            store: store,
+            actionKind: "review.evaluate-run-guard"
+        )
         let snapshotBuilder = DefaultFlowRunLoopSnapshotBuilder(
             loader: store,
-            evidencePersistence: store
+            evidencePersistence: actionPersistence
         )
         let result = try await DefaultFlowRunGuardEvaluator(
             snapshotBuilder: snapshotBuilder,
-            persistence: store
+            persistence: actionPersistence
         ).evaluateRunGuard(
             runID: options.runID,
             workspaceID: workspaceID,
@@ -56,9 +63,13 @@ extension XcircuiteFlowCLICommand {
         let profile = try loadEvaluationProfile(from: options.profileURL)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
         let workspaceID = try await workspaceID(for: store)
+        let actionPersistence = RunActionArtifactStore(
+            store: store,
+            actionKind: "review.compare-artifacts"
+        )
         let result = try await DefaultFlowRunCrossArtifactEvaluator(
             loader: store,
-            evidencePersistence: store
+            evidencePersistence: actionPersistence
         ).compareArtifacts(
             runID: options.runID,
             workspaceID: workspaceID,

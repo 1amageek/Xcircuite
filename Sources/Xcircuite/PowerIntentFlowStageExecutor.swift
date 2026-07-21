@@ -10,6 +10,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     public let toolID: String
     private let sourceInput: XcircuiteFlowInputReference
     private let designInput: XcircuiteFlowInputReference
+    private let pdkInput: XcircuiteFlowInputReference
     private let topDesignName: String
     private let format: PowerIntentFormat
     private let engine: any PowerIntentParsing
@@ -20,6 +21,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
         toolID: String = "logic-design.power-intent",
         sourceInput: XcircuiteFlowInputReference,
         designInput: XcircuiteFlowInputReference,
+        pdkInput: XcircuiteFlowInputReference,
         topDesignName: String,
         format: PowerIntentFormat = .upf,
         engine: any PowerIntentParsing = PowerIntentParsingEngine()
@@ -28,6 +30,7 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.sourceInput = sourceInput
         self.designInput = designInput
+        self.pdkInput = pdkInput
         self.topDesignName = topDesignName
         self.format = format
         self.engine = engine
@@ -41,14 +44,31 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let sourceURL = try sourceInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+            let projectRoot = try context.xcircuiteProjectRoot()
+            let runDirectory = try context.xcircuiteRunDirectory()
+            let sourceReference = try sourceInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "power-intent-source",
+                kind: ArtifactKind.powerIntent,
+                format: format == .upf ? ArtifactFormat.upf : ArtifactFormat.cpf
             )
-            let designURL = try designInput.resolveExisting(
-                projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+            let designReference = try designInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "power-intent-design",
+                kind: ArtifactKind.rtl,
+                format: ArtifactFormat.json
             )
+            let pdkReference = try pdkInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                artifactID: "power-intent-pdk",
+                kind: ArtifactKind.technology,
+                format: ArtifactFormat.json
+            )
+            let sourceURL = try sourceReference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+            let designURL = try designReference.locator.location.resolvedFileURL(relativeTo: projectRoot)
             let source = try String(contentsOf: sourceURL, encoding: .utf8)
             let snapshot = try LogicDesignSnapshotCodec.decode(Data(contentsOf: designURL))
             let designDigest: String
@@ -57,24 +77,9 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             } else {
                 designDigest = try LogicDesignSnapshotCodec.digest(snapshot)
             }
-            let sourceReference = try support.artifactBuilder.reference(
-                for: sourceURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
-                kind: ArtifactKind.powerIntent,
-                format: format == .upf ? ArtifactFormat.upf : ArtifactFormat.cpf
-            )
-            let designReference = try support.artifactBuilder.reference(
-                for: designURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
-                kind: ArtifactKind.rtl,
-                format: ArtifactFormat.json
-            )
             let request = PowerIntentParsingRequest(
                 runID: context.runID,
-                inputs: [
-                    sourceReference.locator,
-                    designReference.locator,
-                ],
+                inputs: [sourceReference, designReference, pdkReference],
                 design: LogicDesignReference(
                     artifact: designReference,
                     topDesignName: topDesignName,
@@ -83,11 +88,20 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
                 format: format,
                 sources: [PowerIntentSourceUnit(path: sourceReference.path, source: source, format: format)]
             )
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "power-intent-request",
+                stageID: stageID,
+                fileName: "power-intent-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
             let result = try await engine.execute(request)
             try await context.checkCancellation()
 
             var persistedResult = result
-            var artifacts = [sourceReference, designReference]
+            var artifacts = [sourceReference, designReference, pdkReference, requestArtifact]
             if let intent = result.payload.intent {
                 let intentReference = try await context.persistJSONArtifact(
                     intent,
@@ -136,10 +150,11 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
     ) async throws -> ArtifactReference {
         try await context.persistJSONArtifact(
             result,
-            artifactID: "\(stageID)-result",
+            artifactID: "\(stageID)-domain-result",
             stageID: stageID,
             fileName: "power-intent-result.json",
             kind: ArtifactKind.report,
+            producer: result.provenance.producer,
             mode: .replaceable
         )
     }

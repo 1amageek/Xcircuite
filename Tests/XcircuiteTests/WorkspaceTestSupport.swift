@@ -43,6 +43,58 @@ func retainTestArtifact(
 }
 
 @discardableResult
+func retainTestProjectInput(
+    path: String,
+    artifactID: String,
+    kind: ArtifactKind,
+    format: ArtifactFormat,
+    runID: String,
+    store: XcircuiteWorkspaceStore,
+    projectRoot: URL
+) async throws -> ArtifactReference {
+    let reference = try await store.makeArtifactReference(
+        forProjectRelativePath: path,
+        artifactID: artifactID,
+        role: .input,
+        kind: kind,
+        format: format
+    )
+    return try await retainTestArtifact(
+        reference,
+        runID: runID,
+        store: store,
+        projectRoot: projectRoot
+    )
+}
+
+func retainLVSInputs(
+    layoutPath: String,
+    schematicPath: String,
+    runID: String,
+    store: XcircuiteWorkspaceStore,
+    root: URL
+) async throws {
+    _ = try await retainTestProjectInput(
+        path: layoutPath,
+        artifactID: "\(runID)-layout-netlist-input",
+        kind: .netlist,
+        format: .spice,
+        runID: runID,
+        store: store,
+        projectRoot: root
+    )
+    _ = try await retainTestProjectInput(
+        path: schematicPath,
+        artifactID: "\(runID)-schematic-netlist-input",
+        kind: .netlist,
+        format: .spice,
+        runID: runID,
+        store: store,
+        projectRoot: root
+    )
+}
+
+@discardableResult
 func persistTestArtifactEnvelope(
     _ envelope: FlowArtifactEnvelope,
     runID: String,

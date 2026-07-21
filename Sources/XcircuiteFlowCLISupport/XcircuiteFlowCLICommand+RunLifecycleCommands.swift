@@ -35,7 +35,10 @@ extension XcircuiteFlowCLICommand {
         let result = try await DefaultFlowRunStageArtifactLadderBuilder(
             loader: store,
             reviewBundler: makeReviewBundler(store: store),
-            persistence: store
+            persistence: RunActionArtifactStore(
+                store: store,
+                actionKind: "review.build-stage-artifact-ladder"
+            )
         ).buildStageArtifactLadder(runID: options.runID, workspaceID: workspaceID)
         return try encode(result, pretty: options.pretty)
     }
@@ -46,7 +49,10 @@ extension XcircuiteFlowCLICommand {
         let workspaceID = try await workspaceID(for: store)
         let result = try await DefaultFlowRunDecisionPacketBuilder(
             reviewBundler: makeReviewBundler(store: store),
-            persistence: store
+            persistence: RunActionArtifactStore(
+                store: store,
+                actionKind: "review.build-decision-packet"
+            )
         ).buildDecisionPacket(runID: options.runID, workspaceID: workspaceID)
         return try encode(result, pretty: options.pretty)
     }
@@ -83,7 +89,10 @@ extension XcircuiteFlowCLICommand {
         let result = try await DefaultFlowRunReleaseEnvelopeBuilder(
             decisionPacketValidator: makeDecisionPacketValidator(store: store),
             loader: store,
-            persistence: store
+            persistence: RunActionArtifactStore(
+                store: store,
+                actionKind: "release.build-envelope"
+            )
         ).buildReleaseEnvelope(
             runID: options.runID,
             workspaceID: workspaceID,
@@ -128,7 +137,17 @@ extension XcircuiteFlowCLICommand {
             kind: .report,
             format: .json
         )
-        let result = try await DefaultFlowRunReleaseEvidenceCollector(persistence: store).collectReleaseEvidence(
+        let result = try await DefaultFlowRunReleaseEvidenceCollector(
+            persistence: RunActionArtifactStore(
+                store: store,
+                actionKind: "release.collect-evidence"
+            ),
+            producer: try ProducerIdentity(
+                kind: .engine,
+                identifier: "design-flow-kernel.release-evidence-collector",
+                version: "1.0.0"
+            )
+        ).collectReleaseEvidence(
             runID: options.runID,
             workspaceID: workspaceID,
             signoffDashboard: dashboard,
@@ -202,8 +221,13 @@ extension XcircuiteFlowCLICommand {
             minimumRetentionDays: minimumRetentionDays,
             recordedAt: recordedAt
         )
-        let data = try JSONEncoder().encode(index)
-        let artifact = try await store.persistArtifact(
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(index)
+        let artifact = try await RunActionArtifactStore(
+            store: store,
+            actionKind: "release.build-retention-index"
+        ).persistArtifact(
             content: data,
             id: ArtifactID(rawValue: "qualification-retention-index"),
             locator: ArtifactLocator(
@@ -236,11 +260,10 @@ extension XcircuiteFlowCLICommand {
         let options = try requireRunOptions(root: root, runID: runID, pretty: pretty)
         let store = try XcircuiteWorkspaceStore(projectRoot: options.projectRoot)
         let workspaceID = try await workspaceID(for: store)
-        let reference = try await store.makeArtifactReference(
-            forProjectRelativePath: ".xcircuite/runs/\(options.runID)/qualification/retention-index.json",
+        let reference = try await latestActionOutput(
             artifactID: "qualification-retention-index",
-            kind: .release,
-            format: .json
+            runID: options.runID,
+            store: store
         )
         let data = try await store.loadArtifactContent(for: reference)
         let index = try JSONDecoder().decode(FlowRunReleaseRetentionIndex.self, from: data)
@@ -299,7 +322,10 @@ extension XcircuiteFlowCLICommand {
         let result = try await DefaultFlowGateApprovalRecorder(
             loader: store,
             inspector: inspector,
-            ledgerPersistence: store
+            approvalPersistence: store,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(
+                storagePrefix: ".xcircuite"
+            )
         ).recordApproval(FlowGateApprovalRequest(
             workspaceID: workspaceID,
             runID: options.runID,
@@ -415,8 +441,14 @@ extension XcircuiteFlowCLICommand {
     private static func makeDecisionPacketValidator(store: XcircuiteWorkspaceStore) -> DefaultFlowRunDecisionPacketValidator {
         DefaultFlowRunDecisionPacketValidator(
             loader: store,
-            persistence: store,
-            reviewBundler: makeReviewBundler(store: store)
+            persistence: RunActionArtifactStore(
+                store: store,
+                actionKind: "review.validate-decision-packet"
+            ),
+            reviewBundler: makeReviewBundler(store: store),
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(
+                storagePrefix: ".xcircuite"
+            )
         )
     }
 
@@ -446,6 +478,20 @@ extension XcircuiteFlowCLICommand {
         try await store.createWorkspace()
         let manifest = try await store.loadManifest()
         return try FlowWorkspaceID(rawValue: manifest.identity.projectID)
+    }
+
+    private static func latestActionOutput(
+        artifactID: String,
+        runID: String,
+        store: XcircuiteWorkspaceStore
+    ) async throws -> ArtifactReference {
+        let ledger = try await store.loadRunLedger(runID: runID)
+        guard let reference = ledger.actions.reversed().lazy
+            .flatMap(\.outputs)
+            .first(where: { $0.artifactID == artifactID }) else {
+            throw FlowExecutionError.missingArtifact(artifactID)
+        }
+        return reference
     }
 
     private static func workspacePath(_ value: String, projectRoot: URL) throws -> String {

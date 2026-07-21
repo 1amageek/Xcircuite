@@ -78,6 +78,7 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                     stageID: stageID,
                     fileName: "logic-design.json",
                     kind: ArtifactKind.rtl,
+                    producer: persistedResult.provenance.producer,
                     mode: .replaceable
                 )
                 var payload = persistedResult.payload
@@ -113,7 +114,8 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
                 persistedResult,
                 stageID: stageID,
                 context: context,
-                fileName: "logic-result.json"
+                fileName: "logic-result.json",
+                producer: persistedResult.provenance.producer
             )
             return try support.stageResult(
                 resultArtifact: resultArtifact,

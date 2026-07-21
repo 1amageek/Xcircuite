@@ -241,6 +241,20 @@ enum QualifiedToolFixtures {
                 )
                 try fixture.data.write(to: url, options: .atomic)
             }
+            let issuer = try qualificationIssuer(toolID: descriptor.toolID)
+            for name in ["input", "output", "primary-output", "oracle-output", "health-output"] {
+                let reference = try supportingArtifact(
+                    toolID: descriptor.toolID,
+                    name: name,
+                    producer: issuer
+                )
+                let url = try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
+                try FileManager.default.createDirectory(
+                    at: url.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data("\(descriptor.toolID):\(name)".utf8).write(to: url, options: .atomic)
+            }
         }
     }
 
@@ -377,10 +391,10 @@ enum QualifiedToolFixtures {
                 caseID: "fixture-case",
                 primary: outcome,
                 oracle: outcome,
-                agreementComparisons: [ToolQualificationMetricComparison(
-                    metricID: "agreement",
-                    observed: 1,
-                    expected: 1
+                agreementComparisons: [ToolOracleMetricComparison(
+                    metricID: "pass",
+                    primaryObserved: 1,
+                    oracleObserved: 1
                 )]
             )],
             checkedAt: checkedAt

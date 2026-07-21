@@ -8,6 +8,9 @@ public enum XcircuiteCandidatePlanVerificationError: Error, LocalizedError, Equa
     case artifactIntegrityFailed(path: String, status: FlowArtifactVerificationStatus, message: String)
     case artifactProducerRunMismatch(expected: String, actual: String?)
     case runMismatch(expected: String, actual: String)
+    case invalidArtifactPayload(path: String, reason: String)
+    case stalePlanVerification(String)
+    case approvalRequirementNotFound(String)
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +26,12 @@ public enum XcircuiteCandidatePlanVerificationError: Error, LocalizedError, Equa
             "Candidate plan verification artifact producer run mismatch: expected \(expected), got \(actual ?? "<missing>")."
         case .runMismatch(let expected, let actual):
             "Candidate plan verification run mismatch: expected \(expected), got \(actual)."
+        case .invalidArtifactPayload(let path, let reason):
+            "Candidate plan verification artifact \(path) has an invalid payload: \(reason)"
+        case .stalePlanVerification(let reason):
+            "Candidate plan verification is stale: \(reason)"
+        case .approvalRequirementNotFound(let approvalID):
+            "Candidate plan verification does not require approval \(approvalID)."
         }
     }
 }

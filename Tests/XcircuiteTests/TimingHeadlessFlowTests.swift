@@ -99,7 +99,8 @@ struct TimingHeadlessFlowTests {
         let approval = try await DefaultFlowGateApprovalRecorder(
             loader: workspaceStore,
             inspector: inspector,
-            ledgerPersistence: workspaceStore
+            approvalPersistence: workspaceStore,
+            artifactLocationValidator: DefaultFlowRunArtifactLocationValidator(storagePrefix: ".xcircuite")
         ).recordApproval(
             FlowGateApprovalRequest(
                 workspaceID: workspaceID,

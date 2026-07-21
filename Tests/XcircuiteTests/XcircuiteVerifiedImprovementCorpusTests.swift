@@ -229,7 +229,7 @@ struct XcircuiteVerifiedImprovementCorpusTests {
         #expect(report.status == .failed)
         let result = try #require(report.caseResults.first)
         #expect(result.status == .failed)
-        #expect(result.diagnostics.contains { $0.code == "artifact-reference-duplicate" })
+        #expect(result.diagnostics.contains { $0.code == "run-manifest-unavailable" })
         #expect(!result.artifactRefs.contains {
             $0.artifactID == XcircuitePlanningArtifactStore.numericRepairLoopArtifactID
         })

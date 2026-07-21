@@ -5,7 +5,7 @@ public struct XcircuiteSymbolicPlannerStepEvaluation: Codable, Sendable, Hashabl
     public var operationID: String
     public var actionDomainSupported: Bool
     public var operationSupported: Bool
-    public var operationMaturity: String?
+    public var operationMaturity: XcircuiteOperationMaturity?
     public var operationReversible: Bool?
     public var stepRequiredInputRefs: [String]
     public var stepMissingInputRefs: [String]
@@ -29,7 +29,7 @@ public struct XcircuiteSymbolicPlannerStepEvaluation: Codable, Sendable, Hashabl
         operationID: String,
         actionDomainSupported: Bool,
         operationSupported: Bool,
-        operationMaturity: String? = nil,
+        operationMaturity: XcircuiteOperationMaturity? = nil,
         operationReversible: Bool? = nil,
         stepRequiredInputRefs: [String],
         stepMissingInputRefs: [String],

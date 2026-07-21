@@ -26,7 +26,9 @@ struct ReleaseStageExecutionSupport: Sendable {
         _ result: Result,
         stageID: String,
         artifactID: String,
-        context: FlowExecutionContext
+        context: FlowExecutionContext,
+        producer: ProducerIdentity? = nil,
+        mode: FlowArtifactPersistenceMode = .replaceable
     ) async throws -> ArtifactReference {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -38,7 +40,55 @@ struct ReleaseStageExecutionSupport: Sendable {
             fileName: "result.json",
             kind: ArtifactKind.report,
             format: ArtifactFormat.json,
-            mode: .replaceable
+            producer: producer,
+            mode: mode
+        )
+    }
+
+    func persistRequest(
+        _ data: Data,
+        stageID: String,
+        artifactID: String,
+        context: FlowExecutionContext
+    ) async throws -> ArtifactReference {
+        try await context.persistArtifact(
+            data,
+            artifactID: artifactID,
+            stageID: stageID,
+            fileName: "request.json",
+            role: .input,
+            kind: .request,
+            format: .json,
+            mode: .immutable
+        )
+    }
+
+    func encodeRequest<Value: Encodable>(_ value: Value) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(value)
+    }
+
+    func provenance(
+        _ provenance: ExecutionProvenance,
+        retaining input: ArtifactReference
+    ) throws -> ExecutionProvenance {
+        var inputs = provenance.inputs
+        if !inputs.contains(input) {
+            inputs.append(input)
+        }
+        return try ExecutionProvenance(
+            producer: provenance.producer,
+            supportingTools: provenance.supportingTools,
+            inputs: inputs.sorted { $0.path < $1.path },
+            invocation: provenance.invocation,
+            environment: provenance.environment,
+            configurationDigest: provenance.configurationDigest,
+            designRevision: provenance.designRevision,
+            randomSeed: provenance.randomSeed,
+            startedAt: provenance.startedAt,
+            completedAt: provenance.completedAt
         )
     }
 

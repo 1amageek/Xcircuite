@@ -34,10 +34,6 @@ extension XcircuiteCandidatePlanExecutor {
             step: step,
             projectRoot: projectRoot
         )
-        context.latestLayoutDocumentPath = try projectRelativePath(
-            for: validatedArtifacts.outputDocumentURL,
-            projectRoot: projectRoot
-        )
         var artifacts = try [
             artifactBuilder.reference(
                 for: requestURL,
@@ -77,6 +73,15 @@ extension XcircuiteCandidatePlanExecutor {
             projectRoot: projectRoot
         ))
         artifacts = try await retainRunArtifacts(artifacts, runID: plan.runID)
+        guard let retainedLayoutDocument = artifacts.first(where: {
+            $0.id.rawValue == "candidate-step-\(step.order)-layout-document"
+        }) else {
+            throw XcircuiteCandidatePlanExecutionError.invalidArtifactReference(
+                path: validatedArtifacts.outputDocumentURL.path(percentEncoded: false),
+                reason: "retained layout document artifact is missing"
+            )
+        }
+        context.latestLayoutDocumentPath = retainedLayoutDocument.path
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
             order: step.order,
@@ -126,7 +131,17 @@ extension XcircuiteCandidatePlanExecutor {
                 expected: "model-equivalence or terminal-equivalence"
             )
         }
-        let policyPath = try projectRelativePath(for: policyURL, projectRoot: projectRoot)
+        let policyReference = try artifactBuilder.reference(
+            for: policyURL,
+            projectRoot: projectRoot,
+            artifactID: policyArtifactID,
+            kind: .model,
+            format: .json
+        )
+        let retainedPolicy = try await retainRunArtifact(
+            policyReference,
+            runID: plan.runID
+        )
 
         let sourceDiagnosticIndex = try optionalNumberHint("sourceDiagnosticIndex", step: step).map(Int.init)
         let report = XcircuiteLVSPolicyRepairReport(
@@ -147,28 +162,24 @@ extension XcircuiteCandidatePlanExecutor {
             terminalPinCount: terminalPolicyMetadata?.pinCount,
             equivalentPinGroups: terminalPolicyMetadata?.groups ?? [],
             producedPolicyArtifactID: policyArtifactID,
-            producedPolicyPath: policyPath,
+            producedPolicyPath: retainedPolicy.path,
             rationale: step.reason
         )
         let reportURL = executionDirectory.appending(path: "lvs-policy-repair-report.json")
         try await writeWorkspaceJSON(report, to: reportURL, projectRoot: projectRoot)
 
-        let artifacts = try await retainRunArtifacts([
-            artifactBuilder.reference(
-                for: policyURL,
-                projectRoot: projectRoot,
-                artifactID: policyArtifactID,
-                kind: .model,
-                format: .json
-            ),
-            artifactBuilder.reference(
-                for: reportURL,
-                projectRoot: projectRoot,
-                artifactID: "candidate-step-\(step.order)-lvs-policy-repair-report",
-                kind: .report,
-                format: .json
-            ),
-        ], runID: plan.runID)
+        let reportReference = try artifactBuilder.reference(
+            for: reportURL,
+            projectRoot: projectRoot,
+            artifactID: "candidate-step-\(step.order)-lvs-policy-repair-report",
+            kind: .report,
+            format: .json
+        )
+        let retainedReport = try await retainRunArtifact(
+            reportReference,
+            runID: plan.runID
+        )
+        let artifacts = [retainedPolicy, retainedReport]
         return XcircuiteCandidatePlanExecutionStepResult(
             stepID: step.stepID,
             order: step.order,

@@ -33,26 +33,35 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
         projectRoot: URL
     ) async throws -> XcircuiteCandidatePlanVerificationResult {
         try FlowIdentifierValidator().validate(request.runID, kind: .runID)
-        let manifest = try await loadRunManifest(runID: request.runID)
-        let candidatePlanRef = try requiredCandidatePlanReference(
+        let ledger = try await workspaceStore.loadRunLedger(runID: request.runID)
+        let manifest = ledger.runManifest
+        let expectedCandidatePlanArtifactID: String?
+        if let artifactID = request.candidatePlanArtifactID {
+            expectedCandidatePlanArtifactID = artifactID
+        } else if request.candidatePlanPath == nil {
+            let generatedReferences = XcircuitePlanningArtifactStore
+                .generatedCandidatePlanReferences(in: manifest)
+            guard generatedReferences.count <= 1 else {
+                throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
+                    path: XcircuitePlanningArtifactStore.generatedCandidatePlanDirectory,
+                    reason: "multiple generated candidate plans are retained; specify an artifact ID or path."
+                )
+            }
+            expectedCandidatePlanArtifactID = generatedReferences.first?.artifactID
+                ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID
+        } else {
+            expectedCandidatePlanArtifactID = nil
+        }
+        let currentCandidatePlanRef = try requiredCandidatePlanReference(
             explicitPath: request.candidatePlanPath,
-            artifactID: request.candidatePlanArtifactID ?? XcircuitePlanningArtifactStore.candidatePlanArtifactID,
+            artifactID: expectedCandidatePlanArtifactID,
             manifest: manifest,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        let candidatePlanURL: URL
-        do {
-            candidatePlanURL = try candidatePlanRef.locator.location.resolvedFileURL(relativeTo: projectRoot)
-        } catch {
-            throw XcircuiteCandidatePlanVerificationError.invalidArtifactReference(
-                path: candidatePlanRef.path,
-                reason: error.localizedDescription
-            )
-        }
-        let plan = try JSONDecoder().decode(
-            XcircuiteCandidatePlan.self,
-            from: Data(contentsOf: candidatePlanURL)
+        let plan: XcircuiteCandidatePlan = try await decodeRetainedArtifact(
+            currentCandidatePlanRef,
+            as: XcircuiteCandidatePlan.self
         )
         guard plan.runID == request.runID else {
             throw XcircuiteCandidatePlanVerificationError.runMismatch(
@@ -60,14 +69,23 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
                 actual: plan.runID
             )
         }
-        let planningProblem = try loadPlanningProblem(
-            for: plan,
+        let candidatePlanRef = try await artifactStore.persistCandidatePlanSnapshot(
+            plan,
+            runID: request.runID,
             projectRoot: projectRoot
+        )
+        let planningProblem = try await loadPlanningProblem(
+            for: plan,
+            manifest: manifest
         )
         let planningProblemValidationRef = manifest.artifacts.first {
             $0.artifactID == XcircuitePlanningArtifactStore.planningProblemValidationArtifactID
         }
-        let approvals = try await workspaceStore.loadRunApprovals(runID: request.runID)
+        let approvals = try await validatedRiskApprovals(
+            in: ledger,
+            for: plan,
+            candidatePlanReference: candidatePlanRef
+        )
         let actionDomainContext = try await loadOrPersistActionDomainSnapshot(
             manifest: manifest,
             runID: request.runID,
@@ -116,9 +134,7 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
         try await appendActionRecord(
             verification: verification,
             candidatePlanRef: candidatePlanRef,
-            verificationRef: verificationRef,
-            rejectedPlansRef: rejectedPlansRef,
-            projectRoot: projectRoot
+            verificationRef: verificationRef
         )
 
         return XcircuiteCandidatePlanVerificationResult(
@@ -191,6 +207,7 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
             && plan.unresolvedObjectives.isEmpty
         let correctnessGateResults = makeCorrectnessGateResults(
             plan: plan,
+            candidatePlanArtifact: candidatePlanRef,
             verificationMode: verificationMode,
             planningProblem: planningProblem,
             planningProblemValidationArtifact: planningProblemValidationArtifact,

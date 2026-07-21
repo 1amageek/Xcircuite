@@ -42,7 +42,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ToolQualification",
-            revision: "c9f93df1b35298820116fdf69a4026dfb4e84217"
+            revision: "d572d950a9dccb699413cd5157d901812354444f"
         ),
         workspaceDependency(
             named: "DesignFlowKernel",
@@ -50,11 +50,11 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "3cab3f150fb47c9a084472aa9f4ad3ea09edc882"
+            revision: "e6a0fa2c5b64de1b4ef81e651bd1bb77ecc77299"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "0ac3caff6a8e72b2daadd0da7f9121831d7b760f"
+            revision: "f79b52da83146c108e0a122f4581fe93fae59527"
         ),
         workspaceDependency(
             named: "PEXEngine",
@@ -74,39 +74,39 @@ let package = Package(
         ),
         workspaceDependency(
             named: "PDKKit",
-            revision: "ab148cc60a4872b0e33755869372baaf816cff17"
+            revision: "b62c5ad7e5819a24977038c2133856caed52f481"
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "87d6ef006b7889b6dd6098e3e79f402a56cb3075"
+            revision: "b9aa25b0b78e6168befa25df3bfe8309bd020a6d"
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "8d302e0a9ffe7e0ba4b4079c72fa3c96aec7c8d3"
+            revision: "2b8f0df3e359fca274edc8ede176457de40e1648"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "d882dbebcd8c25b57016c45be7996c10c60b5b1c"
+            revision: "f1ec9581cf3dea9f439ed244b0475e0493505c22"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "24b64f53e58bca64db3e9eac5784187d32514649"
+            revision: "345e81140439bda43c683aa47c1ecb1dfda83331"
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "2a5795b58ab29007b712b858d0ef840e55f4ca1c"
+            revision: "601fa71a60c97fbdd994c8e7090291e19651fcc4"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "eb0395c538d63517ed78070aa802b5ec471e61dc"
+            revision: "a2b64a3f9f1651be0601496a7423a211c1438c49"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "c2f995ccb7611b17124b8fe77b7719f36d4b7943"
+            revision: "5eb111a3c35dfc54285a6b95e72b8f98b2828648"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "be52779216b055914fe02063862941c88a227498"
+            revision: "e0f6aa2256950f2046eb834d1e7b9472bd2c97ae"
         ),
     ],
     targets: [
@@ -137,6 +137,7 @@ let package = Package(
                 .product(name: "SystemVerilogFrontend", package: "LogicDesign"),
                 .product(name: "TimingEngine", package: "TimingEngine"),
                 .product(name: "STAEngine", package: "TimingEngine"),
+                .product(name: "SignalIntegrityEngine", package: "TimingEngine"),
                 .product(name: "TimingCore", package: "TimingEngine"),
                 .product(name: "LogicEngine", package: "LogicEngine"),
                 .product(name: "LogicEngineCore", package: "LogicEngine"),
@@ -154,6 +155,9 @@ let package = Package(
                 .product(name: "ElectricalSignoffEngine", package: "ElectricalSignoffEngine"),
                 .product(name: "ElectricalSignoffEvidence", package: "ElectricalSignoffEngine"),
                 .product(name: "ReleaseEngine", package: "ReleaseEngine"),
+                .product(name: "ReleaseCore", package: "ReleaseEngine"),
+                .product(name: "SignoffEngine", package: "ReleaseEngine"),
+                .product(name: "TapeoutEngine", package: "ReleaseEngine"),
             ]
         ),
         .target(
@@ -177,6 +181,7 @@ let package = Package(
                 .product(name: "DRCEngine", package: "DRCEngine"),
                 .product(name: "LVSEngine", package: "LVSEngine"),
                 .product(name: "PEXEngine", package: "PEXEngine"),
+                .product(name: "CoreSpice", package: "CoreSpice"),
                 .product(name: "DesignFlowKernel", package: "DesignFlowKernel"),
                 .product(name: "ToolQualification", package: "ToolQualification"),
                 .product(name: "RTLVerificationEngine", package: "RTLVerificationEngine"),

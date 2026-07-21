@@ -12,19 +12,28 @@ extension XcircuiteCandidatePlanVerifier {
         sourceStepIDs: [String],
         spec: SimulationMetricExecutionSpec,
         netlistRef: XcircuitePlanningReference,
-        manifest: FlowRunManifest,
         verificationDirectory: URL,
         runID: String,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
-        let netlistURL = try url(for: netlistRef, manifest: manifest, projectRoot: projectRoot)
-        let source = try String(contentsOf: netlistURL, encoding: .utf8)
-        let netlistCopyURL = verificationDirectory.appending(path: "input-\(netlistURL.lastPathComponent)")
-        try await writeWorkspaceText(source, to: netlistCopyURL, projectRoot: projectRoot)
-        let outcome = try await CoreSpiceSimulationEngine().run(
-            netlistSource: source,
-            fileName: netlistURL.lastPathComponent
+        let verifiedNetlist = try await verifiedArtifactContent(
+            for: netlistRef,
+            runID: runID
         )
+        guard let source = String(data: verifiedNetlist.content, encoding: .utf8) else {
+            throw XcircuiteCandidatePlanVerificationError.invalidArtifactPayload(
+                path: verifiedNetlist.reference.path,
+                reason: "simulation netlist is not valid UTF-8."
+            )
+        }
+        let fileName = URL(fileURLWithPath: verifiedNetlist.reference.path).lastPathComponent
+        let netlistCopyURL = verificationDirectory.appending(path: "input-\(fileName)")
+        try await writeWorkspaceText(source, to: netlistCopyURL, projectRoot: projectRoot)
+        let outcome = try await CoreSpiceSimulationEngine().execute(SimulationExecutionRequest(
+            netlistSource: source,
+            fileName: fileName,
+            inputs: [verifiedNetlist.reference]
+        ))
         let waveformURL = verificationDirectory.appending(path: "waveform.csv")
         try await writeWorkspaceText(outcome.waveformCSV, to: waveformURL, projectRoot: projectRoot)
         let measurementsURL = verificationDirectory.appending(path: "measurements.json")
@@ -64,15 +73,17 @@ extension XcircuiteCandidatePlanVerifier {
         required: Bool,
         sourceStepIDs: [String],
         metricReportRef: XcircuitePlanningReference,
-        manifest: FlowRunManifest,
         verificationDirectory: URL,
         runID: String,
         projectRoot: URL
     ) async throws -> GateExecutionEvaluation {
-        let reportURL = try url(for: metricReportRef, manifest: manifest, projectRoot: projectRoot)
+        let verifiedReport = try await verifiedArtifactContent(
+            for: metricReportRef,
+            runID: runID
+        )
         let postLayoutReport = try JSONDecoder().decode(
             PostLayoutComparisonReport.self,
-            from: Data(contentsOf: reportURL)
+            from: verifiedReport.content
         )
         let summary = simulationMetricReport(
             postLayoutReport: postLayoutReport,

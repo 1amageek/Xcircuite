@@ -57,13 +57,22 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                     stageID: stageID,
                     gateID: stageID,
                     code: "LOGIC_EQUIVALENCE_PROOF_SCOPE_UNSUPPORTED",
-                    message: "The requested logic equivalence proof scope is not supported by this adapter."
+                    message: "The requested logic equivalence proof scope is not supported by this engine."
                 )
             }
+            let requestArtifact = try await context.persistJSONArtifact(
+                request,
+                artifactID: "logic-equivalence-request",
+                stageID: stageID,
+                fileName: "logic-equivalence-request.json",
+                role: .input,
+                kind: .request,
+                mode: .immutable
+            )
 
             if let resumed = try loadResumableResult(
                 request: request,
-                requestURL: requestURL,
+                requestArtifact: requestArtifact,
                 context: context
             ) {
                 return resumed
@@ -75,6 +84,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                     request.sourceDesign.artifact,
                     request.mappedDesign.artifact,
                     request.synthesisProvenance,
+                    request.pdkArtifact,
                 ],
                 design: request.sourceDesign,
                 referenceDesign: request.mappedDesign,
@@ -103,7 +113,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 fileName: "logic-equivalence-result.json",
                 artifactID: "logic-equivalence-result",
                 stageID: stageID,
-                context: context
+                context: context,
+                producer: result.provenance.producer,
+                mode: .replaceable
             )
             let evidence = makeEvidence(request: request, result: result)
             try evidence.validate()
@@ -112,7 +124,9 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 fileName: "logic-equivalence-evidence.json",
                 artifactID: "logic-equivalence-evidence",
                 stageID: stageID,
-                context: context
+                context: context,
+                producer: evidence.provenance.producer,
+                mode: .replaceable
             )
             let acceptance = NativeLogicSynthesisAcceptanceEvaluator().evaluate(
                 request: request,
@@ -124,14 +138,6 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
                 artifactID: "logic-synthesis-acceptance",
                 stageID: stageID,
                 context: context
-            )
-            let requestArtifact = try artifactBuilder.reference(
-                for: requestURL,
-                projectRoot: try context.xcircuiteProjectRoot(),
-                artifactID: "logic-equivalence-request",
-                role: .input,
-                kind: ArtifactKind.report,
-                format: ArtifactFormat.json
             )
             let accepted = acceptance.state == .accepted
             let audit = try makeAuditRecord(
@@ -188,14 +194,14 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             return support.failure(
                 stageID: stageID,
                 gateID: stageID,
-                code: "LOGIC_EQUIVALENCE_ADAPTER_ERROR",
+                code: "LOGIC_EQUIVALENCE_EXECUTION_ERROR",
                 message: error.localizedDescription
             )
         } catch {
             return support.failure(
                 stageID: stageID,
                 gateID: stageID,
-                code: "LOGIC_EQUIVALENCE_ADAPTER_ERROR",
+                code: "LOGIC_EQUIVALENCE_EXECUTION_ERROR",
                 message: error.localizedDescription
             )
         }
@@ -203,7 +209,7 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
 
     private func loadResumableResult(
         request: LogicSynthesisEquivalenceRequest,
-        requestURL: URL,
+        requestArtifact: ArtifactReference,
         context: FlowExecutionContext
     ) throws -> FlowStageResult? {
         let rawDirectory = try context.xcircuiteRunDirectory()
@@ -289,22 +295,16 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-result",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
-        )
-        let requestArtifact = try artifactBuilder.reference(
-            for: requestURL,
-            projectRoot: try context.xcircuiteProjectRoot(),
-            artifactID: "logic-equivalence-request",
-            role: .input,
-            kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            format: ArtifactFormat.json,
+            producer: result.provenance.producer
         )
         let evidenceArtifact = try artifactBuilder.reference(
             for: evidenceURL,
             projectRoot: try context.xcircuiteProjectRoot(),
             artifactID: "logic-equivalence-evidence",
             kind: ArtifactKind.report,
-            format: ArtifactFormat.json
+            format: ArtifactFormat.json,
+            producer: evidence.provenance.producer
         )
         let acceptanceArtifact = try artifactBuilder.reference(
             for: acceptanceURL,
@@ -381,7 +381,8 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
             status: status,
             proofArtifact: isProved
                 ? result.artifacts.first(where: { $0.artifactID == "rtl-verification-report" })
-                : nil
+                : nil,
+            provenance: result.provenance
         )
     }
 
@@ -391,23 +392,18 @@ public struct LogicEquivalenceFlowStageExecutor: FlowStageExecutor {
         artifactID: String,
         stageID: String,
         context: FlowExecutionContext,
+        producer: ProducerIdentity? = nil,
+        mode: FlowArtifactPersistenceMode = .replaceable,
         directoryName: String = "raw"
     ) async throws -> ArtifactReference {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try await context.infrastructure.persistArtifact(
-            content: encoder.encode(value),
-            id: ArtifactID(rawValue: artifactID),
-            locator: ArtifactLocator(
-                location: try ArtifactLocation(
-                    workspaceRelativePath: ".xcircuite/runs/\(context.runID)/stages/\(stageID)/\(directoryName)/\(fileName)"
-                ),
-                role: .output,
-                kind: .report,
-                format: .json
-            ),
-            runID: context.runID,
-            mode: .replaceable
+        try await context.persistJSONArtifact(
+            value,
+            artifactID: artifactID,
+            stageID: stageID,
+            directory: directoryName,
+            fileName: fileName,
+            producer: producer,
+            mode: mode
         )
     }
 

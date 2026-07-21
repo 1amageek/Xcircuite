@@ -118,20 +118,42 @@ public struct XcircuiteProjectManifest: Sendable, Hashable, Codable {
             throw XcircuiteWorkspaceStoreError.invalidProjectManifest("runs must be sorted by runID.")
         }
 
-        var filePaths: Set<String> = []
+        var fileLocators: Set<ArtifactLocator> = []
         for reference in files {
             try XcircuiteWorkspaceLayout.validateProjectRelativePath(reference.path)
-            guard filePaths.insert(reference.path).inserted else {
+            guard fileLocators.insert(reference.locator).inserted else {
                 throw XcircuiteWorkspaceStoreError.invalidProjectManifest(
-                    "file path '\(reference.path)' must be unique."
+                    "file locator for '\(reference.path)' with role "
+                        + "'\(reference.locator.role.rawValue)' must be unique."
                 )
             }
             try FlowIdentifierValidator().validate(reference.artifactID, kind: .artifactID)
             try validateRunManifestProjection(reference, registeredRunIDs: runIDs)
         }
-        guard files == files.sorted(by: { $0.path < $1.path }) else {
-            throw XcircuiteWorkspaceStoreError.invalidProjectManifest("files must be sorted by path.")
+        guard files == files.sorted(by: Self.artifactReferenceOrder) else {
+            throw XcircuiteWorkspaceStoreError.invalidProjectManifest(
+                "files must be sorted by locator and artifact ID."
+            )
         }
+    }
+
+    private static func artifactReferenceOrder(
+        _ lhs: ArtifactReference,
+        _ rhs: ArtifactReference
+    ) -> Bool {
+        if lhs.locator.location.value != rhs.locator.location.value {
+            return lhs.locator.location.value < rhs.locator.location.value
+        }
+        if lhs.locator.role.rawValue != rhs.locator.role.rawValue {
+            return lhs.locator.role.rawValue < rhs.locator.role.rawValue
+        }
+        if lhs.locator.kind.rawValue != rhs.locator.kind.rawValue {
+            return lhs.locator.kind.rawValue < rhs.locator.kind.rawValue
+        }
+        if lhs.locator.format.rawValue != rhs.locator.format.rawValue {
+            return lhs.locator.format.rawValue < rhs.locator.format.rawValue
+        }
+        return lhs.id.rawValue < rhs.id.rawValue
     }
 
     private func validateRunManifestProjection(

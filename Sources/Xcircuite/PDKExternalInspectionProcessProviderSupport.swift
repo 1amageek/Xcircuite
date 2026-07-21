@@ -7,6 +7,7 @@ import SignoffToolSupport
 struct PDKExternalInspectionProcessRun: Sendable {
     var resultData: Data?
     var artifacts: [ArtifactReference]
+    var provenance: ExecutionProvenance
     var exitCode: Int32?
     var failure: PDKExternalInspectionProcessError?
 }
@@ -52,8 +53,10 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
             throw PDKExternalInspectionProcessError.missingProjectRoot
         }
 
-        let projectRoot = URL(filePath: projectRootPath).standardizedFileURL
-        let artifactDirectory = projectRoot
+        let projectRoot = URL(filePath: projectRootPath)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let requestedArtifactDirectory = projectRoot
             .appending(path: ".xcircuite")
             .appending(path: "runs")
             .appending(path: runID)
@@ -61,6 +64,15 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
             .appending(path: stageID)
             .appending(path: "raw")
             .appending(path: "external-pdk")
+        let artifactDirectory = requestedArtifactDirectory
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        guard artifactDirectory.path.hasPrefix(projectRoot.path + "/") else {
+            throw PDKExternalInspectionProcessError.artifactPreparationFailed(
+                path: requestedArtifactDirectory.path(percentEncoded: false),
+                reason: "Artifact directory escapes the project root through a symbolic link."
+            )
+        }
         do {
             try FileManager.default.createDirectory(
                 at: artifactDirectory,
@@ -112,15 +124,41 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
             runID: runID,
             assetID: assetID
         )
+        let recordedArguments = try configuration.recordedArguments(from: arguments)
+        let executableURL = URL(filePath: configuration.executablePath)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let digester = SHA256ContentDigester()
+        let executableDigestBeforeRun: ContentDigest
+        do {
+            executableDigestBeforeRun = try digester.digest(fileAt: executableURL, using: .sha256)
+        } catch {
+            throw PDKExternalInspectionProcessError.executableMeasurementFailed(
+                path: executableURL.path,
+                reason: error.localizedDescription
+            )
+        }
         let startedAt = Date()
-        let processOutcome = await run(
-            executablePath: configuration.executablePath,
+        var processOutcome = await run(
+            executablePath: executableURL.path,
             arguments: arguments,
             workingDirectory: workingDirectory,
             runID: runID,
             projectRoot: projectRoot
         )
         let completedAt = Date()
+        do {
+            let executableDigestAfterRun = try digester.digest(fileAt: executableURL, using: .sha256)
+            if executableDigestAfterRun != executableDigestBeforeRun {
+                processOutcome.failure = .processFailed(
+                    "The external executable changed during inspection."
+                )
+            }
+        } catch {
+            processOutcome.failure = .processFailed(
+                "The external executable could not be reverified after inspection: \(error.localizedDescription)"
+            )
+        }
 
         let standardOutputData = Data(processOutcome.standardOutput.utf8)
         let standardErrorData = Data(processOutcome.standardError.utf8)
@@ -152,52 +190,58 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         } else {
             status = "failed"
         }
-        let record = PDKExternalInspectionExecutionRecord(
-            runID: runID,
-            stageID: stageID,
-            executablePath: configuration.executablePath,
-            arguments: arguments,
-            workingDirectoryPath: workingDirectory.path(percentEncoded: false),
-            timeoutSeconds: configuration.timeoutSeconds,
-            requestPath: requestURL.path(percentEncoded: false),
-            resultPath: resultURL.path(percentEncoded: false),
-            standardOutputPath: standardOutputURL.path(percentEncoded: false),
-            standardErrorPath: standardErrorURL.path(percentEncoded: false),
-            exitCode: processOutcome.exitCode,
-            status: status,
-            startedAt: startedAt,
-            completedAt: completedAt,
-            diagnostics: processOutcome.failure.map { [$0.localizedDescription] } ?? []
-        )
+        let artifacts: [ArtifactReference]
+        let provenance: ExecutionProvenance
         do {
+            let requestReference = try foundationReference(
+                for: requestURL,
+                projectRoot: projectRoot,
+                artifactID: "pdk-external-request",
+                role: .input,
+                kind: .request,
+                format: .json
+            )
+            provenance = try PDKExternalInspectionExecutionProvenance.make(
+                executablePath: executableURL.path,
+                arguments: recordedArguments,
+                workingDirectory: workingDirectory,
+                requestReference: requestReference,
+                startedAt: startedAt,
+                completedAt: completedAt,
+                executableDigest: executableDigestBeforeRun
+            )
+            let record = PDKExternalInspectionExecutionRecord(
+                runID: runID,
+                stageID: stageID,
+                executablePath: executableURL.path,
+                arguments: recordedArguments,
+                workingDirectoryPath: workingDirectory.path(percentEncoded: false),
+                timeoutSeconds: configuration.timeoutSeconds,
+                requestPath: requestURL.path(percentEncoded: false),
+                resultPath: resultURL.path(percentEncoded: false),
+                standardOutputPath: standardOutputURL.path(percentEncoded: false),
+                standardErrorPath: standardErrorURL.path(percentEncoded: false),
+                exitCode: processOutcome.exitCode,
+                status: status,
+                startedAt: startedAt,
+                completedAt: completedAt,
+                provenance: provenance,
+                diagnostics: processOutcome.failure.map { [$0.localizedDescription] } ?? []
+            )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(record).write(to: executionURL, options: [.atomic])
-        } catch {
-            throw PDKExternalInspectionProcessError.artifactPreparationFailed(
-                path: executionURL.path(percentEncoded: false),
-                reason: error.localizedDescription
-            )
-        }
 
-        let artifacts: [ArtifactReference]
-        do {
             artifacts = [
-                try foundationReference(
-                    for: requestURL,
-                    projectRoot: projectRoot,
-                    artifactID: "pdk-external-request",
-                    role: .input,
-                    kind: .request,
-                    format: .json
-                ),
+                requestReference,
                 try foundationReference(
                     for: resultURL,
                     projectRoot: projectRoot,
                     artifactID: "pdk-external-result",
                     role: .output,
                     kind: .report,
-                    format: .json
+                    format: .json,
+                    producer: provenance.producer
                 ),
                 try foundationReference(
                     for: standardOutputURL,
@@ -205,7 +249,8 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
                     artifactID: "pdk-external-stdout",
                     role: .output,
                     kind: .log,
-                    format: .text
+                    format: .text,
+                    producer: provenance.producer
                 ),
                 try foundationReference(
                     for: standardErrorURL,
@@ -213,7 +258,8 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
                     artifactID: "pdk-external-stderr",
                     role: .output,
                     kind: .log,
-                    format: .text
+                    format: .text,
+                    producer: provenance.producer
                 ),
                 try foundationReference(
                     for: executionURL,
@@ -221,7 +267,8 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
                     artifactID: "pdk-external-execution",
                     role: .output,
                     kind: .evidence,
-                    format: .json
+                    format: .json,
+                    producer: provenance.producer
                 ),
             ]
         } catch {
@@ -234,6 +281,7 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         return PDKExternalInspectionProcessRun(
             resultData: resultData,
             artifacts: artifacts,
+            provenance: provenance,
             exitCode: processOutcome.exitCode,
             failure: processOutcome.failure
         )
@@ -242,12 +290,14 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
     func appendArtifacts(
         to data: Data,
         artifacts: [ArtifactReference],
+        provenance: ExecutionProvenance,
         as resultType: PDKRuleDeckInspectionResult.Type
     ) throws -> Data {
         _ = resultType
         var result = try JSONDecoder().decode(PDKRuleDeckInspectionResult.self, from: data)
         let existing = Set(result.artifacts)
         result.artifacts.append(contentsOf: artifacts.filter { !existing.contains($0) })
+        result.provenance = provenance
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(result)
@@ -256,12 +306,14 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
     func appendArtifacts(
         to data: Data,
         artifacts: [ArtifactReference],
+        provenance: ExecutionProvenance,
         as resultType: PDKStandardViewInspectionResult.Type
     ) throws -> Data {
         _ = resultType
         var result = try JSONDecoder().decode(PDKStandardViewInspectionResult.self, from: data)
         let existing = Set(result.artifacts)
         result.artifacts.append(contentsOf: artifacts.filter { !existing.contains($0) })
+        result.provenance = provenance
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(result)
@@ -273,7 +325,8 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         artifactID: String,
         role: ArtifactRole,
         kind: ArtifactKind,
-        format: ArtifactFormat
+        format: ArtifactFormat,
+        producer: ProducerIdentity? = nil
     ) throws -> ArtifactReference {
         let root = projectRoot.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = url.standardizedFileURL.resolvingSymlinksInPath()
@@ -298,7 +351,7 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
             locator: measured.locator,
             digest: measured.digest,
             byteCount: measured.byteCount,
-            producer: measured.producer
+            producer: producer ?? measured.producer
         )
     }
 
@@ -320,7 +373,9 @@ struct PDKExternalInspectionProcessProviderSupport: Sendable {
         let outputData = Data(standardOutput.utf8)
         guard !outputData.isEmpty else {
             if let failure {
-                return Data("{\"processFailure\":\"\(failure.localizedDescription)\"}".utf8)
+                return try JSONEncoder().encode([
+                    "processFailure": failure.localizedDescription,
+                ])
             }
             throw PDKExternalInspectionProcessError.resultMissing(
                 path: resultURL.path(percentEncoded: false)

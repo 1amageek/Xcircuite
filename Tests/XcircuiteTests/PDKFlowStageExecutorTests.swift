@@ -9,14 +9,14 @@ import Testing
 import ToolQualification
 @testable import Xcircuite
 
-@Suite("PDK flow stage adapters")
+@Suite("PDK flow stage executors")
 struct PDKFlowStageExecutorTests {
-    @Test("discovery adapter persists an envelope artifact")
+    @Test("discovery stage persists provenance through the run ledger")
     func discoveryPersistsArtifact() async throws {
-        let root = try makeRoot(name: "pdk-discovery-adapter")
+        let root = try makeRoot(name: "pdk-discovery-executor")
         defer { removeRoot(root) }
         _ = try makeFixtureProject(root: root)
-        let context = try await makeContext(root: root, runID: "pdk-discovery-adapter")
+        let context = try await makeContext(root: root, runID: "pdk-discovery-executor")
 
         let result = try await PDKDiscoveryFlowStageExecutor.local(
             searchRoots: [.path("fixtures")],
@@ -30,18 +30,23 @@ struct PDKFlowStageExecutorTests {
         #expect(result.artifacts.count == 1)
         #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/pdk.discover/raw/pdk-result.json").path))
+        try await expectProducerLineage(
+            in: result,
+            as: PDKDiscoveryResult.self,
+            context: context
+        )
     }
 
-    @Test("validation adapter preserves a blocked semantic result")
+    @Test("validation stage preserves a blocked result and its producer lineage")
     func validationPreservesBlockedResult() async throws {
-        let root = try makeRoot(name: "pdk-validation-adapter")
+        let root = try makeRoot(name: "pdk-validation-executor")
         defer { removeRoot(root) }
         let fixtureRoot = try makeFixtureProject(root: root)
         let manifestURL = fixtureRoot.appending(path: "valid-pdk/pdk.json")
         try FileManager.default.removeItem(
             at: fixtureRoot.appending(path: "valid-pdk/models.spice")
         )
-        let context = try await makeContext(root: root, runID: "pdk-validation-adapter")
+        let context = try await makeContext(root: root, runID: "pdk-validation-executor")
 
         let result = try await PDKValidationFlowStageExecutor.local(
             manifestInput: .path(manifestURL.path)
@@ -55,14 +60,19 @@ struct PDKFlowStageExecutorTests {
         #expect(result.artifacts.count == 1)
         #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/pdk.validate/raw/pdk-result.json").path))
+        try await expectProducerLineage(
+            in: result,
+            as: PDKValidationResult.self,
+            context: context
+        )
     }
 
-    @Test("corpus adapter persists a retained corpus envelope")
+    @Test("corpus stage persists retained evidence with producer lineage")
     func corpusPersistsArtifact() async throws {
-        let root = try makeRoot(name: "pdk-corpus-adapter")
+        let root = try makeRoot(name: "pdk-corpus-executor")
         defer { removeRoot(root) }
         _ = try makeFixtureProject(root: root)
-        let context = try await makeContext(root: root, runID: "pdk-corpus-adapter")
+        let context = try await makeContext(root: root, runID: "pdk-corpus-executor")
 
         let result = try await PDKCorpusValidationFlowStageExecutor.local(
             suiteInput: .path("fixtures/pdk-corpus.json"),
@@ -80,15 +90,20 @@ struct PDKFlowStageExecutorTests {
         #expect(result.artifacts.count == 1)
         #expect(FileManager.default.fileExists(atPath: try context.xcircuiteRunDirectory()
             .appending(path: "stages/pdk.validate-corpus/raw/pdk-result.json").path))
+        try await expectProducerLineage(
+            in: result,
+            as: PDKCorpusValidationResult.self,
+            context: context
+        )
     }
 
-    @Test("standard view and oracle stages persist typed raw evidence")
-    func standardOracleAndQualificationPersistArtifacts() async throws {
-        let root = try makeRoot(name: "pdk-evidence-adapters")
+    @Test("standard view, rule-deck, and oracle stages persist typed producer lineage")
+    func standardViewRuleDeckAndOraclePersistProducerLineage() async throws {
+        let root = try makeRoot(name: "pdk-evidence-executors")
         defer { removeRoot(root) }
         _ = try makeFixtureProject(root: root)
 
-        let standardContext = try await makeContext(root: root, runID: "pdk-standard-view-adapter")
+        let standardContext = try await makeContext(root: root, runID: "pdk-standard-view-executor")
         let standardResult = try await PDKStandardViewInspectionFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             assetID: "cells",
@@ -102,8 +117,13 @@ struct PDKFlowStageExecutorTests {
         )
         #expect(standardResult.status == .succeeded, "Standard-view diagnostics: \(standardResult.diagnostics)")
         #expect(standardResult.artifacts.count == 1)
+        try await expectProducerLineage(
+            in: standardResult,
+            as: PDKManifestViewInspectionResult.self,
+            context: standardContext
+        )
 
-        let ruleDeckContext = try await makeContext(root: root, runID: "pdk-rule-deck-adapter")
+        let ruleDeckContext = try await makeContext(root: root, runID: "pdk-rule-deck-executor")
         let ruleDeckResult = try await PDKRuleDeckInspectionFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             assetID: "rules"
@@ -116,6 +136,11 @@ struct PDKFlowStageExecutorTests {
         )
         #expect(ruleDeckResult.status == .succeeded, "Rule-deck diagnostics: \(ruleDeckResult.diagnostics)")
         #expect(ruleDeckResult.artifacts.count == 1)
+        try await expectProducerLineage(
+            in: ruleDeckResult,
+            as: PDKRuleDeckInspectionResult.self,
+            context: ruleDeckContext
+        )
         let ruleDeckURL = try ruleDeckContext.xcircuiteRunDirectory()
             .appending(path: "stages")
             .appending(path: PDKOperation.ruleDeckInspection.rawValue)
@@ -130,7 +155,7 @@ struct PDKFlowStageExecutorTests {
         #expect(sourceArtifact.byteCount > 0)
         #expect(sourceArtifact.locator.role == .input)
 
-        let oracleContext = try await makeContext(root: root, runID: "pdk-oracle-adapter")
+        let oracleContext = try await makeContext(root: root, runID: "pdk-oracle-executor")
         let oracleResult = try await PDKOracleFlowStageExecutor.local(
             manifestInput: .path("fixtures/valid-pdk/pdk.json"),
             oracleInput: .path("fixtures/standard-view-oracle.json")
@@ -143,11 +168,16 @@ struct PDKFlowStageExecutorTests {
         )
         #expect(oracleResult.status == .succeeded, "Oracle diagnostics: \(oracleResult.diagnostics)")
         #expect(oracleResult.artifacts.count == 1)
+        try await expectProducerLineage(
+            in: oracleResult,
+            as: PDKOracleComparisonResult.self,
+            context: oracleContext
+        )
 
     }
 
     @Test("PDK runtime specifications round-trip through the agent-facing contract")
-    func runtimeSpecRoundTripsPDKAdapters() async throws {
+    func runtimeSpecRoundTripsPDKExecutors() async throws {
         let specs: [XcircuiteFlowStageExecutorSpec] = [
             .pdkDiscovery(.init(searchRoots: [.path("fixtures")])),
             .pdkValidation(.init(manifestInput: .path("fixtures/valid-pdk/pdk.json"))),
@@ -194,6 +224,30 @@ struct PDKFlowStageExecutorTests {
             toolRegistry: ToolRegistry(),
             healthResults: [:]
         )
+    }
+
+    private func expectProducerLineage<Result: Decodable & PDKStageExecutionResult>(
+        in stageResult: FlowStageResult,
+        as resultType: Result.Type,
+        context: FlowExecutionContext
+    ) async throws {
+        let resultArtifact = try #require(stageResult.artifacts.first {
+            $0.locator.location.value.hasSuffix("/pdk-result.json")
+        })
+        let store = try XcircuiteWorkspaceStore(
+            projectRoot: try context.xcircuiteProjectRoot()
+        )
+        let persistedResult = try JSONDecoder().decode(
+            resultType,
+            from: try await store.loadArtifactContent(for: resultArtifact)
+        )
+        let expectedProducer = persistedResult.provenance.producer
+        let ledger = try await store.loadRunLedger(runID: context.runID)
+        let manifest = try await store.loadRunManifest(runID: context.runID)
+
+        #expect(resultArtifact.producer == expectedProducer)
+        #expect(ledger.artifacts.first { $0.locator == resultArtifact.locator } == resultArtifact)
+        #expect(manifest.artifacts.first { $0.locator == resultArtifact.locator } == resultArtifact)
     }
 
     private func makeRoot(name: String) throws -> URL {

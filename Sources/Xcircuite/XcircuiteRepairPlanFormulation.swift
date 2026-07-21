@@ -52,7 +52,7 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
         public var actionID: String
         public var domainID: String
         public var operationID: String
-        public var maturity: String
+        public var maturity: XcircuiteOperationMaturity
         public var reason: String
         public var sourceGoalIDs: [String]
         public var requiredInputRefs: [String]
@@ -63,7 +63,7 @@ public struct XcircuiteRepairPlanFormulation: Codable, Sendable, Hashable {
             actionID: String,
             domainID: String,
             operationID: String,
-            maturity: String,
+            maturity: XcircuiteOperationMaturity,
             reason: String,
             sourceGoalIDs: [String],
             requiredInputRefs: [String],
