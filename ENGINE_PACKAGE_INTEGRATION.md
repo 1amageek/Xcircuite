@@ -30,7 +30,7 @@ re-export is part of this contract.
 | `ToolQualification` | Tool descriptors, retained-evidence reconstruction, capability and trust decisions, and known limitations |
 | `DesignFlowKernel` | Stage lifecycle, trust requirements, retry, approval, waiver, cancellation, review, and resume |
 | `Xcircuite` | Project-root-bound storage, artifact resolution, stage construction, concrete ledger persistence, and engine composition |
-| `ReleaseEngine` | Fail-closed signoff aggregation, tapeout packaging, and final release authorization |
+| `ReleaseEngine` | Fail-closed signoff aggregation, tapeout packaging, and authorization evaluation through injected artifact and approval-attestation protocols |
 | `circuit-studio` | Human review and intervention over the same ledger and artifacts |
 
 ## Dependency rule
@@ -127,6 +127,13 @@ authorization. This retained boundary proves review-artifact integrity; it
 remains separate from DRC/LVS/PEX, timing, external-oracle correlation, and
 process qualification.
 
+Release authorization follows the same ownership rule. Xcircuite owns
+transaction recovery, canonical ledger projection, and retained-artifact
+attestation. It supplies those capabilities through
+`ReleaseApprovalLedgerReading` and `ReleaseArtifactReading`; ReleaseEngine
+authenticates the human action and reviewed result without interpreting an
+`.xcircuite` path.
+
 ## Completion evidence
 
 A package integration is complete only when it can be executed headlessly,
@@ -134,7 +141,9 @@ retains canonical inputs and outputs, exposes typed failure reasons, survives
 artifact integrity checks, and can participate in review and resume without UI
 state becoming authoritative.
 
-The current retained Xcircuite workspace verification executed 571 tests from
-the current Xcircuite HEAD with all eight declared shards passing. That result
+Package-integration completion must be established from the current HEAD by
+the timeout-bounded Xcode shard matrix and the focused flow-runtime,
+workspace-store, simulation-input, and release-composition suites. Historical
+test counts are not retained as current evidence. A passing integration matrix
 proves package-integration behavior; it is not foundry, process, or tool
 qualification evidence.

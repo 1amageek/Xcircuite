@@ -491,18 +491,32 @@ CLI, and CI callers can therefore select the same in-process executors as Swift
 API callers. `requestInput`, direct logic inputs, and all timing artifact fields use
 `XcircuiteFlowInputReference`; downstream stages should select producer output
 with `stageArtifact`, including an `artifactID` or a sufficiently specific
-kind/format/path suffix. Resolution reads the producing stage's retained
-`result.json` and verifies digest, byte count, and project containment before
-the consumer executes. A successful fixture run does not elevate tool or
-process qualification.
+kind/format/path suffix. Resolution loads the producing stage result through
+the injected `FlowRunInfrastructure`, requires one matching result reference
+in the canonical ledger, verifies that reference and the selected output
+artifact, and only then resolves its project-contained file URL. Stage
+executors do not decode `ledger.json` directly. Digest or byte-count mismatch
+remains a typed input failure rather than being folded into a generic invalid
+reference. A successful fixture run does not elevate tool or process
+qualification.
 
 `releaseTapeout.geometricXOR` binds a canonical process-qualification evidence
 artifact, a workspace-relative output report locator, deterministic arguments
 and environment, and a finite positive timeout. When it is present, the runtime
-constructs `QualifiedGeometricXORExecutor` directly and retains the raw XOR
-report and the complete qualification artifact graph in execution provenance
-and the foundry handoff. When it is absent, byte identity remains diagnostic
-only and tapeout cannot become release-qualified.
+constructs `QualifiedGeometricXORExecutor` directly. The executor copies the
+verified executable and layouts into a private immutable execution workspace,
+verifies those snapshots again after the process exits, and retains the raw
+XOR report plus the complete qualification artifact graph in execution
+provenance and the foundry handoff. When it is absent, byte identity remains
+diagnostic only and tapeout cannot become release-qualified.
+
+`releaseAuthorization` is host-integrated. Its default factory creates one
+project-bound `XcircuiteWorkspaceStore` and injects that same store into
+ToolQualification artifact reading, ReleaseEngine artifact reading, and
+`AttestedReleaseApprovalAuthenticator`. The store supplies an attested ledger
+only after transaction recovery, projection validation, and retained-artifact
+verification. No standalone ReleaseEngine CLI path attempts to reconstruct
+this storage-owned trust boundary.
 
 Direct logic input mode closes the in-run producer lineage without generating
 mutable request files between stages. `logicLowering.designInput` can select the

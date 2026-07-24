@@ -11,6 +11,11 @@ directory. The store rejects traversal, absolute artifact locations, workspace
 symlinks and intermediate symlink escapes. Immutable artifacts and revisioned
 run-ledger compare-and-swap updates are serialized by an atomic file lock.
 Flow lifecycle and approval semantics remain in `DesignFlowKernel`.
+Routine lifecycle reads load validated ledger metadata without forcing a
+whole-run artifact scan. Resume, approval authentication, release
+authorization, and explicit audit paths use `loadAttestedRunLedger(runID:)`,
+which first recovers pending transactions and then verifies canonical
+projections, decision projections, and every retained artifact.
 
 Xcircuite is the headless core runtime of the LSI semiconductor design
 platform. It provides the project-aware flow, CLI, artifact ledger integration,
@@ -65,10 +70,11 @@ through typed stage executors, artifact references, trust gates, and the
 
 Xcircuite is distributed as a Swift Package Manager library and exposes the
 `Xcircuite` library together with the `xcircuite-flow` command-line tool. Use
-the package manifest as the source of truth for dependency resolution, then
-run `swift build` and `swift test` from the repository root. The package does
-not require a UI session or a project-specific checkout layout. Xcircuite is
-publicly available at <https://github.com/1amageek/Xcircuite>.
+the package manifest as the source of truth for dependency resolution. Build
+with `swift build`; run Swift package tests through the timeout-bounded
+`Xcircuite-Package` Xcode scheme. The package does not require a UI session or
+a project-specific checkout layout. Xcircuite is publicly available at
+<https://github.com/1amageek/Xcircuite>.
 
 ## Stage executors
 
@@ -84,12 +90,13 @@ publicly available at <https://github.com/1amageek/Xcircuite>.
 | `ProcessQualificationEvidenceBuilderFlowStageExecutor` | Builds ToolQualification-owned process evidence from independently retained artifact groups |
 | `SimulationFlowStageExecutor` | Runs SPICE simulation through the canonical `CoreSpiceSimulationResult` contract, binds its provenance to the persisted netlist input, retains the exact producer on waveform/measurement/result artifacts, emits a run-level evaluation envelope, and gates on measurement expectations plus artifact integrity |
 | `PostLayoutComparisonFlowStageExecutor` | Resolves exact pre/post waveform artifact references, retains them in comparison provenance, and persists the retry-safe canonical report with the comparison producer identity |
-| `TimingSTAFlowStageExecutor` / `TimingSIFlowStageExecutor` | Invoke TimingEngine protocols directly and read every design, library, constraint, PDK, and parasitic input through `LocalArtifactVerifier` before analysis |
+| `TimingSTAFlowStageExecutor` / `TimingSIFlowStageExecutor` | Invoke TimingEngine protocols directly and resolve every design, library, constraint, PDK, and parasitic input through the injected flow infrastructure before analysis |
 | `PDKDiscoveryFlowStageExecutor` / `PDKValidationFlowStageExecutor` | Discover and validate manifest-bound PDKs, then persist the typed result through the workspace transaction boundary with the domain execution producer retained in the artifact, ledger, and run manifest |
 | `PDKCorpusValidationFlowStageExecutor` / `PDKOracleFlowStageExecutor` | Execute retained-corpus and oracle comparison contracts, preserve blocked/failed semantics, and retain result provenance as retry-safe run evidence |
 | `PDKStandardViewInspectionFlowStageExecutor` / `PDKRuleDeckInspectionFlowStageExecutor` | Inspect manifest-bound standard views and rule decks locally or through the typed external process provider, persist retry-safe result evidence with its measured producer identity, and preserve blocked/failed contract diagnostics |
 | Electrical corpus stage | Persists raw corpus and independent-oracle observations for ToolQualification without issuing trust |
 | `PhysicalDesignReviewFlowStageExecutor` | Persists an immutable physical-design review packet, records the generic approval gate, and delegates reviewed-artifact integrity validation to `PhysicalDesignArtifactReviewValidator` |
+| `ReleaseAuthorizationFlowStageExecutor` | Composes ReleaseEngine with the project-bound workspace store for verified artifact reads and attested canonical-ledger approval authentication; ReleaseEngine itself remains storage-layout independent |
 
 PDK external inspection is selected by adding `externalProcess` to a tagged
 `pdkStandardView` or `pdkRuleDeck` runtime executor. The configuration is
@@ -469,9 +476,12 @@ representation is simulation golden corpus report schema version 2.
 
 ```bash
 swift build
-perl -e 'alarm 420; exec @ARGV' swift test --parallel --num-workers 4
+perl -e 'alarm 420; exec @ARGV' xcodebuild test \
+  -scheme Xcircuite-Package \
+  -destination 'platform=macOS' \
+  -only-testing:XcircuiteTests/<FocusedSuite>
 ```
 
-The latest bounded full regression passed 557 test cases in 59 suites using a
-serial SwiftPM runner. This is package-integration evidence, not foundry or
-process qualification.
+Use focused suites while iterating and the repository shard matrix before
+release. Historical test counts are not current evidence. A passing bounded
+matrix is package-integration evidence, not foundry or process qualification.
