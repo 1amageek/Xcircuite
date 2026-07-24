@@ -26,7 +26,17 @@ struct DFTFlowStageExecutorTests {
             kind: .netlist,
             role: .input
         )
-        let libraryManifest = makeCellLibraryManifest()
+        let pdkArtifact = try writeArtifact(
+            root: root,
+            path: "pdk.json",
+            artifactID: "pdk",
+            data: Data("{\"process\":\"fixture-process\"}".utf8),
+            kind: .technology,
+            role: .input
+        )
+        let libraryManifest = makeCellLibraryManifest(
+            pdkDigest: pdkArtifact.digest.hexadecimalValue
+        )
         let libraryData = try DFTCellLibraryManifestCodec.encode(libraryManifest)
         let libraryArtifact = try writeArtifact(
             root: root,
@@ -57,7 +67,7 @@ struct DFTFlowStageExecutorTests {
                 manifestDigest: try DFTCellLibraryManifestCodec.digest(libraryManifest),
                 timingLibraryArtifact: timingArtifact
             ),
-            pdkDigest: libraryManifest.pdkDigest
+            pdkArtifact: pdkArtifact
         )
         try DFTArtifactJSONEncoder().encode(request).write(
             to: root.appending(path: "dft-request.json"),
@@ -638,11 +648,13 @@ struct DFTFlowStageExecutorTests {
         )
     }
 
-    private func makeCellLibraryManifest() -> DFTCellLibraryManifest {
+    private func makeCellLibraryManifest(
+        pdkDigest: String = String(repeating: "e", count: 64)
+    ) -> DFTCellLibraryManifest {
         DFTCellLibraryManifest(
             processID: "fixture-process",
             version: "1",
-            pdkDigest: String(repeating: "e", count: 64),
+            pdkDigest: pdkDigest,
             bindings: [
                 DFTCellLibraryBinding(
                     bindingID: "dff-to-sdff",

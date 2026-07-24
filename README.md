@@ -121,10 +121,14 @@ process qualification.
 
 DFT execution and oracle correlation use distinct `dftExecution` and
 `dftOracleCorrelation` runtime cases. The DFT stages produce raw results and
-correlation observations. A separate `processQualificationEvidenceBuild` stage
-uses ToolQualification to build process evidence; neither stage issues release
-eligibility. `ReleaseEngine` consumes validated signoff evidence and
-`DesignFlowKernel` owns approval, waiver, review, and resume.
+correlation observations. Completed scan/BIST mutations are accepted only after
+DFTEngine's semantic verifier reopens the source and transformed canonical
+artifacts and validates the retained structure. Release evidence assembly uses
+that same verifier instead of duplicating DFT semantics. A separate
+`processQualificationEvidenceBuild` stage uses ToolQualification to build
+process evidence; none of these stages issues release eligibility.
+`ReleaseEngine` consumes validated signoff evidence and `DesignFlowKernel` owns
+approval, waiver, review, and resume.
 
 ```mermaid
 flowchart LR

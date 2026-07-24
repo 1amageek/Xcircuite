@@ -77,11 +77,23 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                     designLoader: FileSystemDFTDesignLoader(rootURL: try context.xcircuiteProjectRoot()),
                     cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: try context.xcircuiteProjectRoot()),
                     timingLibraryLoader: FileSystemDFTTimingLibraryLoader(rootURL: try context.xcircuiteProjectRoot()),
-                    constraintLoader: FileSystemDFTConstraintLoader(rootURL: try context.xcircuiteProjectRoot())
+                    constraintLoader: FileSystemDFTConstraintLoader(rootURL: try context.xcircuiteProjectRoot()),
+                    logicBISTCellMappingLoader: FileSystemDFTLogicBISTCellMappingLoader(
+                        rootURL: try context.xcircuiteProjectRoot()
+                    )
                 )
             }
             let result = try await engine.execute(request)
             try DFTResultValidator().validate(result, for: request)
+            if result.status == .completed {
+                try await DFTResultSemanticVerifier().validate(
+                    result,
+                    for: request,
+                    reading: FlowDFTArtifactReader(
+                        infrastructure: context.infrastructure
+                    )
+                )
+            }
             try await context.checkCancellation()
             let diagnostics = result.dftDiagnostics.map(flowDiagnostic)
             let gateStatus = gateStatus(for: result.status)
@@ -206,5 +218,13 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
             diagnostics: [diagnostic],
             gates: [FlowGateResult(gateID: "dft", status: .blocked, diagnostics: [diagnostic])]
         )
+    }
+}
+
+private struct FlowDFTArtifactReader: DFTArtifactReading {
+    let infrastructure: any FlowRunInfrastructure
+
+    func data(for reference: ArtifactReference) async throws -> Data {
+        try await infrastructure.loadArtifactContent(for: reference)
     }
 }

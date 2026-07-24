@@ -413,7 +413,18 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
             try DFTResultValidator().validate(result, for: request)
             try requireExactInputs(request.executionInputArtifacts, provenance: result.provenance)
             try await verify(result.artifacts, reading: artifacts)
-            let semanticPass = try dftSemanticPass(result, request: request, axis: source.axis)
+            let semanticPass: Bool
+            if result.status == .completed,
+               !result.diagnostics.contains(where: { $0.severity == .error }) {
+                try await DFTResultSemanticVerifier().validate(
+                    result,
+                    for: request,
+                    reading: DFTArtifactReader(persistence: artifacts)
+                )
+                semanticPass = true
+            } else {
+                semanticPass = false
+            }
             return EvaluatedEvidence(
                 evaluation: executionEvaluation(
                     result.status,
@@ -659,53 +670,6 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
             return EvaluatedEvidence(
                 evaluation: try electricalEvaluation(result, axis: source.axis),
                 provenance: result.provenance
-            )
-        }
-    }
-
-    private func dftSemanticPass(
-        _ result: DFTResult,
-        request: DFTRequest,
-        axis: ReleaseSignoffAxis
-    ) throws -> Bool {
-        guard result.status == .completed,
-              !result.diagnostics.contains(where: { $0.severity == .error }) else {
-            return false
-        }
-        switch axis {
-        case .scanInsertion:
-            return result.payload.transformedDesign != nil
-                && result.payload.scanPlan != nil
-                && (request.insertionPolicy?.generateDesignDiff != true
-                    || result.payload.designDiff != nil)
-        case .automaticTestPatternGeneration:
-            guard let evidence = result.payload.coverageEvidence else {
-                return false
-            }
-            return evidence.declaredFaultCount > evidence.excludedFaultCount
-                && evidence.coverage == 1
-        case .builtInSelfTest:
-            guard let structure = result.payload.bistStructure,
-                  let configuration = request.bistConfiguration,
-                  structure.kind == configuration.kind,
-                  structure.controllerCellName == configuration.controllerCellName,
-                  structure.targetInstances == configuration.targetInstances.sorted(),
-                  structure.patternCount == configuration.patternCount else {
-                return false
-            }
-            if configuration.kind == .memory {
-                return configuration.memoryBindings?.isEmpty == false
-                    && structure.logicCellMapping == nil
-            }
-            guard let requestedMapping = configuration.logicCellMapping else {
-                return false
-            }
-            return structure.logicCellMapping == requestedMapping
-                && requestedMapping.processID == request.pdk.processID
-                && requestedMapping.pdkDigest == request.pdk.digest
-        default:
-            throw ReleaseSignoffEvidenceAssemblyError.resultContractViolation(
-                "DFT result cannot supply release axis \(axis.rawValue)"
             )
         }
     }
@@ -1158,6 +1122,14 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
 }
 
 private extension DefaultReleaseSignoffEvidenceAssembler {
+    struct DFTArtifactReader: DFTArtifactReading {
+        let persistence: any FlowArtifactPersisting
+
+        func data(for reference: ArtifactReference) async throws -> Data {
+            try await persistence.loadArtifactContent(for: reference)
+        }
+    }
+
     struct EvaluatedEvidence: Sendable, Hashable {
         var evaluation: Evaluation
         var provenance: ExecutionProvenance
