@@ -44,17 +44,39 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
         request: XcircuiteSignoffRepairFormulationRequest,
         projectRoot: URL
     ) async throws -> XcircuiteSignoffRepairFormulationResult {
+        let preparation = try await prepare(request: request, projectRoot: projectRoot)
+        for artifact in preparation.artifacts {
+            let persisted = try await workspaceStore.persistArtifact(
+                content: artifact.content,
+                id: artifact.reference.id,
+                locator: artifact.reference.locator,
+                runID: request.runID,
+                mode: .replaceable
+            )
+            guard persisted == artifact.reference else {
+                throw XcircuiteRuntimeError.invalidConfiguration(
+                    "Persisted signoff repair artifact identity does not match its prepared identity."
+                )
+            }
+        }
+        return preparation.result
+    }
+
+    public func prepare(
+        request: XcircuiteSignoffRepairFormulationRequest,
+        projectRoot: URL
+    ) async throws -> XcircuiteSignoffRepairFormulationPreparation {
         let loadedReports = try await loadReports(request: request, projectRoot: projectRoot)
-        let actionDomainArtifact = try await artifactStore.persistActionDomainSnapshot(
+        let actionDomainArtifact = try artifactStore.prepareActionDomainSnapshot(
             runID: request.runID,
             projectRoot: projectRoot
         )
         let formulation = try makeFormulation(
             request: request,
             loadedReports: loadedReports,
-            actionDomainArtifact: actionDomainArtifact
+            actionDomainArtifact: actionDomainArtifact.reference
         )
-        let compilation = try await compiler.compile(
+        let compilation = try compiler.prepare(
             request: XcircuiteRepairPlanFormulationCompilationRequest(
                 runID: request.runID,
                 formulation: formulation,
@@ -62,14 +84,17 @@ public struct XcircuiteSignoffRepairFormulationBuilder: Sendable {
             ),
             projectRoot: projectRoot
         )
-        return XcircuiteSignoffRepairFormulationResult(
-            status: compilation.status,
-            runID: request.runID,
-            formulationID: formulation.formulationID,
-            problemID: compilation.problemID,
-            sourceReports: sourceReports(from: loadedReports),
-            actionDomainArtifact: actionDomainArtifact,
-            compilation: compilation
+        return XcircuiteSignoffRepairFormulationPreparation(
+            result: XcircuiteSignoffRepairFormulationResult(
+                status: compilation.result.status,
+                runID: request.runID,
+                formulationID: formulation.formulationID,
+                problemID: compilation.result.problemID,
+                sourceReports: sourceReports(from: loadedReports),
+                actionDomainArtifact: actionDomainArtifact.reference,
+                compilation: compilation.result
+            ),
+            artifacts: [actionDomainArtifact] + compilation.artifacts
         )
     }
 

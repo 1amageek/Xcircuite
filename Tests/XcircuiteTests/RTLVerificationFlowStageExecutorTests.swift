@@ -500,9 +500,9 @@ private struct FixtureOracleProcessRunner: RTLExternalToolProcessRunning {
             provenance: try ExecutionProvenance(
                 producer: ProducerIdentity(
                     kind: .engine,
-                    identifier: request.analysis.stageID,
+                    identifier: toolID,
                     version: "1.0.0",
-                    build: toolID
+                    build: request.analysis.stageID
                 ),
                 startedAt: now,
                 completedAt: now

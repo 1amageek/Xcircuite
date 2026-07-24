@@ -62,6 +62,12 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
                 return reusable
             }
         }
+        if let actionSnapshot = try await latestActionSnapshot(
+            runID: runID,
+            projectRoot: projectRoot
+        ) {
+            return actionSnapshot
+        }
         return try await persistAndLoad(runID: runID, projectRoot: projectRoot)
     }
 
@@ -90,6 +96,12 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
             )
         }
         if artifactID == nil {
+            if let actionSnapshot = try await latestActionSnapshot(
+                runID: runID,
+                projectRoot: projectRoot
+            ) {
+                return actionSnapshot
+            }
             return try await persistAndLoad(runID: runID, projectRoot: projectRoot)
         }
         throw XcircuiteActionDomainSnapshotResolutionError.artifactNotFound(
@@ -143,6 +155,26 @@ struct XcircuiteActionDomainSnapshotResolver: Sendable {
             return nil
         }
         return XcircuiteResolvedActionDomainSnapshot(snapshot: snapshot, reference: reference)
+    }
+
+    private func latestActionSnapshot(
+        runID: String,
+        projectRoot: URL
+    ) async throws -> XcircuiteResolvedActionDomainSnapshot? {
+        let ledger = try await workspaceStore.loadRunLedger(runID: runID)
+        guard let reference = ledger.actions.reversed()
+            .lazy
+            .flatMap(\.outputs)
+            .first(where: {
+                $0.artifactID == XcircuitePlanningArtifactStore.actionDomainArtifactID
+            }) else {
+            return nil
+        }
+        return try await reusableDefaultSnapshot(
+            reference,
+            runID: runID,
+            projectRoot: projectRoot
+        )
     }
 
     private func verifiedManifestSnapshot(

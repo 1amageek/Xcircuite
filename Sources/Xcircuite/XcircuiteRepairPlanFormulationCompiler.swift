@@ -17,10 +17,32 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         request: XcircuiteRepairPlanFormulationCompilationRequest,
         projectRoot: URL
     ) async throws -> XcircuiteRepairPlanFormulationCompilationResult {
+        let preparation = try prepare(request: request, projectRoot: projectRoot)
+        for artifact in preparation.artifacts {
+            let persisted = try await workspaceStore.persistArtifact(
+                content: artifact.content,
+                id: artifact.reference.id,
+                locator: artifact.reference.locator,
+                runID: request.runID,
+                mode: .replaceable
+            )
+            guard persisted == artifact.reference else {
+                throw XcircuiteRuntimeError.invalidConfiguration(
+                    "Persisted repair planning artifact identity does not match its prepared identity."
+                )
+            }
+        }
+        return preparation.result
+    }
+
+    public func prepare(
+        request: XcircuiteRepairPlanFormulationCompilationRequest,
+        projectRoot: URL
+    ) throws -> XcircuiteRepairPlanFormulationPreparation {
         try FlowIdentifierValidator().validate(request.runID, kind: .runID)
         let formulation = try loadFormulation(request: request, projectRoot: projectRoot)
         try validate(formulation: formulation, expectedRunID: request.runID)
-        let formulationArtifact = try await artifactStore.persistRepairPlanFormulation(
+        let formulationArtifact = try artifactStore.prepareRepairPlanFormulation(
             formulation,
             runID: request.runID,
             projectRoot: projectRoot
@@ -33,21 +55,24 @@ public struct XcircuiteRepairPlanFormulationCompiler: Sendable {
         let problem = makePlanningProblem(
             formulation: formulation,
             problemID: problemID,
-            formulationArtifact: formulationArtifact
+            formulationArtifact: formulationArtifact.reference
         )
-        let problemArtifact = try await artifactStore.persistPlanningProblem(
+        let problemArtifact = try artifactStore.preparePlanningProblem(
             problem,
             runID: request.runID,
             projectRoot: projectRoot
         )
-        return XcircuiteRepairPlanFormulationCompilationResult(
-            status: "compiled",
-            runID: request.runID,
-            formulationID: formulation.formulationID,
-            problemID: problemID,
-            formulationArtifact: formulationArtifact,
-            problemArtifact: problemArtifact,
-            diagnosticCodes: diagnostics(for: formulation)
+        return XcircuiteRepairPlanFormulationPreparation(
+            result: XcircuiteRepairPlanFormulationCompilationResult(
+                status: "compiled",
+                runID: request.runID,
+                formulationID: formulation.formulationID,
+                problemID: problemID,
+                formulationArtifact: formulationArtifact.reference,
+                problemArtifact: problemArtifact.reference,
+                diagnosticCodes: diagnostics(for: formulation)
+            ),
+            artifacts: [formulationArtifact, problemArtifact]
         )
     }
 

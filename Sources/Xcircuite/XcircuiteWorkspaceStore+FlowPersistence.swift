@@ -586,6 +586,281 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         )
     }
 
+    public func appendActionArtifacts(
+        _ artifacts: [XcircuitePreparedArtifact],
+        action: FlowRunActionRecord,
+        replacingProjectArtifactAt projectArtifactPath: String? = nil,
+        expectedContent: Data? = nil,
+        replacementContent: Data? = nil
+    ) async throws -> FlowRunLedger {
+        let runID = action.runID
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        if let stageID = action.stageID {
+            try FlowIdentifierValidator().validate(stageID, kind: .stageID)
+        }
+        guard !artifacts.isEmpty else {
+            throw FlowRunLedgerPersistenceError.actionArtifactBindingMismatch(
+                runID: runID,
+                path: ".xcircuite/runs/\(runID)/planning"
+            )
+        }
+        let replacement: (
+            path: String,
+            expectedContent: Data,
+            replacementContent: Data,
+            destination: URL
+        )?
+        switch (projectArtifactPath, expectedContent, replacementContent) {
+        case (nil, nil, nil):
+            replacement = nil
+        case let (.some(path), .some(expected), .some(updated)):
+            try XcircuiteWorkspaceLayout.validateProjectRelativePath(path)
+            guard !path.hasPrefix(".xcircuite/") else {
+                throw XcircuiteWorkspaceStoreError.unsafeProjectPath(path)
+            }
+            replacement = (
+                path: path,
+                expectedContent: expected,
+                replacementContent: updated,
+                destination: try rawProjectArtifactURL(for: ArtifactLocator(
+                    location: try ArtifactLocation(workspaceRelativePath: path),
+                    role: .input,
+                    kind: .other,
+                    format: .unknown
+                ))
+            )
+        default:
+            throw FlowRunLedgerPersistenceError.actionArtifactBindingMismatch(
+                runID: runID,
+                path: projectArtifactPath ?? ".xcircuite/runs/\(runID)"
+            )
+        }
+
+        var normalized: [(artifact: XcircuitePreparedArtifact, path: String, destination: URL)] = []
+        var paths = Set<String>()
+        var references = Set<ArtifactReference>()
+        let prefix = ".xcircuite/runs/\(runID)/planning/"
+        for artifact in artifacts {
+            let locator = try projectRelativeLocator(from: artifact.reference.locator)
+            let path = try projectRelativePath(for: locator)
+            let expectedReference = ArtifactReference(
+                id: artifact.reference.id,
+                locator: locator,
+                digest: try SHA256ContentDigester().digest(
+                    data: artifact.content,
+                    using: .sha256
+                ),
+                byteCount: UInt64(artifact.content.count),
+                producer: artifact.reference.producer
+            )
+            let runPrefix = ".xcircuite/runs/\(runID)/"
+            let relativePath = path.hasPrefix(runPrefix)
+                ? String(path.dropFirst(runPrefix.count))
+                : ""
+            let isActionOwnedPath = relativePath.hasPrefix("planning/")
+                || relativePath.hasPrefix("review/")
+                || relativePath.hasPrefix("actions/")
+                || relativePath.hasPrefix("release/")
+                || relativePath.hasPrefix("qualification/")
+                || relativePath.hasPrefix("loop/")
+                || relativePath.hasPrefix("reports/")
+                || relativePath.hasPrefix("design-diffs/")
+            guard isActionOwnedPath,
+                  locator.role == .output,
+                  expectedReference == artifact.reference,
+                  action.outputs.contains(artifact.reference),
+                  paths.insert(path).inserted,
+                  references.insert(artifact.reference).inserted else {
+                throw FlowRunLedgerPersistenceError.actionArtifactBindingMismatch(
+                    runID: runID,
+                    path: path
+                )
+            }
+            normalized.append((
+                artifact: artifact,
+                path: path,
+                destination: try rawProjectArtifactURL(for: locator)
+            ))
+        }
+
+        try ensureWorkspace()
+        let ledgerPath = ledgerRelativePath(for: runID)
+        let ledgerURL = try workspaceURL(relativePath: ledgerPath)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let lockURL = workspaceRoot.appending(path: ".workspace.lock")
+        return try XcircuiteWorkspaceFileLock.withExclusiveLock(at: lockURL) {
+            try transactionCoordinator.recoverPendingTransactions()
+            guard fileManager.fileExists(atPath: ledgerURL.path(percentEncoded: false)) else {
+                throw FlowRunLedgerPersistenceError.resumeTargetNotFound(runID: runID)
+            }
+            var ledger: FlowRunLedger
+            do {
+                ledger = try JSONDecoder().decode(
+                    FlowRunLedger.self,
+                    from: Data(contentsOf: ledgerURL, options: [.mappedIfSafe])
+                )
+            } catch {
+                throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
+            }
+            try validateLedgerProjection(ledger, requestedRunID: runID)
+            try verifyRetainedArtifacts(in: ledger)
+            try verifyDecisionProjections(for: ledger)
+
+            if let existingAction = ledger.actions.first(where: { $0.actionID == action.actionID }) {
+                guard existingAction == action else {
+                    throw FlowRunLedgerPersistenceError.duplicateActionID(
+                        runID: runID,
+                        actionID: action.actionID
+                    )
+                }
+                for item in normalized {
+                    guard fileManager.fileExists(
+                        atPath: item.destination.path(percentEncoded: false)
+                    ),
+                    try Data(
+                        contentsOf: item.destination,
+                        options: [.mappedIfSafe]
+                    ) == item.artifact.content else {
+                        throw FlowRunLedgerPersistenceError.duplicateActionID(
+                            runID: runID,
+                            actionID: action.actionID
+                        )
+                    }
+                }
+                if let replacement {
+                    guard fileManager.fileExists(
+                        atPath: replacement.destination.path(percentEncoded: false)
+                    ),
+                    try Data(
+                        contentsOf: replacement.destination,
+                        options: [.mappedIfSafe]
+                    ) == replacement.replacementContent else {
+                        throw FlowRunLedgerPersistenceError.duplicateActionID(
+                            runID: runID,
+                            actionID: action.actionID
+                        )
+                    }
+                }
+                return ledger
+            }
+
+            let knownArtifacts = Set(
+                ledger.artifacts + ledger.actions.flatMap(\.outputs)
+            )
+            guard action.inputs.allSatisfy(knownArtifacts.contains),
+                  action.outputs.allSatisfy({
+                      references.contains($0) || knownArtifacts.contains($0)
+                  }) else {
+                throw FlowRunLedgerPersistenceError.actionArtifactBindingMismatch(
+                    runID: runID,
+                    path: prefix
+                )
+            }
+            for item in normalized where fileManager.fileExists(
+                atPath: item.destination.path(percentEncoded: false)
+            ) {
+                let existing = try Data(
+                    contentsOf: item.destination,
+                    options: [.mappedIfSafe]
+                )
+                guard existing == item.artifact.content else {
+                    throw XcircuiteWorkspaceStoreError.immutableArtifactConflict(
+                        item.path
+                    )
+                }
+            }
+            if let replacement {
+                guard fileManager.fileExists(
+                    atPath: replacement.destination.path(percentEncoded: false)
+                ) else {
+                    throw XcircuiteWorkspaceStoreError.missingArtifact(replacement.path)
+                }
+                let currentContent = try Data(
+                    contentsOf: replacement.destination,
+                    options: [.mappedIfSafe]
+                )
+                guard currentContent == replacement.expectedContent else {
+                    throw XcircuiteWorkspaceStoreError.projectArtifactChanged(
+                        replacement.path
+                    )
+                }
+            }
+
+            ledger.actions.append(action)
+            if let selection = try FlowRunSuggestedActionSelection(record: action) {
+                ledger.suggestedActionSelections.append(selection)
+            }
+            let currentManifest = ledger.runManifest
+            ledger.runManifest = try FlowRunManifest(
+                runID: currentManifest.runID,
+                status: currentManifest.status,
+                revision: currentManifest.revision + 1,
+                actor: currentManifest.actor,
+                intent: currentManifest.intent,
+                parentRunID: currentManifest.parentRunID,
+                createdAt: currentManifest.createdAt,
+                updatedAt: max(Date(), currentManifest.updatedAt),
+                startedAt: currentManifest.startedAt,
+                finishedAt: currentManifest.finishedAt,
+                artifacts: currentManifest.artifacts
+            )
+            guard Set(ledger.artifacts) == Set(ledger.runManifest.artifacts) else {
+                throw FlowRunLedgerPersistenceError.decodingFailed(
+                    "Run ledger and updated manifest contain different artifact sets for \(runID)."
+                )
+            }
+            if ledger.runManifest.status.isTerminal {
+                guard let evidence = ledger.evidence,
+                      Set(evidence.artifacts) == Set(ledger.artifacts),
+                      evidence.artifacts.count == ledger.artifacts.count else {
+                    throw FlowRunLedgerPersistenceError.invalidTerminalProjection(
+                        runID: runID,
+                        issue: .unexpectedDecisionProjectionMutation
+                    )
+                }
+            }
+
+            let projections = try prepareDecisionProjections(
+                for: ledger,
+                encoder: encoder
+            )
+            let projectionOperations = projections
+                .map(\.operation)
+                .filter { !paths.contains($0.projectRelativePath) }
+            let artifactOperations = normalized
+                .sorted { $0.path < $1.path }
+                .map {
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: $0.path,
+                        content: $0.artifact.content
+                    )
+                }
+            let replacementOperations = replacement.map {
+                [
+                    XcircuiteWorkspaceTransaction.Operation(
+                        projectRelativePath: $0.path,
+                        content: $0.replacementContent
+                    ),
+                ]
+            } ?? []
+            let ledgerData = try encoder.encode(ledger)
+            let operations = artifactOperations + replacementOperations + projectionOperations + [
+                XcircuiteWorkspaceTransaction.Operation(
+                    projectRelativePath: runManifestRelativePath(for: runID),
+                    content: try encoder.encode(ledger.runManifest)
+                ),
+                XcircuiteWorkspaceTransaction.Operation(
+                    projectRelativePath: ledgerPath,
+                    content: ledgerData
+                ),
+                try projectManifestOperation(registering: runID, encoder: encoder),
+            ]
+            try transactionCoordinator.commit(operations, fault: transactionFault)
+            return try JSONDecoder().decode(FlowRunLedger.self, from: ledgerData)
+        }
+    }
+
     private func appendActionOwnedArtifact(
         content: Data,
         reference: ArtifactReference,
@@ -933,7 +1208,17 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         runID: String,
         mode: FlowArtifactPersistenceMode
     ) async throws -> ArtifactReference {
-        try persistRunArtifact(
+        if let reference = try await persistTerminalPlanningArtifactIfRequired(
+            content: content,
+            id: id,
+            locator: locator,
+            runID: runID,
+            producer: nil,
+            mode: mode
+        ) {
+            return reference
+        }
+        return try persistRunArtifact(
             content: content,
             id: id,
             locator: locator,
@@ -952,7 +1237,17 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         producer: ProducerIdentity,
         mode: FlowArtifactPersistenceMode
     ) async throws -> ArtifactReference {
-        try persistRunArtifact(
+        if let reference = try await persistTerminalPlanningArtifactIfRequired(
+            content: content,
+            id: id,
+            locator: locator,
+            runID: runID,
+            producer: producer,
+            mode: mode
+        ) {
+            return reference
+        }
+        return try persistRunArtifact(
             content: content,
             id: id,
             locator: locator,
@@ -961,6 +1256,79 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             mode: mode,
             permitsRunControlPath: false
         ) { _ in }
+    }
+
+    private func persistTerminalPlanningArtifactIfRequired(
+        content: Data,
+        id: ArtifactID?,
+        locator: ArtifactLocator,
+        runID: String,
+        producer: ProducerIdentity?,
+        mode: FlowArtifactPersistenceMode
+    ) async throws -> ArtifactReference? {
+        let ledger = try loadRunLedgerMetadata(runID: runID)
+        guard ledger.runManifest.status.isTerminal else {
+            return nil
+        }
+        let persistedLocator = try projectRelativeLocator(from: locator)
+        let originalPath = try projectRelativePath(for: persistedLocator)
+        let runPrefix = ".xcircuite/runs/\(runID)/"
+        guard originalPath.hasPrefix(runPrefix),
+              persistedLocator.role == .output else {
+            return nil
+        }
+        let relativePath = String(originalPath.dropFirst(runPrefix.count))
+        let isPlanningOutput = relativePath.hasPrefix("planning/")
+            || relativePath.hasPrefix("design-diffs/")
+        guard isPlanningOutput,
+              mode == .immutable || mode == .replaceable else {
+            return nil
+        }
+
+        let digest = try SHA256ContentDigester().digest(data: content, using: .sha256)
+        let digestToken = String(digest.hexadecimalValue.prefix(16))
+        let originalNSString = originalPath as NSString
+        let pathExtension = originalNSString.pathExtension
+        let fileName = (originalNSString.deletingPathExtension as NSString)
+            .lastPathComponent
+        let isContentAddressed = fileName.contains(digest.hexadecimalValue)
+        let snapshotPath: String
+        if isContentAddressed {
+            snapshotPath = originalPath
+        } else {
+            let snapshotName = pathExtension.isEmpty
+                ? "\(fileName)-\(digestToken)"
+                : "\(fileName)-\(digestToken).\(pathExtension)"
+            snapshotPath = (originalNSString.deletingLastPathComponent as NSString)
+                .appendingPathComponent(snapshotName)
+        }
+        let snapshotLocator = ArtifactLocator(
+            location: try ArtifactLocation(workspaceRelativePath: snapshotPath),
+            role: persistedLocator.role,
+            kind: persistedLocator.kind,
+            format: persistedLocator.format
+        )
+        let reference = ArtifactReference(
+            id: id,
+            locator: snapshotLocator,
+            digest: digest,
+            byteCount: UInt64(content.count),
+            producer: producer
+        )
+        let action = FlowRunActionRecord(
+            actionID: "planning.capture-artifact-\(reference.artifactID)-\(digestToken)",
+            runID: runID,
+            actor: FlowRunActor(kind: .system, identifier: "xcircuite-workspace"),
+            actionKind: "planning.captureArtifact",
+            status: .succeeded,
+            outputs: [reference],
+            createdAt: ledger.runManifest.finishedAt ?? ledger.runManifest.updatedAt
+        )
+        _ = try await appendActionArtifacts(
+            [XcircuitePreparedArtifact(reference: reference, content: content)],
+            action: action
+        )
+        return reference
     }
 
     public func persistRunControlArtifact(

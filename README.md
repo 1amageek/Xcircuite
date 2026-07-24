@@ -17,6 +17,15 @@ authorization, and explicit audit paths use `loadAttestedRunLedger(runID:)`,
 which first recovers pending transactions and then verifies canonical
 projections, decision projections, and every retained artifact.
 
+Terminal run evidence is immutable. Human-review and planning work performed
+after completion is retained as action-owned artifacts: content is prepared
+first, then artifact bytes, the action record, decision projections, the run
+manifest revision, and the project manifest are committed in one workspace
+transaction. Fixed-name planning outputs and design diffs are redirected to
+digest-addressed snapshots with deterministic `planning.captureArtifact`
+records. Rejected-plan feedback is retained as cumulative immutable snapshots,
+so later planning iterations do not invalidate earlier action digests.
+
 Xcircuite is the headless core runtime of the LSI semiconductor design
 platform. It provides the project-aware flow, CLI, artifact ledger integration,
 tool qualification, and Agent-operable planning surface used by both

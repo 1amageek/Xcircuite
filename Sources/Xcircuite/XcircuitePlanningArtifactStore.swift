@@ -119,15 +119,63 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         return try await persistRunJSON(snapshot, id: Self.actionDomainArtifactID, path: Self.actionDomainRelativePath, runID: runID, projectRoot: projectRoot)
     }
 
+    public func prepareActionDomainSnapshot(
+        runID: String,
+        projectRoot: URL,
+        generatedAt: String? = nil
+    ) throws -> XcircuitePreparedArtifact {
+        let snapshot = try snapshotBuilder.snapshot(
+            runID: runID,
+            generatedAt: generatedAt ?? Self.currentTimestamp()
+        )
+        return try prepareRunJSON(
+            snapshot,
+            id: Self.actionDomainArtifactID,
+            path: Self.actionDomainRelativePath,
+            runID: runID,
+            projectRoot: projectRoot
+        )
+    }
+
     public func persistRepairPlanFormulation(_ value: XcircuiteRepairPlanFormulation, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunJSON(value, id: Self.repairPlanFormulationArtifactID, path: Self.repairPlanFormulationRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func prepareRepairPlanFormulation(
+        _ value: XcircuiteRepairPlanFormulation,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuitePreparedArtifact {
+        try validateRun(value.runID, expected: runID)
+        return try prepareRunJSON(
+            value,
+            id: Self.repairPlanFormulationArtifactID,
+            path: Self.repairPlanFormulationRelativePath,
+            runID: runID,
+            projectRoot: projectRoot
+        )
     }
 
     @discardableResult
     public func persistPlanningProblem(_ value: XcircuiteCircuitPlanningProblem, runID: String, projectRoot: URL) async throws -> ArtifactReference {
         try validateRun(value.runID, expected: runID)
         return try await persistRunJSON(value, id: Self.problemArtifactID, path: Self.problemRelativePath, runID: runID, projectRoot: projectRoot)
+    }
+
+    public func preparePlanningProblem(
+        _ value: XcircuiteCircuitPlanningProblem,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuitePreparedArtifact {
+        try validateRun(value.runID, expected: runID)
+        return try prepareRunJSON(
+            value,
+            id: Self.problemArtifactID,
+            path: Self.problemRelativePath,
+            runID: runID,
+            projectRoot: projectRoot
+        )
     }
 
     public func persistPlanningProblemValidation(_ value: XcircuitePlanningProblemValidation, runID: String, projectRoot: URL) async throws -> ArtifactReference {
@@ -172,6 +220,65 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let encodedRecord = try encoder.encode(record)
+        let ledger = try await store.loadRunLedger(runID: runID)
+        if ledger.runManifest.status.isTerminal {
+            let priorReference = ledger.actions.reversed()
+                .lazy
+                .flatMap(\.outputs)
+                .first {
+                    $0.artifactID == Self.rejectedPlansArtifactID
+                }
+            var existing = Data()
+            if let priorReference {
+                _ = try await store.verify(priorReference)
+                existing = try await store.read(from: priorReference.path)
+            }
+            let records = try decodeRejectedPlans(existing, runID: runID)
+            guard !records.contains(where: { $0.rejectionID == record.rejectionID }) else {
+                throw XcircuitePlanningArtifactError.duplicateRejectedPlan(
+                    rejectionID: record.rejectionID
+                )
+            }
+            var updated = existing
+            if !updated.isEmpty, updated.last != 0x0A {
+                updated.append(0x0A)
+            }
+            updated.append(encodedRecord)
+            updated.append(0x0A)
+            let digest = try SHA256ContentDigester().digest(
+                data: updated,
+                using: .sha256
+            )
+            let digestToken = String(digest.hexadecimalValue.prefix(16))
+            let reference = ArtifactReference(
+                id: try ArtifactID(rawValue: Self.rejectedPlansArtifactID),
+                locator: ArtifactLocator(
+                    location: try ArtifactLocation(
+                        workspaceRelativePath: ".xcircuite/runs/\(runID)/planning/rejected-plan-snapshots/\(digestToken).jsonl"
+                    ),
+                    role: .output,
+                    kind: .other,
+                    format: .text
+                ),
+                digest: digest,
+                byteCount: UInt64(updated.count)
+            )
+            let action = FlowRunActionRecord(
+                actionID: "planning.record-rejected-plan-\(record.rejectionID)-\(digestToken)",
+                runID: runID,
+                actor: FlowRunActor(kind: .system, identifier: "xcircuite-planning"),
+                actionKind: "planning.recordRejectedPlan",
+                status: .succeeded,
+                inputs: [priorReference].compactMap { $0 },
+                outputs: [reference],
+                createdAt: ledger.runManifest.finishedAt ?? ledger.runManifest.updatedAt
+            )
+            _ = try await store.appendActionArtifacts(
+                [XcircuitePreparedArtifact(reference: reference, content: updated)],
+                action: action
+            )
+            return reference
+        }
         for attempt in 0..<8 {
             let existing = try await store.loadArtifactContent(at: locator) ?? Data()
             let records = try decodeRejectedPlans(existing, runID: runID)
@@ -445,6 +552,30 @@ public struct XcircuitePlanningArtifactStore: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try await persistRunData(encoder.encode(value), id: id, path: path, format: .json, runID: runID, projectRoot: projectRoot)
+    }
+
+    private func prepareRunJSON<Value: Encodable & Sendable>(
+        _ value: Value,
+        id: String,
+        path: String,
+        runID: String,
+        projectRoot: URL
+    ) throws -> XcircuitePreparedArtifact {
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        _ = try resolvedWorkspaceStore(projectRoot: projectRoot)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let content = try encoder.encode(value)
+        let reference = ArtifactReference(
+            id: try ArtifactID(rawValue: id),
+            locator: try artifactLocator(
+                path: runPath(path, runID: runID),
+                format: .json
+            ),
+            digest: try SHA256ContentDigester().digest(data: content, using: .sha256),
+            byteCount: UInt64(content.count)
+        )
+        return XcircuitePreparedArtifact(reference: reference, content: content)
     }
 
     private func persistImmutableRunJSON<Value: Encodable & Sendable>(

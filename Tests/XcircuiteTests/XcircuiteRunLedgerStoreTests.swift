@@ -514,6 +514,68 @@ struct XcircuiteRunLedgerPersistenceTests {
     }
 
     @Test
+    func appendsMultipleActionArtifactsAndProjectEditAtomically() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        let runID = "run-batch-action"
+        try await store.saveRunLedger(try makeLedger(runID: runID))
+        let originalDesign = Data("{\"enabled\":true}".utf8)
+        let updatedDesign = Data("{\"enabled\":false}".utf8)
+        let designPath = "design/waivers.json"
+        try FileManager.default.createDirectory(
+            at: root.appending(path: "design"),
+            withIntermediateDirectories: true
+        )
+        try originalDesign.write(to: root.appending(path: designPath), options: .atomic)
+
+        let beforeContent = Data("before".utf8)
+        let afterContent = Data("after".utf8)
+        let beforeReference = try makeActionArtifactReference(
+            runID: runID,
+            name: "review/edit/before.json",
+            content: beforeContent
+        )
+        let afterReference = try makeActionArtifactReference(
+            runID: runID,
+            name: "review/edit/after.json",
+            content: afterContent
+        )
+        let action = FlowRunActionRecord(
+            actionID: "apply-edit",
+            runID: runID,
+            actor: FlowRunActor(kind: .human, identifier: "reviewer"),
+            actionKind: "review.applyEdit",
+            status: .succeeded,
+            outputs: [beforeReference, afterReference],
+            createdAt: Date(timeIntervalSince1970: 1_700_000_001)
+        )
+
+        let updated = try await store.appendActionArtifacts(
+            [
+                XcircuitePreparedArtifact(
+                    reference: beforeReference,
+                    content: beforeContent
+                ),
+                XcircuitePreparedArtifact(
+                    reference: afterReference,
+                    content: afterContent
+                ),
+            ],
+            action: action,
+            replacingProjectArtifactAt: designPath,
+            expectedContent: originalDesign,
+            replacementContent: updatedDesign
+        )
+
+        #expect(updated.actions == [action])
+        #expect(updated.artifacts.isEmpty)
+        #expect(try Data(contentsOf: root.appending(path: designPath)) == updatedDesign)
+        #expect(try await store.loadArtifactContent(for: beforeReference) == beforeContent)
+        #expect(try await store.loadArtifactContent(for: afterReference) == afterContent)
+    }
+
+    @Test
     func identicalActionAppendIsIdempotentAndConflictingDuplicateIsRejected() async throws {
         let root = try makeTemporaryRoot()
         defer { remove(root) }

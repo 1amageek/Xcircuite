@@ -244,7 +244,7 @@ extension XcircuiteCandidatePlanVerifier {
         guard plan.sourceProblemRef.path != nil || plan.sourceProblemRef.artifactID != nil else {
             return nil
         }
-        let reference = try requiredSourceProblemReference(
+        let reference = try await requiredSourceProblemReference(
             plan.sourceProblemRef,
             manifest: manifest,
             runID: plan.runID

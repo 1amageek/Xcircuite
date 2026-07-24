@@ -222,7 +222,7 @@ extension XcircuiteCandidatePlanVerifier {
         guard plan.sourceProblemRef.path != nil || plan.sourceProblemRef.artifactID != nil else {
             return nil
         }
-        let reference = try requiredSourceProblemReference(
+        let reference = try await requiredSourceProblemReference(
             plan.sourceProblemRef,
             manifest: manifest,
             runID: plan.runID
@@ -270,8 +270,10 @@ extension XcircuiteCandidatePlanVerifier {
         _ source: XcircuitePlanningReference,
         manifest: FlowRunManifest,
         runID: String
-    ) throws -> ArtifactReference {
-        let matches = manifest.artifacts.filter { reference in
+    ) async throws -> ArtifactReference {
+        let ledger = try await workspaceStore.loadRunLedger(runID: runID)
+        let retained = Set(manifest.artifacts + ledger.actions.flatMap(\.outputs))
+        let matches = retained.filter { reference in
             let pathMatches = source.path.map { reference.path == $0 } ?? true
             let identifierMatches = source.artifactID.map { reference.artifactID == $0 } ?? true
             return pathMatches && identifierMatches
