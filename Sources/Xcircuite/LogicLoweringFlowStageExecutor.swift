@@ -52,7 +52,7 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            var request = try makeRequest(context: context)
+            var request = try await makeRequest(context: context)
             guard request.runID == context.runID else {
                 return support.blocked(
                     stageID: stageID,
@@ -109,13 +109,14 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> LogicLoweringRequest {
+    private func makeRequest(context: FlowExecutionContext) async throws -> LogicLoweringRequest {
         let projectRoot = try context.xcircuiteProjectRoot()
         let runDirectory = try context.xcircuiteRunDirectory()
         if let requestInput {
-            let requestURL = try requestInput.resolveExisting(
+            let requestURL = try await requestInput.resolveExisting(
                 projectRoot: projectRoot,
-                runDirectory: runDirectory
+                runDirectory: runDirectory,
+                infrastructure: context.infrastructure
             )
             return try JSONDecoder().decode(
                 LogicLoweringRequest.self,
@@ -127,9 +128,10 @@ public struct LogicLoweringFlowStageExecutor: FlowStageExecutor {
                 "Logic lowering requires a request input or a producer design input."
             )
         }
-        let designArtifact = try designInput.resolveArtifactReference(
+        let designArtifact = try await designInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "logic-lowering-design-input",
             kind: .rtl,
             format: .json

@@ -85,14 +85,23 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
         }
     }
 
-    func resolve(projectRoot: URL, runDirectory: URL) throws -> URL {
+    func resolve(
+        projectRoot: URL,
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> URL {
         switch self {
         case .path(let path):
             return try XcircuiteFlowRuntimeSpec.resolvePath(path, projectRoot: projectRoot)
         case .artifact(let reference):
             return try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
         case .stageArtifact(let artifact):
-            return try resolveStageArtifact(artifact, projectRoot: projectRoot, runDirectory: runDirectory)
+            return try await resolveStageArtifact(
+                artifact,
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure
+            )
         case .stageRawArtifact(let artifact):
             try FlowIdentifierValidator().validate(artifact.stageID, kind: .stageID)
             let components = try Self.validatedRelativePathComponents(artifact.relativePath)
@@ -110,34 +119,50 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     ) throws -> URL {
         let verifier = LocalArtifactVerifier()
         let integrity = verifier.verify(reference, relativeTo: projectRoot)
-        guard integrity.isVerified else {
-            guard let issue = integrity.issues.first else {
-                throw XcircuiteRuntimeError.invalidInputReference(reference.path)
-            }
-            switch issue.code {
-            case .missingFile:
-                throw XcircuiteRuntimeError.inputReferenceMissing(reference.path)
-            case .byteCountMismatch:
-                throw XcircuiteRuntimeError.artifactReferenceByteCountMismatch(
-                    path: reference.path,
-                    expected: Int64(reference.byteCount),
-                    actual: Int64(issue.actualByteCount ?? 0)
-                )
-            case .digestMismatch:
-                throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
-                    path: reference.path,
-                    expected: reference.digest.hexadecimalValue,
-                    actual: issue.actualDigest?.hexadecimalValue ?? "unknown"
-                )
-            default:
-                throw XcircuiteRuntimeError.invalidInputReference(issue.detail ?? issue.code.rawValue)
-            }
-        }
+        try Self.requireVerified(integrity, reference: reference)
         return try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
     }
 
-    func resolveExisting(projectRoot: URL, runDirectory: URL) throws -> URL {
-        let url = try resolve(projectRoot: projectRoot, runDirectory: runDirectory)
+    private static func requireVerified(
+        _ integrity: ArtifactIntegrity,
+        reference: ArtifactReference
+    ) throws {
+        guard !integrity.isVerified else {
+            return
+        }
+        guard let issue = integrity.issues.first else {
+            throw XcircuiteRuntimeError.invalidInputReference(reference.path)
+        }
+        switch issue.code {
+        case .missingFile:
+            throw XcircuiteRuntimeError.inputReferenceMissing(reference.path)
+        case .byteCountMismatch:
+            throw XcircuiteRuntimeError.artifactReferenceByteCountMismatch(
+                path: reference.path,
+                expected: Int64(reference.byteCount),
+                actual: Int64(issue.actualByteCount ?? 0)
+            )
+        case .digestMismatch:
+            throw XcircuiteRuntimeError.artifactReferenceDigestMismatch(
+                path: reference.path,
+                expected: reference.digest.hexadecimalValue,
+                actual: issue.actualDigest?.hexadecimalValue ?? "unknown"
+            )
+        default:
+            throw XcircuiteRuntimeError.invalidInputReference(issue.detail ?? issue.code.rawValue)
+        }
+    }
+
+    func resolveExisting(
+        projectRoot: URL,
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> URL {
+        let url = try await resolve(
+            projectRoot: projectRoot,
+            runDirectory: runDirectory,
+            infrastructure: infrastructure
+        )
         if case .path(let path) = self {
             return try Self.validateExistingFile(
                 url,
@@ -166,23 +191,29 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     func resolveArtifactReference(
         projectRoot: URL,
         runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure,
         artifactID: String,
         kind: ArtifactKind,
         format: ArtifactFormat? = nil
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         let reference: ArtifactReference
         switch self {
         case .artifact(let providedReference):
             _ = try resolveVerifiedArtifact(providedReference, projectRoot: projectRoot)
             reference = providedReference
         case .stageArtifact(let selector):
-            reference = try resolveStageArtifactReference(
+            reference = try await resolveStageArtifactReference(
                 selector,
                 projectRoot: projectRoot,
-                runDirectory: runDirectory
+                runDirectory: runDirectory,
+                infrastructure: infrastructure
             )
         case .path, .stageRawArtifact:
-            let url = try resolveExisting(projectRoot: projectRoot, runDirectory: runDirectory)
+            let url = try await resolveExisting(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure
+            )
             reference = try StageArtifactReferenceBuilder().reference(
                 for: url,
                 projectRoot: projectRoot,
@@ -222,21 +253,24 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
     private func resolveStageArtifact(
         _ selector: StageArtifact,
         projectRoot: URL,
-        runDirectory: URL
-    ) throws -> URL {
-        let reference = try resolveStageArtifactReference(
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> URL {
+        let reference = try await resolveStageArtifactReference(
             selector,
             projectRoot: projectRoot,
-            runDirectory: runDirectory
+            runDirectory: runDirectory,
+            infrastructure: infrastructure
         )
-        return try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
+        return try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
     }
 
     private func resolveStageArtifactReference(
         _ selector: StageArtifact,
         projectRoot: URL,
-        runDirectory: URL
-    ) throws -> ArtifactReference {
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> ArtifactReference {
         try FlowIdentifierValidator().validate(selector.stageID, kind: .stageID)
         if let artifactID = selector.artifactID {
             try FlowIdentifierValidator().validate(artifactID, kind: .artifactID)
@@ -253,8 +287,46 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
             missingPath: resultURL.path(percentEncoded: false),
             invalidReference: "stage result \(selector.stageID)"
         )
-        let resultData = try Data(contentsOf: trustedResultURL)
+        let runID = runDirectory.lastPathComponent
+        try FlowIdentifierValidator().validate(runID, kind: .runID)
+        let ledger = try await infrastructure.loadRunLedger(runID: runID)
+        guard ledger.runID == runID,
+              ledger.runManifest.runID == runID else {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "stage result \(selector.stageID) belongs to an invalid run ledger"
+            )
+        }
+        let retainedResultCandidates = ledger.artifacts.filter {
+            $0.artifactID == "\(selector.stageID)-result"
+                && $0.locator.role == .output
+                && $0.locator.kind == .other
+                && $0.locator.format == .json
+        }
+        guard retainedResultCandidates.count == 1,
+              let retainedResult = retainedResultCandidates.first else {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "stage result \(selector.stageID) is not uniquely retained by the run ledger"
+            )
+        }
+        let retainedResultURL = try retainedResult.locator.location.resolvedFileURL(
+            relativeTo: projectRoot
+        )
+        guard retainedResultURL.resolvingSymlinksInPath().standardizedFileURL
+                == trustedResultURL.resolvingSymlinksInPath().standardizedFileURL else {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "stage result \(selector.stageID) does not match its retained ledger location"
+            )
+        }
+        let resultIntegrity = await infrastructure.verifyArtifact(retainedResult)
+        try Self.requireVerified(resultIntegrity, reference: retainedResult)
+        let resultData = try await infrastructure.loadArtifactContent(for: retainedResult)
         let result = try JSONDecoder().decode(FlowStageResult.self, from: resultData)
+        guard result.stageID == selector.stageID,
+              result.status == .succeeded else {
+            throw XcircuiteRuntimeError.invalidInputReference(
+                "stage result \(selector.stageID) must be a succeeded result for the selected stage"
+            )
+        }
         let matches = result.artifacts.filter { artifact in
             if let artifactID = selector.artifactID, artifact.artifactID != artifactID {
                 return false
@@ -280,7 +352,9 @@ public enum XcircuiteFlowInputReference: Sendable, Hashable, Codable {
                 matchCount: matches.count
             )
         }
-        _ = try resolveVerifiedArtifact(reference, projectRoot: projectRoot)
+        let integrity = await infrastructure.verifyArtifact(reference)
+        try Self.requireVerified(integrity, reference: reference)
+        _ = try reference.locator.location.resolvedFileURL(relativeTo: projectRoot)
         return reference
     }
 

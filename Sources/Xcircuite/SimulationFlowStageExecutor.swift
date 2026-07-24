@@ -59,9 +59,10 @@ public struct SimulationFlowStageExecutor: FlowStageExecutor {
 
             // The run captures its own input: the netlist is copied in
             // so the stage stays reviewable after the source moves.
-            let resolvedNetlistURL = try netlistInput.resolveExisting(
+            let resolvedNetlistURL = try await netlistInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let source = try String(contentsOf: resolvedNetlistURL, encoding: .utf8)
             let netlistReference = try await context.persistArtifact(

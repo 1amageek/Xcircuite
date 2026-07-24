@@ -51,16 +51,18 @@ public struct PostLayoutComparisonFlowStageExecutor: FlowStageExecutor {
             try validate(stage: stage)
             let projectRoot = try context.xcircuiteProjectRoot()
             let runDirectory = try context.xcircuiteRunDirectory()
-            let preLayoutWaveform = try preLayoutWaveformInput.resolveArtifactReference(
+            let preLayoutWaveform = try await preLayoutWaveformInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "pre-layout-waveform",
                 kind: .waveform,
                 format: .csv
             )
-            let postLayoutWaveform = try postLayoutWaveformInput.resolveArtifactReference(
+            let postLayoutWaveform = try await postLayoutWaveformInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "post-layout-waveform",
                 kind: .waveform,
                 format: .csv

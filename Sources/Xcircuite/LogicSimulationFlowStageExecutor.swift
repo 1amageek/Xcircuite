@@ -68,7 +68,7 @@ public struct LogicSimulationFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            var request = try makeRequest(context: context)
+            var request = try await makeRequest(context: context)
             guard request.runID == context.runID else {
                 return support.blocked(
                     stageID: stageID,
@@ -134,13 +134,14 @@ public struct LogicSimulationFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> LogicSimulationRequest {
+    private func makeRequest(context: FlowExecutionContext) async throws -> LogicSimulationRequest {
         let projectRoot = try context.xcircuiteProjectRoot()
         let runDirectory = try context.xcircuiteRunDirectory()
         if let requestInput {
-            let requestURL = try requestInput.resolveExisting(
+            let requestURL = try await requestInput.resolveExisting(
                 projectRoot: projectRoot,
-                runDirectory: runDirectory
+                runDirectory: runDirectory,
+                infrastructure: context.infrastructure
             )
             return try JSONDecoder().decode(
                 LogicSimulationRequest.self,
@@ -152,25 +153,31 @@ public struct LogicSimulationFlowStageExecutor: FlowStageExecutor {
                 "Logic simulation requires a request input or a producer design input."
             )
         }
-        let designArtifact = try designInput.resolveArtifactReference(
+        let designArtifact = try await designInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "logic-simulation-design-input",
             kind: .netlist,
             format: .json
         )
-        let stimulusArtifact = try stimulusInput.map {
-            try $0.resolveArtifactReference(
+        let stimulusArtifact: ArtifactReference?
+        if let stimulusInput {
+            stimulusArtifact = try await stimulusInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "logic-simulation-stimulus-input",
                 kind: .testPattern,
                 format: .json
             )
+        } else {
+            stimulusArtifact = nil
         }
-        let pdkArtifact = try pdkInput.resolveArtifactReference(
+        let pdkArtifact = try await pdkInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "logic-simulation-pdk-input",
             kind: .technology,
             format: .json

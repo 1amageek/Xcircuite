@@ -32,7 +32,7 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let request = try makeRequest(context: context)
+            let request = try await makeRequest(context: context)
             let requestArtifact = try await context.persistJSONArtifact(
                 request,
                 artifactID: "timing-sta-request",
@@ -87,46 +87,53 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> STARequest {
-        let design = try reference(
+    private func makeRequest(context: FlowExecutionContext) async throws -> STARequest {
+        let design = try await reference(
             input: inputs.design,
             context: context,
             artifactID: "timing-design",
             kind: .netlist,
             formatFallback: .json
         )
-        let libraries = try inputs.libraries.enumerated().map { index, input in
-            let reference = try reference(
+        var libraries: [TimingLibraryReference] = []
+        libraries.reserveCapacity(inputs.libraries.count)
+        for (index, input) in inputs.libraries.enumerated() {
+            let reference = try await reference(
                 input: input,
                 context: context,
                 artifactID: "timing-library-\(index)",
                 kind: .timingLibrary,
                 formatFallback: .liberty
             )
-            return TimingLibraryReference(artifact: reference, cornerIDs: inputs.cornerIDs)
+            libraries.append(
+                TimingLibraryReference(artifact: reference, cornerIDs: inputs.cornerIDs)
+            )
         }
-        let constraints = try reference(
+        let constraints = try await reference(
             input: inputs.constraints,
             context: context,
             artifactID: "timing-constraints",
             kind: .constraint,
             formatFallback: .sdc
         )
-        let pdkManifest = try reference(
+        let pdkManifest = try await reference(
             input: inputs.pdkManifest,
             context: context,
             artifactID: "pdk-manifest",
             kind: .technology,
             formatFallback: .json
         )
-        let parasitics = try inputs.parasitics.map {
-            try reference(
-                input: $0,
+        let parasitics: ArtifactReference?
+        if let parasiticsInput = inputs.parasitics {
+            parasitics = try await reference(
+                input: parasiticsInput,
                 context: context,
                 artifactID: "timing-parasitics",
                 kind: .parasitics,
                 formatFallback: .spef
             )
+        } else {
+            parasitics = nil
         }
         return STARequest(
             runID: context.runID,
@@ -152,10 +159,11 @@ public struct TimingSTAFlowStageExecutor: FlowStageExecutor {
         artifactID: String,
         kind: ArtifactKind,
         formatFallback: ArtifactFormat
-    ) throws -> ArtifactReference {
-        try input.resolveArtifactReference(
+    ) async throws -> ArtifactReference {
+        try await input.resolveArtifactReference(
             projectRoot: try context.xcircuiteProjectRoot(),
             runDirectory: try context.xcircuiteRunDirectory(),
+            infrastructure: context.infrastructure,
             artifactID: artifactID,
             kind: kind,
             format: formatFallback

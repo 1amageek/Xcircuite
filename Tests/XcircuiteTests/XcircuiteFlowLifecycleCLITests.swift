@@ -366,6 +366,42 @@ struct XcircuiteFlowLifecycleCLITests {
         #expect(ledger.progressEvents == progress.events)
     }
 
+    @Test func cancellationCommandDoesNotMutateATerminalRun() async throws {
+        let root = try makeTemporaryRoot("terminal-cancellation")
+        defer { removeTemporaryRoot(root) }
+        let runID = "run-terminal-cancel"
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await createRunFixture(
+            runID: runID,
+            status: .succeeded,
+            stageStatus: .succeeded,
+            requiresApproval: false,
+            store: store
+        )
+        let before = try await store.loadRunLedger(runID: runID)
+
+        await #expect(throws: XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
+            runID: runID,
+            path: ".xcircuite/runs/\(runID)/cancellation.json"
+        )) {
+            let _: FlowRunCancellationResult = try await runCLI(
+                "request-cancel",
+                root: root,
+                runID: runID,
+                additionalArguments: [
+                    "--requested-by", "integration-operator",
+                    "--reason", "This terminal run must remain immutable.",
+                ]
+            )
+        }
+
+        let after = try await store.loadRunLedger(runID: runID)
+        #expect(after == before)
+        #expect(!FileManager.default.fileExists(
+            atPath: root.appending(path: ".xcircuite/runs/\(runID)/cancellation.json").path
+        ))
+    }
+
     private func createRunFixture(
         runID: String,
         status: FlowRunStatus,

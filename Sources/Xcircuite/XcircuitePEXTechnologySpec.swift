@@ -1,4 +1,5 @@
 import Foundation
+import DesignFlowKernel
 import PEXEngine
 
 public enum XcircuitePEXTechnologySpec: Sendable, Hashable, Codable {
@@ -57,12 +58,20 @@ public enum XcircuitePEXTechnologySpec: Sendable, Hashable, Codable {
         }
     }
 
-    func makeTechnologyInput(projectRoot: URL, runDirectory: URL) throws -> TechnologyInput {
+    func makeTechnologyInput(
+        projectRoot: URL,
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> TechnologyInput {
         switch self {
         case .jsonFile(let path):
             .jsonFile(try XcircuiteFlowRuntimeSpec.resolvePath(path, projectRoot: projectRoot))
         case .input(let input):
-            .jsonFile(try input.resolveExisting(projectRoot: projectRoot, runDirectory: runDirectory))
+            .jsonFile(try await input.resolveExisting(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure
+            ))
         case .inline(let technology):
             .inline(technology)
         }

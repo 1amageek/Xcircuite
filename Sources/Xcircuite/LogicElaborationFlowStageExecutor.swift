@@ -35,9 +35,10 @@ public struct LogicElaborationFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let sourceURL = try sourceInput.resolveExisting(
+            let sourceURL = try await sourceInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let source = try String(contentsOf: sourceURL, encoding: .utf8)
             let sourceReference = try support.artifactBuilder.reference(

@@ -30,9 +30,10 @@ public struct PhysicalDesignReviewFlowStageExecutor: FlowStageExecutor, FlowStag
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let manifestURL = try manifestInput.resolveExisting(
+            let manifestURL = try await manifestInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let manifestReference = try foundationReference(
                 for: manifestURL,

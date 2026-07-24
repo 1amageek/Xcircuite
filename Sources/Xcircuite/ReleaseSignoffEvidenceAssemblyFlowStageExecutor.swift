@@ -36,9 +36,10 @@ public struct ReleaseSignoffEvidenceAssemblyFlowStageExecutor: FlowStageExecutor
             try FlowIdentifierValidator().validate(stageID, kind: .stageID)
             try FlowIdentifierValidator().validate(toolID, kind: .toolID)
             let projectRoot = try context.xcircuiteProjectRoot()
-            let requestArtifact = try requestInput.resolveArtifactReference(
+            let requestArtifact = try await requestInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure,
                 artifactID: "release-signoff-evidence-assembly-request",
                 kind: .request,
                 format: .json

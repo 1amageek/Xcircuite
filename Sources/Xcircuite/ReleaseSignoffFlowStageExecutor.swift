@@ -30,9 +30,10 @@ public struct ReleaseSignoffFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let requestURL = try requestInput.resolveExisting(
+            let requestURL = try await requestInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let data = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()

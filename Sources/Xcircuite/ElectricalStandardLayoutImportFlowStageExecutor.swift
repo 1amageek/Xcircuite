@@ -52,12 +52,13 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         do {
             try await context.checkCancellation()
             try validate(stage: stage, context: context)
-            let layoutURL = try layoutInput.resolveExisting(
+            let layoutURL = try await layoutInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
-            let technology = try loadTechnology(context: context)
-            var inputArtifacts = [try inputReference(
+            let technology = try await loadTechnology(context: context)
+            var inputArtifacts = [try await inputReference(
                 layoutInput,
                 artifactID: "electrical-standard-layout-input",
                 kind: .layout,
@@ -65,7 +66,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 context: context
             )]
             if let technologyInput {
-                inputArtifacts.append(try inputReference(
+                inputArtifacts.append(try await inputReference(
                     technologyInput,
                     artifactID: "electrical-standard-technology-input",
                     kind: .technology,
@@ -74,7 +75,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 ))
             }
             if let technologyLayerMappingInput {
-                inputArtifacts.append(try inputReference(
+                inputArtifacts.append(try await inputReference(
                     technologyLayerMappingInput,
                     artifactID: "electrical-standard-technology-layer-mapping-input",
                     kind: .technology,
@@ -88,15 +89,16 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             )
             let connectivityDocument: LayoutDocument?
             if let connectivityInput {
-                let connectivityURL = try connectivityInput.resolveExisting(
+                let connectivityURL = try await connectivityInput.resolveExisting(
                     projectRoot: try context.xcircuiteProjectRoot(),
-                    runDirectory: try context.xcircuiteRunDirectory()
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure
                 )
                 connectivityDocument = try MaskDataFormatConverter(tech: technology).importDocument(
                     from: connectivityURL,
                     format: connectivityFormat
                 )
-                inputArtifacts.append(try inputReference(
+                inputArtifacts.append(try await inputReference(
                     connectivityInput,
                     artifactID: "electrical-standard-connectivity-input",
                     kind: .layout,
@@ -175,7 +177,7 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         }
     }
 
-    private func loadTechnology(context: FlowExecutionContext) throws -> LayoutTechDatabase {
+    private func loadTechnology(context: FlowExecutionContext) async throws -> LayoutTechDatabase {
         let technology: LayoutTechDatabase
         if let injectedTechnology {
             technology = injectedTechnology
@@ -186,9 +188,10 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             guard technologyFormat == .lef || technologyFormat == .json else {
                 throw ElectricalStandardLayoutImportError.unsupportedLayoutFormat(technologyFormat.rawValue)
             }
-            let url = try technologyInput.resolveExisting(
+            let url = try await technologyInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             technology = try TechFormatConverter().loadTech(from: url)
         }
@@ -203,9 +206,10 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
             return technology
         }
 
-        let mappingURL = try technologyLayerMappingInput.resolveExisting(
+        let mappingURL = try await technologyLayerMappingInput.resolveExisting(
             projectRoot: try context.xcircuiteProjectRoot(),
-            runDirectory: try context.xcircuiteRunDirectory()
+            runDirectory: try context.xcircuiteRunDirectory(),
+            infrastructure: context.infrastructure
         )
         let mapping: ElectricalStandardLayoutLayerMapping
         do {
@@ -227,12 +231,13 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
         kind: ArtifactKind,
         format: ArtifactFormat,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         switch input {
         case .artifact(let suppliedReference):
-            _ = try input.resolveExisting(
+            _ = try await input.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             return ArtifactReference(
                 id: try ArtifactID(rawValue: artifactID),
@@ -247,9 +252,10 @@ public struct ElectricalStandardLayoutImportFlowStageExecutor: FlowStageExecutor
                 producer: suppliedReference.producer
             )
         case .path, .stageArtifact, .stageRawArtifact:
-            let url = try input.resolveExisting(
+            let url = try await input.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             return try StageArtifactReferenceBuilder().reference(
                 for: url,

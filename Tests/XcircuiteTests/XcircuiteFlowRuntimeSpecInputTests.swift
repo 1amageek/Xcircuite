@@ -950,7 +950,7 @@ extension XcircuiteFlowRuntimeTests {
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/drc-layout.json"
         let layoutData = Data("tampered".utf8)
         try await workspaceStore.write(layoutData, to: layoutPath)
-        try await workspaceStore.writeJSON(
+        try await persistTestStageResult(
             FlowStageResult(
                 stageID: "006-layout",
                 status: .succeeded,
@@ -965,7 +965,8 @@ extension XcircuiteFlowRuntimeTests {
                     ),
                 ]
             ),
-            to: ".xcircuite/runs/run-1/stages/006-layout/result.json"
+            runID: "run-1",
+            store: workspaceStore
         )
         let executor = DRCFlowStageExecutor(
             stageID: "007-drc",
@@ -1000,6 +1001,103 @@ extension XcircuiteFlowRuntimeTests {
         })
     }
 
+    @Test func stageArtifactInputReferenceRejectsAnUnretainedResultFile() async throws {
+        let root = try makeTemporaryRoot("runtime-stage-artifact-unretained-result")
+        defer { removeTemporaryRoot(root) }
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/drc-layout.json"
+        let layoutData = Data("{}".utf8)
+        try await workspaceStore.write(layoutData, to: layoutPath)
+        try await workspaceStore.writeJSON(
+            FlowStageResult(
+                stageID: "006-layout",
+                status: .succeeded,
+                artifacts: [
+                    try fixtureArtifactReference(
+                        artifactID: "drc-layout",
+                        path: layoutPath,
+                        kind: .layout,
+                        format: .json,
+                        sha256: try fixtureSHA256(data: layoutData),
+                        byteCount: Int64(layoutData.count)
+                    ),
+                ]
+            ),
+            to: ".xcircuite/runs/run-1/stages/006-layout/result.json"
+        )
+        let result = try await DRCFlowStageExecutor(
+            stageID: "007-drc",
+            toolID: "native-drc",
+            layoutInput: .stageArtifact(.init(
+                stageID: "006-layout",
+                artifactID: "drc-layout",
+                kind: .layout,
+                format: .json
+            )),
+            topCell: "top",
+            backendSelection: DRCBackendSelection(backendID: "native"),
+            engine: NoopDRCEngine()
+        ).execute(
+            stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
+            context: FlowExecutionContext(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-1",
+                infrastructure: workspaceStore,
+                toolRegistry: ToolRegistry(),
+                healthResults: [:]
+            )
+        )
+
+        #expect(result.status == .failed)
+        #expect(result.diagnostics.contains {
+            $0.code == "DRC_EXECUTION_ERROR"
+                && $0.message.contains("not uniquely retained")
+        })
+    }
+
+    @Test func stageArtifactInputReferenceRejectsARetainedFailedResult() async throws {
+        let root = try makeTemporaryRoot("runtime-stage-artifact-failed-result")
+        defer { removeTemporaryRoot(root) }
+        let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await workspaceStore.ensureWorkspace()
+        _ = try await prepareTestRun(runID: "run-1", store: workspaceStore)
+        _ = try await persistTestStageResult(
+            FlowStageResult(stageID: "006-layout", status: .failed),
+            runID: "run-1",
+            store: workspaceStore
+        )
+        let result = try await DRCFlowStageExecutor(
+            stageID: "007-drc",
+            toolID: "native-drc",
+            layoutInput: .stageArtifact(.init(
+                stageID: "006-layout",
+                artifactID: "drc-layout",
+                kind: .layout,
+                format: .json
+            )),
+            topCell: "top",
+            backendSelection: DRCBackendSelection(backendID: "native"),
+            engine: NoopDRCEngine()
+        ).execute(
+            stage: FlowStageDefinition(stageID: "007-drc", displayName: "DRC"),
+            context: FlowExecutionContext(
+                workspaceID: try await workspaceID(projectRoot: root),
+                runID: "run-1",
+                infrastructure: workspaceStore,
+                toolRegistry: ToolRegistry(),
+                healthResults: [:]
+            )
+        )
+
+        #expect(result.status == .failed)
+        #expect(result.diagnostics.contains {
+            $0.code == "DRC_EXECUTION_ERROR"
+                && $0.message.contains("must be a succeeded result")
+        })
+    }
+
     @Test func stageArtifactInputReferenceRejectsByteCountMismatch() async throws {
         let root = try makeTemporaryRoot("runtime-stage-artifact-byte-count")
         defer { removeTemporaryRoot(root) }
@@ -1011,7 +1109,7 @@ extension XcircuiteFlowRuntimeTests {
         let layoutData = Data("{}".utf8)
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/drc-layout.json"
         try await workspaceStore.write(layoutData, to: layoutPath)
-        try await workspaceStore.writeJSON(
+        try await persistTestStageResult(
             FlowStageResult(
                 stageID: "006-layout",
                 status: .succeeded,
@@ -1026,7 +1124,8 @@ extension XcircuiteFlowRuntimeTests {
                     ),
                 ]
             ),
-            to: ".xcircuite/runs/run-1/stages/006-layout/result.json"
+            runID: "run-1",
+            store: workspaceStore
         )
         let executor = DRCFlowStageExecutor(
             stageID: "007-drc",
@@ -1201,7 +1300,7 @@ extension XcircuiteFlowRuntimeTests {
         let layoutData = Data("{}".utf8)
         let layoutPath = ".xcircuite/runs/run-1/stages/006-layout/raw/notdrc-layout.json"
         try await workspaceStore.write(layoutData, to: layoutPath)
-        try await workspaceStore.writeJSON(
+        try await persistTestStageResult(
             FlowStageResult(
                 stageID: "006-layout",
                 status: .succeeded,
@@ -1216,7 +1315,8 @@ extension XcircuiteFlowRuntimeTests {
                     ),
                 ]
             ),
-            to: ".xcircuite/runs/run-1/stages/006-layout/result.json"
+            runID: "run-1",
+            store: workspaceStore
         )
         let executor = DRCFlowStageExecutor(
             stageID: "007-drc",

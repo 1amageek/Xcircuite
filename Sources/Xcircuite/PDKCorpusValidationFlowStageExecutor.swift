@@ -48,13 +48,15 @@ public struct PDKCorpusValidationFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let suiteURL = try suiteInput.resolveExisting(
+            let suiteURL = try await suiteInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
-            let rootURL = try rootInput.resolveExisting(
+            let rootURL = try await rootInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(

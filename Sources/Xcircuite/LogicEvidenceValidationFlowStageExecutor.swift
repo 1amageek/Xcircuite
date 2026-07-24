@@ -30,9 +30,10 @@ public struct LogicEvidenceValidationFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let reportURL = try reportInput.resolveExisting(
+            let reportURL = try await reportInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let report = try JSONDecoder().decode(
                 LogicEvidenceReport.self,

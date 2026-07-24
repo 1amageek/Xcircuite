@@ -67,18 +67,20 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let requestURL = try requestInput.resolveExisting(
+            let requestURL = try await requestInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let requestData = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let template = try decoder.decode(PhysicalDesignRequest.self, from: requestData)
-            let request = try boundRequest(
+            let request = try await boundRequest(
                 template,
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             guard request.runID == context.runID else {
                 return blockedResult(
@@ -186,35 +188,56 @@ public struct PhysicalDesignFlowStageExecutor: FlowStageExecutor {
     private func boundRequest(
         _ template: PhysicalDesignRequest,
         projectRoot: URL,
-        runDirectory: URL
-    ) throws -> PhysicalDesignRequest {
-        let designArtifact = try designInput?.resolveArtifactReference(
-            projectRoot: projectRoot,
-            runDirectory: runDirectory,
-            artifactID: "physical-design-logic-input",
-            kind: .netlist,
-            format: .json
-        ) ?? template.design.artifact
-        let constraintsArtifact = try constraintsInput?.resolveArtifactReference(
-            projectRoot: projectRoot,
-            runDirectory: runDirectory,
-            artifactID: "physical-design-constraints-input",
-            kind: .constraint,
-            format: .sdc
-        ) ?? template.constraints
-        let pdkArtifact = try pdkInput?.resolveArtifactReference(
-            projectRoot: projectRoot,
-            runDirectory: runDirectory,
-            artifactID: "physical-design-pdk-input",
-            kind: .technology,
-            format: .json
-        ) ?? template.pdk.manifest
-        let inputLayoutArtifact = try inputLayoutInput?.resolveArtifactReference(
-            projectRoot: projectRoot,
-            runDirectory: runDirectory,
-            artifactID: "physical-design-layout-input",
-            kind: .layout
-        )
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> PhysicalDesignRequest {
+        let designArtifact = if let designInput {
+            try await designInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure,
+                artifactID: "physical-design-logic-input",
+                kind: .netlist,
+                format: .json
+            )
+        } else {
+            template.design.artifact
+        }
+        let constraintsArtifact = if let constraintsInput {
+            try await constraintsInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure,
+                artifactID: "physical-design-constraints-input",
+                kind: .constraint,
+                format: .sdc
+            )
+        } else {
+            template.constraints
+        }
+        let pdkArtifact = if let pdkInput {
+            try await pdkInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure,
+                artifactID: "physical-design-pdk-input",
+                kind: .technology,
+                format: .json
+            )
+        } else {
+            template.pdk.manifest
+        }
+        let inputLayoutArtifact: ArtifactReference? = if let inputLayoutInput {
+            try await inputLayoutInput.resolveArtifactReference(
+                projectRoot: projectRoot,
+                runDirectory: runDirectory,
+                infrastructure: infrastructure,
+                artifactID: "physical-design-layout-input",
+                kind: .layout
+            )
+        } else {
+            nil
+        }
         let inputLayout = inputLayoutArtifact.map {
             PhysicalDesignReference(
                 layoutArtifact: $0,

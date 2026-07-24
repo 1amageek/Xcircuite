@@ -35,13 +35,15 @@ public struct DFTOracleCorrelationFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
 
-            let corpusURL = try corpusInput.resolveExisting(
+            let corpusURL = try await corpusInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
-            let observationsURL = try observationsInput.resolveExisting(
+            let observationsURL = try await observationsInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let corpus = try decode(corpusURL, as: DFTOracleCorpus.self)
             let observations = try decode(observationsURL, as: [DFTOracleCaseObservation].self)

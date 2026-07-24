@@ -46,7 +46,7 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let resolvedRoots = try resolveSearchRoots(context: context)
+            let resolvedRoots = try await resolveSearchRoots(context: context)
             let request = PDKDiscoveryRequest(
                 runID: context.runID,
                 inputs: [],
@@ -68,12 +68,13 @@ public struct PDKDiscoveryFlowStageExecutor: FlowStageExecutor {
         }
     }
 
-    private func resolveSearchRoots(context: FlowExecutionContext) throws -> [String] {
+    private func resolveSearchRoots(context: FlowExecutionContext) async throws -> [String] {
         var paths: [String] = []
         for input in searchRoots {
-            let url = try input.resolveExisting(
+            let url = try await input.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else {

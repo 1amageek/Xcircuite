@@ -40,11 +40,12 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage, context: context)
-            let specURL = try requestInput.resolveExisting(
+            let specURL = try await requestInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
-            let specInputReference = try inputReference(
+            let specInputReference = try await inputReference(
                 requestInput,
                 artifactID: "electrical-signoff-corpus-spec-input",
                 context: context
@@ -62,13 +63,16 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
                 specURL: specURL,
                 context: context
             )
-            let oracleReference = try oracleInput.map { input in
-                try inputReference(
-                    input,
+            let oracleReference: ArtifactReference?
+            if let oracleInput {
+                oracleReference = try await inputReference(
+                    oracleInput,
                     artifactID: "electrical-signoff-oracle-observations",
                     context: context
                 )
-            } ?? oraclePreparation?.observationReference
+            } else {
+                oracleReference = oraclePreparation?.observationReference
+            }
             let effectiveRunner: ElectricalSignoffCorpusRunner
             if let oracleURL = oraclePreparation?.observationURL {
                 let oracle = try LocalElectricalSignoffOracle(contentsOf: oracleURL)
@@ -186,12 +190,13 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
         _ input: XcircuiteFlowInputReference,
         artifactID: String,
         context: FlowExecutionContext
-    ) throws -> ArtifactReference {
+    ) async throws -> ArtifactReference {
         switch input {
         case .artifact(let suppliedReference):
-            _ = try input.resolveExisting(
+            _ = try await input.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             return ArtifactReference(
                 id: try ArtifactID(rawValue: artifactID),
@@ -206,9 +211,10 @@ public struct ElectricalSignoffCorpusFlowStageExecutor: FlowStageExecutor {
                 producer: suppliedReference.producer
             )
         case .path, .stageArtifact, .stageRawArtifact:
-            let url = try input.resolveExisting(
+            let url = try await input.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let path = try projectRelativePath(for: url, projectRoot: try context.xcircuiteProjectRoot())
             return try foundationReference(

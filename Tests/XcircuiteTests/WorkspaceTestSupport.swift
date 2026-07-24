@@ -26,6 +26,31 @@ func prepareTestRun(
 }
 
 @discardableResult
+func persistTestStageResult(
+    _ result: FlowStageResult,
+    runID: String,
+    store: XcircuiteWorkspaceStore
+) async throws -> ArtifactReference {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    let content = try encoder.encode(result)
+    return try await store.persistRunControlArtifact(
+        content: content,
+        id: try ArtifactID(rawValue: "\(result.stageID)-result"),
+        locator: ArtifactLocator(
+            location: try ArtifactLocation(
+                workspaceRelativePath: ".xcircuite/runs/\(runID)/stages/\(result.stageID)/result.json"
+            ),
+            role: .output,
+            kind: .other,
+            format: .json
+        ),
+        runID: runID,
+        mode: .replaceable
+    )
+}
+
+@discardableResult
 func retainTestArtifact(
     _ reference: ArtifactReference,
     runID: String,

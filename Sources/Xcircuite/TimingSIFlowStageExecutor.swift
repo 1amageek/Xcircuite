@@ -33,7 +33,7 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let request = try makeRequest(context: context)
+            let request = try await makeRequest(context: context)
             let requestArtifact = try await context.persistJSONArtifact(
                 request,
                 artifactID: "timing-signal-integrity-request",
@@ -87,11 +87,11 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         try FlowIdentifierValidator().validate(toolID, kind: .toolID)
     }
 
-    private func makeRequest(context: FlowExecutionContext) throws -> SignalIntegrityRequest {
-        let design = try reference(input: inputs.design, context: context, artifactID: "timing-si-design", kind: .netlist, fallback: .json)
-        let constraints = try reference(input: inputs.constraints, context: context, artifactID: "timing-si-constraints", kind: .constraint, fallback: .sdc)
-        let pdkManifest = try reference(input: inputs.pdkManifest, context: context, artifactID: "timing-si-pdk-manifest", kind: .technology, fallback: .json)
-        let parasitics = try reference(input: inputs.parasitics, context: context, artifactID: "timing-si-parasitics", kind: .parasitics, fallback: .spef)
+    private func makeRequest(context: FlowExecutionContext) async throws -> SignalIntegrityRequest {
+        let design = try await reference(input: inputs.design, context: context, artifactID: "timing-si-design", kind: .netlist, fallback: .json)
+        let constraints = try await reference(input: inputs.constraints, context: context, artifactID: "timing-si-constraints", kind: .constraint, fallback: .sdc)
+        let pdkManifest = try await reference(input: inputs.pdkManifest, context: context, artifactID: "timing-si-pdk-manifest", kind: .technology, fallback: .json)
+        let parasitics = try await reference(input: inputs.parasitics, context: context, artifactID: "timing-si-parasitics", kind: .parasitics, fallback: .spef)
         return SignalIntegrityRequest(
             runID: context.runID,
             design: design,
@@ -114,10 +114,11 @@ public struct TimingSIFlowStageExecutor: FlowStageExecutor {
         artifactID: String,
         kind: ArtifactKind,
         fallback: ArtifactFormat
-    ) throws -> ArtifactReference {
-        try input.resolveArtifactReference(
+    ) async throws -> ArtifactReference {
+        try await input.resolveArtifactReference(
             projectRoot: try context.xcircuiteProjectRoot(),
             runDirectory: try context.xcircuiteRunDirectory(),
+            infrastructure: context.infrastructure,
             artifactID: artifactID,
             kind: kind,
             format: fallback

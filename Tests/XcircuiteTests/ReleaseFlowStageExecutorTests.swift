@@ -130,6 +130,38 @@ struct ReleaseFlowStageExecutorTests {
             .appending(path: "stages/release.authorization/raw/result.json").path))
     }
 
+    @Test("authorization executor rejects an inconsistent authorized result")
+    func authorizationRejectsInconsistentAuthorizedResult() async throws {
+        let root = try makeRoot(name: "release-authorization-invalid-result")
+        defer { removeRoot(root) }
+        let runID = "release-authorization-invalid-result"
+        let request = try makeAuthorizationRequest(runID: runID)
+        try encode(request).write(
+            to: root.appending(path: "authorization-request.json"),
+            options: [.atomic]
+        )
+        let context = try await makeContext(root: root, runID: runID)
+
+        let result = try await ReleaseAuthorizationFlowStageExecutor(
+            requestInput: .path("authorization-request.json"),
+            authorizerFactory: { _ in InconsistentAuthorizedReleaseAuthorizer() }
+        ).execute(
+            stage: FlowStageDefinition(
+                stageID: "release.authorization",
+                displayName: "Release authorization"
+            ),
+            context: context
+        )
+
+        #expect(result.status == .failed)
+        #expect(result.diagnostics.contains {
+            $0.code == "RELEASE_AUTHORIZATION_RESULT_INVALID"
+        })
+        #expect(!result.artifacts.contains {
+            $0.artifactID == "release-authorization-result"
+        })
+    }
+
     @Test("tapeout executor persists a blocked prerequisite result")
     func tapeoutPersistsBlockedPrerequisite() async throws {
         let root = try makeRoot(name: "release-tapeout-stage")
@@ -705,6 +737,27 @@ private struct StubReleaseAuthorizer: ReleaseAuthorizing {
                 ),
                 invocation: ExecutionInvocation.inProcess(
                     entryPoint: "stub.release.authorization"
+                ),
+                startedAt: now,
+                completedAt: now
+            )
+        )
+    }
+}
+
+private struct InconsistentAuthorizedReleaseAuthorizer: ReleaseAuthorizing {
+    func execute(_ request: ReleaseAuthorizationRequest) async throws -> ReleaseAuthorizationResult {
+        let now = Date()
+        return ReleaseAuthorizationResult(
+            status: .authorized,
+            signoffBundle: nil,
+            approval: request.approval,
+            diagnostics: [],
+            provenance: try ExecutionProvenance(
+                producer: ProducerIdentity(
+                    kind: .engine,
+                    identifier: "release.authorization.invalid",
+                    version: "1.0.0"
                 ),
                 startedAt: now,
                 completedAt: now

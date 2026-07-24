@@ -36,9 +36,10 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let projectRoot = try context.xcircuiteProjectRoot()
-            let requestReference = try requestInput.resolveArtifactReference(
+            let requestReference = try await requestInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure,
                 artifactID: "release-tapeout-request",
                 kind: .request,
                 format: .json
@@ -62,10 +63,11 @@ public struct ReleaseTapeoutFlowStageExecutor: FlowStageExecutor {
             if let injectedEngine {
                 configuredEngine = injectedEngine
             } else if let geometricXOR {
-                let qualificationReference = try geometricXOR.qualificationInput
+                let qualificationReference = try await geometricXOR.qualificationInput
                     .resolveArtifactReference(
                         projectRoot: projectRoot,
                         runDirectory: try context.xcircuiteRunDirectory(),
+                        infrastructure: context.infrastructure,
                         artifactID: "release-geometric-xor-qualification",
                         kind: .evidence,
                         format: .json

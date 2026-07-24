@@ -32,9 +32,10 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let requestURL = try requestInput.resolveExisting(
+            let requestURL = try await requestInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let requestData = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()

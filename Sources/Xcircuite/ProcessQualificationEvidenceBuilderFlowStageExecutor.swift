@@ -34,9 +34,10 @@ public struct ProcessQualificationEvidenceBuilderFlowStageExecutor: FlowStageExe
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let projectRoot = try context.xcircuiteProjectRoot()
-            let buildRequestURL = try buildRequestInput.resolveExisting(
+            let buildRequestURL = try await buildRequestInput.resolveExisting(
                 projectRoot: projectRoot,
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let buildRequest = try JSONDecoder().decode(
                 ToolProcessQualificationEvidenceBuildRequest.self,

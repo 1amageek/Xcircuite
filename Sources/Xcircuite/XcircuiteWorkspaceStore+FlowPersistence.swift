@@ -1,9 +1,10 @@
 import CircuiteFoundation
 import DesignFlowKernel
 import Foundation
+import ReleaseEngine
 import ToolQualification
 
-extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersisting, FlowRunReviewLedgerLoading, FlowRunActionArtifactPersisting, FlowRunApprovalArtifactPersisting, ToolQualificationArtifactReading {
+extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersisting, FlowRunReviewLedgerLoading, FlowRunActionArtifactPersisting, FlowRunApprovalArtifactPersisting, ToolQualificationArtifactReading, ReleaseArtifactReading, ReleaseApprovalLedgerReading {
     public func verifyArtifact(
         _ reference: ArtifactReference
     ) async -> ArtifactIntegrity {
@@ -16,7 +17,7 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
     }
 
     public func loadRunLedger(runID: String) async throws -> FlowRunLedger {
-        try await loadAttestedRunLedger(runID: runID)
+        try loadRunLedgerMetadata(runID: runID)
     }
 
     public func loadRunLedgerForReview(runID: String) async throws -> FlowRunLedger {
@@ -1229,6 +1230,12 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
                 throw FlowRunLedgerPersistenceError.decodingFailed(error.localizedDescription)
             }
             try validateLedgerProjection(ledger, requestedRunID: runID)
+            guard !ledger.runManifest.status.isTerminal else {
+                throw XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
+                    runID: runID,
+                    path: path
+                )
+            }
             if let retainedProgress = ledger.artifacts.first(where: {
                 $0.locator.location.value == path
             }) {
@@ -1636,25 +1643,17 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
             let destinationExists = fileManager.fileExists(
                 atPath: destination.path(percentEncoded: false)
             )
-            if ledger.runManifest.status.isTerminal, destinationExists {
-                if mode == .immutable {
+            if ledger.runManifest.status.isTerminal {
+                if destinationExists, mode == .immutable {
                     let existing = try Data(contentsOf: destination, options: [.mappedIfSafe])
-                    if existing == content {
-                        guard ledger.artifacts.contains(reference) else {
-                            throw FlowRunLedgerPersistenceError.artifactReferenceMutation(
-                                runID: runID,
-                                path: projectRelativePath
-                            )
-                        }
+                    if existing == content, ledger.artifacts.contains(reference) {
                         return
                     }
                 }
-                if mode != .appendOnly {
-                    throw XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
-                        runID: runID,
-                        path: projectRelativePath
-                    )
-                }
+                throw XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
+                    runID: runID,
+                    path: projectRelativePath
+                )
             }
             switch mode {
             case .createOnly where destinationExists:
@@ -1805,7 +1804,16 @@ extension XcircuiteWorkspaceStore: FlowRunInfrastructure, FlowRunLedgerPersistin
         permitsRunControlPath: Bool
     ) throws {
         let runPrefix = ".xcircuite/runs/\(runID)/"
-        guard path.hasPrefix(runPrefix) else { return }
+        let runsPrefix = ".xcircuite/runs/"
+        if path.hasPrefix(runsPrefix), !path.hasPrefix(runPrefix) {
+            throw XcircuiteWorkspaceStoreError.artifactOutsideRun(
+                path: path,
+                runID: runID
+            )
+        }
+        guard path.hasPrefix(runPrefix) else {
+            return
+        }
         guard !permitsRunControlPath else {
             return
         }

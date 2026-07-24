@@ -108,9 +108,10 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try validate(stage: stage)
-            let resolvedRTL = try rtlInput.resolveExisting(
+            let resolvedRTL = try await rtlInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let rtlReference = try artifactBuilder.reference(
                 for: resolvedRTL,
@@ -120,25 +121,29 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 kind: ArtifactKind.rtl,
                 format: format(for: resolvedRTL)
             )
-            let additionalRTLReferences = try additionalRTLInputs.enumerated().map { index, input in
-                let resolvedInput = try input.resolveExisting(
+            var additionalRTLReferences: [ArtifactReference] = []
+            additionalRTLReferences.reserveCapacity(additionalRTLInputs.count)
+            for (index, input) in additionalRTLInputs.enumerated() {
+                let resolvedInput = try await input.resolveExisting(
                     projectRoot: try context.xcircuiteProjectRoot(),
-                    runDirectory: try context.xcircuiteRunDirectory()
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure
                 )
-                return try artifactBuilder.reference(
+                additionalRTLReferences.append(try artifactBuilder.reference(
                     for: resolvedInput,
                     projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-input-\(index + 1)",
                     role: .input,
                     kind: ArtifactKind.rtl,
                     format: format(for: resolvedInput)
-                )
+                ))
             }
             let referenceDesign: LogicDesignReference?
             if let referenceInput {
-                let resolvedReference = try referenceInput.resolveExisting(
+                let resolvedReference = try await referenceInput.resolveExisting(
                     projectRoot: try context.xcircuiteProjectRoot(),
-                    runDirectory: try context.xcircuiteRunDirectory()
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure
                 )
                 let reference = try artifactBuilder.reference(
                     for: resolvedReference,
@@ -156,26 +161,30 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             } else {
                 referenceDesign = nil
             }
-            let additionalReferenceReferences = try additionalReferenceInputs.enumerated().map { index, input in
-                let resolvedInput = try input.resolveExisting(
+            var additionalReferenceReferences: [ArtifactReference] = []
+            additionalReferenceReferences.reserveCapacity(additionalReferenceInputs.count)
+            for (index, input) in additionalReferenceInputs.enumerated() {
+                let resolvedInput = try await input.resolveExisting(
                     projectRoot: try context.xcircuiteProjectRoot(),
-                    runDirectory: try context.xcircuiteRunDirectory()
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure
                 )
-                return try artifactBuilder.reference(
+                additionalReferenceReferences.append(try artifactBuilder.reference(
                     for: resolvedInput,
                     projectRoot: try context.xcircuiteProjectRoot(),
                     artifactID: "rtl-reference-\(index + 1)",
                     role: .input,
                     kind: ArtifactKind.rtl,
                     format: format(for: resolvedInput)
-                )
+                ))
             }
             let constraintReference: RTLConstraintReference?
             let constraintArtifact: ArtifactReference?
             if let constraintsInput {
-                let resolvedConstraints = try constraintsInput.resolveExisting(
+                let resolvedConstraints = try await constraintsInput.resolveExisting(
                     projectRoot: try context.xcircuiteProjectRoot(),
-                    runDirectory: try context.xcircuiteRunDirectory()
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure
                 )
                 let artifact = try artifactBuilder.reference(
                     for: resolvedConstraints,
@@ -197,9 +206,10 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
             let evidenceInputValue: RTLVerificationEvidenceInput?
             let evidenceArtifact: ArtifactReference?
             if let evidenceInput {
-                let resolvedEvidence = try evidenceInput.resolveExisting(
+                let resolvedEvidence = try await evidenceInput.resolveExisting(
                     projectRoot: try context.xcircuiteProjectRoot(),
-                    runDirectory: try context.xcircuiteRunDirectory()
+                    runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure
                 )
                 evidenceArtifact = try artifactBuilder.reference(
                     for: resolvedEvidence,
@@ -234,9 +244,10 @@ public struct RTLVerificationFlowStageExecutor: FlowStageExecutor {
                 requestInputs.append(evidenceArtifact)
             }
             if let pdkInput {
-                requestInputs.append(try pdkInput.resolveArtifactReference(
+                requestInputs.append(try await pdkInput.resolveArtifactReference(
                     projectRoot: try context.xcircuiteProjectRoot(),
                     runDirectory: try context.xcircuiteRunDirectory(),
+                    infrastructure: context.infrastructure,
                     artifactID: "rtl-pdk-input",
                     kind: .technology,
                     format: .json

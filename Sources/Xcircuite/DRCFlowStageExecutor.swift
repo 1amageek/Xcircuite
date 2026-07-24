@@ -131,7 +131,7 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
             )
             try await context.checkCancellation()
 
-            let request = try preparedRequest(
+            let request = try await preparedRequest(
                 context: context,
                 workingDirectory: rawDirectory
             )
@@ -298,33 +298,42 @@ public struct DRCFlowStageExecutor: FlowStageExecutor {
     private func preparedRequest(
         context: FlowExecutionContext,
         workingDirectory: URL
-    ) throws -> DRCRequest {
+    ) async throws -> DRCRequest {
         let projectRoot = try context.xcircuiteProjectRoot()
         let runDirectory = try context.xcircuiteRunDirectory()
-        let layoutArtifact = try layoutInput.resolveArtifactReference(
+        let layoutArtifact = try await layoutInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "drc-layout-input",
             kind: .layout,
             format: try artifactFormat(for: layoutFormat)
         )
-        let technologyArtifact = try technologyInput.map {
-            try $0.resolveArtifactReference(
+        let technologyArtifact: ArtifactReference?
+        if let technologyInput {
+            technologyArtifact = try await technologyInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "drc-technology-input",
                 kind: .technology,
                 format: .json
             )
+        } else {
+            technologyArtifact = nil
         }
-        let waiverArtifact = try waiverInput.map {
-            try $0.resolveArtifactReference(
+        let waiverArtifact: ArtifactReference?
+        if let waiverInput {
+            waiverArtifact = try await waiverInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "drc-waiver-input",
                 kind: .constraint,
                 format: .json
             )
+        } else {
+            waiverArtifact = nil
         }
         return DRCRequest(
             layoutURL: try layoutArtifact.locator.location.resolvedFileURL(relativeTo: projectRoot),

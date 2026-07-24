@@ -204,7 +204,7 @@ struct XcircuiteWorkspaceStoreTests {
     }
 
     @Test
-    func terminalRunAcceptsNewAuditArtifactButRejectsReplacement() async throws {
+    func terminalRunRejectsNewAuditArtifact() async throws {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
@@ -251,32 +251,23 @@ struct XcircuiteWorkspaceStoreTests {
             format: .json
         )
         let original = Data("audit".utf8)
-        let reference = try await store.persistArtifact(
-            content: original,
-            id: try ArtifactID(rawValue: "terminal-audit"),
-            locator: locator,
-            runID: runID,
-            mode: .replaceable
-        )
-
-        #expect(try await store.loadArtifactContent(for: reference) == original)
-        #expect(try await store.loadRunLedger(runID: runID).artifacts.contains(reference))
         await #expect(throws: XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
             runID: runID,
             path: path
         )) {
             _ = try await store.persistArtifact(
-                content: Data("replacement".utf8),
+                content: original,
                 id: try ArtifactID(rawValue: "terminal-audit"),
                 locator: locator,
                 runID: runID,
                 mode: .replaceable
             )
         }
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: path).path))
     }
 
     @Test
-    func terminalRunAllowsOnlyPrefixPreservingAuditAppend() async throws {
+    func terminalRunRejectsPrefixPreservingAuditAppend() async throws {
         let root = try makeTemporaryRoot()
         defer { remove(root) }
 
@@ -315,32 +306,47 @@ struct XcircuiteWorkspaceStoreTests {
         )
         let first = Data("{\"id\":1}\n".utf8)
         let second = Data("{\"id\":1}\n{\"id\":2}\n".utf8)
-        _ = try await store.persistArtifact(
-            content: first,
-            id: try ArtifactID(rawValue: "append-only-audit"),
-            locator: locator,
+        await #expect(throws: XcircuiteWorkspaceStoreError.terminalRunArtifactMutation(
             runID: runID,
-            mode: .appendOnly
-        )
-        let appended = try await store.persistArtifact(
-            content: second,
-            id: try ArtifactID(rawValue: "append-only-audit"),
-            locator: locator,
-            runID: runID,
-            mode: .appendOnly
-        )
-
-        #expect(try await store.loadArtifactContent(for: appended) == second)
-        await #expect(throws: XcircuiteWorkspaceStoreError.appendOnlyArtifactConflict(path)) {
+            path: path
+        )) {
             _ = try await store.persistArtifact(
-                content: Data("{\"id\":0}\n{\"id\":2}\n".utf8),
+                content: first + second,
                 id: try ArtifactID(rawValue: "append-only-audit"),
                 locator: locator,
                 runID: runID,
                 mode: .appendOnly
             )
         }
-        #expect(try await store.read(from: path) == second)
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: path).path))
+    }
+
+    @Test
+    func artifactPersistenceRejectsAPathOwnedByAnotherRun() async throws {
+        let root = try makeTemporaryRoot()
+        defer { remove(root) }
+        let store = try XcircuiteWorkspaceStore(projectRoot: root)
+        try await prepareTestRun(runID: "run-a", store: store)
+        let path = ".xcircuite/runs/run-b/stages/verify/raw/report.json"
+
+        await #expect(throws: XcircuiteWorkspaceStoreError.artifactOutsideRun(
+            path: path,
+            runID: "run-a"
+        )) {
+            _ = try await store.persistArtifact(
+                content: Data("{}".utf8),
+                id: try ArtifactID(rawValue: "cross-run-report"),
+                locator: ArtifactLocator(
+                    location: try ArtifactLocation(workspaceRelativePath: path),
+                    role: .output,
+                    kind: .report,
+                    format: .json
+                ),
+                runID: "run-a",
+                mode: .replaceable
+            )
+        }
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: path).path))
     }
 
     @Test

@@ -124,7 +124,7 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             try FileManager.default.createDirectory(at: rawDirectory, withIntermediateDirectories: true)
             try await context.checkCancellation()
 
-            let request = try preparedRequest(
+            let request = try await preparedRequest(
                 context: context,
                 workingDirectory: rawDirectory
             )
@@ -453,19 +453,21 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
     private func preparedRequest(
         context: FlowExecutionContext,
         workingDirectory: URL
-    ) throws -> PEXRunRequest {
+    ) async throws -> PEXRunRequest {
         let projectRoot = try context.xcircuiteProjectRoot()
         let runDirectory = try context.xcircuiteRunDirectory()
-        let layoutReference = try layoutInput.resolveArtifactReference(
+        let layoutReference = try await layoutInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "pex-layout-input",
             kind: .layout,
             format: try artifactFormat(for: layoutFormat)
         )
-        let sourceNetlistReference = try sourceNetlistInput.resolveArtifactReference(
+        let sourceNetlistReference = try await sourceNetlistInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "pex-source-netlist-input",
             kind: .netlist,
             format: try artifactFormat(for: sourceNetlistFormat)
@@ -477,13 +479,15 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
             sourceNetlistFormat: sourceNetlistFormat,
             topCell: topCell,
             corners: corners,
-            technology: try technology.makeTechnologyInput(
+            technology: try await technology.makeTechnologyInput(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             ),
-            technologyByCorner: try resolvedTechnologyByCorner(
+            technologyByCorner: try await resolvedTechnologyByCorner(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             ),
             processProfile: processProfile,
             backendSelection: backendSelection,
@@ -520,16 +524,18 @@ public struct PEXFlowStageExecutor: FlowStageExecutor {
 
     private func resolvedTechnologyByCorner(
         projectRoot: URL,
-        runDirectory: URL
-    ) throws -> [String: TechnologyInput] {
+        runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure
+    ) async throws -> [String: TechnologyInput] {
         var resolved: [String: TechnologyInput] = [:]
         for cornerID in technologyByCorner.keys.sorted() {
             guard let technology = technologyByCorner[cornerID] else {
                 continue
             }
-            resolved[cornerID] = try technology.makeTechnologyInput(
+            resolved[cornerID] = try await technology.makeTechnologyInput(
                 projectRoot: projectRoot,
-                runDirectory: runDirectory
+                runDirectory: runDirectory,
+                infrastructure: infrastructure
             )
         }
         return resolved

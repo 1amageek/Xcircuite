@@ -64,7 +64,7 @@ extension XcircuiteCandidatePlanExecutor {
                 format: .json
             ),
         ]
-        artifacts.append(contentsOf: try standardLayoutArtifactRefs(
+        artifacts.append(contentsOf: try await standardLayoutArtifactRefs(
             step: step,
             plan: plan,
             result: result,
@@ -199,7 +199,7 @@ extension XcircuiteCandidatePlanExecutor {
         outputDocumentURL: URL,
         executionDirectory: URL,
         projectRoot: URL
-    ) throws -> [ArtifactReference] {
+    ) async throws -> [ArtifactReference] {
         let specs = try standardLayoutExportSpecs(from: step)
         guard !specs.isEmpty else {
             return []
@@ -207,22 +207,24 @@ extension XcircuiteCandidatePlanExecutor {
         let documentData = try Data(contentsOf: outputDocumentURL)
         let document = try LayoutDocumentSerializer().decodeDocument(documentData)
         let runDirectory = try XcircuiteWorkspaceLayout(projectRoot: projectRoot).runDirectoryURL(for: plan.runID)
-        return try specs.map { spec in
-            let artifact = try exportStandardLayout(
+        var references: [ArtifactReference] = []
+        for spec in specs {
+            let artifact = try await exportStandardLayout(
                 document,
                 spec: spec,
                 executionDirectory: executionDirectory,
                 runDirectory: runDirectory,
                 projectRoot: projectRoot
             )
-            return try artifactBuilder.reference(
+            references.append(try artifactBuilder.reference(
                 for: artifact.url,
                 projectRoot: projectRoot,
                 artifactID: artifact.artifactID,
                 kind: .layout,
                 format: artifact.format
-            )
+            ))
         }
+        return references
     }
 
     func validateLayoutCommandResult(
@@ -350,14 +352,15 @@ extension XcircuiteCandidatePlanExecutor {
         executionDirectory: URL,
         runDirectory: URL,
         projectRoot: URL
-    ) throws -> CandidatePlanStandardLayoutArtifact {
+    ) async throws -> CandidatePlanStandardLayoutArtifact {
         try FlowIdentifierValidator().validate(spec.artifactID, kind: .artifactID)
         let exportURL = executionDirectory.appending(
             path: "\(spec.artifactID).\(try standardLayoutFileExtension(for: spec.format))"
         )
-        let technologyURL = try spec.technologyInput.resolveExisting(
+        let technologyURL = try await spec.technologyInput.resolveExisting(
             projectRoot: projectRoot,
-            runDirectory: runDirectory
+            runDirectory: runDirectory,
+            infrastructure: workspaceStore
         )
         let converter = MaskDataFormatConverter(tech: try loadTechnology(from: technologyURL))
         try converter.exportDocument(document, to: exportURL, format: spec.format)

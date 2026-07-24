@@ -84,13 +84,15 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
             let drcLayoutURL = try drcExport.map {
                 try exportDRCLayout(from: document, spec: $0, rawDirectory: rawDirectory)
             }
-            let standardLayoutArtifacts = try standardLayoutExports.map {
-                try exportStandardLayout(
+            var standardLayoutArtifacts: [StandardLayoutArtifact] = []
+            standardLayoutArtifacts.reserveCapacity(standardLayoutExports.count)
+            for standardLayoutExport in standardLayoutExports {
+                standardLayoutArtifacts.append(try await exportStandardLayout(
                     document,
-                    spec: $0,
+                    spec: standardLayoutExport,
                     rawDirectory: rawDirectory,
                     context: context
-                )
+                ))
             }
             let artifacts = try artifactReferences(
                 expectedPaths: expectedPaths,
@@ -376,14 +378,15 @@ public struct LayoutCommandFlowStageExecutor: FlowStageExecutor {
         spec: LayoutCommandStandardLayoutExportSpec,
         rawDirectory: URL,
         context: FlowExecutionContext
-    ) throws -> StandardLayoutArtifact {
+    ) async throws -> StandardLayoutArtifact {
         try FlowIdentifierValidator().validate(spec.artifactID, kind: .artifactID)
         let exportURL = rawDirectory.appending(
             path: "\(spec.artifactID).\(try standardLayoutFileExtension(for: spec.format))"
         )
-        let technologyURL = try spec.technologyInput.resolveExisting(
+        let technologyURL = try await spec.technologyInput.resolveExisting(
             projectRoot: try context.xcircuiteProjectRoot(),
-            runDirectory: try context.xcircuiteRunDirectory()
+            runDirectory: try context.xcircuiteRunDirectory(),
+            infrastructure: context.infrastructure
         )
         let converter = MaskDataFormatConverter(tech: try loadTechnology(from: technologyURL))
         try converter.exportDocument(document, to: exportURL, format: spec.format)

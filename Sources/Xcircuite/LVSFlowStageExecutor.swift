@@ -176,7 +176,7 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
             try FileManager.default.createDirectory(at: rawDirectory, withIntermediateDirectories: true)
             try await context.checkCancellation()
 
-            let request = try preparedRequest(
+            let request = try await preparedRequest(
                 context: context,
                 workingDirectory: rawDirectory
             )
@@ -353,86 +353,102 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
     private func preparedRequest(
         context: FlowExecutionContext,
         workingDirectory: URL
-    ) throws -> LVSRequest {
+    ) async throws -> LVSRequest {
         let projectRoot = try context.xcircuiteProjectRoot()
         let runDirectory = try context.xcircuiteRunDirectory()
-        let layoutNetlistArtifact = try layoutNetlistInput.map {
-            try $0.resolveArtifactReference(
+        let layoutNetlistArtifact: ArtifactReference?
+        if let layoutNetlistInput {
+            layoutNetlistArtifact = try await layoutNetlistInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "lvs-layout-netlist-input",
                 kind: .netlist,
                 format: .spice
             )
+        } else {
+            layoutNetlistArtifact = nil
         }
-        let layoutGDSArtifact = try layoutGDSInput.map {
-            try $0.resolveArtifactReference(
+        let layoutGDSArtifact: ArtifactReference?
+        if let layoutGDSInput {
+            layoutGDSArtifact = try await layoutGDSInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "lvs-layout-input",
                 kind: .layout,
                 format: try artifactFormat(for: layoutFormat)
             )
+        } else {
+            layoutGDSArtifact = nil
         }
-        let schematicArtifact = try schematicNetlistInput.resolveArtifactReference(
+        let schematicArtifact = try await schematicNetlistInput.resolveArtifactReference(
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-schematic-netlist-input",
             kind: .netlist,
             format: .spice
         )
-        let technologyArtifact = try resolveOptionalInput(
+        let technologyArtifact = try await resolveOptionalInput(
             technologyInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-technology-input",
             kind: .technology,
             format: .json
         )
-        let extractionProfileArtifact = try resolveOptionalInput(
+        let extractionProfileArtifact = try await resolveOptionalInput(
             extractionProfileInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-extraction-profile-input",
             kind: .technology,
             format: .json
         )
-        let extractionDeckArtifact = try resolveOptionalInput(
+        let extractionDeckArtifact = try await resolveOptionalInput(
             extractionDeckInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-extraction-deck-input",
             kind: .ruleDeck,
             format: nil
         )
-        let waiverArtifact = try resolveOptionalInput(
+        let waiverArtifact = try await resolveOptionalInput(
             waiverInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-waiver-input",
             kind: .constraint,
             format: .json
         )
-        let modelEquivalenceArtifact = try resolveOptionalInput(
+        let modelEquivalenceArtifact = try await resolveOptionalInput(
             modelEquivalenceInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-model-equivalence-input",
             kind: .constraint,
             format: .json
         )
-        let terminalEquivalenceArtifact = try resolveOptionalInput(
+        let terminalEquivalenceArtifact = try await resolveOptionalInput(
             terminalEquivalenceInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-terminal-equivalence-input",
             kind: .constraint,
             format: .json
         )
-        let devicePolicyArtifact = try resolveOptionalInput(
+        let devicePolicyArtifact = try await resolveOptionalInput(
             devicePolicyInput,
             projectRoot: projectRoot,
             runDirectory: runDirectory,
+            infrastructure: context.infrastructure,
             artifactID: "lvs-device-policy-input",
             kind: .constraint,
             format: .json
@@ -473,19 +489,22 @@ public struct LVSFlowStageExecutor: FlowStageExecutor {
         _ input: XcircuiteFlowInputReference?,
         projectRoot: URL,
         runDirectory: URL,
+        infrastructure: any FlowRunInfrastructure,
         artifactID: String,
         kind: ArtifactKind,
         format: ArtifactFormat?
-    ) throws -> ArtifactReference? {
-        try input.map {
-            try $0.resolveArtifactReference(
+    ) async throws -> ArtifactReference? {
+        guard let input else {
+            return nil
+        }
+        return try await input.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: infrastructure,
                 artifactID: artifactID,
                 kind: kind,
                 format: format
             )
-        }
     }
 
     private func artifactFormat(for format: LVSLayoutFormat?) throws -> ArtifactFormat? {

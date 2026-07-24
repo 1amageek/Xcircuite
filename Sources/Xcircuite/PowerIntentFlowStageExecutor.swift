@@ -46,23 +46,26 @@ public struct PowerIntentFlowStageExecutor: FlowStageExecutor {
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
             let projectRoot = try context.xcircuiteProjectRoot()
             let runDirectory = try context.xcircuiteRunDirectory()
-            let sourceReference = try sourceInput.resolveArtifactReference(
+            let sourceReference = try await sourceInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "power-intent-source",
                 kind: ArtifactKind.powerIntent,
                 format: format == .upf ? ArtifactFormat.upf : ArtifactFormat.cpf
             )
-            let designReference = try designInput.resolveArtifactReference(
+            let designReference = try await designInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "power-intent-design",
                 kind: ArtifactKind.rtl,
                 format: ArtifactFormat.json
             )
-            let pdkReference = try pdkInput.resolveArtifactReference(
+            let pdkReference = try await pdkInput.resolveArtifactReference(
                 projectRoot: projectRoot,
                 runDirectory: runDirectory,
+                infrastructure: context.infrastructure,
                 artifactID: "power-intent-pdk",
                 kind: ArtifactKind.technology,
                 format: ArtifactFormat.json

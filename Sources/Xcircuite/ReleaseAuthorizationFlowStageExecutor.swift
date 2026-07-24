@@ -34,9 +34,10 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
         do {
             try await context.checkCancellation()
             try support.validate(stage: stage, stageID: stageID, toolID: toolID)
-            let requestURL = try requestInput.resolveExisting(
+            let requestURL = try await requestInput.resolveExisting(
                 projectRoot: try context.xcircuiteProjectRoot(),
-                runDirectory: try context.xcircuiteRunDirectory()
+                runDirectory: try context.xcircuiteRunDirectory(),
+                infrastructure: context.infrastructure
             )
             let requestData = try Data(contentsOf: requestURL)
             let decoder = JSONDecoder()
@@ -90,6 +91,16 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
             let engineResult = try await authorizerFactory(
                 projectRoot
             ).execute(request)
+            if let contractFailure = Self.authorizationContractFailure(
+                engineResult,
+                request: request
+            ) {
+                return support.failureResult(
+                    stageID: stage.stageID,
+                    code: "RELEASE_AUTHORIZATION_RESULT_INVALID",
+                    message: contractFailure
+                )
+            }
             let result = ReleaseAuthorizationResult(
                 status: engineResult.status,
                 signoffBundle: engineResult.signoffBundle,
@@ -134,8 +145,9 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
     }
 
     public static func makeDefaultAuthorizer(projectRoot: URL) throws -> any ReleaseAuthorizing {
+        let store = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
         let qualificationEngine = DefaultToolQualificationEngine(
-            artifactReader: LocalToolQualificationArtifactReader(workspaceRoot: projectRoot),
+            artifactReader: store,
             producer: try ProducerIdentity(
                 kind: .engine,
                 identifier: "xcircuite.release-authorization",
@@ -144,7 +156,11 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
         )
         return DefaultReleaseAuthorizer(
             qualificationEngine: qualificationEngine,
-            artifactReader: LocalReleaseArtifactReader(workspaceRoot: projectRoot)
+            artifactReader: store,
+            approvalAuthenticator: AttestedReleaseApprovalAuthenticator(
+                ledgerReader: store,
+                artifactReader: store
+            )
         )
     }
 
@@ -163,5 +179,32 @@ public struct ReleaseAuthorizationFlowStageExecutor: FlowStageExecutor {
             code: diagnostic.code.rawValue,
             message: diagnostic.detail ?? diagnostic.summary
         )
+    }
+
+    private static func authorizationContractFailure(
+        _ result: ReleaseAuthorizationResult,
+        request: ReleaseAuthorizationRequest
+    ) -> String? {
+        guard result.schemaVersion == ReleaseAuthorizationResult.currentSchemaVersion,
+              result.approval == request.approval,
+              result.evidence.artifacts == result.artifacts else {
+            return "Release authorization returned an inconsistent approval or evidence projection."
+        }
+        switch result.status {
+        case .authorized:
+            guard result.signoffBundle == request.signoffBundle,
+                  result.artifacts == [request.signoffBundle.artifact],
+                  result.diagnostics.allSatisfy({ $0.severity != .error }),
+                  result.evidence.provenance.inputs.contains(request.signoffBundle.artifact),
+                  result.evidence.provenance.inputs.contains(request.approval.evidence.plan) else {
+                return "Authorized release output is not bound to the exact bundle, approval plan, and provenance inputs."
+            }
+        case .blocked:
+            guard result.signoffBundle == nil,
+                  result.artifacts.isEmpty else {
+                return "Blocked release output must not expose an authorized signoff bundle."
+            }
+        }
+        return nil
     }
 }
