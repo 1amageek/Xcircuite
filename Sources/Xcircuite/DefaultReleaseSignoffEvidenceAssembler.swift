@@ -410,16 +410,15 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
             }
             let result = try decode(DFTResult.self, from: data)
             try requireRunID(result.runID, expected: runID)
-            try requireExactInputs(request.inputs, provenance: result.provenance)
+            try DFTResultValidator().validate(result, for: request)
+            try requireExactInputs(request.executionInputArtifacts, provenance: result.provenance)
             try await verify(result.artifacts, reading: artifacts)
-            if result.status == .completed {
-                try validateCompletedDFT(result, for: source.axis)
-            }
+            let semanticPass = try dftSemanticPass(result, request: request, axis: source.axis)
             return EvaluatedEvidence(
                 evaluation: executionEvaluation(
                     result.status,
-                    passed: true,
-                    failureReason: "DFT execution did not complete."
+                    passed: semanticPass,
+                    failureReason: "DFT execution did not retain release-eligible semantic evidence."
                 ),
                 provenance: result.provenance
             )
@@ -664,30 +663,49 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
         }
     }
 
-    private func validateCompletedDFT(
+    private func dftSemanticPass(
         _ result: DFTResult,
-        for axis: ReleaseSignoffAxis
-    ) throws {
-        let complete: Bool
+        request: DFTRequest,
+        axis: ReleaseSignoffAxis
+    ) throws -> Bool {
+        guard result.status == .completed,
+              !result.diagnostics.contains(where: { $0.severity == .error }) else {
+            return false
+        }
         switch axis {
         case .scanInsertion:
-            complete = result.payload.transformedDesign != nil
+            return result.payload.transformedDesign != nil
                 && result.payload.scanPlan != nil
-                && result.payload.designDiff != nil
+                && (request.insertionPolicy?.generateDesignDiff != true
+                    || result.payload.designDiff != nil)
         case .automaticTestPatternGeneration:
-            complete = result.payload.faultCoverage != nil
-                && result.payload.patterns != nil
-                && result.payload.coverageEvidence != nil
+            guard let evidence = result.payload.coverageEvidence else {
+                return false
+            }
+            return evidence.declaredFaultCount > evidence.excludedFaultCount
+                && evidence.coverage == 1
         case .builtInSelfTest:
-            complete = result.payload.transformedDesign != nil
-                && result.payload.bistStructure != nil
-                && result.payload.designDiff != nil
+            guard let structure = result.payload.bistStructure,
+                  let configuration = request.bistConfiguration,
+                  structure.kind == configuration.kind,
+                  structure.controllerCellName == configuration.controllerCellName,
+                  structure.targetInstances == configuration.targetInstances.sorted(),
+                  structure.patternCount == configuration.patternCount else {
+                return false
+            }
+            if configuration.kind == .memory {
+                return configuration.memoryBindings?.isEmpty == false
+                    && structure.logicCellMapping == nil
+            }
+            guard let requestedMapping = configuration.logicCellMapping else {
+                return false
+            }
+            return structure.logicCellMapping == requestedMapping
+                && requestedMapping.processID == request.pdk.processID
+                && requestedMapping.pdkDigest == request.pdk.digest
         default:
-            complete = false
-        }
-        guard complete else {
             throw ReleaseSignoffEvidenceAssemblyError.resultContractViolation(
-                "completed DFT result is missing required \(axis.rawValue) outputs"
+                "DFT result cannot supply release axis \(axis.rawValue)"
             )
         }
     }

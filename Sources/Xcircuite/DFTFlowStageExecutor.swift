@@ -55,11 +55,7 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                     message: "DFT stage \(stage.stageID) requires \(expectedOperation.rawValue), but the request declares \(request.operation.rawValue)."
                 )
             }
-            let inputArtifacts = uniqueArtifacts(
-                request.inputs
-                    + [request.design.artifact, request.constraints.artifact, request.pdk.manifest]
-                    + [request.cellLibrary?.artifact].compactMap { $0 }
-            )
+            let inputArtifacts = uniqueArtifacts(request.executionInputArtifacts)
             for artifact in inputArtifacts {
                 _ = try await context.infrastructure.loadArtifactContent(for: artifact)
             }
@@ -79,10 +75,13 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
                 engine = DefaultDFTEngine(
                     artifactStore: FileSystemDFTArtifactStore(rootURL: try context.xcircuiteProjectRoot()),
                     designLoader: FileSystemDFTDesignLoader(rootURL: try context.xcircuiteProjectRoot()),
-                    cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: try context.xcircuiteProjectRoot())
+                    cellLibraryLoader: FileSystemDFTCellLibraryLoader(rootURL: try context.xcircuiteProjectRoot()),
+                    timingLibraryLoader: FileSystemDFTTimingLibraryLoader(rootURL: try context.xcircuiteProjectRoot()),
+                    constraintLoader: FileSystemDFTConstraintLoader(rootURL: try context.xcircuiteProjectRoot())
                 )
             }
             let result = try await engine.execute(request)
+            try DFTResultValidator().validate(result, for: request)
             try await context.checkCancellation()
             let diagnostics = result.dftDiagnostics.map(flowDiagnostic)
             let gateStatus = gateStatus(for: result.status)

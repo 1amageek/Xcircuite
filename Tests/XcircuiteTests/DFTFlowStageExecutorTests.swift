@@ -36,6 +36,15 @@ struct DFTFlowStageExecutorTests {
             kind: .technology,
             role: .input
         )
+        let timingArtifact = try writeArtifact(
+            root: root,
+            path: "cell-timing.lib",
+            artifactID: "cell-timing",
+            data: Data(Self.cellTimingLibrary.utf8),
+            kind: .technology,
+            format: .liberty,
+            role: .input
+        )
         let request = try makeRequest(
             root: root,
             runID: runID,
@@ -45,7 +54,8 @@ struct DFTFlowStageExecutorTests {
                 artifact: libraryArtifact,
                 processID: libraryManifest.processID,
                 version: libraryManifest.version,
-                manifestDigest: try DFTCellLibraryManifestCodec.digest(libraryManifest)
+                manifestDigest: try DFTCellLibraryManifestCodec.digest(libraryManifest),
+                timingLibraryArtifact: timingArtifact
             ),
             pdkDigest: libraryManifest.pdkDigest
         )
@@ -62,7 +72,6 @@ struct DFTFlowStageExecutorTests {
             stage: FlowStageDefinition(stageID: "dft.scan", displayName: "DFT scan insertion"),
             context: try await makeContext(root: root, runID: runID)
         )
-
         #expect(result.status == .succeeded)
         #expect(result.gates.contains { $0.gateID == "dft" && $0.status == .passed })
         #expect(Set(result.artifacts.map(\.artifactID)) == [
@@ -70,6 +79,7 @@ struct DFTFlowStageExecutorTests {
             "constraints",
             "pdk",
             "cell-library",
+            "cell-timing",
             "dft-request",
             "dft-transformed-design",
             "dft-design-diff",
@@ -429,7 +439,13 @@ struct DFTFlowStageExecutorTests {
             root: root,
             path: "constraints.sdc",
             artifactID: "constraints",
-            data: Data("create_clock -name scan_clk -period 10 scan_clk".utf8),
+            data: Data(
+                """
+                create_clock -name scan_clk -period 10 [get_ports scan_clk]
+                set_case_analysis 1 [get_ports test_mode]
+                set_case_analysis 1 [get_ports scan_en]
+                """.utf8
+            ),
             kind: .constraint,
             format: .sdc,
             role: .input
@@ -605,6 +621,9 @@ struct DFTFlowStageExecutorTests {
                         id: "module-top",
                         name: "top",
                         ports: [RTLPort(id: "port-clk", name: "clk", direction: .input)],
+                        portBindings: [
+                            GatePortBinding(portID: "port-clk", netID: "clk"),
+                        ],
                         cells: cells,
                         nets: [
                             GateNet(id: "d-0", name: "d0"),
@@ -634,7 +653,8 @@ struct DFTFlowStageExecutorTests {
                     clockPinNames: ["CLK"],
                     scanInPinName: "SI",
                     scanEnablePinName: "SE",
-                    testModePinName: "TM"
+                    testModePinName: "TM",
+                    legalReplacementGroup: "scan-flops"
                 ),
             ],
             evidenceProvenance: DFTEvidenceProvenance(
@@ -651,6 +671,36 @@ struct DFTFlowStageExecutorTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
+
+    private static let cellTimingLibrary = """
+    library (fixture) {
+      time_unit : "1ns";
+      capacitive_load_unit (1, pf);
+      cell (SDFF) {
+        ff (IQ, IQN) {
+          next_state : "D";
+          clocked_on : "CLK";
+        }
+        pin (D) { direction : input; }
+        pin (CLK) { direction : input; }
+        pin (SI) { direction : input; }
+        pin (SE) { direction : input; }
+        pin (TM) { direction : input; }
+        pin (Q) {
+          direction : output;
+          timing () {
+            related_pin : "CLK";
+            timing_type : rising_edge;
+            timing_sense : positive_unate;
+            cell_rise (t) { index_1 ("0.1"); index_2 ("0.0"); values ("0.1"); }
+            cell_fall (t) { index_1 ("0.1"); index_2 ("0.0"); values ("0.1"); }
+            rise_transition (t) { index_1 ("0.1"); index_2 ("0.0"); values ("0.1"); }
+            fall_transition (t) { index_1 ("0.1"); index_2 ("0.0"); values ("0.1"); }
+          }
+        }
+      }
+    }
+    """
 
     private func removeRoot(_ root: URL) {
         do {

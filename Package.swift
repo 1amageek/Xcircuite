@@ -78,11 +78,11 @@ let package = Package(
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "b9aa25b0b78e6168befa25df3bfe8309bd020a6d"
+            revision: "ba3176f60c450ed0c1b12e7995247b0718bf9ad9"
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "2b8f0df3e359fca274edc8ede176457de40e1648"
+            revision: "1aef8fd6f06a007e9f70ebfe726ab4fb11b40c3e"
         ),
         workspaceDependency(
             named: "LogicEngine",
@@ -94,7 +94,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "601fa71a60c97fbdd994c8e7090291e19651fcc4"
+            revision: "b3466b2f22111ad6c7daba0bf5a54bdb3a141235"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
