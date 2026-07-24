@@ -1,22 +1,18 @@
 import DesignFlowKernel
 import Foundation
-import DesignFlowKernel
 
 public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
-    private let ledgerLoader: any FlowRunLedgerLoading
     private let reviewBundler: any FlowRunReviewBundling
     private let workspaceStore: XcircuiteWorkspaceStore
     private let identifierValidator: FlowIdentifierValidator
     private let stageClassifier: XcircuiteGeneratedLayoutSignoffStageClassifier
 
     public init(
-        ledgerLoader: any FlowRunLedgerLoading,
         reviewBundler: any FlowRunReviewBundling,
         workspaceStore: XcircuiteWorkspaceStore,
         identifierValidator: FlowIdentifierValidator = FlowIdentifierValidator(),
         stageClassifier: XcircuiteGeneratedLayoutSignoffStageClassifier = XcircuiteGeneratedLayoutSignoffStageClassifier()
     ) {
-        self.ledgerLoader = ledgerLoader
         self.reviewBundler = reviewBundler
         self.workspaceStore = workspaceStore
         self.identifierValidator = identifierValidator
@@ -28,7 +24,7 @@ public struct XcircuiteGeneratedLayoutFailureLadderCollector: Sendable {
         projectRoot: URL
     ) async throws -> XcircuiteGeneratedLayoutFailureLadderReport {
         try validate(request)
-        let ledger = try await ledgerLoader.loadRunLedger(runID: request.runID)
+        let ledger = try await workspaceStore.loadAttestedRunLedger(runID: request.runID)
         let manifest = try await workspaceStore.loadManifest()
         let workspaceID = try FlowWorkspaceID(rawValue: manifest.identity.projectID)
         let bundle = try await reviewBundler.makeReviewBundle(

@@ -33,7 +33,7 @@ public struct XcircuiteCandidatePlanVerifier: Sendable {
         projectRoot: URL
     ) async throws -> XcircuiteCandidatePlanVerificationResult {
         try FlowIdentifierValidator().validate(request.runID, kind: .runID)
-        let ledger = try await workspaceStore.loadRunLedger(runID: request.runID)
+        let ledger = try await workspaceStore.loadAttestedRunLedger(runID: request.runID)
         let manifest = ledger.runManifest
         let expectedCandidatePlanArtifactID: String?
         if let artifactID = request.candidatePlanArtifactID {

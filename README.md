@@ -261,7 +261,7 @@ flowchart LR
 | `XcircuiteFlowTechnologyCatalog` | Catalog-backed readiness contract for matching profile PDK/catalog IDs and required local technology files |
 | `XcircuiteFlowTechnologyCatalogInventory` | Agent-facing inventory report for PDK-root discovery, catalog entries, required-file resolution, and missing PDK/catalog assets |
 | `XcircuiteFlowToolSpec` | Optional digest-bound `ArtifactReference` to a `ToolQualificationRecord` issued outside the Engine |
-| `XcircuiteFlowRuntime` | Runs or resumes through `DesignFlowKernel` with the configured registry and executors |
+| `XcircuiteFlowRuntime` | Runs through `DesignFlowKernel`; resume first loads an artifact-attested ledger and stops before execution if any retained artifact is missing or changed |
 
 `xcircuite-flow validate --project-root <path> --runtime-config <path>` gates
 catalog-backed profile readiness before execution: profile IDs, PDK/catalog
@@ -404,6 +404,13 @@ generated candidate when selection is unambiguous, then fall back to the
 canonical `planning/candidate-plan.json`. If multiple immutable generated
 candidates exist, callers must select one with `--candidate-plan-artifact-id`
 or `--candidate-plan-path`; no implicit latest-candidate fallback is applied.
+
+`approve-candidate-plan-risk` first attests every retained run artifact. It then
+selects the latest `planning.verify-candidate-plan` action output whose action
+input is the exact candidate reference recorded by that verification. The
+approval is bound to that decoded candidate plan and verification artifact;
+an unrelated file with a familiar artifact ID, a stale verification, or a
+tampered retained artifact cannot authorize the candidate.
 
 Default platform-readiness test evidence uses exact Xcode test identifiers,
 including the `()` suffix for Swift Testing methods. Every evidence command is

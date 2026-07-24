@@ -2161,7 +2161,6 @@ extension XcircuiteFlowRuntimeTests {
             persistence: workspaceStore
         )
         return XcircuiteGeneratedLayoutFailureLadderCollector(
-            ledgerLoader: workspaceStore,
             reviewBundler: reviewBundler,
             workspaceStore: workspaceStore
         )

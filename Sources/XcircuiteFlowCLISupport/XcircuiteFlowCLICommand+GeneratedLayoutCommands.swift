@@ -343,7 +343,6 @@ extension XcircuiteFlowCLICommand {
         )
         let workspaceStore = try XcircuiteWorkspaceStore(projectRoot: projectRoot)
         let collector = XcircuiteGeneratedLayoutFailureLadderCollector(
-            ledgerLoader: workspaceStore,
             reviewBundler: makeReviewBundler(store: workspaceStore),
             workspaceStore: workspaceStore
         )

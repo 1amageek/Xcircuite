@@ -37,6 +37,9 @@ public struct XcircuiteFlowRuntime: Sendable {
                 progressStore: progressStore
             )
         }
+        let attestedLedgerLoader = XcircuiteAttestedRunLedgerLoader(
+            workspaceStore: workspaceStore
+        )
         let reviewBundler = DefaultFlowRunReviewBundler(
             loader: workspaceStore,
             persistence: workspaceStore
@@ -48,7 +51,7 @@ public struct XcircuiteFlowRuntime: Sendable {
         self.toolchainProfile = toolchainProfile
         self.orchestrator = resolvedOrchestrator
         self.resumer = resumer ?? DefaultFlowRunResumer(
-            loader: workspaceStore,
+            loader: attestedLedgerLoader,
             orchestrator: resolvedOrchestrator,
             inspector: inspector,
             artifactPersistence: workspaceStore,
@@ -110,7 +113,10 @@ public struct XcircuiteFlowRuntime: Sendable {
             toolchainProfile: profileRecord,
             artifactPreparer: nil
         )
-        let reviewBundler = DefaultFlowRunReviewBundler(loader: workspaceStore, persistence: workspaceStore)
+        let reviewBundler = DefaultFlowRunReviewBundler(
+            loader: workspaceStore,
+            persistence: workspaceStore
+        )
         let summary = try await DefaultFlowRunLedgerInspector(reviewBundler: reviewBundler).inspectRun(
             runID: request.runID,
             workspaceID: request.workspaceID

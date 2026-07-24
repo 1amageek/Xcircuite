@@ -18,35 +18,23 @@ public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
         try validator.validate(request.runID, kind: .runID)
         try validator.validate(request.approvalID, kind: .stageID)
 
-        let ledger = try await workspaceStore.loadRunLedger(runID: request.runID)
-        let currentPlanReference = try requiredArtifact(
-            id: XcircuitePlanningArtifactStore.candidatePlanArtifactID,
-            in: ledger
-        )
-        let candidatePlan: XcircuiteCandidatePlan = try await decodedArtifact(
-            currentPlanReference,
-            as: XcircuiteCandidatePlan.self
-        )
-        let verification = try await requiredVerificationArtifact(
-            for: candidatePlan,
-            in: ledger
-        )
-        let planVerification: XcircuitePlanVerification = try await decodedArtifact(
-            verification,
-            as: XcircuitePlanVerification.self
-        )
+        let ledger = try await workspaceStore.loadAttestedRunLedger(runID: request.runID)
+        let (verification, planVerification) = try await currentVerification(in: ledger)
         let reviewedPlanReference = planVerification.candidatePlanRef
         let reviewedPlan: XcircuiteCandidatePlan = try await decodedArtifact(
             reviewedPlanReference,
             as: XcircuiteCandidatePlan.self
         )
-        guard reviewedPlan == candidatePlan else {
+        guard reviewedPlan.runID == request.runID,
+              reviewedPlan.planID == planVerification.planID,
+              reviewedPlan.problemID == planVerification.problemID,
+              planVerification.artifactRefs.contains(reviewedPlanReference) else {
             throw XcircuiteCandidatePlanVerificationError.stalePlanVerification(
-                "The retained verification does not contain the current candidate plan bytes."
+                "The retained verification does not bind its reviewed candidate plan."
             )
         }
         try validateEvidence(
-            plan: candidatePlan,
+            plan: reviewedPlan,
             planReference: reviewedPlanReference,
             verification: planVerification,
             request: request
@@ -115,50 +103,29 @@ public struct XcircuiteCandidatePlanRiskApprovalRecorder: Sendable {
         )
     }
 
-    private func requiredArtifact(id: String, in ledger: FlowRunLedger) throws -> ArtifactReference {
-        let matches = ledger.artifacts.filter { $0.id.rawValue == id }
-        guard matches.count == 1, let artifact = matches.first else {
-            throw XcircuiteRuntimeError.invalidConfiguration(
-                "Approval evidence requires exactly one \(id) artifact."
-            )
-        }
-        return artifact
-    }
-
-    private func requiredVerificationArtifact(
-        for candidatePlan: XcircuiteCandidatePlan,
+    private func currentVerification(
         in ledger: FlowRunLedger
-    ) async throws -> ArtifactReference {
-        var matches: [ArtifactReference] = []
-        for reference in ledger.artifacts where
-            reference.id.rawValue == XcircuitePlanningArtifactStore.planVerificationArtifactID {
-            let verification: XcircuitePlanVerification = try await decodedArtifact(
-                reference,
-                as: XcircuitePlanVerification.self
-            )
-            if verification.runID == candidatePlan.runID,
-               verification.planID == candidatePlan.planID,
-               verification.problemID == candidatePlan.problemID {
-                matches.append(reference)
-            }
-        }
-        guard !matches.isEmpty else {
-            throw XcircuiteRuntimeError.invalidConfiguration(
-                "Approval evidence requires plan verification bound to the current candidate plan."
-            )
-        }
-        guard matches.count > 1 else {
-            return matches[0]
-        }
-        let matchSet = Set(matches)
+    ) async throws -> (ArtifactReference, XcircuitePlanVerification) {
+        let retainedReferences = Set(ledger.artifacts + ledger.actions.flatMap(\.outputs))
         for action in ledger.actions.reversed() where
             action.actionKind == "planning.verify-candidate-plan" {
-            if let reference = action.outputs.first(where: matchSet.contains) {
-                return reference
+            for reference in action.outputs where
+                reference.id.rawValue == XcircuitePlanningArtifactStore.planVerificationArtifactID
+                    && retainedReferences.contains(reference) {
+                let verification: XcircuitePlanVerification = try await decodedArtifact(
+                    reference,
+                    as: XcircuitePlanVerification.self
+                )
+                guard verification.runID == ledger.runID,
+                      action.runID == ledger.runID,
+                      action.inputs == [verification.candidatePlanRef] else {
+                    continue
+                }
+                return (reference, verification)
             }
         }
         throw XcircuiteRuntimeError.invalidConfiguration(
-            "Approval evidence has multiple plan verifications without an ordered action binding."
+            "Approval evidence requires an action-bound plan verification."
         )
     }
 
