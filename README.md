@@ -414,7 +414,14 @@ introducing an Agent wrapper.
 | `verify-candidate-plan` | Immutable `planning/plan-verification/<sha256>.json` with symbolic state, gate results, `riskReviews`, approval review state, `planning/rejected-plans.jsonl` for rejected/blocked plans, plus post-execution DRC/LVS/PEX/simulation metric artifacts when inputs exist |
 | `run-numeric-repair-loop` | `planning/numeric-repair-loop.json` plus per-iteration snapshots under `planning/numeric-repair-loop/iterations/` while generating candidates, synthesizing edits, executing, verifying, and feeding rejected candidates into the next iteration |
 | `assess-verified-improvement-corpus` | `.xcircuite/assessments/verified-improvement/<suite-id>/corpus-suite.json` and `corpus-report.json` with typed DRC/LVS/PEX/numeric-loop outcome assessment; it does not issue tool qualification |
-| `run-selected-suggested-action` | loads the latest ready `review.selectSuggestedAction` record, validates its run binding, then projects the typed semantic operation into this project's `xcircuite-flow --project-root` invocation and dispatches through the typed CLI handler |
+| `run-selected-suggested-action` | loads the latest ready `review.selectSuggestedAction` record, validates its run binding, then projects the typed semantic operation into this project's `xcircuite-flow --project-root` invocation and dispatches through the typed CLI handler; the parent next-action ID and nested suggested-action ID remain distinct ledger identities |
+
+`XcircuiteFlowCLISupport` is also published as a library product for trusted
+local hosts such as circuit-studio. A host resolves
+`XcircuiteResolvedSuggestedAction` once and calls
+`XcircuiteFlowCLICommand.dispatchResolvedSuggestedAction(_:)`; operation
+selection and artifact persistence remain owned by Xcircuite instead of being
+copied into the UI layer.
 
 `execute-candidate-plan` and `verify-candidate-plan` use the sole retained
 generated candidate when selection is unambiguous, then fall back to the

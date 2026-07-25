@@ -119,8 +119,8 @@ struct XcircuiteSelectedSuggestedActionResolverTests {
         #expect(resolved.dispatchArguments.contains(rejectedPlansArtifactID.rawValue))
     }
 
-    @Test func rejectsInconsistentSelectionIdentity() async throws {
-        let root = try makeTemporaryRoot("inconsistent-selected-action")
+    @Test func preservesDistinctNextActionAndSuggestedActionIdentities() async throws {
+        let root = try makeTemporaryRoot("distinct-next-and-suggested-action")
         defer { removeTemporaryRoot(root) }
         let store = try XcircuiteWorkspaceStore(projectRoot: root)
         try await prepareTestRun(runID: "run-1", store: store)
@@ -147,18 +147,18 @@ struct XcircuiteSelectedSuggestedActionResolverTests {
             )
         )
 
-        await #expect(
-            throws: XcircuiteSelectedSuggestedActionResolutionError.self
-        ) {
-            _ = try await XcircuiteSelectedSuggestedActionResolver(
-                workspaceStore: store
-            ).resolve(
-                request: XcircuiteSelectedSuggestedActionResolutionRequest(
-                    runID: "run-1",
-                    actionID: "different-action"
-                )
+        let resolved = try await XcircuiteSelectedSuggestedActionResolver(
+            workspaceStore: store
+        ).resolve(
+            request: XcircuiteSelectedSuggestedActionResolutionRequest(
+                runID: "run-1",
+                actionID: "different-action"
             )
-        }
+        )
+
+        #expect(resolved.selection.nextActionID == "expected-action")
+        #expect(resolved.selection.action.id == "different-action")
+        #expect(resolved.command == .inspectRun)
     }
 
     @Test func latestFailedSelectionSupersedesAnEarlierSuccessfulSelection() async throws {

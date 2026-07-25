@@ -18,12 +18,6 @@ public struct XcircuiteSelectedSuggestedActionResolver: XcircuiteSuggestedAction
             actionID: request.actionID
         )
         let action = selection.action
-        guard selection.nextActionID == action.id else {
-            throw XcircuiteSelectedSuggestedActionResolutionError.mismatchedSelectedActionID(
-                expected: selection.nextActionID,
-                actual: action.id
-            )
-        }
         guard action.readiness == .ready else {
             throw XcircuiteSelectedSuggestedActionResolutionError.actionRequiresInput(
                 actionID: action.id

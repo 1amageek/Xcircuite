@@ -6,7 +6,6 @@ public enum XcircuiteSelectedSuggestedActionResolutionError: Error, LocalizedErr
     case selectionNotSucceeded(actionID: String, status: FlowRunActionStatus)
     case actionRequiresInput(actionID: String)
     case actionRunIDMissing(actionID: String)
-    case mismatchedSelectedActionID(expected: String, actual: String)
     case mismatchedRunID(expected: String, actual: String)
 
     public var errorDescription: String? {
@@ -23,8 +22,6 @@ public enum XcircuiteSelectedSuggestedActionResolutionError: Error, LocalizedErr
             "Selected suggested action \(actionID) requires input before it can run."
         case .actionRunIDMissing(let actionID):
             "Selected suggested action \(actionID) does not identify a run."
-        case .mismatchedSelectedActionID(let expected, let actual):
-            "Selected suggested action ID mismatch. Expected \(expected), got \(actual)."
         case .mismatchedRunID(let expected, let actual):
             "Selected suggested action run ID mismatch. Expected \(expected), got \(actual)."
         }

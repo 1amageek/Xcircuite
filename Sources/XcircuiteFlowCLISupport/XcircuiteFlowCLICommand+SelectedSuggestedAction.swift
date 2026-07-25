@@ -50,7 +50,7 @@ extension XcircuiteFlowCLICommand {
         return try await dispatchResolvedSuggestedAction(resolved)
     }
 
-    static func dispatchResolvedSuggestedAction(
+    public static func dispatchResolvedSuggestedAction(
         _ resolved: XcircuiteResolvedSuggestedAction
     ) async throws -> String {
         let arguments = resolved.dispatchArguments

@@ -33,6 +33,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "Xcircuite", targets: ["Xcircuite"]),
+        .library(name: "XcircuiteFlowCLISupport", targets: ["XcircuiteFlowCLISupport"]),
         .executable(name: "xcircuite-flow", targets: ["XcircuiteFlowCLI"]),
     ],
     dependencies: [
