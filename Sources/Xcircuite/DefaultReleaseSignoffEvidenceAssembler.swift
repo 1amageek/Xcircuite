@@ -1,6 +1,7 @@
 import CircuiteFoundation
 import DesignFlowKernel
 import DFTCore
+import ATPGEngine
 import DRCEngine
 import ElectricalSignoffCore
 import ElectricalSignoffEngine
@@ -416,7 +417,9 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
             let semanticPass: Bool
             if result.status == .completed,
                !result.diagnostics.contains(where: { $0.severity == .error }) {
-                try await DFTResultSemanticVerifier().validate(
+                try await DFTResultSemanticVerifier(
+                    atpgVerifier: GateLevelATPGResultSemanticVerifier()
+                ).validate(
                     result,
                     for: request,
                     reading: DFTArtifactReader(persistence: artifacts)
@@ -981,6 +984,13 @@ public struct DefaultReleaseSignoffEvidenceAssembler: ReleaseSignoffEvidenceAsse
         }
         if candidates.contains(where: { $0.status == .blocked || $0.status == .cancelled }) {
             return Evaluation(disposition: .blocked, reason: "Electrical analysis was blocked or cancelled.")
+        }
+        guard candidates.allSatisfy({
+            $0.payload.analysisCoverage.isComplete
+        }) else {
+            throw ReleaseSignoffEvidenceAssemblyError.resultContractViolation(
+                "completed electrical result does not prove complete analyzed-entity coverage for \(electricalAxis.rawValue)"
+            )
         }
         let passed: Bool
         switch axis {

@@ -472,12 +472,22 @@ private struct StubElectricalSignoffEngine: ElectricalSignoffExecuting {
             startedAt: 1,
             completedAt: 1
         )
-        let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: axes.map { axis in
-            let payload = ElectricalSignoffPayload(violationCount: 0, axis: axis)
+        let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: try axes.map { axis in
+            let payload = makeCompletedPayload(
+                request: request,
+                axis: axis,
+                violationCount: 0
+            )
+            let artifact = try makeStubElectricalArtifact(
+                request: request,
+                axis: axis,
+                producer: metadata.producer
+            )
             let result = ElectricalSignoffResult(
                 schemaVersion: 1,
                 runID: request.runID,
                 status: .completed,
+                artifacts: [artifact],
                 provenance: metadata,
                 payload: payload
             )
@@ -509,10 +519,11 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
             startedAt: 1,
             completedAt: 1
         )
-        let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: axes.map { axis in
-            let payload = ElectricalSignoffPayload(
-                violationCount: 1,
+        let results: [ElectricalSignoffAnalysisAxis: ElectricalSignoffResult] = Dictionary(uniqueKeysWithValues: try axes.map { axis in
+            let payload = makeCompletedPayload(
+                request: request,
                 axis: axis,
+                violationCount: 1,
                 repairCandidates: [ElectricalSignoffPayload.RepairCandidate(
                     candidateID: "repair-erc-1",
                     kind: "connect-domain-isolation",
@@ -521,10 +532,16 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
                     actions: ["insert_domain_isolation"]
                 )]
             )
+            let artifact = try makeStubElectricalArtifact(
+                request: request,
+                axis: axis,
+                producer: metadata.producer
+            )
             return (axis, ElectricalSignoffResult(
                 schemaVersion: 1,
                 runID: request.runID,
                 status: .completed,
+                artifacts: [artifact],
                 provenance: metadata,
                 payload: payload
             ))
@@ -544,13 +561,56 @@ private struct RepairCandidateElectricalSignoffEngine: ElectricalSignoffExecutin
     }
 }
 
+private func makeCompletedPayload(
+    request: ElectricalSignoffRequest,
+    axis: ElectricalSignoffAnalysisAxis,
+    violationCount: Int,
+    repairCandidates: [ElectricalSignoffPayload.RepairCandidate] = []
+) -> ElectricalSignoffPayload {
+    let coverageEntityID = "fixture:\(axis.rawValue)"
+    return ElectricalSignoffPayload(
+        violationCount: violationCount,
+        axis: axis,
+        repairCandidates: repairCandidates,
+        provenance: ElectricalSignoffPayload.Provenance(
+            designDigest: request.design.designDigest,
+            layoutDigest: request.physicalDesign.layoutDigest,
+            pdkDigest: request.pdk.digest,
+            parasiticDigest: request.parasitics?.digest.hexadecimalValue,
+            topCell: request.physicalDesign.topCell,
+            inputArtifactIDs: request.executionInputArtifacts.map(\.id.rawValue).sorted()
+        ),
+        analysisCoverage: .init(
+            expectedEntityIDs: [coverageEntityID],
+            analyzedEntityIDs: [coverageEntityID]
+        )
+    )
+}
+
+private func makeStubElectricalArtifact(
+    request: ElectricalSignoffRequest,
+    axis: ElectricalSignoffAnalysisAxis,
+    producer: ProducerIdentity
+) throws -> ArtifactReference {
+    try makeFoundationArtifactReference(
+        id: "stub-electrical-\(axis.rawValue)-evidence",
+        path: request.physicalDesign.layoutArtifact.path,
+        role: .output,
+        kind: .report,
+        format: .json,
+        data: Data("source".utf8),
+        producer: producer
+    )
+}
+
 private func makeFoundationArtifactReference(
     id: String,
     path: String,
     role: ArtifactRole,
     kind: ArtifactKind,
     format: ArtifactFormat,
-    data: Data
+    data: Data,
+    producer: ProducerIdentity? = nil
 ) throws -> ArtifactReference {
     ArtifactReference(
         id: try ArtifactID(rawValue: id),
@@ -564,7 +624,8 @@ private func makeFoundationArtifactReference(
             algorithm: .sha256,
             hexadecimalValue: try SHA256ContentDigester().digest(data: data).hexadecimalValue
         ),
-        byteCount: UInt64(data.count)
+        byteCount: UInt64(data.count),
+        producer: producer
     )
 }
 

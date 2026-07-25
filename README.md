@@ -123,8 +123,12 @@ DFT execution and oracle correlation use distinct `dftExecution` and
 `dftOracleCorrelation` runtime cases. The DFT stages produce raw results and
 correlation observations. Completed scan/BIST mutations are accepted only after
 DFTEngine's semantic verifier reopens the source and transformed canonical
-artifacts and validates the retained structure. Release evidence assembly uses
-that same verifier instead of duplicating DFT semantics. A separate
+artifacts and validates the retained structure; ATPG additionally replays every
+detected pattern with the native gate-level verifier. Release evidence assembly
+uses that same verifier instead of duplicating DFT semantics. Completed
+electrical results must retain canonical exact expected/analyzed entity coverage;
+blocked and failed results remain reviewable but cannot become passing release
+evidence. A separate
 `processQualificationEvidenceBuild` stage uses ToolQualification to build
 process evidence; none of these stages issues release eligibility.
 `ReleaseEngine` consumes validated signoff evidence and `DesignFlowKernel` owns

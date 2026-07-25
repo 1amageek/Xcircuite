@@ -1,5 +1,6 @@
 import DFTCore
 import DFTEngine
+import ATPGEngine
 import CircuiteFoundation
 import Foundation
 import DesignFlowKernel
@@ -86,7 +87,9 @@ public struct DFTFlowStageExecutor: FlowStageExecutor {
             let result = try await engine.execute(request)
             try DFTResultValidator().validate(result, for: request)
             if result.status == .completed {
-                try await DFTResultSemanticVerifier().validate(
+                try await DFTResultSemanticVerifier(
+                    atpgVerifier: GateLevelATPGResultSemanticVerifier()
+                ).validate(
                     result,
                     for: request,
                     reading: FlowDFTArtifactReader(

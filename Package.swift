@@ -78,7 +78,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "4894cd89862f43300a3ca9d4cf73b3d9e6034626"
+            revision: "b0eff14c90faafb4e474ed629358c9f7c12d0ea6"
         ),
         workspaceDependency(
             named: "TimingEngine",
@@ -94,7 +94,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "b3fe812175b7cd125aebcfa0bc0127e9baaf3a4c"
+            revision: "52416854d265589227878c189e4ef2185e403b83"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
@@ -102,7 +102,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "5eb111a3c35dfc54285a6b95e72b8f98b2828648"
+            revision: "6acb98640fcee52452e09b380b2e5bd239a14cc9"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
@@ -149,6 +149,7 @@ let package = Package(
                 .product(name: "RTLVerificationCore", package: "RTLVerificationEngine"),
                 .product(name: "DFTCore", package: "DFTEngine"),
                 .product(name: "DFTEngine", package: "DFTEngine"),
+                .product(name: "ATPGEngine", package: "DFTEngine"),
                 .product(name: "PhysicalDesignEngine", package: "PhysicalDesignEngine"),
                 .product(name: "PhysicalDesignCore", package: "PhysicalDesignEngine"),
                 .product(name: "ElectricalSignoffCore", package: "ElectricalSignoffEngine"),

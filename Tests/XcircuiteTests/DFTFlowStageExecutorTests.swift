@@ -30,7 +30,7 @@ struct DFTFlowStageExecutorTests {
             root: root,
             path: "pdk.json",
             artifactID: "pdk",
-            data: Data("{\"process\":\"fixture-process\"}".utf8),
+            data: Data(Self.pdkManifest.utf8),
             kind: .technology,
             role: .input
         )
@@ -95,9 +95,16 @@ struct DFTFlowStageExecutorTests {
             "dft-design-diff",
             "dft-result",
         ])
-        #expect(FileManager.default.fileExists(atPath: root
-            .appending(path: "dft/runs/\(runID)/transformed-design.json")
-            .path))
+        let transformed = try #require(
+            result.artifacts.first {
+                $0.artifactID == "dft-transformed-design"
+            }
+        )
+        #expect(
+            FileManager.default.fileExists(
+                atPath: root.appending(path: transformed.path).path
+            )
+        )
     }
 
     @Test("DFT flow stage rejects a request for another operation")
@@ -464,7 +471,7 @@ struct DFTFlowStageExecutorTests {
             root: root,
             path: "pdk.json",
             artifactID: "pdk",
-            data: Data("{\"process\":\"fixture-process\"}".utf8),
+            data: Data(Self.pdkManifest.utf8),
             kind: .technology,
             role: .input
         )
@@ -676,6 +683,79 @@ struct DFTFlowStageExecutorTests {
             )
         )
     }
+
+    private static let pdkManifest = """
+    {
+      "assets": [
+        {
+          "assetID": "models",
+          "cornerIDs": ["tt"],
+          "format": "SPICE",
+          "kind": "model",
+          "metadata": {},
+          "path": "models.spice",
+          "required": true,
+          "role": "model"
+        }
+      ],
+      "corners": [
+        {
+          "assetIDs": ["models"],
+          "cornerID": "tt",
+          "pvt": {
+            "process": {"name": "tt", "nominal": true},
+            "temperatureCelsius": 25,
+            "voltage": 1
+          },
+          "viewMappings": {"spice": "models"}
+        }
+      ],
+      "crossViewMappings": [
+        {
+          "assetID": "models",
+          "cornerIDs": ["tt"],
+          "deviceIDs": ["nmos"],
+          "layerIDs": ["active"],
+          "logicalNames": [],
+          "mappingID": "canonical",
+          "physicalNames": [],
+          "view": "spice"
+        }
+      ],
+      "devices": [
+        {
+          "aliases": [],
+          "deviceID": "nmos",
+          "extractionRecognition": {
+            "extractorKeys": ["mos.nmos"],
+            "layerIDs": ["active"],
+            "markerNames": []
+          },
+          "modelName": "nmos",
+          "parameterNames": [],
+          "terminals": [
+            {"name": "D", "order": 0, "role": "output"},
+            {"name": "G", "order": 1, "role": "input"},
+            {"name": "S", "order": 2, "role": "output"}
+          ]
+        }
+      ],
+      "layers": [
+        {
+          "aliases": [],
+          "isRoutingLayer": false,
+          "layerID": "active",
+          "name": "ACTIVE",
+          "number": 1,
+          "purpose": "diffusion"
+        }
+      ],
+      "metadata": {"source": "semantic-fixture"},
+      "processID": "fixture-process",
+      "schemaVersion": 1,
+      "version": "1"
+    }
+    """
 
     private func makeRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory

@@ -65,6 +65,13 @@ until after qualification.
 | `physicalDesign` | density, metal fill, physical DFM | `PhysicalDesignRequest`, `PhysicalDesignResult` |
 | `electricalSignoff` | EM, IR drop, ERC, ESD, latch-up, aging | `ElectricalSignoffRequest`, `ElectricalSignoffRunResult` |
 
+A completed DFT record is reopened and checked by DFTEngine's semantic verifier;
+ATPG records require independent gate-level pattern replay. A completed
+electrical record must contain canonical, non-empty, identical expected and
+analyzed entity sets for every retained operating-corner result. Blocked or
+failed electrical results remain negative evidence and are never promoted to a
+passing disposition.
+
 A missing, expired, invalid, or mismatched qualification blocks assembly. It never creates
 a passing record. The assembled records artifact is immutable; an identical retry is
 idempotent and different bytes at the same location are rejected. The assembly,
