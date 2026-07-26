@@ -8,6 +8,8 @@ public struct PDKValidationFlowStageExecutor: FlowStageExecutor {
     public let toolID: String
     private let manifestInput: XcircuiteFlowInputReference
     private let requiredAssetRoles: [PDKAssetRole]
+    private let requiredCornerIDs: [String]
+    private let requireAssetIdentity: Bool
     private let validateCrossViews: Bool
     private let engine: any PDKValidating
     private let support: PDKStageExecutionSupport
@@ -17,6 +19,8 @@ public struct PDKValidationFlowStageExecutor: FlowStageExecutor {
         toolID: String = "pdk-validation",
         manifestInput: XcircuiteFlowInputReference,
         requiredAssetRoles: [PDKAssetRole] = [],
+        requiredCornerIDs: [String] = [],
+        requireAssetIdentity: Bool = false,
         validateCrossViews: Bool = true,
         engine: any PDKValidating
     ) {
@@ -24,6 +28,8 @@ public struct PDKValidationFlowStageExecutor: FlowStageExecutor {
         self.toolID = toolID
         self.manifestInput = manifestInput
         self.requiredAssetRoles = requiredAssetRoles
+        self.requiredCornerIDs = requiredCornerIDs
+        self.requireAssetIdentity = requireAssetIdentity
         self.validateCrossViews = validateCrossViews
         self.engine = engine
         self.support = PDKStageExecutionSupport()
@@ -33,12 +39,16 @@ public struct PDKValidationFlowStageExecutor: FlowStageExecutor {
         stageID: String = "pdk.validate",
         manifestInput: XcircuiteFlowInputReference,
         requiredAssetRoles: [PDKAssetRole] = [],
+        requiredCornerIDs: [String] = [],
+        requireAssetIdentity: Bool = false,
         validateCrossViews: Bool = true
     ) -> PDKValidationFlowStageExecutor {
         PDKValidationFlowStageExecutor(
             stageID: stageID,
             manifestInput: manifestInput,
             requiredAssetRoles: requiredAssetRoles,
+            requiredCornerIDs: requiredCornerIDs,
+            requireAssetIdentity: requireAssetIdentity,
             validateCrossViews: validateCrossViews,
             engine: LocalPDKValidator()
         )
@@ -62,6 +72,8 @@ public struct PDKValidationFlowStageExecutor: FlowStageExecutor {
                 inputs: [pdk.manifest.locator],
                 pdk: pdk,
                 requiredAssetRoles: requiredAssetRoles,
+                requiredCornerIDs: requiredCornerIDs,
+                requireAssetIdentity: requireAssetIdentity,
                 validateCrossViews: validateCrossViews
             )
             let result = try await engine.execute(request)

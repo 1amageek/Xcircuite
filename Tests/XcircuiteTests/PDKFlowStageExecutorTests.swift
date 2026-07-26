@@ -67,6 +67,45 @@ struct PDKFlowStageExecutorTests {
         )
     }
 
+    @Test("production validation profile reaches PDKKit and fails closed")
+    func productionValidationProfileFailsClosed() async throws {
+        let root = try makeRoot(name: "pdk-production-validation-executor")
+        defer { removeRoot(root) }
+        let fixtureRoot = try makeFixtureProject(root: root)
+        let manifestURL = fixtureRoot.appending(path: "valid-pdk/pdk.json")
+        let context = try await makeContext(
+            root: root,
+            runID: "pdk-production-validation-executor"
+        )
+
+        let result = try await PDKValidationFlowStageExecutor.local(
+            manifestInput: .path(manifestURL.path),
+            requiredCornerIDs: ["tt-1v8-25c", "ss-1v6-100c"],
+            requireAssetIdentity: true
+        ).execute(
+            stage: FlowStageDefinition(
+                stageID: "pdk.validate",
+                displayName: "Production PDK validation"
+            ),
+            context: context
+        )
+
+        #expect(result.status == .blocked, "Validation diagnostics: \(result.diagnostics)")
+        let resultURL = try context.xcircuiteRunDirectory()
+            .appending(path: "stages/pdk.validate/raw/pdk-result.json")
+        let persisted = try JSONDecoder().decode(
+            PDKValidationResult.self,
+            from: Data(contentsOf: resultURL)
+        )
+        #expect(persisted.payload.findings.contains {
+            $0.code == "pdk.validation.asset-identity-missing"
+        })
+        #expect(persisted.payload.findings.contains {
+            $0.code == "pdk.validation.required-corner-missing"
+                && $0.entity == "ss-1v6-100c"
+        })
+    }
+
     @Test("corpus stage persists retained evidence with producer lineage")
     func corpusPersistsArtifact() async throws {
         let root = try makeRoot(name: "pdk-corpus-executor")
@@ -180,7 +219,11 @@ struct PDKFlowStageExecutorTests {
     func runtimeSpecRoundTripsPDKExecutors() async throws {
         let specs: [XcircuiteFlowStageExecutorSpec] = [
             .pdkDiscovery(.init(searchRoots: [.path("fixtures")])),
-            .pdkValidation(.init(manifestInput: .path("fixtures/valid-pdk/pdk.json"))),
+            .pdkValidation(.init(
+                manifestInput: .path("fixtures/valid-pdk/pdk.json"),
+                requiredCornerIDs: ["tt-1v8-25c"],
+                requireAssetIdentity: true
+            )),
             .pdkCorpus(.init(
                 suiteInput: .path("fixtures/pdk-corpus.json"),
                 rootInput: .path("fixtures")
@@ -210,6 +253,25 @@ struct PDKFlowStageExecutorTests {
             #expect(decoded == spec)
             try XcircuiteFlowRuntimeSpec(executors: [decoded]).validate()
         }
+
+        let retainedData = Data("""
+        {
+          "stageID": "pdk.validate",
+          "manifestInput": {
+            "kind": "path",
+            "value": "fixtures/valid-pdk/pdk.json"
+          },
+          "requiredAssetRoles": [],
+          "validateCrossViews": true,
+          "tool": {}
+        }
+        """.utf8)
+        let retained = try JSONDecoder().decode(
+            XcircuiteFlowStageExecutorSpec.PDKValidation.self,
+            from: retainedData
+        )
+        #expect(retained.requiredCornerIDs.isEmpty)
+        #expect(retained.requireAssetIdentity == false)
     }
 
     private func makeContext(root: URL, runID: String) async throws -> FlowExecutionContext {

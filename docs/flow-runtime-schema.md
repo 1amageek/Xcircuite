@@ -466,7 +466,7 @@ Supported `kind` values:
 | `timingSTA` | `TimingSTAFlowStageExecutor` | `stageID`, typed `inputs`, `tool` |
 | `timingSignalIntegrity` | `TimingSIFlowStageExecutor` | `stageID`, typed `inputs`, `tool` |
 | `pdkDiscovery` | `PDKDiscoveryFlowStageExecutor` | `stageID`, non-empty `searchRoots`, `tool`; optional `requiredProcessID` |
-| `pdkValidation` | `PDKValidationFlowStageExecutor` | `stageID`, `manifestInput`, `requiredAssetRoles`, `validateCrossViews`, `tool` |
+| `pdkValidation` | `PDKValidationFlowStageExecutor` | `stageID`, `manifestInput`, `requiredAssetRoles`, `validateCrossViews`, `tool`; optional `requiredCornerIDs` and `requireAssetIdentity` enable fail-closed production input locking |
 | `pdkCorpus` | `PDKCorpusValidationFlowStageExecutor` | `stageID`, `suiteInput`, `rootInput`, `tool` |
 | `pdkStandardView` | `PDKStandardViewInspectionFlowStageExecutor` | `stageID`, `manifestInput`, `assetID`, `format`, `tool`; optional external process configuration |
 | `pdkRuleDeck` | `PDKRuleDeckInspectionFlowStageExecutor` | `stageID`, `manifestInput`, `assetID`, `tool`; optional external process configuration |
@@ -479,6 +479,13 @@ Supported `kind` values:
 | `electricalSignoff` | `ElectricalSignoffFlowStageExecutor` | `stageID`, `requestPath`, non-empty unique non-aggregate `axes`, `tool` |
 | `electricalSignoffCorpus` | `ElectricalSignoffCorpusFlowStageExecutor` | `stageID`, `specPath`, `tool`; at most one of `oraclePath` and `oracleProcess` |
 | `electricalRepairRevision` | `ElectricalSignoffRepairRevisionFlowStageExecutor` | `stageID`, `requestPath`, `tool` |
+
+For `pdkValidation`, `requiredCornerIDs` names every process corner locked by
+the selected profile and `requireAssetIdentity` requires PDKKit to verify
+declared SHA-256 and byte count for production-required assets. Retained runtime
+specifications that predate these fields decode with an empty corner list and
+identity locking disabled; production profiles must set both controls
+explicitly.
 
 Schema version 7 has exactly 35 executor discriminators. Each discriminator is
 decoded into its typed value, validated, mapped to a tool descriptor, and

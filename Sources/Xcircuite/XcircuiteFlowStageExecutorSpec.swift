@@ -267,6 +267,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
         public var stageID: String
         public var manifestInput: XcircuiteFlowInputReference
         public var requiredAssetRoles: [PDKAssetRole]
+        public var requiredCornerIDs: [String]
+        public var requireAssetIdentity: Bool
         public var validateCrossViews: Bool
         public var tool: XcircuiteFlowToolSpec
 
@@ -274,14 +276,51 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
             stageID: String = PDKOperation.validation.rawValue,
             manifestInput: XcircuiteFlowInputReference,
             requiredAssetRoles: [PDKAssetRole] = [],
+            requiredCornerIDs: [String] = [],
+            requireAssetIdentity: Bool = false,
             validateCrossViews: Bool = true,
             tool: XcircuiteFlowToolSpec = XcircuiteFlowToolSpec()
         ) {
             self.stageID = stageID
             self.manifestInput = manifestInput
             self.requiredAssetRoles = requiredAssetRoles
+            self.requiredCornerIDs = requiredCornerIDs
+            self.requireAssetIdentity = requireAssetIdentity
             self.validateCrossViews = validateCrossViews
             self.tool = tool
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            stageID = try container.decode(String.self, forKey: .stageID)
+            manifestInput = try container.decode(
+                XcircuiteFlowInputReference.self,
+                forKey: .manifestInput
+            )
+            requiredAssetRoles = try container.decode(
+                [PDKAssetRole].self,
+                forKey: .requiredAssetRoles
+            )
+            requiredCornerIDs = try container.decodeIfPresent(
+                [String].self,
+                forKey: .requiredCornerIDs
+            ) ?? []
+            requireAssetIdentity = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .requireAssetIdentity
+            ) ?? false
+            validateCrossViews = try container.decode(Bool.self, forKey: .validateCrossViews)
+            tool = try container.decode(XcircuiteFlowToolSpec.self, forKey: .tool)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case stageID
+            case manifestInput
+            case requiredAssetRoles
+            case requiredCornerIDs
+            case requireAssetIdentity
+            case validateCrossViews
+            case tool
         }
     }
 
@@ -1347,6 +1386,8 @@ public enum XcircuiteFlowStageExecutorSpec: Sendable, Hashable, Codable {
                 stageID: spec.stageID,
                 manifestInput: spec.manifestInput,
                 requiredAssetRoles: spec.requiredAssetRoles,
+                requiredCornerIDs: spec.requiredCornerIDs,
+                requireAssetIdentity: spec.requireAssetIdentity,
                 validateCrossViews: spec.validateCrossViews
             )
         case .pdkCorpus(let spec):
