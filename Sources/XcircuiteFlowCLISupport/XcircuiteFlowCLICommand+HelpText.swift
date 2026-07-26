@@ -79,9 +79,9 @@ extension XcircuiteFlowCLICommand {
     public static var inspectPlatformCapabilitiesHelpText: String {
         """
         Usage:
-          xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path> --evidence-root <path> [--execute-tests]] [--pretty]
+          xcircuite-flow inspect-platform-capabilities [--run-id <id>] [--generated-at <timestamp>] [--test-evidence <path> --evidence-root <path> [--execute-tests]] [--out <path>] [--pretty]
 
-        Builds the canonical action-domain snapshot and returns milestone readiness for standalone signoff, Agent-operable design loops, human review, standard-format grounding, and post-layout improvement planning. Persisted JSON is audit input only and cannot promote itself to passed. --execute-tests runs each bounded xcodebuild declaration, retains its transcript and execution record under --evidence-root, and supplies the non-serializable in-process verification receipt required for passing readiness.
+        Builds the canonical action-domain snapshot and returns milestone readiness for standalone signoff, Agent-operable design loops, human review, standard-format grounding, and post-layout improvement planning. Persisted JSON is audit input only and cannot promote itself to passed. --execute-tests runs each bounded xcodebuild declaration, retains its transcript and execution record under --evidence-root, and supplies the non-serializable in-process verification receipt required for passing readiness. --out atomically retains the report produced by that invocation.
         """
     }
 

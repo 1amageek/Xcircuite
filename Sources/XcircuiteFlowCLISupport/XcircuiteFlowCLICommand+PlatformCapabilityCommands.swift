@@ -8,6 +8,7 @@ extension XcircuiteFlowCLICommand {
         var generatedAt = "1970-01-01T00:00:00Z"
         var testEvidenceURL: URL?
         var evidenceRoot: URL?
+        var outputURL: URL?
         var executeTests = false
         var pretty = false
 
@@ -24,6 +25,8 @@ extension XcircuiteFlowCLICommand {
                     fileURLWithPath: try parser.requiredValue(after: argument),
                     isDirectory: true
                 ).standardizedFileURL
+            case "--out":
+                outputURL = URL(filePath: try parser.requiredValue(after: argument))
             case "--execute-tests":
                 executeTests = true
             case "--pretty":
@@ -66,6 +69,9 @@ extension XcircuiteFlowCLICommand {
             evidenceRoot: evidenceRoot,
             verifications: verifications
         )
+        if let outputURL {
+            try write(report, to: outputURL, pretty: pretty)
+        }
         return try encode(report, pretty: pretty)
     }
 

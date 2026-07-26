@@ -649,6 +649,36 @@ struct XcircuitePlatformCapabilityReadinessTests {
         #expect(report.nextActions.contains("run-test-evidence:xci-runtime-local-signoff-flow"))
     }
 
+    @Test func platformCapabilityCLIAtomicallyRetainsReadinessReport() async throws {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appending(path: "platform-capability-report-\(UUID().uuidString).json")
+        defer {
+            removeTemporaryEvidence(at: outputURL)
+        }
+
+        let json = try await XcircuiteFlowCLICommand.run(arguments: [
+            "inspect-platform-capabilities",
+            "--run-id",
+            "retained-capabilities",
+            "--generated-at",
+            "2026-07-26T00:00:00Z",
+            "--out",
+            outputURL.path(percentEncoded: false),
+            "--pretty",
+        ])
+        let returned = try JSONDecoder().decode(
+            XcircuitePlatformCapabilityReadinessReport.self,
+            from: Data(json.utf8)
+        )
+        let retained = try JSONDecoder().decode(
+            XcircuitePlatformCapabilityReadinessReport.self,
+            from: Data(contentsOf: outputURL)
+        )
+
+        #expect(retained == returned)
+        #expect(retained.actionDomainRunID == "retained-capabilities")
+    }
+
     @Test func platformCapabilityCLIRejectsUnknownOption() async throws {
         await #expect(throws: XcircuiteFlowCLIError.self) {
             _ = try await XcircuiteFlowCLICommand.run(arguments: [
@@ -667,6 +697,7 @@ struct XcircuitePlatformCapabilityReadinessTests {
 
         #expect(commandHelp.contains("inspect-platform-capabilities"))
         #expect(commandHelp.contains("--test-evidence"))
+        #expect(commandHelp.contains("--out"))
         #expect(commandHelp.contains("standalone signoff"))
         #expect(globalHelp.contains("inspect-platform-capabilities"))
     }
