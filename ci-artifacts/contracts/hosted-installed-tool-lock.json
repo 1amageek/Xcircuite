@@ -54,6 +54,16 @@
       }
     ]
   },
+  "buildDependencies": {
+    "cudd": {
+      "repository": "https://github.com/ivmai/cudd.git",
+      "revision": "f54f533303640afd5dbe47a05ebeabb3066f2a25",
+      "artifacts": [
+        "installed/include/cudd.h",
+        "installed/lib/libcudd.a"
+      ]
+    }
+  },
   "tools": {
     "magic": {
       "repository": "https://github.com/RTimothyEdwards/magic.git",

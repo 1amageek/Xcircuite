@@ -28,13 +28,14 @@ flowchart LR
 
 ## Locked identity
 
-[`hosted-installed-tool-lock.json`](../ci-artifacts/contracts/hosted-installed-tool-lock.json) is the only acquisition and lane inventory. It pins full source revisions for Magic, Netgen, OpenROAD/OpenRCX, OpenSTA, and ngspice. It also pins the Volare version, open_pdks revision, real TT/SS/FF corners, PDK assets, package revisions, test filters, and every process timeout.
+[`hosted-installed-tool-lock.json`](../ci-artifacts/contracts/hosted-installed-tool-lock.json) is the only acquisition and lane inventory. It pins full source revisions for Magic, Netgen, OpenROAD/OpenRCX, OpenSTA, and ngspice. Source-built dependencies are part of the same contract: OpenSTA's CUDD dependency is built from its locked full revision into the qualified prefix, and its installed header and static library are digest-bound in the toolchain manifest. The workflow does not obtain CUDD from an unversioned Homebrew tap. The lock also pins the Volare version, open_pdks revision, real TT/SS/FF corners, PDK assets, package revisions, test filters, and every process timeout.
 
 Each successful toolchain manifest records:
 
 | Identity | Evidence |
 |---|---|
 | Tool source | Repository and full source revision |
+| Source-built dependency | Repository, full source revision, installed artifact path, byte count, and SHA-256 digest |
 | Installed executable | Relative path, byte count, SHA-256 digest, version output |
 | Process | Process name and full open_pdks revision |
 | Corners | TT, SS, and FF identifier, classification, voltage, and ngspice model section |

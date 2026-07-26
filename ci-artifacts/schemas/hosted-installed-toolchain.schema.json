@@ -4,7 +4,7 @@
   "title": "Hosted Installed Toolchain Evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "kind", "status", "generatedAt", "runner", "process", "tools", "diagnostics"],
+  "required": ["schemaVersion", "kind", "status", "generatedAt", "runner", "process", "buildDependencies", "tools", "diagnostics"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "kind": { "const": "hosted-installed-toolchain" },
@@ -12,6 +12,32 @@
     "generatedAt": { "type": "string", "format": "date-time" },
     "runner": { "type": "object" },
     "process": { "type": ["object", "null"] },
+    "buildDependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository", "sourceRevision", "artifacts"],
+        "properties": {
+          "repository": { "type": "string", "format": "uri" },
+          "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "artifacts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256", "byteCount"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "byteCount": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
     "tools": {
       "type": "object",
       "additionalProperties": {

@@ -133,11 +133,18 @@ def validate_lock(lock: dict[str, Any]) -> None:
             "Migrate the lock and this runner together.",
         )
     tools = lock.get("tools")
+    build_dependencies = lock.get("buildDependencies")
     lanes = lock.get("lanes")
     process = lock.get("process")
     timeouts = lock.get("timeouts")
     if not isinstance(tools, dict) or not tools:
         raise MatrixFailure("invalid_lock", "tools must be non-empty.", "Declare pinned tools.")
+    if not isinstance(build_dependencies, dict) or not build_dependencies:
+        raise MatrixFailure(
+            "invalid_lock",
+            "buildDependencies must be non-empty.",
+            "Declare every source-built tool dependency.",
+        )
     if not isinstance(lanes, dict) or not lanes:
         raise MatrixFailure("invalid_lock", "lanes must be non-empty.", "Declare package lanes.")
     if not isinstance(process, dict):
@@ -188,6 +195,46 @@ def validate_lock(lock: dict[str, Any]) -> None:
                     f"tools.{tool_name} does not share source and executable identity with {alias}.",
                     "Keep capability aliases bound to one installed executable identity.",
                 )
+    for dependency_name, dependency in build_dependencies.items():
+        if not isinstance(dependency, dict):
+            raise MatrixFailure(
+                "invalid_lock",
+                f"Build dependency {dependency_name} must be an object.",
+                "Correct the lock.",
+            )
+        revision = require_string(
+            dependency,
+            "revision",
+            f"buildDependencies.{dependency_name}",
+        )
+        if FULL_REVISION.fullmatch(revision) is None:
+            raise MatrixFailure(
+                "unpinned_build_dependency_revision",
+                f"Build dependency {dependency_name} does not use a full Git revision.",
+                "Pin the dependency to a full 40-character commit revision.",
+            )
+        require_string(
+            dependency,
+            "repository",
+            f"buildDependencies.{dependency_name}",
+        )
+        artifacts = dependency.get("artifacts")
+        if (
+            not isinstance(artifacts, list)
+            or not artifacts
+            or not all(isinstance(item, str) and item for item in artifacts)
+        ):
+            raise MatrixFailure(
+                "invalid_lock_field",
+                f"buildDependencies.{dependency_name}.artifacts must be a non-empty string array.",
+                "Declare the installed artifacts that establish dependency identity.",
+            )
+        for artifact in artifacts:
+            contained_path(
+                Path("/hosted-toolchain"),
+                artifact,
+                f"buildDependencies.{dependency_name}.artifacts",
+            )
     process_revision = require_string(process, "revision", "process")
     if FULL_REVISION.fullmatch(process_revision) is None:
         raise MatrixFailure(
@@ -402,6 +449,16 @@ def acquire_tool_sources(lock: dict[str, Any], root: Path, log_root: Path, timeo
         alias = tool.get("aliasOf")
         if alias is not None:
             sources[tool_name] = sources[alias]
+    for dependency_name, dependency in lock["buildDependencies"].items():
+        source = root / "sources" / "build-dependencies" / dependency_name
+        clone_revision(
+            dependency["repository"],
+            dependency["revision"],
+            source,
+            timeout,
+            log_root / f"clone-build-dependency-{dependency_name}.log",
+        )
+        sources[dependency_name] = source
     return sources
 
 
@@ -413,7 +470,6 @@ def install_build_dependencies(log_root: Path, timeout: int) -> None:
         "boost",
         "cairo",
         "cmake",
-        "cudd",
         "eigen",
         "flex",
         "gnu-sed",
@@ -469,6 +525,16 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         ),
     }
     build_autotools_tool(
+        "cudd",
+        sources["cudd"],
+        install_root,
+        ["--enable-shared", "--enable-static"],
+        build_environment,
+        log_root,
+        timeout,
+        run_autogen=False,
+    )
+    build_autotools_tool(
         "magic",
         sources["magic"],
         install_root,
@@ -495,7 +561,8 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         install_root,
         [
             "-DBUILD_SHARED_LIBS=OFF",
-            "-DCUDD_DIR=/opt/homebrew/opt/cudd",
+            f"-DCUDD_LIB={install_root / 'lib' / 'libcudd.a'}",
+            f"-DCUDD_HEADER={install_root / 'include' / 'cudd.h'}",
             "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
         ],
         build_environment,
@@ -702,6 +769,27 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
         }
         if specification.get("aliasOf") is not None:
             tools[tool_name]["aliasOf"] = specification["aliasOf"]
+    build_dependencies: dict[str, Any] = {}
+    for dependency_name, specification in lock["buildDependencies"].items():
+        artifacts: list[dict[str, Any]] = []
+        for relative_path in specification["artifacts"]:
+            path = contained_path(
+                root,
+                relative_path,
+                f"buildDependencies.{dependency_name}.artifacts",
+            )
+            if not path.is_file():
+                raise MatrixFailure(
+                    "build_dependency_artifact_missing",
+                    f"Build dependency {dependency_name} is missing {relative_path}.",
+                    "Inspect the retained dependency build and install logs.",
+                )
+            artifacts.append({"path": relative_path, **file_digest(path)})
+        build_dependencies[dependency_name] = {
+            "repository": specification["repository"],
+            "sourceRevision": specification["revision"],
+            "artifacts": artifacts,
+        }
     assets: list[dict[str, Any]] = []
     pdk_container = pdk_root.parent
     for specification in lock["process"]["assets"]:
@@ -767,6 +855,7 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
             "assets": assets,
             "corners": corners,
         },
+        "buildDependencies": build_dependencies,
         "tools": tools,
         "diagnostics": [],
     }
@@ -817,6 +906,7 @@ def acquire(args: argparse.Namespace) -> int:
             "generatedAt": utc_now(),
             "runner": {"lockImage": lock.get("runner") if lock is not None else None},
             "process": lock.get("process") if lock is not None else None,
+            "buildDependencies": {},
             "tools": {},
             "diagnostics": [failure.diagnostic()],
         }
@@ -877,6 +967,55 @@ def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], 
                 f"Tool {tool_name} failed executable integrity verification.",
                 "Discard the artifact and rerun acquisition.",
             )
+    build_dependencies = manifest.get("buildDependencies")
+    if (
+        not isinstance(build_dependencies, dict)
+        or set(build_dependencies) != set(lock["buildDependencies"])
+    ):
+        raise MatrixFailure(
+            "build_dependency_identity_mismatch",
+            "Build dependency set does not match the lock.",
+            "Discard the artifact and rerun acquisition.",
+        )
+    for dependency_name, locked in lock["buildDependencies"].items():
+        recorded = build_dependencies.get(dependency_name)
+        if (
+            not isinstance(recorded, dict)
+            or recorded.get("repository") != locked["repository"]
+            or recorded.get("sourceRevision") != locked["revision"]
+        ):
+            raise MatrixFailure(
+                "build_dependency_revision_mismatch",
+                f"Build dependency {dependency_name} does not match its locked source.",
+                "Discard the artifact and rerun acquisition.",
+            )
+        artifacts = recorded.get("artifacts")
+        if (
+            not isinstance(artifacts, list)
+            or {item.get("path") for item in artifacts if isinstance(item, dict)}
+            != set(locked["artifacts"])
+        ):
+            raise MatrixFailure(
+                "build_dependency_artifact_set_mismatch",
+                f"Build dependency {dependency_name} artifacts do not match the lock.",
+                "Discard the artifact and rerun acquisition.",
+            )
+        for artifact in artifacts:
+            path = contained_path(
+                root,
+                artifact["path"],
+                f"buildDependencies.{dependency_name}.artifacts",
+            )
+            identity = file_digest(path)
+            if (
+                identity["sha256"] != artifact.get("sha256")
+                or identity["byteCount"] != artifact.get("byteCount")
+            ):
+                raise MatrixFailure(
+                    "build_dependency_digest_mismatch",
+                    f"Build dependency {dependency_name} failed artifact integrity verification.",
+                    "Discard the artifact and rerun acquisition.",
+                )
     recorded_assets = process.get("assets")
     if not isinstance(recorded_assets, list):
         raise MatrixFailure("toolchain_manifest_invalid", "Missing process assets.", "Regenerate the artifact.")

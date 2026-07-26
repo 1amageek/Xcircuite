@@ -22,12 +22,32 @@ MODULE_SPEC.loader.exec_module(MATRIX)
 
 
 class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
+    def test_checked_in_lock_pins_source_built_dependencies(self) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+
+        MATRIX.validate_lock(lock)
+
+        cudd = lock["buildDependencies"]["cudd"]
+        self.assertRegex(cudd["revision"], r"^[0-9a-f]{40}$")
+        self.assertEqual(
+            set(cudd["artifacts"]),
+            {
+                "installed/include/cudd.h",
+                "installed/lib/libcudd.a",
+            },
+        )
+
     def test_magic_headless_build_disables_incompatible_bundled_readline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             sources = {
                 name: root / name
-                for name in ("magic", "netgen", "opensta", "openroad", "ngspice")
+                for name in ("cudd", "magic", "netgen", "opensta", "openroad", "ngspice")
             }
             for source in sources.values():
                 source.mkdir()
@@ -62,7 +82,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             root = Path(temporary_directory)
             sources = {
                 name: root / name
-                for name in ("magic", "netgen", "opensta", "openroad", "ngspice")
+                for name in ("cudd", "magic", "netgen", "opensta", "openroad", "ngspice")
             }
             for source in sources.values():
                 source.mkdir()
@@ -89,13 +109,20 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 if call.args[0] == "opensta"
             )
             options = opensta_build.args[3]
-            self.assertIn("-DCUDD_DIR=/opt/homebrew/opt/cudd", options)
+            self.assertIn(
+                f"-DCUDD_LIB={root / 'installed' / 'lib' / 'libcudd.a'}",
+                options,
+            )
+            self.assertIn(
+                f"-DCUDD_HEADER={root / 'installed' / 'include' / 'cudd.h'}",
+                options,
+            )
             self.assertIn(
                 "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
                 options,
             )
 
-    def test_acquisition_installs_opensta_cudd_dependency(self) -> None:
+    def test_acquisition_does_not_use_an_unpinned_cudd_formula(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             with patch.object(MATRIX, "run_command") as command:
                 MATRIX.install_build_dependencies(
@@ -105,7 +132,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
 
             formulas = command.call_args.args[0]
             self.assertEqual(formulas[:2], ["brew", "install"])
-            self.assertIn("cudd", formulas[2:])
+            self.assertNotIn("cudd", formulas[2:])
 
 
 if __name__ == "__main__":
