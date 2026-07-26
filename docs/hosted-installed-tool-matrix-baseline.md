@@ -25,6 +25,7 @@ contract.
 | [30200668102](https://github.com/1amageek/Xcircuite/actions/runs/30200668102) | `ebc19a812340731d61ed81dd3aa29846886f79b8` | Dependency API compatibility | Netgen completed installation and OpenROAD reached 70%, but the pinned fmt 12.1 compatibility header no longer re-exported `fmt::format` required by OpenROAD's pinned slang source. | `b99a5807e21e2cbbbf844516f4301b3b2b560b03` |
 | [30202503357](https://github.com/1amageek/Xcircuite/actions/runs/30202503357) | `5dd888a6785015dfd6a6f3476d84eaeab3cefd7b` | Dependency selection and API compatibility | Slang required fmt 12.1 or newer, rejected the pinned 11.2 CMake package, and selected an unpinned Homebrew fmt 12.2 whose lightweight `core.h` no longer declares `fmt::format`. | `844c6ea81b38ceee3897b7d4af8d49b1d878fb3f` |
 | [30203381430](https://github.com/1amageek/Xcircuite/actions/runs/30203381430) | `bc1564959f79ee27f4d4ea7839b7647656339c09` | Undeclared binding surface | OpenROAD built the unused Python/SWIG bindings, whose hosted Python 3.14 link introduced an undeclared `zstd` dependency and failed at 77%. | `2d64d9589beab581c56c5f858396083caa846a75` |
+| [30205109019](https://github.com/1amageek/Xcircuite/actions/runs/30205109019) | `88067bc63ceecf667cac4622f5ceed49eec107f3` | Dependency discovery | With Python disabled, OpenROAD reached 85%, but the OpenDB Tcl `odbtcl` target still linked `zstd` without a declared keg or CMake prefix. | `c39a9d436b2c48311981a9db6900f674f1d698eb` |
 
 ## Invariants confirmed
 
@@ -32,8 +33,9 @@ contract.
 - No package lane ran after an unqualified acquisition.
 - The publication job treated all missing lane evidence as blocked.
 - Magic, Netgen, CUDD, fmt, and OpenSTA now advance through installation;
-  OpenROAD now reaches 77% and the declared headless Tcl/CLI realization
-  excludes unused GUI, Python, and upstream-test surfaces.
+  OpenROAD reaches 85%. The declared headless realization excludes unused GUI,
+  Python, and upstream-test surfaces, while its consumed Tcl surface retains an
+  explicit `zstd` build dependency.
 - CUDD is source-built from a full revision and its installed bytes are part of
   the realization identity.
 - The checked-in corpus and profile identity are independent from volatile
@@ -42,8 +44,7 @@ contract.
 ## Active continuation
 
 The next dispatched run must prove that the headless OpenROAD executable
-completes without the undeclared Python `zstd` link. A local diagnostic build
-of the exact pinned Yosys revision also exposed the foundry model's required
-empty `UNIT_DELAY` macro; the process-owned Verilog definitions are now locked
-and copied into the manifest for Yosys, Icarus, and Verilator. Hosted logic and
-RTL-verification lanes must still execute before M0 can close.
+completes with the explicit `zstd` keg and prefix. If acquisition succeeds, all
+package lanes must execute from that single archive. The added DFT lane then
+must retain real OpenROAD scan insertion, Yosys equivalence, DFTEngine
+ATPG/STIL artifacts, and Icarus fault correlation before M0 can close.
