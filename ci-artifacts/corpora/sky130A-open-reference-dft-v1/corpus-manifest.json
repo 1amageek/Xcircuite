@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "profileID": "sky130A-open-reference-dft-v1",
+  "designID": "sky130-hd-scan-1",
+  "artifacts": [
+    {
+      "role": "designContract",
+      "path": "design-contract.json",
+      "sha256": "4be7458ac1020465b9cba2c9733f19689e3a2367bd4df77758d31fd9d54a4a96",
+      "byteCount": 423
+    },
+    {
+      "role": "sourceNetlist",
+      "path": "source.v",
+      "sha256": "fe7200a7d93d888c4c4228ca02972aa839cc4dd58aba885efb22d0022debe129",
+      "byteCount": 289
+    },
+    {
+      "role": "scanConstraints",
+      "path": "constraints.sdc",
+      "sha256": "74c98effd52b1a99a3f7612b9e1a4ea23da72c60ea2074a45dd13e24959bfa74",
+      "byteCount": 147
+    },
+    {
+      "role": "pdkIdentity",
+      "path": "pdk-identity.json",
+      "sha256": "5564615f19ed21b413fd01160222ef69991a59d53c1597cb49f4e4d3e1c391df",
+      "byteCount": 139
+    },
+    {
+      "role": "scanCellLibrary",
+      "path": "cell-library.json",
+      "sha256": "cd4ca877a4936f42918edab18b6d31ed66a0ce5ea6e774277228690ee33c8c3f",
+      "byteCount": 1325
+    }
+  ]
+}

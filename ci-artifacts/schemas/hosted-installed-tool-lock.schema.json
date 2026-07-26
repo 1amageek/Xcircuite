@@ -4,7 +4,7 @@
   "title": "Hosted Installed Tool Matrix Lock",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "runner", "runnerEnvironment", "retentionDays", "corpus", "process", "buildDependencies", "tools", "lanes", "timeouts"],
+  "required": ["schemaVersion", "runner", "runnerEnvironment", "retentionDays", "corpus", "dftCorpus", "process", "buildDependencies", "tools", "lanes", "timeouts"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "runner": { "const": "macos-26" },
@@ -20,17 +20,8 @@
       }
     },
     "retentionDays": { "type": "integer", "minimum": 1 },
-    "corpus": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["profileID", "repositoryPath", "sha256", "byteCount"],
-      "properties": {
-        "profileID": { "type": "string", "minLength": 1 },
-        "repositoryPath": { "type": "string", "minLength": 1 },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "byteCount": { "type": "integer", "minimum": 1 }
-      }
-    },
+    "corpus": { "$ref": "#/$defs/corpus" },
+    "dftCorpus": { "$ref": "#/$defs/corpus" },
     "process": {
       "type": "object",
       "required": ["name", "revision", "verilogDefines", "acquisitionClient", "assets", "corners"],
@@ -81,13 +72,24 @@
     },
     "lanes": {
       "type": "object",
-      "minProperties": 9,
+      "minProperties": 10,
       "additionalProperties": { "$ref": "#/$defs/lane" }
     },
     "timeouts": { "type": "object" }
   },
   "$defs": {
     "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileID", "repositoryPath", "sha256", "byteCount"],
+      "properties": {
+        "profileID": { "type": "string", "minLength": 1 },
+        "repositoryPath": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "byteCount": { "type": "integer", "minimum": 1 }
+      }
+    },
     "buildDependency": {
       "type": "object",
       "additionalProperties": false,

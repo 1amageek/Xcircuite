@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "designID": "sky130-hd-scan-1",
+  "logicalTop": "hosted_dft_probe",
+  "clockPort": "clock",
+  "dataInputPort": "data_in",
+  "setPort": "set_b",
+  "dataOutputPort": "data_out",
+  "testModePort": "test_mode",
+  "scanEnablePort": "scan_enable_0",
+  "scanInputPort": "scan_in_0",
+  "scanDomainID": "default",
+  "functionalCell": "sky130_fd_sc_hd__dfstp_1",
+  "scanCell": "sky130_fd_sc_hd__sdfsbp_1"
+}

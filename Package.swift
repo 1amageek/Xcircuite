@@ -95,7 +95,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "5000d14f7fe94f09d97134ef0b238b25c1ae2412"
+            revision: "5df7494371751b81d374f04adf9e74a82d62e34a"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",

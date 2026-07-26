@@ -69,6 +69,7 @@ jobs:
         lane:
           - logic
           - rtl-verification
+          - dft
           - drc
           - lvs
           - pex

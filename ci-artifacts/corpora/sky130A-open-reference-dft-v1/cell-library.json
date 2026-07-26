@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "processID": "sky130A",
+  "version": "sky130A-open-reference-v1",
+  "pdkDigest": "5564615f19ed21b413fd01160222ef69991a59d53c1597cb49f4e4d3e1c391df",
+  "bindings": [
+    {
+      "bindingID": "sky130-hd-dfstp-to-sdfsbp",
+      "functionalCellType": "sky130_fd_sc_hd__dfstp_1",
+      "scanCellType": "sky130_fd_sc_hd__sdfsbp_1",
+      "dataPinName": "D",
+      "outputPinName": "Q",
+      "clockPinNames": [
+        "CLK"
+      ],
+      "resetPinNames": [],
+      "resetPolarity": "activeHigh",
+      "setPinNames": [
+        "SET_B"
+      ],
+      "setPolarity": "activeLow",
+      "controlTiming": "asynchronous",
+      "clockEdge": "rising",
+      "elementKind": "edgeTriggered",
+      "latchEnablePolarity": "activeHigh",
+      "scanInPinName": "SCD",
+      "scanEnablePinName": "SCE",
+      "requiredTimingPinNames": [
+        "CLK",
+        "D",
+        "Q",
+        "SET_B"
+      ]
+    }
+  ],
+  "evidenceProvenance": {
+    "status": "corpusObserved",
+    "corpusRevision": "sky130A-open-reference-dft-v1",
+    "processID": "sky130A",
+    "pdkDigest": "5564615f19ed21b413fd01160222ef69991a59d53c1597cb49f4e4d3e1c391df",
+    "requestDigests": [],
+    "notes": [
+      "OpenROAD scan replacement mapping at the locked source revision; production trust remains ToolQualification-owned."
+    ]
+  }
+}

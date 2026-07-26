@@ -206,6 +206,29 @@ def require_finite_number(
     return float(value)
 
 
+def validate_corpus_lock(
+    corpus: Any,
+    key: str,
+) -> None:
+    if not isinstance(corpus, dict):
+        raise MatrixFailure(
+            "invalid_lock",
+            f"{key} must be an object.",
+            "Declare an immutable checked-in corpus.",
+        )
+    require_string(corpus, "profileID", key)
+    corpus_path = require_string(corpus, "repositoryPath", key)
+    contained_path(Path("/repository"), corpus_path, f"{key}.repositoryPath")
+    corpus_digest = require_string(corpus, "sha256", key)
+    if re.fullmatch(r"[0-9a-f]{64}", corpus_digest) is None:
+        raise MatrixFailure(
+            "invalid_lock_field",
+            f"{key}.sha256 must be a SHA-256 digest.",
+            "Hash the exact checked-in corpus manifest.",
+        )
+    require_integer(corpus, "byteCount", key)
+
+
 def validate_lock(lock: dict[str, Any]) -> None:
     if lock.get("schemaVersion") != SCHEMA_VERSION:
         raise MatrixFailure(
@@ -218,6 +241,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
     lanes = lock.get("lanes")
     process = lock.get("process")
     corpus = lock.get("corpus")
+    dft_corpus = lock.get("dftCorpus")
     timeouts = lock.get("timeouts")
     runner_environment = lock.get("runnerEnvironment")
     if not isinstance(tools, dict) or not tools:
@@ -232,12 +256,8 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MatrixFailure("invalid_lock", "lanes must be non-empty.", "Declare package lanes.")
     if not isinstance(process, dict):
         raise MatrixFailure("invalid_lock", "process must be an object.", "Declare a pinned process.")
-    if not isinstance(corpus, dict):
-        raise MatrixFailure(
-            "invalid_lock",
-            "corpus must be an object.",
-            "Declare one immutable checked-in corpus.",
-        )
+    validate_corpus_lock(corpus, "corpus")
+    validate_corpus_lock(dft_corpus, "dftCorpus")
     if not isinstance(timeouts, dict):
         raise MatrixFailure("invalid_lock", "timeouts must be an object.", "Declare bounded timeouts.")
     if not isinstance(runner_environment, dict):
@@ -253,17 +273,6 @@ def validate_lock(lock: dict[str, Any]) -> None:
         "developerDirectory",
         "runnerEnvironment",
     )
-    require_string(corpus, "profileID", "corpus")
-    corpus_path = require_string(corpus, "repositoryPath", "corpus")
-    contained_path(Path("/repository"), corpus_path, "corpus.repositoryPath")
-    corpus_digest = require_string(corpus, "sha256", "corpus")
-    if re.fullmatch(r"[0-9a-f]{64}", corpus_digest) is None:
-        raise MatrixFailure(
-            "invalid_lock_field",
-            "corpus.sha256 must be a SHA-256 digest.",
-            "Hash the exact checked-in corpus manifest.",
-        )
-    require_integer(corpus, "byteCount", "corpus")
     acquisition_client = process.get("acquisitionClient")
     if not isinstance(acquisition_client, dict):
         raise MatrixFailure("invalid_lock", "process.acquisitionClient must be an object.", "Pin the PDK client.")
@@ -528,12 +537,35 @@ def validate_lock(lock: dict[str, Any]) -> None:
         "electrical-signoff": "ngspice-dc",
     }
     for lane_name, oracle in required_corner_oracles.items():
+        if lane_name not in lanes:
+            raise MatrixFailure(
+                "required_lane_missing",
+                f"The lock is missing required lane {lane_name}.",
+                "Restore the production lane inventory.",
+            )
         if oracle not in lanes[lane_name]["oracles"]:
             raise MatrixFailure(
                 "corner_oracle_missing",
                 f"Lane {lane_name} must execute {oracle} at every corner.",
                 "Restore the required real corner oracle.",
             )
+    required_dft_oracles = {
+        "openroad-dft",
+        "yosys-dft-equivalence",
+        "iverilog-dft-replay",
+    }
+    if "dft" not in lanes or set(lanes["dft"]["oracles"]) != required_dft_oracles:
+        raise MatrixFailure(
+            "dft_oracle_inventory_mismatch",
+            "The DFT lane must execute scan insertion, functional equivalence, and pattern replay.",
+            "Restore the complete real-tool DFT oracle inventory.",
+        )
+    if "xcircuite" not in lanes:
+        raise MatrixFailure(
+            "required_lane_missing",
+            "The lock is missing the Xcircuite integration lane.",
+            "Restore the production integration lane.",
+        )
     xcircuite_tests = lanes["xcircuite"]["tests"]
     for suite in ("EndToEndDesignFlowTests", "ReleaseFlowStageExecutorTests", "ReleaseSignoffRawEvidenceValidatorTests"):
         if not any(suite in test_filter for test_filter in xcircuite_tests):
@@ -742,6 +774,7 @@ def install_build_dependencies(log_root: Path, timeout: int) -> None:
         "readline",
         "swig",
         "tcl-tk",
+        "zstd",
         "zlib",
     ]
     run_command(
@@ -791,6 +824,8 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
                 "/usr/local/opt/or-tools",
                 "/opt/homebrew/opt/tcl-tk@8",
                 "/usr/local/opt/tcl-tk@8",
+                "/opt/homebrew/opt/zstd",
+                "/usr/local/opt/zstd",
                 os.environ.get("CMAKE_PREFIX_PATH", ""),
             ]
         ),
@@ -1788,14 +1823,15 @@ def materialize_corpus(
     lock_path: Path,
     lock: dict[str, Any],
     probe_root: Path,
+    corpus_key: str = "corpus",
 ) -> None:
     probe_root.mkdir(parents=True, exist_ok=True)
     repository_root = lock_path.parents[2]
-    corpus_lock = lock["corpus"]
+    corpus_lock = lock[corpus_key]
     manifest_path = contained_path(
         repository_root,
         corpus_lock["repositoryPath"],
-        "corpus.repositoryPath",
+        f"{corpus_key}.repositoryPath",
     )
     manifest_identity = file_digest(manifest_path)
     if (
@@ -1811,7 +1847,6 @@ def materialize_corpus(
     if (
         manifest.get("schemaVersion") != 1
         or manifest.get("profileID") != corpus_lock["profileID"]
-        or manifest.get("designID") != "sky130-hd-buffer-1"
     ):
         raise MatrixFailure(
             "corpus_manifest_identity_mismatch",
@@ -1825,12 +1860,41 @@ def materialize_corpus(
             "The checked-in corpus manifest has no artifact inventory.",
             "Declare every immutable corpus input.",
         )
-    expected_paths = {
-        "designContract": "design-contract.json",
-        "logicalNetlist": "design.v",
-        "logicTestbench": "logic-testbench.sv",
-        "electricalTemplate": "electrical-template.cir",
+    corpus_contracts = {
+        "corpus": {
+            "designID": "sky130-hd-buffer-1",
+            "artifacts": {
+                "designContract": "design-contract.json",
+                "logicalNetlist": "design.v",
+                "logicTestbench": "logic-testbench.sv",
+                "electricalTemplate": "electrical-template.cir",
+            },
+        },
+        "dftCorpus": {
+            "designID": "sky130-hd-scan-1",
+            "artifacts": {
+                "designContract": "design-contract.json",
+                "sourceNetlist": "source.v",
+                "scanConstraints": "constraints.sdc",
+                "pdkIdentity": "pdk-identity.json",
+                "scanCellLibrary": "cell-library.json",
+            },
+        },
     }
+    contract = corpus_contracts.get(corpus_key)
+    if contract is None:
+        raise MatrixFailure(
+            "unknown_corpus",
+            f"No materialization contract exists for {corpus_key}.",
+            "Add an explicit immutable corpus contract.",
+        )
+    if manifest.get("designID") != contract["designID"]:
+        raise MatrixFailure(
+            "corpus_manifest_identity_mismatch",
+            f"The {corpus_key} manifest does not identify {contract['designID']}.",
+            "Restore the locked production corpus identity.",
+        )
+    expected_paths = contract["artifacts"]
     artifacts_by_role = {
         item.get("role"): item
         for item in artifacts
@@ -1869,6 +1933,29 @@ def artifact_input(role: str, path: Path) -> dict[str, Any]:
     return {"role": role, "path": str(path), **file_digest(path)}
 
 
+def corpus_identity(
+    design_definition: dict[str, Any],
+    inputs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    canonical_bytes = json.dumps(
+        [
+            {
+                "role": item["role"],
+                "sha256": item["sha256"],
+                "byteCount": item["byteCount"],
+            }
+            for item in inputs
+        ],
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return {
+        "sha256": hashlib.sha256(canonical_bytes).hexdigest(),
+        "designDefinition": design_definition,
+        "artifacts": inputs,
+    }
+
+
 def probe_input_identity(probe_root: Path, manifest: dict[str, Any], root: Path) -> dict[str, Any]:
     inputs = [
         artifact_input("corpusManifest", probe_root / "corpus-manifest.json"),
@@ -1879,15 +1966,111 @@ def probe_input_identity(probe_root: Path, manifest: dict[str, Any], root: Path)
         artifact_input("physicalLayout", manifest_asset(manifest, root, "standardCellGDS")),
         artifact_input("schematicNetlist", manifest_asset(manifest, root, "standardCellSPICE")),
     ]
-    canonical_bytes = json.dumps(
-        [{"role": item["role"], "sha256": item["sha256"], "byteCount": item["byteCount"]} for item in inputs],
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
+    return corpus_identity(
+        load_json(probe_root / "design-contract.json"),
+        inputs,
+    )
+
+
+def dft_probe_input_identity(probe_root: Path) -> dict[str, Any]:
+    inputs = [
+        artifact_input("corpusManifest", probe_root / "corpus-manifest.json"),
+        artifact_input("designContract", probe_root / "design-contract.json"),
+        artifact_input("sourceNetlist", probe_root / "source.v"),
+        artifact_input("scanConstraints", probe_root / "constraints.sdc"),
+        artifact_input("pdkIdentity", probe_root / "pdk-identity.json"),
+        artifact_input("scanCellLibrary", probe_root / "cell-library.json"),
+    ]
+    return corpus_identity(
+        load_json(probe_root / "design-contract.json"),
+        inputs,
+    )
+
+
+def dft_artifact_reference(
+    workspace: Path,
+    path: Path,
+    *,
+    artifact_id: str,
+    kind: str,
+    artifact_format: str,
+) -> dict[str, Any]:
+    resolved_workspace = workspace.resolve()
+    resolved_path = path.resolve()
+    if resolved_workspace != resolved_path and resolved_workspace not in resolved_path.parents:
+        raise MatrixFailure(
+            "dft_artifact_outside_workspace",
+            f"DFT artifact {path} is outside {workspace}.",
+            "Materialize every DFT CLI input below the immutable workspace root.",
+        )
+    identity = file_digest(resolved_path)
     return {
-        "sha256": hashlib.sha256(canonical_bytes).hexdigest(),
-        "designDefinition": load_json(probe_root / "design-contract.json"),
-        "artifacts": inputs,
+        "id": artifact_id,
+        "locator": {
+            "location": {
+                "storage": "workspaceRelative",
+                "value": str(resolved_path.relative_to(resolved_workspace)),
+            },
+            "role": "input",
+            "kind": kind,
+            "format": artifact_format,
+        },
+        "digest": {
+            "algorithm": "sha256",
+            "hexadecimalValue": identity["sha256"],
+        },
+        "byteCount": identity["byteCount"],
+    }
+
+
+def dft_artifact_path(
+    workspace: Path,
+    reference: dict[str, Any],
+    context: str,
+) -> Path:
+    locator = reference.get("locator")
+    location = locator.get("location") if isinstance(locator, dict) else None
+    if (
+        not isinstance(location, dict)
+        or location.get("storage") != "workspaceRelative"
+        or not isinstance(location.get("value"), str)
+    ):
+        raise MatrixFailure(
+            "dft_artifact_locator_invalid",
+            f"{context} does not use a workspace-relative artifact locator.",
+            "Retain DFTEngine artifacts below the lane workspace.",
+        )
+    return contained_path(workspace, location["value"], context)
+
+
+def dft_tool_descriptor(
+    manifest: dict[str, Any],
+    tool_name: str,
+    *,
+    engine_id: str,
+    implementation_id: str,
+    companion_name: str | None = None,
+) -> dict[str, str]:
+    tool = manifest["tools"][tool_name]
+    realization = tool
+    if companion_name is not None:
+        companions = [
+            item
+            for item in tool.get("companions", [])
+            if isinstance(item, dict) and item.get("name") == companion_name
+        ]
+        if len(companions) != 1:
+            raise MatrixFailure(
+                "dft_tool_companion_missing",
+                f"DFT replay requires exactly one {companion_name} realization.",
+                "Restore the locked compiler companion identity.",
+            )
+        realization = companions[0]
+    return {
+        "engineID": engine_id,
+        "implementationID": implementation_id,
+        "implementationVersion": tool["sourceRevision"],
+        "binaryDigest": realization["executableSHA256"],
     }
 
 
@@ -2378,6 +2561,714 @@ def run_xcodebuild_lane(
     return invocations
 
 
+def run_openroad_dft_oracle(
+    lock: dict[str, Any],
+    manifest: dict[str, Any],
+    toolchain_root: Path,
+    probe_root: Path,
+    log_root: Path,
+    design_identity: str,
+) -> dict[str, Any]:
+    design = load_json(probe_root / "design-contract.json")
+    transformed_netlist = probe_root / "openroad-scan.v"
+    transformed_def = probe_root / "openroad-scan.def"
+    script = probe_root / "openroad-dft.tcl"
+    timing_library = manifest_corner_asset(
+        manifest,
+        toolchain_root,
+        manifest["process"]["corners"][0]["id"],
+        "timingLibrary",
+    )
+    script.write_text(
+        "\n".join([
+            f"read_lef {manifest_asset(manifest, toolchain_root, 'technologyLEF')}",
+            f"read_lef {manifest_asset(manifest, toolchain_root, 'libraryLEF')}",
+            f"read_liberty {timing_library}",
+            f"read_verilog {probe_root / 'source.v'}",
+            f"link_design {design['logicalTop']}",
+            "initialize_floorplan -die_area {0 0 100 100} -core_area {10 10 90 90} -site unithd",
+            f"create_clock -name scan_clock -period 10 [get_ports {design['clockPort']}]",
+            "set_dft_config -max_length 10 -max_chains 1",
+            "scan_replace",
+            "report_dft_plan -verbose",
+            "execute_dft_plan",
+            f"write_verilog {transformed_netlist}",
+            f"write_def {transformed_def}",
+            "puts HOSTED_OPENROAD_DFT_COMPLETE",
+            "exit",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    log_path = log_root / "openroad-dft.log"
+    record = run_command(
+        [
+            str(tool_path(lock, toolchain_root, "openroad")),
+            "-no_init",
+            "-exit",
+            str(script),
+        ],
+        cwd=probe_root,
+        timeout=lock["timeouts"]["oracleSeconds"],
+        log_path=log_path,
+    )
+    output = log_path.read_text(encoding="utf-8", errors="replace")
+    if "HOSTED_OPENROAD_DFT_COMPLETE" not in output:
+        raise MatrixFailure(
+            "openroad_dft_completion_unverified",
+            "OpenROAD exited without the DFT completion marker.",
+            "Inspect the retained scan insertion log and driver.",
+        )
+    if (
+        not transformed_netlist.is_file()
+        or transformed_netlist.stat().st_size == 0
+        or not transformed_def.is_file()
+        or transformed_def.stat().st_size == 0
+        or "SCANCHAINS" not in transformed_def.read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+    ):
+        raise MatrixFailure(
+            "openroad_dft_outputs_incomplete",
+            "OpenROAD did not retain both a scan netlist and DEF SCANCHAINS.",
+            "Correct the DFT configuration before canonical import.",
+        )
+    record.update({
+        "oracle": "openroad-dft",
+        "cornerID": None,
+        "designIdentitySHA256": design_identity,
+        "consumedInputs": [
+            artifact_input("driver", script),
+            artifact_input("sourceNetlist", probe_root / "source.v"),
+            artifact_input(
+                "technologyLEF",
+                manifest_asset(manifest, toolchain_root, "technologyLEF"),
+            ),
+            artifact_input(
+                "libraryLEF",
+                manifest_asset(manifest, toolchain_root, "libraryLEF"),
+            ),
+            artifact_input("timingLibrary", timing_library),
+        ],
+        "outputArtifacts": [
+            artifact_input("transformedNetlist", transformed_netlist),
+            artifact_input("scanDEF", transformed_def),
+            artifact_input("executionEvidence", log_path),
+        ],
+    })
+    return record
+
+
+def run_yosys_dft_equivalence_oracle(
+    lock: dict[str, Any],
+    manifest: dict[str, Any],
+    toolchain_root: Path,
+    probe_root: Path,
+    log_root: Path,
+    design_identity: str,
+) -> dict[str, Any]:
+    design = load_json(probe_root / "design-contract.json")
+    transformed_netlist = probe_root / "openroad-scan.v"
+    wrapper = probe_root / "dft-functional-wrapper.v"
+    wrapper.write_text(
+        "\n".join([
+            "module gate(",
+            f"  input {design['clockPort']},",
+            f"  input {design['dataInputPort']},",
+            f"  input {design['setPort']},",
+            f"  input {design['testModePort']},",
+            f"  output {design['dataOutputPort']}",
+            ");",
+            f"  {design['logicalTop']}_scan scan_design(",
+            f"    .{design['clockPort']}({design['clockPort']}),",
+            f"    .{design['dataInputPort']}({design['dataInputPort']}),",
+            f"    .{design['setPort']}({design['setPort']}),",
+            f"    .{design['testModePort']}({design['testModePort']}),",
+            f"    .{design['scanEnablePort']}(1'b0),",
+            f"    .{design['scanInputPort']}(1'b0),",
+            f"    .{design['dataOutputPort']}({design['dataOutputPort']})",
+            "  );",
+            "endmodule",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+    standard_cell_verilog = manifest_asset(
+        manifest,
+        toolchain_root,
+        "standardCellVerilog",
+    )
+    standard_cell_primitives = manifest_asset(
+        manifest,
+        toolchain_root,
+        "standardCellVerilogPrimitives",
+    )
+    definitions = process_verilog_definitions(manifest) + ["NO_PRIMITIVES=1"]
+    definition_arguments = " ".join(f"-D {item}" for item in definitions)
+    script = probe_root / "yosys-dft-equivalence.ys"
+    script.write_text(
+        "\n".join([
+            f"read_verilog {definition_arguments} {standard_cell_primitives}",
+            f"read_verilog {definition_arguments} {standard_cell_verilog}",
+            f"read_verilog {probe_root / 'source.v'}",
+            f"hierarchy -check -top {design['logicalTop']}",
+            "proc",
+            "flatten",
+            "opt",
+            f"rename {design['logicalTop']} gold",
+            "design -save gold_design",
+            "design -reset",
+            f"read_verilog {definition_arguments} {standard_cell_primitives}",
+            f"read_verilog {definition_arguments} {standard_cell_verilog}",
+            f"read_verilog {transformed_netlist}",
+            f"rename {design['logicalTop']} {design['logicalTop']}_scan",
+            f"read_verilog {wrapper}",
+            "hierarchy -check -top gate",
+            "proc",
+            "flatten",
+            "opt",
+            "design -copy-from gold_design -as gold gold",
+            "equiv_make gold gate equivalence",
+            "hierarchy -check -top equivalence",
+            "equiv_simple",
+            "equiv_induct -undef -seq 4",
+            "equiv_status -assert",
+            "log HOSTED_YOSYS_DFT_EQUIVALENCE_COMPLETE",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    log_path = log_root / "yosys-dft-equivalence.log"
+    record = run_command(
+        [
+            str(tool_path(lock, toolchain_root, "yosys")),
+            "-s",
+            str(script),
+        ],
+        cwd=probe_root,
+        timeout=lock["timeouts"]["oracleSeconds"],
+        log_path=log_path,
+    )
+    output = log_path.read_text(encoding="utf-8", errors="replace")
+    if (
+        "HOSTED_YOSYS_DFT_EQUIVALENCE_COMPLETE" not in output
+        or "Equivalence successfully proven" not in output
+    ):
+        raise MatrixFailure(
+            "yosys_dft_equivalence_unverified",
+            "Yosys did not prove functional-mode scan equivalence.",
+            "Inspect the retained formal script, PDK models, and proof log.",
+        )
+    record.update({
+        "oracle": "yosys-dft-equivalence",
+        "cornerID": None,
+        "designIdentitySHA256": design_identity,
+        "consumedInputs": [
+            artifact_input("driver", script),
+            artifact_input("functionalWrapper", wrapper),
+            artifact_input("sourceNetlist", probe_root / "source.v"),
+            artifact_input("transformedNetlist", transformed_netlist),
+            artifact_input("standardCellVerilog", standard_cell_verilog),
+            artifact_input(
+                "standardCellVerilogPrimitives",
+                standard_cell_primitives,
+            ),
+        ],
+        "outputArtifact": artifact_input("equivalenceLog", log_path),
+    })
+    return record
+
+
+def find_dft_artifact(
+    result: dict[str, Any],
+    artifact_id: str,
+) -> dict[str, Any]:
+    matches = [
+        item
+        for item in result.get("artifacts", [])
+        if isinstance(item, dict) and item.get("id") == artifact_id
+    ]
+    if len(matches) != 1:
+        raise MatrixFailure(
+            "dft_result_artifact_missing",
+            f"DFTEngine result does not contain exactly one {artifact_id}.",
+            "Retain the exact fault universe and scan execution plan.",
+        )
+    return matches[0]
+
+
+def run_dft_cli_pipeline(
+    lock: dict[str, Any],
+    manifest: dict[str, Any],
+    toolchain_root: Path,
+    probe_root: Path,
+    evidence_root: Path,
+    design_identity: str,
+) -> dict[str, Any]:
+    workspace = evidence_root / "dft-workspace"
+    inputs = workspace / "inputs"
+    inputs.mkdir(parents=True, exist_ok=True)
+    source_paths = {
+        "source.v": probe_root / "source.v",
+        "constraints.sdc": probe_root / "constraints.sdc",
+        "pdk-identity.json": probe_root / "pdk-identity.json",
+        "cell-library.json": probe_root / "cell-library.json",
+        "openroad-scan.v": probe_root / "openroad-scan.v",
+        "openroad-scan.def": probe_root / "openroad-scan.def",
+        "openroad-dft.log": evidence_root / "oracle-logs" / "openroad-dft.log",
+        "sky130-cell-models.v": manifest_asset(
+            manifest,
+            toolchain_root,
+            "standardCellVerilog",
+        ),
+        "sky130-primitives.v": manifest_asset(
+            manifest,
+            toolchain_root,
+            "standardCellVerilogPrimitives",
+        ),
+        "sky130-tt.lib": manifest_corner_asset(
+            manifest,
+            toolchain_root,
+            manifest["process"]["corners"][0]["id"],
+            "timingLibrary",
+        ),
+    }
+    for name, source in source_paths.items():
+        shutil.copyfile(source, inputs / name)
+
+    executable = (
+        evidence_root
+        / "derived-data"
+        / "Build"
+        / "Products"
+        / "Debug"
+        / "dft-engine"
+    )
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise MatrixFailure(
+            "dft_cli_missing",
+            f"The tested DFTEngine build did not produce {executable}.",
+            "Build the executable product in the locked package scheme.",
+        )
+    design = load_json(probe_root / "design-contract.json")
+    run_id = "hosted-sky130-dft"
+    openroad_descriptor = dft_tool_descriptor(
+        manifest,
+        "openroad",
+        engine_id="dft.scan-insertion",
+        implementation_id="openroad-hosted-scan",
+    )
+    references = {
+        "source": dft_artifact_reference(
+            workspace,
+            inputs / "source.v",
+            artifact_id="hosted-dft-source",
+            kind="netlist",
+            artifact_format="verilog",
+        ),
+        "transformed": dft_artifact_reference(
+            workspace,
+            inputs / "openroad-scan.v",
+            artifact_id="hosted-dft-transformed",
+            kind="netlist",
+            artifact_format="verilog",
+        ),
+        "scanDEF": dft_artifact_reference(
+            workspace,
+            inputs / "openroad-scan.def",
+            artifact_id="hosted-dft-scandef",
+            kind="layout",
+            artifact_format="def",
+        ),
+        "cellLibrary": dft_artifact_reference(
+            workspace,
+            inputs / "cell-library.json",
+            artifact_id="hosted-dft-cell-library",
+            kind="model",
+            artifact_format="json",
+        ),
+        "executionEvidence": dft_artifact_reference(
+            workspace,
+            inputs / "openroad-dft.log",
+            artifact_id="hosted-dft-openroad-log",
+            kind="log",
+            artifact_format="text",
+        ),
+        "constraints": dft_artifact_reference(
+            workspace,
+            inputs / "constraints.sdc",
+            artifact_id="hosted-dft-constraints",
+            kind="constraint",
+            artifact_format="sdc",
+        ),
+        "pdk": dft_artifact_reference(
+            workspace,
+            inputs / "pdk-identity.json",
+            artifact_id="hosted-dft-pdk",
+            kind="technology",
+            artifact_format="json",
+        ),
+        "timingLibrary": dft_artifact_reference(
+            workspace,
+            inputs / "sky130-tt.lib",
+            artifact_id="hosted-dft-timing-library",
+            kind="timing-library",
+            artifact_format="liberty",
+        ),
+    }
+    request_path = workspace / "openroad-import-request.json"
+    write_json(request_path, {
+        "schemaVersion": 1,
+        "runID": run_id,
+        "architectureName": "hosted_sky130_scan",
+        "topModule": design["logicalTop"],
+        "scanEnableSignal": design["scanEnablePort"],
+        "testModeSignal": design["testModePort"],
+        "sourceNetlistArtifact": references["source"],
+        "transformedNetlistArtifact": references["transformed"],
+        "scanDEFArtifact": references["scanDEF"],
+        "cellLibraryArtifact": references["cellLibrary"],
+        "executionEvidenceArtifact": references["executionEvidence"],
+        "producer": openroad_descriptor,
+    })
+    timeout = lock["timeouts"]["oracleSeconds"]
+    pipeline_invocations = [
+        run_command(
+            [
+                str(executable),
+                "import-openroad-scan",
+                "--request",
+                str(request_path),
+                "--output-dir",
+                str(workspace),
+                "--result",
+                str(workspace / "openroad-import-result.json"),
+            ],
+            cwd=workspace,
+            timeout=timeout,
+            log_path=evidence_root / "oracle-logs" / "dft-import.log",
+        )
+    ]
+    import_result = load_json(workspace / "openroad-import-result.json")
+    if (
+        import_result.get("processID") != "sky130A"
+        or import_result.get("pdkDigest")
+        != references["pdk"]["digest"]["hexadecimalValue"]
+    ):
+        raise MatrixFailure(
+            "dft_import_process_mismatch",
+            "The canonical scan import is detached from the locked PDK identity.",
+            "Use one process-bound cell mapping and PDK reference.",
+        )
+    configuration_path = workspace / "atpg-configuration.json"
+    write_json(configuration_path, {
+        "schemaVersion": 1,
+        "runID": run_id,
+        "constraints": {
+            "modes": [{
+                "modeID": "scan",
+                "artifact": references["constraints"],
+            }],
+        },
+        "pdk": {
+            "manifest": references["pdk"],
+            "processID": "sky130A",
+            "version": "sky130A-open-reference-v1",
+            "digest": references["pdk"]["digest"]["hexadecimalValue"],
+        },
+        "cellLibrary": {
+            "artifact": references["cellLibrary"],
+            "processID": "sky130A",
+            "version": "sky130A-open-reference-v1",
+            "manifestDigest": canonical_json_digest(
+                load_json(inputs / "cell-library.json")
+            ),
+            "timingLibraryArtifact": references["timingLibrary"],
+        },
+        "clocks": [{
+            "id": "scan-clock",
+            "signalName": design["clockPort"],
+            "periodNanoseconds": 10,
+            "dutyCycle": 0.5,
+            "isGenerated": False,
+        }],
+        "domainClockIDs": {
+            design["scanDomainID"]: "scan-clock",
+        },
+        "atpg": {
+            "maximumPatternCount": 128,
+            "patternLength": 16,
+            "abortLimit": 0,
+            "randomSeed": 1,
+            "supportedProcessFamilies": [],
+            "patternFormat": "json",
+            "faultSource": "gateLevel",
+            "maximumExhaustiveInputCount": 8,
+            "maximumSequentialCycleCount": 4,
+            "sequentialCellContracts": [],
+        },
+    })
+    atpg_request_path = workspace / "atpg-request.json"
+    pipeline_invocations.append(
+        run_command(
+            [
+                str(executable),
+                "compose-atpg-request",
+                "--import-result",
+                str(workspace / "openroad-import-result.json"),
+                "--configuration",
+                str(configuration_path),
+                "--output-dir",
+                str(workspace),
+                "--result",
+                str(atpg_request_path),
+            ],
+            cwd=workspace,
+            timeout=timeout,
+            log_path=evidence_root / "oracle-logs" / "dft-compose-atpg.log",
+        )
+    )
+    atpg_result_path = workspace / "atpg-result.json"
+    pipeline_invocations.append(
+        run_command(
+            [
+                str(executable),
+                "execute",
+                "--request",
+                str(atpg_request_path),
+                "--output-dir",
+                str(workspace),
+                "--result",
+                str(atpg_result_path),
+            ],
+            cwd=workspace,
+            timeout=timeout,
+            log_path=evidence_root / "oracle-logs" / "dft-atpg.log",
+        )
+    )
+    atpg_result = load_json(atpg_result_path)
+    if atpg_result.get("status") != "completed":
+        raise MatrixFailure(
+            "dft_atpg_not_completed",
+            "DFTEngine ATPG did not complete over the realized scan design.",
+            "Inspect retained typed diagnostics and correct the design or model.",
+        )
+    fault_universe = find_dft_artifact(atpg_result, "dft-fault-universe")
+    execution_plan = find_dft_artifact(
+        atpg_result,
+        "dft-scan-pattern-execution-plan",
+    )
+    execution_plan_path = dft_artifact_path(
+        workspace,
+        execution_plan,
+        "dft execution plan",
+    )
+    stil_path = workspace / "hosted-scan-patterns.stil"
+    pipeline_invocations.append(
+        run_command(
+            [
+                str(executable),
+                "convert-scan-pattern",
+                "--plan",
+                str(execution_plan_path),
+                "--name",
+                "hosted_sky130_scan_patterns",
+                "--format",
+                "stil",
+                "--result",
+                str(stil_path),
+            ],
+            cwd=workspace,
+            timeout=timeout,
+            log_path=evidence_root / "oracle-logs" / "dft-stil.log",
+        )
+    )
+    pattern_reference = dft_artifact_reference(
+        workspace,
+        stil_path,
+        artifact_id="hosted-dft-stil",
+        kind="test-pattern",
+        artifact_format="stil",
+    )
+    model_references = [
+        dft_artifact_reference(
+            workspace,
+            inputs / "sky130-cell-models.v",
+            artifact_id="hosted-dft-cell-models",
+            kind="model",
+            artifact_format="verilog",
+        ),
+        dft_artifact_reference(
+            workspace,
+            inputs / "sky130-primitives.v",
+            artifact_id="hosted-dft-primitives",
+            kind="model",
+            artifact_format="verilog",
+        ),
+    ]
+    universe_path = dft_artifact_path(
+        workspace,
+        fault_universe,
+        "dft fault universe",
+    )
+    universe = load_json(universe_path)
+    fault_ids = [
+        item["id"]
+        for item in universe.get("faults", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    ]
+    if not fault_ids:
+        raise MatrixFailure(
+            "dft_fault_universe_empty",
+            "Realized scan ATPG retained no replayable faults.",
+            "Correct gate-level fault extraction for the scan design.",
+        )
+    replay_request_path = workspace / "replay-request.json"
+    write_json(replay_request_path, {
+        "schemaVersion": 1,
+        "runID": run_id,
+        "topModule": design["logicalTop"],
+        "patternArtifact": pattern_reference,
+        "scanNetlistArtifact": references["transformed"],
+        "scanImplementation": import_result["scanImplementation"],
+        "faultUniverseArtifact": fault_universe,
+        "cellModelArtifacts": model_references,
+        "preprocessorDefines": ["FUNCTIONAL"],
+        "faultIDs": fault_ids,
+    })
+    compiler_descriptor = dft_tool_descriptor(
+        manifest,
+        "iverilog",
+        engine_id="dft.pattern-replay",
+        implementation_id="iverilog-hosted-compiler",
+    )
+    simulator_descriptor = dft_tool_descriptor(
+        manifest,
+        "iverilog",
+        engine_id="dft.pattern-replay",
+        implementation_id="vvp-hosted-simulator",
+        companion_name="vvp",
+    )
+    compiler_descriptor_path = workspace / "iverilog-descriptor.json"
+    simulator_descriptor_path = workspace / "vvp-descriptor.json"
+    write_json(compiler_descriptor_path, compiler_descriptor)
+    write_json(simulator_descriptor_path, simulator_descriptor)
+    replay_result_path = workspace / "replay-result.json"
+    replay_invocation = run_command(
+        [
+            str(executable),
+            "replay",
+            "--request",
+            str(replay_request_path),
+            "--output-dir",
+            str(workspace),
+            "--compiler",
+            str(tool_path(lock, toolchain_root, "iverilog")),
+            "--compiler-descriptor",
+            str(compiler_descriptor_path),
+            "--simulator",
+            str(tool_companion_path(
+                lock,
+                toolchain_root,
+                "iverilog",
+                "vvp",
+            )),
+            "--simulator-descriptor",
+            str(simulator_descriptor_path),
+            "--timeout-seconds",
+            str(timeout),
+            "--termination-grace-seconds",
+            "2",
+            "--result",
+            str(replay_result_path),
+        ],
+        cwd=workspace,
+        timeout=timeout * 2,
+        log_path=evidence_root / "oracle-logs" / "dft-replay.log",
+    )
+    replay_result = load_json(replay_result_path)
+    observations = replay_result.get("observations")
+    outcomes = (
+        atpg_result.get("payload", {})
+        .get("coverageEvidence", {})
+        .get("outcomes", [])
+    )
+    producer_detected = {
+        item.get("faultID"): item.get("status") == "detected"
+        for item in outcomes
+        if isinstance(item, dict)
+    }
+    replay_detected = {
+        item.get("faultID"): item.get("detected")
+        for item in observations
+        if isinstance(item, dict)
+    } if isinstance(observations, list) else {}
+    if (
+        set(producer_detected) != set(fault_ids)
+        or set(replay_detected) != set(fault_ids)
+        or replay_detected != producer_detected
+    ):
+        raise MatrixFailure(
+            "dft_replay_correlation_mismatch",
+            "Icarus fault observations do not exactly match native ATPG outcomes.",
+            "Inspect the retained STIL, harness, scan netlist, and fault evidence.",
+        )
+    replay_invocation.update({
+        "oracle": "iverilog-dft-replay",
+        "cornerID": None,
+        "designIdentitySHA256": design_identity,
+        "consumedInputs": [
+            artifact_input("patternArtifact", stil_path),
+            artifact_input("scanNetlistArtifact", inputs / "openroad-scan.v"),
+            artifact_input(
+                "scanImplementationArtifact",
+                dft_artifact_path(
+                    workspace,
+                    import_result["scanImplementation"]["artifact"],
+                    "scan implementation",
+                ),
+            ),
+            artifact_input("faultUniverseArtifact", universe_path),
+            artifact_input("standardCellVerilog", inputs / "sky130-cell-models.v"),
+            artifact_input(
+                "standardCellVerilogPrimitives",
+                inputs / "sky130-primitives.v",
+            ),
+            artifact_input("compilerDescriptor", compiler_descriptor_path),
+            artifact_input("simulatorDescriptor", simulator_descriptor_path),
+        ],
+        "outputArtifact": artifact_input("replayResult", replay_result_path),
+        "pipelineInvocations": pipeline_invocations,
+        "pipelineInputs": [
+            artifact_input("sourceNetlist", inputs / "source.v"),
+            artifact_input(
+                "transformedNetlist",
+                inputs / "openroad-scan.v",
+            ),
+            artifact_input("scanDEF", inputs / "openroad-scan.def"),
+            artifact_input(
+                "scanCellLibrary",
+                inputs / "cell-library.json",
+            ),
+            artifact_input(
+                "executionEvidence",
+                inputs / "openroad-dft.log",
+            ),
+            artifact_input(
+                "scanConstraints",
+                inputs / "constraints.sdc",
+            ),
+            artifact_input("pdkIdentity", inputs / "pdk-identity.json"),
+            artifact_input("timingLibrary", inputs / "sky130-tt.lib"),
+        ],
+        "correlation": {
+            "faultCount": len(fault_ids),
+            "detectedFaultCount": sum(producer_detected.values()),
+            "status": "matched",
+        },
+    })
+    return replay_invocation
+
+
 def run_lane(args: argparse.Namespace) -> int:
     lane_name = args.lane
     evidence_root = Path(args.evidence_root).resolve()
@@ -2430,28 +3321,55 @@ def run_lane(args: argparse.Namespace) -> int:
         evidence["package"]["revision"] = package_revision
         ensure_remote_dependencies(package_root, lock["timeouts"]["dependencyResolutionSeconds"], evidence_root)
         probe_root = evidence_root / "oracle-inputs"
-        materialize_corpus(lock_path, lock, probe_root)
-        design_input_identity = probe_input_identity(probe_root, manifest, toolchain_root)
+        corpus_key = "dftCorpus" if lane_name == "dft" else "corpus"
+        materialize_corpus(lock_path, lock, probe_root, corpus_key)
+        design_input_identity = (
+            dft_probe_input_identity(probe_root)
+            if lane_name == "dft"
+            else probe_input_identity(probe_root, manifest, toolchain_root)
+        )
         evidence["designInputIdentity"] = design_input_identity
-        corner_sensitive_oracles = {"openrcx", "opensta", "ngspice-dc"}
         executed_corner_ids: set[str] = set()
-        for oracle in lane["oracles"]:
-            corner_ids = [corner["id"] for corner in manifest["process"]["corners"]] if oracle in corner_sensitive_oracles else [None]
-            for corner_id in corner_ids:
-                evidence["oracleInvocations"].append(
-                    run_oracle(
-                        oracle,
-                        lock,
-                        manifest,
-                        toolchain_root,
-                        probe_root,
-                        evidence_root / "oracle-logs",
-                        design_input_identity["sha256"],
-                        corner_id,
-                    )
+        if lane_name == "dft":
+            evidence["oracleInvocations"].append(
+                run_openroad_dft_oracle(
+                    lock,
+                    manifest,
+                    toolchain_root,
+                    probe_root,
+                    evidence_root / "oracle-logs",
+                    design_input_identity["sha256"],
                 )
-                if corner_id is not None:
-                    executed_corner_ids.add(corner_id)
+            )
+            evidence["oracleInvocations"].append(
+                run_yosys_dft_equivalence_oracle(
+                    lock,
+                    manifest,
+                    toolchain_root,
+                    probe_root,
+                    evidence_root / "oracle-logs",
+                    design_input_identity["sha256"],
+                )
+            )
+        else:
+            corner_sensitive_oracles = {"openrcx", "opensta", "ngspice-dc"}
+            for oracle in lane["oracles"]:
+                corner_ids = [corner["id"] for corner in manifest["process"]["corners"]] if oracle in corner_sensitive_oracles else [None]
+                for corner_id in corner_ids:
+                    evidence["oracleInvocations"].append(
+                        run_oracle(
+                            oracle,
+                            lock,
+                            manifest,
+                            toolchain_root,
+                            probe_root,
+                            evidence_root / "oracle-logs",
+                            design_input_identity["sha256"],
+                            corner_id,
+                        )
+                    )
+                    if corner_id is not None:
+                        executed_corner_ids.add(corner_id)
         evidence["qualifiedCornerIDs"] = sorted(executed_corner_ids)
         if lane_name == "xcircuite":
             evidence["releaseHandoffTestFilters"] = [
@@ -2470,6 +3388,17 @@ def run_lane(args: argparse.Namespace) -> int:
         )
         for invocation in evidence["xcodebuildInvocations"]:
             invocation["designIdentitySHA256"] = design_input_identity["sha256"]
+        if lane_name == "dft":
+            evidence["oracleInvocations"].append(
+                run_dft_cli_pipeline(
+                    lock,
+                    manifest,
+                    toolchain_root,
+                    probe_root,
+                    evidence_root,
+                    design_input_identity["sha256"],
+                )
+            )
         if lane_name == "xcircuite":
             evidence["releaseHandoffEvidence"] = {
                 "designIdentitySHA256": design_input_identity["sha256"],
@@ -2493,7 +3422,287 @@ def run_lane(args: argparse.Namespace) -> int:
         return 1
 
 
+def validate_dft_consumed_input_contract(
+    lane: dict[str, Any],
+    evidence: dict[str, Any],
+) -> None:
+    identity = evidence.get("designInputIdentity")
+    if not isinstance(identity, dict) or not isinstance(identity.get("artifacts"), list):
+        raise MatrixFailure(
+            "dft_corpus_missing",
+            "The DFT lane has no immutable scan corpus identity.",
+            "Retain the exact source, constraint, PDK, and scan-cell inputs.",
+        )
+    expected_design = {
+        "schemaVersion": 1,
+        "designID": "sky130-hd-scan-1",
+        "logicalTop": "hosted_dft_probe",
+        "clockPort": "clock",
+        "dataInputPort": "data_in",
+        "setPort": "set_b",
+        "dataOutputPort": "data_out",
+        "testModePort": "test_mode",
+        "scanEnablePort": "scan_enable_0",
+        "scanInputPort": "scan_in_0",
+        "scanDomainID": "default",
+        "functionalCell": "sky130_fd_sc_hd__dfstp_1",
+        "scanCell": "sky130_fd_sc_hd__sdfsbp_1",
+    }
+    if identity.get("designDefinition") != expected_design:
+        raise MatrixFailure(
+            "dft_design_definition_mismatch",
+            "The DFT lane does not identify the locked scan corpus.",
+            "Use the exact hosted DFT design contract.",
+        )
+    corpus_artifacts = identity["artifacts"]
+    corpus_by_role = {
+        item.get("role"): item
+        for item in corpus_artifacts
+        if isinstance(item, dict)
+    }
+    required_corpus_roles = {
+        "corpusManifest",
+        "designContract",
+        "sourceNetlist",
+        "scanConstraints",
+        "pdkIdentity",
+        "scanCellLibrary",
+    }
+    if (
+        set(corpus_by_role) != required_corpus_roles
+        or len(corpus_by_role) != len(corpus_artifacts)
+    ):
+        raise MatrixFailure(
+            "dft_corpus_incomplete",
+            "The DFT lane does not retain the complete scan corpus.",
+            "Restore every immutable DFT corpus artifact.",
+        )
+    for artifact in corpus_by_role.values():
+        validate_input_digest(artifact, f"DFT corpus {artifact.get('role')}")
+    computed_identity = hashlib.sha256(
+        json.dumps(
+            [
+                {
+                    "role": item["role"],
+                    "sha256": item["sha256"],
+                    "byteCount": item["byteCount"],
+                }
+                for item in corpus_artifacts
+            ],
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    if identity.get("sha256") != computed_identity:
+        raise MatrixFailure(
+            "dft_corpus_digest_mismatch",
+            "The DFT design identity does not match its retained bytes.",
+            "Regenerate the identity from the exact corpus artifact digests.",
+        )
+    process = evidence.get("process")
+    if not isinstance(process, dict):
+        raise MatrixFailure(
+            "process_evidence_missing",
+            "The DFT lane has no process evidence.",
+            "Retain the locked process realization.",
+        )
+    process_assets = {
+        item.get("role"): item
+        for item in process.get("assets", [])
+        if isinstance(item, dict)
+    }
+    corner_assets = {
+        item.get("role"): item
+        for item in process.get("corners", [{}])[0].get("assets", [])
+        if isinstance(item, dict)
+    }
+    expected_roles = {
+        "openroad-dft": {
+            "driver",
+            "sourceNetlist",
+            "technologyLEF",
+            "libraryLEF",
+            "timingLibrary",
+        },
+        "yosys-dft-equivalence": {
+            "driver",
+            "functionalWrapper",
+            "sourceNetlist",
+            "transformedNetlist",
+            "standardCellVerilog",
+            "standardCellVerilogPrimitives",
+        },
+        "iverilog-dft-replay": {
+            "patternArtifact",
+            "scanNetlistArtifact",
+            "scanImplementationArtifact",
+            "faultUniverseArtifact",
+            "standardCellVerilog",
+            "standardCellVerilogPrimitives",
+            "compilerDescriptor",
+            "simulatorDescriptor",
+        },
+    }
+    invocations = evidence.get("oracleInvocations")
+    if not isinstance(invocations, list):
+        raise MatrixFailure(
+            "dft_oracle_evidence_missing",
+            "The DFT lane has no oracle evidence.",
+            "Execute the complete DFT oracle chain.",
+        )
+    by_oracle: dict[str, dict[str, Any]] = {}
+    for invocation in invocations:
+        if not isinstance(invocation, dict):
+            raise MatrixFailure(
+                "dft_oracle_evidence_invalid",
+                "The DFT lane contains malformed oracle evidence.",
+                "Rerun the DFT lane.",
+            )
+        oracle = invocation.get("oracle")
+        if oracle not in expected_roles or oracle in by_oracle:
+            raise MatrixFailure(
+                "dft_oracle_inventory_mismatch",
+                f"The DFT lane contains unexpected or duplicate oracle {oracle}.",
+                "Execute each locked DFT oracle exactly once.",
+            )
+        consumed = invocation.get("consumedInputs")
+        consumed_by_role = {
+            item.get("role"): item
+            for item in consumed
+            if isinstance(item, dict)
+        } if isinstance(consumed, list) else {}
+        if (
+            set(consumed_by_role) != expected_roles[oracle]
+            or len(consumed_by_role) != len(consumed or [])
+        ):
+            raise MatrixFailure(
+                "dft_consumed_input_roles_mismatch",
+                f"Oracle {oracle} consumed roles do not match its contract.",
+                "Record every and only the actual DFT tool inputs.",
+            )
+        for role, artifact in consumed_by_role.items():
+            validate_input_digest(artifact, f"{oracle}/{role}")
+            expected = (
+                corpus_by_role.get(role)
+                or process_assets.get(role)
+                or corner_assets.get(role)
+            )
+            if expected is not None and (
+                artifact.get("sha256") != expected.get("sha256")
+                or artifact.get("byteCount") != expected.get("byteCount")
+            ):
+                raise MatrixFailure(
+                    "dft_consumed_input_digest_mismatch",
+                    f"Oracle {oracle} did not consume the retained {role} bytes.",
+                    "Rerun the DFT tool from the locked corpus and process.",
+                )
+        invocation["_consumedByRole"] = consumed_by_role
+        by_oracle[oracle] = invocation
+    if set(by_oracle) != set(lane["oracles"]):
+        raise MatrixFailure(
+            "dft_oracle_execution_count_mismatch",
+            "The DFT lane did not execute the complete locked oracle chain.",
+            "Run OpenROAD, Yosys, and Icarus exactly once.",
+        )
+    openroad_outputs = {
+        item.get("role"): item
+        for item in by_oracle["openroad-dft"].get("outputArtifacts", [])
+        if isinstance(item, dict)
+    }
+    if set(openroad_outputs) != {
+        "transformedNetlist",
+        "scanDEF",
+        "executionEvidence",
+    }:
+        raise MatrixFailure(
+            "dft_openroad_outputs_incomplete",
+            "OpenROAD DFT output lineage is incomplete.",
+            "Retain scan Verilog, DEF SCANCHAINS, and raw execution evidence.",
+        )
+    for artifact in openroad_outputs.values():
+        validate_input_digest(artifact, f"openroad-dft/{artifact.get('role')}")
+    transformed_identity = openroad_outputs["transformedNetlist"]
+    for oracle, role in (
+        ("yosys-dft-equivalence", "transformedNetlist"),
+        ("iverilog-dft-replay", "scanNetlistArtifact"),
+    ):
+        consumed = by_oracle[oracle]["_consumedByRole"][role]
+        if (
+            consumed.get("sha256") != transformed_identity.get("sha256")
+            or consumed.get("byteCount") != transformed_identity.get("byteCount")
+        ):
+            raise MatrixFailure(
+                "dft_transformed_netlist_lineage_mismatch",
+                f"Oracle {oracle} did not consume the OpenROAD scan netlist.",
+                "Preserve byte-identical OpenROAD-to-oracle artifact lineage.",
+            )
+    pipeline_inputs = by_oracle["iverilog-dft-replay"].get("pipelineInputs")
+    pipeline_by_role = {
+        item.get("role"): item
+        for item in pipeline_inputs
+        if isinstance(item, dict)
+    } if isinstance(pipeline_inputs, list) else {}
+    expected_pipeline_roles = {
+        "sourceNetlist",
+        "transformedNetlist",
+        "scanDEF",
+        "scanCellLibrary",
+        "executionEvidence",
+        "scanConstraints",
+        "pdkIdentity",
+        "timingLibrary",
+    }
+    if (
+        set(pipeline_by_role) != expected_pipeline_roles
+        or len(pipeline_by_role) != len(pipeline_inputs or [])
+    ):
+        raise MatrixFailure(
+            "dft_pipeline_input_roles_mismatch",
+            "DFTEngine pipeline inputs do not match the realized-scan contract.",
+            "Retain every and only the exact DFTEngine pipeline input.",
+        )
+    expected_pipeline_inputs = {
+        "sourceNetlist": corpus_by_role["sourceNetlist"],
+        "transformedNetlist": openroad_outputs["transformedNetlist"],
+        "scanDEF": openroad_outputs["scanDEF"],
+        "scanCellLibrary": corpus_by_role["scanCellLibrary"],
+        "executionEvidence": openroad_outputs["executionEvidence"],
+        "scanConstraints": corpus_by_role["scanConstraints"],
+        "pdkIdentity": corpus_by_role["pdkIdentity"],
+        "timingLibrary": corner_assets["timingLibrary"],
+    }
+    for role, artifact in pipeline_by_role.items():
+        validate_input_digest(artifact, f"dft-pipeline/{role}")
+        expected = expected_pipeline_inputs[role]
+        if (
+            artifact.get("sha256") != expected.get("sha256")
+            or artifact.get("byteCount") != expected.get("byteCount")
+        ):
+            raise MatrixFailure(
+                "dft_pipeline_input_lineage_mismatch",
+                f"DFTEngine did not consume the retained {role} bytes.",
+                "Rerun DFTEngine from the locked DFT corpus and process.",
+            )
+    correlation = by_oracle["iverilog-dft-replay"].get("correlation")
+    if (
+        not isinstance(correlation, dict)
+        or correlation.get("status") != "matched"
+        or not isinstance(correlation.get("faultCount"), int)
+        or correlation["faultCount"] <= 0
+    ):
+        raise MatrixFailure(
+            "dft_replay_correlation_missing",
+            "Icarus replay lacks exact non-empty ATPG fault correlation.",
+            "Retain raw replay observations and compare every active fault.",
+        )
+    for invocation in invocations:
+        invocation.pop("_consumedByRole", None)
+
+
 def validate_consumed_input_contract(lane_name: str, lane: dict[str, Any], evidence: dict[str, Any]) -> None:
+    if lane_name == "dft":
+        validate_dft_consumed_input_contract(lane, evidence)
+        return
     identity = evidence.get("designInputIdentity")
     if not isinstance(identity, dict) or not isinstance(identity.get("artifacts"), list):
         raise MatrixFailure(

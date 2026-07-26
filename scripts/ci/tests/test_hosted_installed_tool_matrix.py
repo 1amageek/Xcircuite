@@ -85,6 +85,18 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             {"verilator-lint", "yosys-synthesis-equivalence"},
         )
         self.assertEqual(
+            set(lock["lanes"]["dft"]["oracles"]),
+            {
+                "openroad-dft",
+                "yosys-dft-equivalence",
+                "iverilog-dft-replay",
+            },
+        )
+        self.assertEqual(
+            lock["lanes"]["dft"]["revision"],
+            "5df7494371751b81d374f04adf9e74a82d62e34a",
+        )
+        self.assertEqual(
             MATRIX.process_verilog_definitions(
                 {"process": lock["process"]}
             ),
@@ -126,6 +138,278 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 identity = MATRIX.file_digest(destination / artifact["path"])
                 self.assertEqual(identity["sha256"], artifact["sha256"])
                 self.assertEqual(identity["byteCount"], artifact["byteCount"])
+
+    def test_checked_in_dft_corpus_materializes_exact_bytes(self) -> None:
+        lock_path = (
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock = MATRIX.load_json(lock_path)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            destination = Path(temporary_directory)
+            MATRIX.materialize_corpus(
+                lock_path,
+                lock,
+                destination,
+                "dftCorpus",
+            )
+
+            manifest = MATRIX.load_json(destination / "corpus-manifest.json")
+            self.assertEqual(
+                manifest["profileID"],
+                "sky130A-open-reference-dft-v1",
+            )
+            for artifact in manifest["artifacts"]:
+                identity = MATRIX.file_digest(destination / artifact["path"])
+                self.assertEqual(identity["sha256"], artifact["sha256"])
+                self.assertEqual(identity["byteCount"], artifact["byteCount"])
+
+    def test_dft_evidence_requires_openroad_netlist_lineage(self) -> None:
+        lock_path = (
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock = MATRIX.load_json(lock_path)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            corpus = root / "corpus"
+            MATRIX.materialize_corpus(
+                lock_path,
+                lock,
+                corpus,
+                "dftCorpus",
+            )
+            identity = MATRIX.dft_probe_input_identity(corpus)
+            files = root / "files"
+            files.mkdir()
+
+            def fixture(name: str, contents: str) -> Path:
+                path = files / name
+                path.write_text(contents, encoding="utf-8")
+                return path
+
+            technology_lef = fixture("technology.lef", "VERSION 5.8 ;\n")
+            library_lef = fixture("library.lef", "MACRO scan_cell\nEND scan_cell\n")
+            timing_library = fixture("timing.lib", "library(test) {}\n")
+            cell_models = fixture("cells.v", "module scan_cell; endmodule\n")
+            primitives = fixture("primitives.v", "module primitive; endmodule\n")
+            transformed = fixture(
+                "transformed.v",
+                "module hosted_dft_probe; endmodule\n",
+            )
+            scan_def = fixture(
+                "transformed.def",
+                "SCANCHAINS 1 ;\nEND SCANCHAINS\n",
+            )
+            execution_log = fixture(
+                "openroad.log",
+                "HOSTED_OPENROAD_DFT_COMPLETE\n",
+            )
+            openroad_driver = fixture("openroad.tcl", "execute_dft_plan\n")
+            yosys_driver = fixture("equivalence.ys", "equiv_status -assert\n")
+            wrapper = fixture("wrapper.v", "module gate; endmodule\n")
+            pattern = fixture("patterns.stil", "STIL 1.0;\n")
+            implementation = fixture("implementation.json", "{}\n")
+            universe = fixture("universe.json", "{}\n")
+            compiler_descriptor = fixture("iverilog.json", "{}\n")
+            simulator_descriptor = fixture("vvp.json", "{}\n")
+            replay_result = fixture("replay.json", "{}\n")
+            source = corpus / "source.v"
+
+            evidence = {
+                "designInputIdentity": identity,
+                "process": {
+                    "assets": [
+                        MATRIX.artifact_input("technologyLEF", technology_lef),
+                        MATRIX.artifact_input("libraryLEF", library_lef),
+                        MATRIX.artifact_input(
+                            "standardCellVerilog",
+                            cell_models,
+                        ),
+                        MATRIX.artifact_input(
+                            "standardCellVerilogPrimitives",
+                            primitives,
+                        ),
+                    ],
+                    "corners": [{
+                        "assets": [
+                            MATRIX.artifact_input(
+                                "timingLibrary",
+                                timing_library,
+                            ),
+                        ],
+                    }],
+                },
+                "oracleInvocations": [
+                    {
+                        "oracle": "openroad-dft",
+                        "consumedInputs": [
+                            MATRIX.artifact_input("driver", openroad_driver),
+                            MATRIX.artifact_input("sourceNetlist", source),
+                            MATRIX.artifact_input(
+                                "technologyLEF",
+                                technology_lef,
+                            ),
+                            MATRIX.artifact_input("libraryLEF", library_lef),
+                            MATRIX.artifact_input(
+                                "timingLibrary",
+                                timing_library,
+                            ),
+                        ],
+                        "outputArtifacts": [
+                            MATRIX.artifact_input(
+                                "transformedNetlist",
+                                transformed,
+                            ),
+                            MATRIX.artifact_input("scanDEF", scan_def),
+                            MATRIX.artifact_input(
+                                "executionEvidence",
+                                execution_log,
+                            ),
+                        ],
+                    },
+                    {
+                        "oracle": "yosys-dft-equivalence",
+                        "consumedInputs": [
+                            MATRIX.artifact_input("driver", yosys_driver),
+                            MATRIX.artifact_input(
+                                "functionalWrapper",
+                                wrapper,
+                            ),
+                            MATRIX.artifact_input("sourceNetlist", source),
+                            MATRIX.artifact_input(
+                                "transformedNetlist",
+                                transformed,
+                            ),
+                            MATRIX.artifact_input(
+                                "standardCellVerilog",
+                                cell_models,
+                            ),
+                            MATRIX.artifact_input(
+                                "standardCellVerilogPrimitives",
+                                primitives,
+                            ),
+                        ],
+                    },
+                    {
+                        "oracle": "iverilog-dft-replay",
+                        "consumedInputs": [
+                            MATRIX.artifact_input("patternArtifact", pattern),
+                            MATRIX.artifact_input(
+                                "scanNetlistArtifact",
+                                transformed,
+                            ),
+                            MATRIX.artifact_input(
+                                "scanImplementationArtifact",
+                                implementation,
+                            ),
+                            MATRIX.artifact_input(
+                                "faultUniverseArtifact",
+                                universe,
+                            ),
+                            MATRIX.artifact_input(
+                                "standardCellVerilog",
+                                cell_models,
+                            ),
+                            MATRIX.artifact_input(
+                                "standardCellVerilogPrimitives",
+                                primitives,
+                            ),
+                            MATRIX.artifact_input(
+                                "compilerDescriptor",
+                                compiler_descriptor,
+                            ),
+                            MATRIX.artifact_input(
+                                "simulatorDescriptor",
+                                simulator_descriptor,
+                            ),
+                        ],
+                        "outputArtifact": MATRIX.artifact_input(
+                            "replayResult",
+                            replay_result,
+                        ),
+                        "pipelineInputs": [
+                            MATRIX.artifact_input("sourceNetlist", source),
+                            MATRIX.artifact_input(
+                                "transformedNetlist",
+                                transformed,
+                            ),
+                            MATRIX.artifact_input("scanDEF", scan_def),
+                            MATRIX.artifact_input(
+                                "scanCellLibrary",
+                                corpus / "cell-library.json",
+                            ),
+                            MATRIX.artifact_input(
+                                "executionEvidence",
+                                execution_log,
+                            ),
+                            MATRIX.artifact_input(
+                                "scanConstraints",
+                                corpus / "constraints.sdc",
+                            ),
+                            MATRIX.artifact_input(
+                                "pdkIdentity",
+                                corpus / "pdk-identity.json",
+                            ),
+                            MATRIX.artifact_input(
+                                "timingLibrary",
+                                timing_library,
+                            ),
+                        ],
+                        "correlation": {
+                            "faultCount": 2,
+                            "detectedFaultCount": 2,
+                            "status": "matched",
+                        },
+                    },
+                ],
+            }
+
+            MATRIX.validate_dft_consumed_input_contract(
+                lock["lanes"]["dft"],
+                evidence,
+            )
+
+            detached = fixture(
+                "detached.v",
+                "module hosted_dft_probe; wire changed; endmodule\n",
+            )
+            evidence["oracleInvocations"][2]["consumedInputs"][1] = (
+                MATRIX.artifact_input("scanNetlistArtifact", detached)
+            )
+            with self.assertRaises(MATRIX.MatrixFailure) as failure:
+                MATRIX.validate_dft_consumed_input_contract(
+                    lock["lanes"]["dft"],
+                    evidence,
+                )
+
+            self.assertEqual(
+                failure.exception.code,
+                "dft_transformed_netlist_lineage_mismatch",
+            )
+
+            evidence["oracleInvocations"][2]["consumedInputs"][1] = (
+                MATRIX.artifact_input("scanNetlistArtifact", transformed)
+            )
+            evidence["oracleInvocations"][2]["pipelineInputs"][3] = (
+                MATRIX.artifact_input("scanCellLibrary", implementation)
+            )
+            with self.assertRaises(MATRIX.MatrixFailure) as failure:
+                MATRIX.validate_dft_consumed_input_contract(
+                    lock["lanes"]["dft"],
+                    evidence,
+                )
+
+            self.assertEqual(
+                failure.exception.code,
+                "dft_pipeline_input_lineage_mismatch",
+            )
 
     def test_runner_environment_rejects_architecture_drift(self) -> None:
         lock = MATRIX.load_json(
@@ -334,6 +618,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 if call.args[0] == "openroad"
             )
             openroad_options = openroad_build.args[3]
+            openroad_environment = openroad_build.args[4]
             self.assertIn("-DBUILD_GUI=OFF", openroad_options)
             self.assertIn("-DBUILD_PYTHON=OFF", openroad_options)
             self.assertIn(
@@ -359,6 +644,10 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertIn(
                 "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
                 openroad_options,
+            )
+            self.assertIn(
+                "/opt/homebrew/opt/zstd",
+                openroad_environment["CMAKE_PREFIX_PATH"],
             )
             self.assertIn(
                 f"-Dfmt_DIR={root / 'installed' / 'lib' / 'cmake' / 'fmt'}",
@@ -387,6 +676,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             formulas = command.call_args.args[0]
             self.assertEqual(formulas[:2], ["brew", "install"])
             self.assertNotIn("cudd", formulas[2:])
+            self.assertIn("zstd", formulas[2:])
 
     def test_cudd_regenerates_its_versioned_autotools_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "processID": "sky130A",
+  "profileID": "sky130A-open-reference-v1",
+  "standardCellLibrary": "sky130_fd_sc_hd"
+}
