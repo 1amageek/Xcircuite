@@ -26,6 +26,7 @@ contract.
 | [30202503357](https://github.com/1amageek/Xcircuite/actions/runs/30202503357) | `5dd888a6785015dfd6a6f3476d84eaeab3cefd7b` | Dependency selection and API compatibility | Slang required fmt 12.1 or newer, rejected the pinned 11.2 CMake package, and selected an unpinned Homebrew fmt 12.2 whose lightweight `core.h` no longer declares `fmt::format`. | `844c6ea81b38ceee3897b7d4af8d49b1d878fb3f` |
 | [30203381430](https://github.com/1amageek/Xcircuite/actions/runs/30203381430) | `bc1564959f79ee27f4d4ea7839b7647656339c09` | Undeclared binding surface | OpenROAD built the unused Python/SWIG bindings, whose hosted Python 3.14 link introduced an undeclared `zstd` dependency and failed at 77%. | `2d64d9589beab581c56c5f858396083caa846a75` |
 | [30205109019](https://github.com/1amageek/Xcircuite/actions/runs/30205109019) | `88067bc63ceecf667cac4622f5ceed49eec107f3` | Dependency discovery | With Python disabled, OpenROAD reached 85%, but the OpenDB Tcl `odbtcl` target still linked `zstd` without a declared keg or CMake prefix. | `c39a9d436b2c48311981a9db6900f674f1d698eb` |
+| [30208241165](https://github.com/1amageek/Xcircuite/actions/runs/30208241165) | `dadd24a885fee72209861ba9773b3bb8d1c790d6` | Linker search contract | The `zstd` keg was installed and discoverable by CMake, but Boost exported a raw `-lzstd` dependency and the OpenDB Tcl executable had no `-L/opt/homebrew/opt/zstd/lib` linker search path. | `e761e489f15603a6ffe13a2e94770d66e25d46ab` |
 
 ## Invariants confirmed
 
@@ -35,7 +36,7 @@ contract.
 - Magic, Netgen, CUDD, fmt, and OpenSTA now advance through installation;
   OpenROAD reaches 85%. The declared headless realization excludes unused GUI,
   Python, and upstream-test surfaces, while its consumed Tcl surface retains an
-  explicit `zstd` build dependency.
+  explicit `zstd` build dependency and linker search path.
 - CUDD is source-built from a full revision and its installed bytes are part of
   the realization identity.
 - The checked-in corpus and profile identity are independent from volatile
@@ -44,7 +45,8 @@ contract.
 ## Active continuation
 
 The next dispatched run must prove that the headless OpenROAD executable
-completes with the explicit `zstd` keg and prefix. If acquisition succeeds, all
-package lanes must execute from that single archive. The added DFT lane then
-must retain real OpenROAD scan insertion, Yosys equivalence, DFTEngine
-ATPG/STIL artifacts, and Icarus fault correlation before M0 can close.
+completes with both the explicit `zstd` keg and linker search path. If
+acquisition succeeds, all package lanes must execute from that single archive.
+The added DFT lane then must retain real OpenROAD scan insertion, Yosys
+equivalence, DFTEngine ATPG/STIL artifacts, and Icarus fault correlation before
+M0 can close.
