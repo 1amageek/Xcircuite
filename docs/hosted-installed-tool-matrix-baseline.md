@@ -18,6 +18,7 @@ contract.
 | [30198051840](https://github.com/1amageek/Xcircuite/actions/runs/30198051840) | `153c3153130e67d41b675e67c65de4b424d0dc1b` | Acquisition | The hosted Homebrew inventory had no trusted `cudd` formula. | `e987e561b438318e5c36fc5589709b1be49ce17c` |
 | [30198213181](https://github.com/1amageek/Xcircuite/actions/runs/30198213181) | `e987e561b438318e5c36fc5589709b1be49ce17c` | Tool build | OpenSTA used the system Flex generator with a different Homebrew `FlexLexer.h`. | `585632a94fb27aff01c3a4d05f1e5d079cd4f5e3` |
 | [30198431982](https://github.com/1amageek/Xcircuite/actions/runs/30198431982) | `585632a94fb27aff01c3a4d05f1e5d079cd4f5e3` | Tool configuration | Headless OpenROAD configuration still discovered a broken Qt5 GUI installation. | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` |
+| [30198691272](https://github.com/1amageek/Xcircuite/actions/runs/30198691272) | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` | Dependency discovery | OpenROAD's embedded OpenSTA scope did not inherit qualified Tcl, Flex, and CUDD paths. | `d60f4214acf7d0466088d66e73330ed73bf86fe0` |
 
 ## Invariants confirmed
 
@@ -34,7 +35,7 @@ contract.
 ## Active continuation
 
 Run
-[30198691272](https://github.com/1amageek/Xcircuite/actions/runs/30198691272)
-contains the headless OpenROAD configuration, exact Xcode host binding, stable
-profile identity, and stable realization identity. Its result must be appended
-here before M0 closes.
+[30198936671](https://github.com/1amageek/Xcircuite/actions/runs/30198936671)
+contains the headless OpenROAD configuration, exact embedded OpenSTA dependency
+binding, exact Xcode host binding, stable profile identity, and stable
+realization identity. Its result must be appended here before M0 closes.

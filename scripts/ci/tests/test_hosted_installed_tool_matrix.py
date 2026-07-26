@@ -258,6 +258,65 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertEqual(formulas[:2], ["brew", "install"])
             self.assertNotIn("cudd", formulas[2:])
 
+    def test_cudd_regenerates_its_versioned_autotools_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            sources = {
+                name: root / name
+                for name in ("cudd", "magic", "netgen", "opensta", "openroad", "ngspice")
+            }
+            for source in sources.values():
+                source.mkdir()
+            dependency_installer = sources["openroad"] / "etc" / "DependencyInstaller.sh"
+            dependency_installer.parent.mkdir()
+            dependency_installer.write_text("#!/bin/sh\n", encoding="utf-8")
+            (sources["ngspice"] / "autogen.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+            with (
+                patch.object(MATRIX, "run_command"),
+                patch.object(MATRIX, "build_autotools_tool") as autotools_build,
+                patch.object(MATRIX, "build_cmake_tool"),
+            ):
+                MATRIX.build_tools(
+                    sources,
+                    root / "installed",
+                    root / "logs",
+                    timeout=30,
+                )
+
+            cudd_build = next(
+                call
+                for call in autotools_build.call_args_list
+                if call.args[0] == "cudd"
+            )
+            self.assertTrue(cudd_build.kwargs["regenerate_build_system"])
+
+    def test_autotools_regeneration_runs_before_configure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "source"
+            source.mkdir()
+
+            with patch.object(MATRIX, "run_command") as command:
+                MATRIX.build_autotools_tool(
+                    "fixture",
+                    source,
+                    root / "installed",
+                    [],
+                    {},
+                    root / "logs",
+                    timeout=30,
+                    run_autogen=False,
+                    regenerate_build_system=True,
+                )
+
+            commands = [call.args[0] for call in command.call_args_list]
+            self.assertEqual(commands[0], ["autoreconf", "-fi"])
+            self.assertEqual(
+                commands[1],
+                ["./configure", f"--prefix={root / 'installed'}"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -677,6 +677,7 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         log_root,
         timeout,
         run_autogen=False,
+        regenerate_build_system=True,
     )
     build_autotools_tool(
         "magic",
@@ -761,8 +762,17 @@ def build_autotools_tool(
     timeout: int,
     *,
     run_autogen: bool = True,
+    regenerate_build_system: bool = False,
 ) -> None:
-    if run_autogen and not (source / "configure").is_file():
+    if regenerate_build_system:
+        run_command(
+            ["autoreconf", "-fi"],
+            cwd=source,
+            timeout=timeout,
+            log_path=log_root / f"{name}-autoreconf.log",
+            environment=environment,
+        )
+    elif run_autogen and not (source / "configure").is_file():
         bootstrap = "./autogen.sh" if (source / "autogen.sh").is_file() else "autoreconf"
         command = [bootstrap] if bootstrap.startswith("./") else [bootstrap, "-fi"]
         run_command(
