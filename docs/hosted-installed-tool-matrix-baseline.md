@@ -21,14 +21,15 @@ contract.
 | [30198691272](https://github.com/1amageek/Xcircuite/actions/runs/30198691272) | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` | Dependency discovery | OpenROAD's embedded OpenSTA scope did not inherit qualified Tcl, Flex, and CUDD paths. | `d60f4214acf7d0466088d66e73330ed73bf86fe0` |
 | [30198936671](https://github.com/1amageek/Xcircuite/actions/runs/30198936671) | `d60f4214acf7d0466088d66e73330ed73bf86fe0` | Build-system generation | CUDD's generated Autotools files retained an obsolete `aclocal-1.14` dependency and were rebuilt based on clone-time timestamp ordering. | `90decdb1b8b2323055924c2ddbdb854b511e4e0f` |
 | [30199139111](https://github.com/1amageek/Xcircuite/actions/runs/30199139111) | `db5382f5d924ea34345f3804713f8e55ac95dd86` | Dependency version drift | OpenROAD's pinned slang revision discovered hosted fmt 12.2, whose `fmt/core.h` no longer exposed the API expected by that source. | `f44efb40b74f5084d73010a84c78992c72851a34` |
+| [30199805781](https://github.com/1amageek/Xcircuite/actions/runs/30199805781) | `6fc16f0231e7afa73464c2b2bf266218e184ee02` | Tool build compatibility | Netgen omitted its existing `VerilogTop` declaration under C99-or-later compilation, while Homebrew Boost.Stacktrace required explicit Darwin `_Unwind_Backtrace` capability for OpenROAD. | `942d2828d16aa16e4014c94aebfc0e8ea64ea31f` |
 
 ## Invariants confirmed
 
 - Every acquisition failure uploaded a typed blocked record and raw build log.
 - No package lane ran after an unqualified acquisition.
 - The publication job treated all missing lane evidence as blocked.
-- Magic, Netgen, CUDD, and OpenSTA now advance through installation before the
-  OpenROAD configuration boundary.
+- Magic, CUDD, fmt, and OpenSTA now advance through installation; Netgen and
+  OpenROAD both reached source compilation on the Xcode 26 runner.
 - CUDD is source-built from a full revision and its installed bytes are part of
   the realization identity.
 - The checked-in corpus and profile identity are independent from volatile
@@ -36,6 +37,6 @@ contract.
 
 ## Active continuation
 
-The next dispatched run must prove that source-built fmt, CUDD regeneration,
-and the complete headless OpenROAD dependency binding remain reproducible
-before M0 closes.
+The next dispatched run must prove the Netgen declaration binding and Darwin
+Boost.Stacktrace capability in addition to the source-built fmt, regenerated
+CUDD, and complete headless OpenROAD dependency binding before M0 closes.
