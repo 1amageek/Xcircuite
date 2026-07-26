@@ -46,7 +46,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
         self.assertRegex(fmt["revision"], r"^[0-9a-f]{40}$")
         self.assertEqual(
             fmt["revision"],
-            "40626af88bd7df9a5fb80be7b25ac85b122d6c21",
+            "1be298e1bd68957e4cd352e1f676f00e07dcfb57",
         )
         self.assertEqual(
             set(fmt["artifacts"]),
@@ -299,7 +299,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 openroad_options,
             )
             self.assertIn(
-                "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED",
+                "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED -DFMT_DEPRECATED_HEAVY_CORE",
                 openroad_options,
             )
             fmt_build = next(

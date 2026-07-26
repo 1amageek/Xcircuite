@@ -75,7 +75,7 @@
     },
     "fmt": {
       "repository": "https://github.com/fmtlib/fmt.git",
-      "revision": "40626af88bd7df9a5fb80be7b25ac85b122d6c21",
+      "revision": "1be298e1bd68957e4cd352e1f676f00e07dcfb57",
       "artifacts": [
         "installed/include/fmt/format.h",
         "installed/lib/libfmt.a"

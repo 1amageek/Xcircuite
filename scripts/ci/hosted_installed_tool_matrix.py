@@ -746,7 +746,7 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
             f"-DCUDD_HEADER={install_root / 'include' / 'cudd.h'}",
             "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
             f"-Dfmt_DIR={install_root / 'lib' / 'cmake' / 'fmt'}",
-            "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED",
+            "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED -DFMT_DEPRECATED_HEAVY_CORE",
         ],
         build_environment,
         log_root,
