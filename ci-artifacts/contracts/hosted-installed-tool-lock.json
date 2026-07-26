@@ -2,6 +2,12 @@
   "schemaVersion": 1,
   "runner": "macos-26",
   "retentionDays": 90,
+  "corpus": {
+    "profileID": "sky130A-open-reference-v1",
+    "repositoryPath": "ci-artifacts/corpora/sky130A-open-reference-v1/corpus-manifest.json",
+    "sha256": "6c1a3813e7671497c3260919747f12380554700d09d0a9c37c82e9ea48d93a30",
+    "byteCount": 691
+  },
   "process": {
     "name": "sky130A",
     "revision": "c6d73a35f524070e85faff4a6a9eef49553ebc2b",
@@ -106,14 +112,14 @@
   "lanes": {
     "drc": {
       "repository": "https://github.com/1amageek/DRCEngine.git",
-      "revision": "e6a0fa2c5b64de1b4ef81e651bd1bb77ecc77299",
+      "revision": "c86059c9cc6a3fdd3f3a12c64b3497571d1c7d54",
       "scheme": "DRCEngine-Package",
       "tests": ["DRCAdaptersTests/MagicDRCAdapterTests"],
       "oracles": ["magic-drc"]
     },
     "lvs": {
       "repository": "https://github.com/1amageek/LVSEngine.git",
-      "revision": "f79b52da83146c108e0a122f4581fe93fae59527",
+      "revision": "0b8509cae85fe25a16759ca027259fbb65622d86",
       "scheme": "LVSEngine-Package",
       "tests": [
         "LVSAdaptersTests/NetgenLVSAdapterTests",
@@ -123,7 +129,7 @@
     },
     "pex": {
       "repository": "https://github.com/1amageek/PEXEngine.git",
-      "revision": "ba10c1fe0b847d5816faef4eae67c64a19d61e1e",
+      "revision": "9b363c1a967cb1cd511ea3bf998f7210803d56e1",
       "scheme": "PEXEngine-Package",
       "tests": [
         "PEXAdaptersTests/MagicPEXAdapterTests",
@@ -134,21 +140,21 @@
     },
     "physical-design": {
       "repository": "https://github.com/1amageek/PhysicalDesignEngine.git",
-      "revision": "a2b64a3f9f1651be0601496a7423a211c1438c49",
+      "revision": "08b2de5dcf8458131a5eebaf7bfca4920dbc2c65",
       "scheme": "PhysicalDesignEngine-Package",
       "tests": ["PhysicalDesignEngineTests/OpenROADPhysicalDesignExecutorTests"],
       "oracles": ["openroad"]
     },
     "timing": {
       "repository": "https://github.com/1amageek/TimingEngine.git",
-      "revision": "2b8f0df3e359fca274edc8ede176457de40e1648",
+      "revision": "3fae581575c7c1b844791156d3505482cf5ebfd7",
       "scheme": "TimingEngine-Package",
       "tests": ["TimingEngineTests/TimingCLIProcessTests"],
       "oracles": ["opensta"]
     },
     "electrical-signoff": {
       "repository": "https://github.com/1amageek/ElectricalSignoffEngine.git",
-      "revision": "5eb111a3c35dfc54285a6b95e72b8f98b2828648",
+      "revision": "90627ac56b9c2411e7b0492e5c4ffeadada515bc",
       "scheme": "ElectricalSignoffEngine-Package",
       "tests": [
         "ElectricalSignoffEngineTests",

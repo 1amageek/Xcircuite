@@ -1,0 +1,12 @@
+Hosted electrical oracle
+.lib {{MODEL_LIBRARY}} {{MODEL_SECTION}}
+.include {{STANDARD_CELL_SPICE}}
+VDD vdd 0 {{SUPPLY_VOLTAGE}}
+VIN gate 0 {{SUPPLY_VOLTAGE}}
+XBUFFER gate 0 0 vdd vdd output sky130_fd_sc_hd__buf_1
+.control
+op
+print v(output)
+quit
+.endc
+.end

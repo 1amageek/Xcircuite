@@ -4,11 +4,22 @@
   "title": "Hosted Installed Tool Matrix Lock",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "runner", "retentionDays", "process", "buildDependencies", "tools", "lanes", "timeouts"],
+  "required": ["schemaVersion", "runner", "retentionDays", "corpus", "process", "buildDependencies", "tools", "lanes", "timeouts"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "runner": { "const": "macos-26" },
     "retentionDays": { "type": "integer", "minimum": 1 },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileID", "repositoryPath", "sha256", "byteCount"],
+      "properties": {
+        "profileID": { "type": "string", "minLength": 1 },
+        "repositoryPath": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "byteCount": { "type": "integer", "minimum": 1 }
+      }
+    },
     "process": {
       "type": "object",
       "required": ["name", "revision", "acquisitionClient", "assets", "corners"],

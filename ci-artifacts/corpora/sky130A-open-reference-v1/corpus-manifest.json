@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "profileID": "sky130A-open-reference-v1",
+  "designID": "sky130-hd-buffer-1",
+  "artifacts": [
+    {
+      "role": "designContract",
+      "path": "design-contract.json",
+      "sha256": "466d15b342cb7591b6890c746bd65470370e992e1d71ac69335f0aa1062563b1",
+      "byteCount": 230
+    },
+    {
+      "role": "logicalNetlist",
+      "path": "design.v",
+      "sha256": "4a7b0efc5d9bee88507c88173768bc9709e3c0e48bc61378af398b0a654ac5bd",
+      "byteCount": 106
+    },
+    {
+      "role": "electricalTemplate",
+      "path": "electrical-template.cir",
+      "sha256": "b61857492ec372d6423dac3479a5178aab0eda31e0a9abcdf035d12c6d7c1e9a",
+      "byteCount": 257
+    }
+  ]
+}

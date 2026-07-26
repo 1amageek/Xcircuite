@@ -1,0 +1,11 @@
+{
+  "designID": "sky130-hd-buffer-1",
+  "logicalTop": "hosted_probe",
+  "physicalTop": "sky130_fd_sc_hd__buf_1",
+  "pinMapping": {
+    "a": "A",
+    "y": "X"
+  },
+  "schemaVersion": 1,
+  "standardCell": "sky130_fd_sc_hd__buf_1"
+}

@@ -42,6 +42,25 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             },
         )
 
+    def test_checked_in_corpus_materializes_exact_bytes(self) -> None:
+        lock_path = (
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock = MATRIX.load_json(lock_path)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            destination = Path(temporary_directory)
+            MATRIX.materialize_corpus(lock_path, lock, destination)
+
+            manifest = MATRIX.load_json(destination / "corpus-manifest.json")
+            for artifact in manifest["artifacts"]:
+                identity = MATRIX.file_digest(destination / artifact["path"])
+                self.assertEqual(identity["sha256"], artifact["sha256"])
+                self.assertEqual(identity["byteCount"], artifact["byteCount"])
+
     def test_magic_headless_build_disables_incompatible_bundled_readline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -109,6 +128,11 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 if call.args[0] == "opensta"
             )
             options = opensta_build.args[3]
+            environment = opensta_build.args[4]
+            self.assertLess(
+                environment["PATH"].index("/opt/homebrew/opt/flex/bin"),
+                environment["PATH"].index("/usr/bin"),
+            )
             self.assertIn(
                 f"-DCUDD_LIB={root / 'installed' / 'lib' / 'libcudd.a'}",
                 options,

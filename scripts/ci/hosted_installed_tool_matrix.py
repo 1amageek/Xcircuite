@@ -136,6 +136,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
     build_dependencies = lock.get("buildDependencies")
     lanes = lock.get("lanes")
     process = lock.get("process")
+    corpus = lock.get("corpus")
     timeouts = lock.get("timeouts")
     if not isinstance(tools, dict) or not tools:
         raise MatrixFailure("invalid_lock", "tools must be non-empty.", "Declare pinned tools.")
@@ -149,9 +150,26 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MatrixFailure("invalid_lock", "lanes must be non-empty.", "Declare package lanes.")
     if not isinstance(process, dict):
         raise MatrixFailure("invalid_lock", "process must be an object.", "Declare a pinned process.")
+    if not isinstance(corpus, dict):
+        raise MatrixFailure(
+            "invalid_lock",
+            "corpus must be an object.",
+            "Declare one immutable checked-in corpus.",
+        )
     if not isinstance(timeouts, dict):
         raise MatrixFailure("invalid_lock", "timeouts must be an object.", "Declare bounded timeouts.")
     require_string(lock, "runner", "lock")
+    require_string(corpus, "profileID", "corpus")
+    corpus_path = require_string(corpus, "repositoryPath", "corpus")
+    contained_path(Path("/repository"), corpus_path, "corpus.repositoryPath")
+    corpus_digest = require_string(corpus, "sha256", "corpus")
+    if re.fullmatch(r"[0-9a-f]{64}", corpus_digest) is None:
+        raise MatrixFailure(
+            "invalid_lock_field",
+            "corpus.sha256 must be a SHA-256 digest.",
+            "Hash the exact checked-in corpus manifest.",
+        )
+    require_integer(corpus, "byteCount", "corpus")
     acquisition_client = process.get("acquisitionClient")
     if not isinstance(acquisition_client, dict):
         raise MatrixFailure("invalid_lock", "process.acquisitionClient must be an object.", "Pin the PDK client.")
@@ -506,7 +524,15 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         log_path=log_root / "openroad-dependencies.log",
     )
     build_environment = {
-        "PATH": f"/opt/homebrew/opt/bison/bin:/usr/local/opt/bison/bin:{os.environ.get('PATH', '')}",
+        "PATH": ":".join(
+            [
+                "/opt/homebrew/opt/bison/bin",
+                "/opt/homebrew/opt/flex/bin",
+                "/usr/local/opt/bison/bin",
+                "/usr/local/opt/flex/bin",
+                os.environ.get("PATH", ""),
+            ]
+        ),
         "PKG_CONFIG_PATH": ":".join(
             [
                 "/opt/homebrew/opt/tcl-tk/lib/pkgconfig",
@@ -1184,40 +1210,84 @@ def prepare_package(
     return destination, revision
 
 
-def write_probe_inputs(probe_root: Path) -> None:
+def materialize_corpus(
+    lock_path: Path,
+    lock: dict[str, Any],
+    probe_root: Path,
+) -> None:
     probe_root.mkdir(parents=True, exist_ok=True)
-    write_json(
-        probe_root / "design-contract.json",
-        {
-            "schemaVersion": 1,
-            "designID": "sky130-hd-buffer-1",
-            "logicalTop": "hosted_probe",
-            "physicalTop": "sky130_fd_sc_hd__buf_1",
-            "standardCell": "sky130_fd_sc_hd__buf_1",
-            "pinMapping": {"a": "A", "y": "X"},
-        },
+    repository_root = lock_path.parents[2]
+    corpus_lock = lock["corpus"]
+    manifest_path = contained_path(
+        repository_root,
+        corpus_lock["repositoryPath"],
+        "corpus.repositoryPath",
     )
-    (probe_root / "design.v").write_text(
-        "module hosted_probe(input a, output y);\n"
-        "  sky130_fd_sc_hd__buf_1 buffer_instance(.A(a), .X(y));\n"
-        "endmodule\n",
-        encoding="utf-8",
-    )
-    (probe_root / "electrical-template.cir").write_text(
-        "Hosted electrical oracle\n"
-        ".lib {{MODEL_LIBRARY}} {{MODEL_SECTION}}\n"
-        ".include {{STANDARD_CELL_SPICE}}\n"
-        "VDD vdd 0 {{SUPPLY_VOLTAGE}}\n"
-        "VIN gate 0 {{SUPPLY_VOLTAGE}}\n"
-        "XBUFFER gate 0 0 vdd vdd output sky130_fd_sc_hd__buf_1\n"
-        ".control\n"
-        "op\n"
-        "print v(output)\n"
-        "quit\n"
-        ".endc\n"
-        ".end\n",
-        encoding="utf-8",
-    )
+    manifest_identity = file_digest(manifest_path)
+    if (
+        manifest_identity["sha256"] != corpus_lock["sha256"]
+        or manifest_identity["byteCount"] != corpus_lock["byteCount"]
+    ):
+        raise MatrixFailure(
+            "corpus_manifest_digest_mismatch",
+            "The checked-in corpus manifest does not match the lock.",
+            "Review and update the corpus manifest and lock in one change.",
+        )
+    manifest = load_json(manifest_path)
+    if (
+        manifest.get("schemaVersion") != 1
+        or manifest.get("profileID") != corpus_lock["profileID"]
+        or manifest.get("designID") != "sky130-hd-buffer-1"
+    ):
+        raise MatrixFailure(
+            "corpus_manifest_identity_mismatch",
+            "The checked-in corpus manifest has an unexpected schema, profile, or design.",
+            "Restore the locked production profile identity.",
+        )
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise MatrixFailure(
+            "corpus_manifest_invalid",
+            "The checked-in corpus manifest has no artifact inventory.",
+            "Declare every immutable corpus input.",
+        )
+    expected_paths = {
+        "designContract": "design-contract.json",
+        "logicalNetlist": "design.v",
+        "electricalTemplate": "electrical-template.cir",
+    }
+    artifacts_by_role = {
+        item.get("role"): item
+        for item in artifacts
+        if isinstance(item, dict)
+    }
+    if set(artifacts_by_role) != set(expected_paths) or len(artifacts_by_role) != len(artifacts):
+        raise MatrixFailure(
+            "corpus_artifact_inventory_mismatch",
+            "The checked-in corpus artifact roles are incomplete or duplicated.",
+            "Restore the exact design contract, logical netlist, and electrical template.",
+        )
+    for role, expected_path in expected_paths.items():
+        artifact = artifacts_by_role[role]
+        if artifact.get("path") != expected_path:
+            raise MatrixFailure(
+                "corpus_artifact_path_mismatch",
+                f"Corpus role {role} does not use {expected_path}.",
+                "Use the canonical checked-in corpus path.",
+            )
+        source = contained_path(manifest_path.parent, expected_path, f"corpus.{role}")
+        identity = file_digest(source)
+        if (
+            identity["sha256"] != artifact.get("sha256")
+            or identity["byteCount"] != artifact.get("byteCount")
+        ):
+            raise MatrixFailure(
+                "corpus_artifact_digest_mismatch",
+                f"Corpus artifact {role} does not match its manifest.",
+                "Review the corpus change and regenerate the manifest identity.",
+            )
+        shutil.copyfile(source, probe_root / expected_path)
+    shutil.copyfile(manifest_path, probe_root / "corpus-manifest.json")
 
 
 def artifact_input(role: str, path: Path) -> dict[str, Any]:
@@ -1226,6 +1296,7 @@ def artifact_input(role: str, path: Path) -> dict[str, Any]:
 
 def probe_input_identity(probe_root: Path, manifest: dict[str, Any], root: Path) -> dict[str, Any]:
     inputs = [
+        artifact_input("corpusManifest", probe_root / "corpus-manifest.json"),
         artifact_input("designContract", probe_root / "design-contract.json"),
         artifact_input("logicalNetlist", probe_root / "design.v"),
         artifact_input("electricalTemplate", probe_root / "electrical-template.cir"),
@@ -1564,7 +1635,8 @@ def run_lane(args: argparse.Namespace) -> int:
         "diagnostics": diagnostics,
     }
     try:
-        lock = load_json(Path(args.lock).resolve())
+        lock_path = Path(args.lock).resolve()
+        lock = load_json(lock_path)
         validate_lock(lock)
         if lane_name not in lock["lanes"]:
             raise MatrixFailure("unknown_lane", f"Unknown lane {lane_name}.", "Select a lane from the lock.")
@@ -1587,7 +1659,7 @@ def run_lane(args: argparse.Namespace) -> int:
         evidence["package"]["revision"] = package_revision
         ensure_remote_dependencies(package_root, lock["timeouts"]["dependencyResolutionSeconds"], evidence_root)
         probe_root = evidence_root / "oracle-inputs"
-        write_probe_inputs(probe_root)
+        materialize_corpus(lock_path, lock, probe_root)
         design_input_identity = probe_input_identity(probe_root, manifest, toolchain_root)
         evidence["designInputIdentity"] = design_input_identity
         corner_sensitive_oracles = {"openrcx", "opensta", "ngspice-dc"}
@@ -1674,6 +1746,7 @@ def validate_consumed_input_contract(lane_name: str, lane: dict[str, Any], evide
         )
     corpus_by_role = {item.get("role"): item for item in corpus_artifacts if isinstance(item, dict)}
     required_corpus_roles = {
+        "corpusManifest",
         "designContract",
         "logicalNetlist",
         "electricalTemplate",

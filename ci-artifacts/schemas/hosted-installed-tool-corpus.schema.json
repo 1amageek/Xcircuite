@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1amageek/Xcircuite/ci-artifacts/schemas/hosted-installed-tool-corpus.schema.json",
+  "title": "Hosted Installed Tool Canonical Corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "profileID", "designID", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profileID": { "const": "sky130A-open-reference-v1" },
+    "designID": { "const": "sky130-hd-buffer-1" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "path", "sha256", "byteCount"],
+        "properties": {
+          "role": {
+            "enum": [
+              "designContract",
+              "logicalNetlist",
+              "electricalTemplate"
+            ]
+          },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "byteCount": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}
