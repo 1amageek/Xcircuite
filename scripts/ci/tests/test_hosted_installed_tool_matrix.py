@@ -42,6 +42,15 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 "installed/lib/libcudd.a",
             },
         )
+        fmt = lock["buildDependencies"]["fmt"]
+        self.assertRegex(fmt["revision"], r"^[0-9a-f]{40}$")
+        self.assertEqual(
+            set(fmt["artifacts"]),
+            {
+                "installed/include/fmt/format.h",
+                "installed/lib/libfmt.a",
+            },
+        )
 
     def test_checked_in_corpus_materializes_exact_bytes(self) -> None:
         lock_path = (
@@ -135,7 +144,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             root = Path(temporary_directory)
             sources = {
                 name: root / name
-                for name in ("cudd", "magic", "netgen", "opensta", "openroad", "ngspice")
+                for name in ("cudd", "fmt", "magic", "netgen", "opensta", "openroad", "ngspice")
             }
             for source in sources.values():
                 source.mkdir()
@@ -170,7 +179,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             root = Path(temporary_directory)
             sources = {
                 name: root / name
-                for name in ("cudd", "magic", "netgen", "opensta", "openroad", "ngspice")
+                for name in ("cudd", "fmt", "magic", "netgen", "opensta", "openroad", "ngspice")
             }
             for source in sources.values():
                 source.mkdir()
@@ -245,6 +254,17 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
                 openroad_options,
             )
+            self.assertIn(
+                f"-Dfmt_DIR={root / 'installed' / 'lib' / 'cmake' / 'fmt'}",
+                openroad_options,
+            )
+            fmt_build = next(
+                call
+                for call in cmake_build.call_args_list
+                if call.args[0] == "fmt"
+            )
+            self.assertIn("-DBUILD_SHARED_LIBS=OFF", fmt_build.args[3])
+            self.assertIn("-DFMT_TEST=OFF", fmt_build.args[3])
 
     def test_acquisition_does_not_use_an_unpinned_cudd_formula(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -263,7 +283,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             root = Path(temporary_directory)
             sources = {
                 name: root / name
-                for name in ("cudd", "magic", "netgen", "opensta", "openroad", "ngspice")
+                for name in ("cudd", "fmt", "magic", "netgen", "opensta", "openroad", "ngspice")
             }
             for source in sources.values():
                 source.mkdir()

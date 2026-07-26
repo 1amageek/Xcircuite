@@ -72,6 +72,14 @@
         "installed/include/cudd.h",
         "installed/lib/libcudd.a"
       ]
+    },
+    "fmt": {
+      "repository": "https://github.com/fmtlib/fmt.git",
+      "revision": "407c905e45ad75fc29bf0f9bb7c5c2fd3475976f",
+      "artifacts": [
+        "installed/include/fmt/format.h",
+        "installed/lib/libfmt.a"
+      ]
     }
   },
   "tools": {

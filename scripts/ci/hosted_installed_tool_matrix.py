@@ -660,6 +660,7 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         ),
         "CMAKE_PREFIX_PATH": ":".join(
             [
+                str(install_root),
                 "/opt/homebrew/opt/or-tools",
                 "/usr/local/opt/or-tools",
                 "/opt/homebrew/opt/tcl-tk@8",
@@ -668,6 +669,19 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
             ]
         ),
     }
+    build_cmake_tool(
+        "fmt",
+        sources["fmt"],
+        install_root,
+        [
+            "-DBUILD_SHARED_LIBS=OFF",
+            "-DFMT_DOC=OFF",
+            "-DFMT_TEST=OFF",
+        ],
+        build_environment,
+        log_root,
+        timeout,
+    )
     build_autotools_tool(
         "cudd",
         sources["cudd"],
@@ -709,6 +723,7 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
             f"-DCUDD_LIB={install_root / 'lib' / 'libcudd.a'}",
             f"-DCUDD_HEADER={install_root / 'include' / 'cudd.h'}",
             "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
+            f"-Dfmt_DIR={install_root / 'lib' / 'cmake' / 'fmt'}",
         ],
         build_environment,
         log_root,
@@ -727,6 +742,7 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
             f"-DCUDD_LIB={install_root / 'lib' / 'libcudd.a'}",
             f"-DCUDD_HEADER={install_root / 'include' / 'cudd.h'}",
             "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
+            f"-Dfmt_DIR={install_root / 'lib' / 'cmake' / 'fmt'}",
         ],
         build_environment,
         log_root,
