@@ -767,6 +767,7 @@ def install_build_dependencies(log_root: Path, timeout: int) -> None:
         "gnu-sed",
         "gperf",
         "help2man",
+        "icu4c",
         "libomp",
         "libtool",
         "libx11",
@@ -824,6 +825,8 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
                 "/usr/local/opt/or-tools",
                 "/opt/homebrew/opt/tcl-tk@8",
                 "/usr/local/opt/tcl-tk@8",
+                "/opt/homebrew/opt/icu4c",
+                "/usr/local/opt/icu4c",
                 "/opt/homebrew/opt/zstd",
                 "/usr/local/opt/zstd",
                 os.environ.get("CMAKE_PREFIX_PATH", ""),
@@ -831,7 +834,10 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         ),
         "LDFLAGS": " ".join(
             [
+                "-L/opt/homebrew/opt/icu4c/lib",
+                "-L/usr/local/opt/icu4c/lib",
                 "-L/opt/homebrew/opt/zstd/lib",
+                "-L/usr/local/opt/zstd/lib",
                 os.environ.get("LDFLAGS", ""),
             ]
         ).strip(),

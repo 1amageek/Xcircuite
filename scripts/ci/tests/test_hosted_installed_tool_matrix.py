@@ -650,7 +650,15 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 openroad_environment["CMAKE_PREFIX_PATH"],
             )
             self.assertIn(
+                "/opt/homebrew/opt/icu4c",
+                openroad_environment["CMAKE_PREFIX_PATH"],
+            )
+            self.assertIn(
                 "-L/opt/homebrew/opt/zstd/lib",
+                openroad_environment["LDFLAGS"],
+            )
+            self.assertIn(
+                "-L/opt/homebrew/opt/icu4c/lib",
                 openroad_environment["LDFLAGS"],
             )
             self.assertIn(
@@ -681,6 +689,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertEqual(formulas[:2], ["brew", "install"])
             self.assertNotIn("cudd", formulas[2:])
             self.assertIn("zstd", formulas[2:])
+            self.assertIn("icu4c", formulas[2:])
 
     def test_cudd_regenerates_its_versioned_autotools_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
