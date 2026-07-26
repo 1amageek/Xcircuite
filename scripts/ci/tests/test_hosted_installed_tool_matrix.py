@@ -84,6 +84,12 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             set(lock["lanes"]["rtl-verification"]["oracles"]),
             {"verilator-lint", "yosys-synthesis-equivalence"},
         )
+        self.assertEqual(
+            MATRIX.process_verilog_definitions(
+                {"process": lock["process"]}
+            ),
+            ["FUNCTIONAL=1", "UNIT_DELAY="],
+        )
 
     def test_workflow_executes_every_locked_lane(self) -> None:
         lock = MATRIX.load_json(
@@ -329,6 +335,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             )
             openroad_options = openroad_build.args[3]
             self.assertIn("-DBUILD_GUI=OFF", openroad_options)
+            self.assertIn("-DBUILD_PYTHON=OFF", openroad_options)
             self.assertIn(
                 "-DCMAKE_DISABLE_FIND_PACKAGE_Qt5=TRUE",
                 openroad_options,
@@ -481,6 +488,40 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             MATRIX.validate_lock(lock)
 
         self.assertEqual(failure.exception.code, "invalid_lock_field")
+
+    def test_process_verilog_definitions_reject_unsafe_or_duplicate_names(
+        self,
+    ) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock["process"]["verilogDefines"].append(
+            {"name": "FUNCTIONAL", "value": "1"}
+        )
+
+        with self.assertRaises(MATRIX.MatrixFailure) as duplicate_failure:
+            MATRIX.validate_lock(lock)
+        self.assertEqual(
+            duplicate_failure.exception.code,
+            "invalid_lock_field",
+        )
+
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock["process"]["verilogDefines"][1]["value"] = "#1"
+        with self.assertRaises(MATRIX.MatrixFailure) as unsafe_failure:
+            MATRIX.validate_lock(lock)
+        self.assertEqual(
+            unsafe_failure.exception.code,
+            "invalid_lock_field",
+        )
 
     def test_source_built_logic_tools_use_locked_install_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

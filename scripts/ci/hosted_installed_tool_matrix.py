@@ -269,6 +269,36 @@ def validate_lock(lock: dict[str, Any]) -> None:
         raise MatrixFailure("invalid_lock", "process.acquisitionClient must be an object.", "Pin the PDK client.")
     require_string(acquisition_client, "name", "process.acquisitionClient")
     require_string(acquisition_client, "version", "process.acquisitionClient")
+    verilog_defines = process.get("verilogDefines")
+    if not isinstance(verilog_defines, list) or not verilog_defines:
+        raise MatrixFailure(
+            "invalid_lock_field",
+            "process.verilogDefines must be a non-empty object array.",
+            "Declare the process-owned Verilog model preprocessor contract.",
+        )
+    define_names: set[str] = set()
+    for index, definition in enumerate(verilog_defines):
+        context = f"process.verilogDefines[{index}]"
+        if not isinstance(definition, dict):
+            raise MatrixFailure(
+                "invalid_lock_field",
+                f"{context} must be an object.",
+                "Correct the process-owned Verilog model preprocessor contract.",
+            )
+        name = require_string(definition, "name", context)
+        value = definition.get("value")
+        if (
+            re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) is None
+            or not isinstance(value, str)
+            or re.fullmatch(r"[A-Za-z0-9_]*", value) is None
+            or name in define_names
+        ):
+            raise MatrixFailure(
+                "invalid_lock_field",
+                f"{context} is not a unique safe Verilog definition.",
+                "Use unique identifier names and token-safe values.",
+            )
+        define_names.add(name)
     for tool_name, tool in tools.items():
         if not isinstance(tool, dict):
             raise MatrixFailure("invalid_lock", f"Tool {tool_name} must be an object.", "Correct the lock.")
@@ -835,6 +865,7 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         [
             "-DENABLE_TESTS=OFF",
             "-DBUILD_GUI=OFF",
+            "-DBUILD_PYTHON=OFF",
             "-DCMAKE_DISABLE_FIND_PACKAGE_Qt5=TRUE",
             "-DTCL_LIBRARY=/opt/homebrew/opt/tcl-tk@8/lib/libtcl8.6.dylib",
             "-DTCL_HEADER=/opt/homebrew/opt/tcl-tk@8/include/tcl-tk/tcl.h",
@@ -1287,6 +1318,7 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
         "process": {
             "name": lock["process"]["name"],
             "revision": lock["process"]["revision"],
+            "verilogDefines": lock["process"]["verilogDefines"],
             "root": str(pdk_root.relative_to(root)),
             "assets": assets,
             "corners": corners,
@@ -1421,6 +1453,12 @@ def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], 
                 f"Toolchain process {key} does not match the lock.",
                 "Discard the artifact and rerun acquisition from this revision.",
             )
+    if process.get("verilogDefines") != lock["process"].get("verilogDefines"):
+        raise MatrixFailure(
+            "process_verilog_defines_mismatch",
+            "The process Verilog definitions do not match the lock.",
+            "Discard the artifact and rerun acquisition from this profile.",
+        )
     tools = manifest.get("tools")
     if not isinstance(tools, dict) or set(tools) != set(lock["tools"]):
         raise MatrixFailure("tool_identity_mismatch", "Tool set does not match the lock.", "Regenerate the artifact.")
@@ -1646,6 +1684,13 @@ def manifest_corner_asset(manifest: dict[str, Any], root: Path, corner_id: str, 
         f"Corner {corner_id} has no {role} asset.",
         "Regenerate the artifact from the complete corner lock.",
     )
+
+
+def process_verilog_definitions(manifest: dict[str, Any]) -> list[str]:
+    return [
+        f"{definition['name']}={definition['value']}"
+        for definition in manifest["process"]["verilogDefines"]
+    ]
 
 
 def tool_path(lock: dict[str, Any], root: Path, name: str) -> Path:
@@ -2020,9 +2065,16 @@ def run_oracle(
             selected_corner_id,
             "timingLibrary",
         )
+        synthesis_definitions = process_verilog_definitions(manifest) + [
+            "NO_PRIMITIVES=1",
+        ]
+        yosys_definitions = " ".join(
+            f"-D {definition}"
+            for definition in synthesis_definitions
+        )
         script.write_text(
-            f"read_verilog -D FUNCTIONAL -D NO_PRIMITIVES {standard_cell_primitives}\n"
-            f"read_verilog -D FUNCTIONAL -D NO_PRIMITIVES {standard_cell_verilog}\n"
+            f"read_verilog {yosys_definitions} {standard_cell_primitives}\n"
+            f"read_verilog {yosys_definitions} {standard_cell_verilog}\n"
             f"read_verilog {probe_root / 'design.v'}\n"
             "hierarchy -check -top hosted_probe\n"
             "proc\n"
@@ -2077,21 +2129,24 @@ def run_oracle(
             root,
             "standardCellVerilogPrimitives",
         )
+        compiler_arguments = [
+            str(tool_path(lock, root, "iverilog")),
+            "-g2012",
+        ]
+        for definition in process_verilog_definitions(manifest):
+            compiler_arguments += ["-D", definition]
+        compiler_arguments += [
+            "-s",
+            "hosted_probe_tb",
+            "-o",
+            str(simulation_image),
+            str(standard_cell_primitives),
+            str(standard_cell_verilog),
+            str(probe_root / "design.v"),
+            str(probe_root / "logic-testbench.sv"),
+        ]
         compile_record = run_command(
-            [
-                str(tool_path(lock, root, "iverilog")),
-                "-g2012",
-                "-D",
-                "FUNCTIONAL",
-                "-s",
-                "hosted_probe_tb",
-                "-o",
-                str(simulation_image),
-                str(standard_cell_primitives),
-                str(standard_cell_verilog),
-                str(probe_root / "design.v"),
-                str(probe_root / "logic-testbench.sv"),
-            ],
+            compiler_arguments,
             cwd=probe_root,
             timeout=timeout,
             log_path=log_root / "iverilog-compile.log",
@@ -2125,8 +2180,13 @@ def run_oracle(
             "--lint-only",
             "--Wall",
             "--Wno-fatal",
-            "-DFUNCTIONAL",
-            "-DNO_PRIMITIVES",
+        ] + [
+            f"-D{definition}"
+            for definition in (
+                process_verilog_definitions(manifest)
+                + ["NO_PRIMITIVES=1"]
+            )
+        ] + [
             "--top-module",
             "hosted_probe",
             str(standard_cell_primitives),

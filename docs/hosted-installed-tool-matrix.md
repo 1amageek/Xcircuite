@@ -34,6 +34,19 @@ flowchart LR
 
 [`hosted-installed-tool-lock.json`](../ci-artifacts/contracts/hosted-installed-tool-lock.json) is the only acquisition and lane inventory. It pins full source revisions for Magic, Netgen, OpenROAD/OpenRCX, OpenSTA, ngspice, Yosys, Icarus Verilog, and Verilator. Runtime companions emitted by one source build, including `yosys-abc` and `vvp`, are declared separately and digest-bound without pretending that they are independent source identities. Source-built dependencies are part of the same contract: OpenSTA's CUDD dependency is built from its locked full revision into the qualified prefix, and its installed header and static library are digest-bound in the toolchain manifest. The workflow does not obtain CUDD from an unversioned Homebrew tap. The lock also pins the Volare version, open_pdks revision, real TT/SS/FF corners, PDK assets, package revisions, test filters, and every process timeout.
 
+The process profile also owns the Verilog-model preprocessor contract. The
+locked `FUNCTIONAL=1` and empty `UNIT_DELAY=` definitions are copied into the
+toolchain manifest and applied consistently by Yosys, Icarus, and Verilator.
+Oracle-specific choices such as disabling UDP bodies for synthesis and lint
+remain in the oracle implementation rather than being presented as a PDK
+property.
+
+OpenROAD is acquired as the headless Tcl/CLI product used by these lanes.
+GUI, Python bindings, and upstream tests are excluded from this hosted
+realization because no declared oracle consumes them; their transitive runtime
+libraries therefore cannot silently become part of the qualified executable
+contract.
+
 Each successful toolchain manifest records:
 
 | Identity | Evidence |
@@ -81,9 +94,9 @@ The PEX, timing, electrical-signoff, and Xcircuite lanes are blocked unless all 
 | OpenROAD / OpenRCX | Read the logical wrapper, LEFs, corner Liberty, and corner extraction rules |
 | OpenSTA | Reads the same logical wrapper bytes and the selected corner Liberty bytes |
 | ngspice | Reads a generated deck for the same standard cell, the foundry schematic SPICE, and the selected model section |
-| Yosys | Reads the same logical wrapper, foundry Verilog models, and TT Liberty; disables UDP bodies for the current combinational corpus, retains synthesized and mapped netlists, and fails on an unproved generic equivalence point |
-| Icarus | Compiles the checked-in functional testbench with the exact logical wrapper and foundry Verilog model bytes, then executes the retained simulation image with `vvp` |
-| Verilator | Lints the exact logical wrapper and foundry Verilog model bytes with UDP bodies disabled for the current combinational corpus |
+| Yosys | Reads the same logical wrapper, foundry Verilog models, process-owned model definitions, and TT Liberty; disables UDP bodies for the current combinational corpus, retains synthesized and mapped netlists, and fails on an unproved generic equivalence point |
+| Icarus | Compiles the checked-in functional testbench with the exact logical wrapper, foundry Verilog model bytes, and process-owned model definitions, then executes the retained simulation image with `vvp` |
+| Verilator | Lints the exact logical wrapper and foundry Verilog model bytes with the process-owned definitions and UDP bodies disabled for the current combinational corpus |
 
 The logic and RTL-verification lanes do not close the DFT or temporal-proof
 release axes. A dedicated sequential corpus, OpenROAD scan result, retained
