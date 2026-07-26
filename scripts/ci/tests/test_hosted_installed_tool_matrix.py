@@ -225,6 +225,26 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 "-DCMAKE_DISABLE_FIND_PACKAGE_Qt5=TRUE",
                 openroad_options,
             )
+            self.assertIn(
+                "-DTCL_LIBRARY=/opt/homebrew/opt/tcl-tk@8/lib/libtcl8.6.dylib",
+                openroad_options,
+            )
+            self.assertIn(
+                "-DTCL_HEADER=/opt/homebrew/opt/tcl-tk@8/include/tcl-tk/tcl.h",
+                openroad_options,
+            )
+            self.assertIn(
+                f"-DCUDD_LIB={root / 'installed' / 'lib' / 'libcudd.a'}",
+                openroad_options,
+            )
+            self.assertIn(
+                f"-DCUDD_HEADER={root / 'installed' / 'include' / 'cudd.h'}",
+                openroad_options,
+            )
+            self.assertIn(
+                "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
+                openroad_options,
+            )
 
     def test_acquisition_does_not_use_an_unpinned_cudd_formula(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

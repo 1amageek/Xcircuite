@@ -84,6 +84,10 @@ After the oracle succeeds, the lane verifies standalone remote package resolutio
 
 ## Evidence retention
 
+The initial execution-derived acquisition failures and their corrective
+commits are retained in
+[`hosted-installed-tool-matrix-baseline.md`](hosted-installed-tool-matrix-baseline.md).
+
 The workflow uploads evidence even when a command fails.
 
 ```text
