@@ -324,12 +324,14 @@ struct EndToEndDesignFlowTests {
             runID: runID,
             workspaceID: workspaceID
         )
-        let elaboratedDesign = try #require(reviewBundle.artifacts.first(where: {
+        let elaboratedDesignArtifact = reviewBundle.artifacts.first(where: {
             $0.stageID == "logic.elaborate" && $0.reference.artifactID == "logic-design"
-        }))
-        let loweredDesign = try #require(reviewBundle.artifacts.first(where: {
+        })
+        let elaboratedDesign = try #require(elaboratedDesignArtifact)
+        let loweredDesignArtifact = reviewBundle.artifacts.first(where: {
             $0.stageID == "logic.lower" && $0.reference.artifactID == "logic-execution-design"
-        }))
+        })
+        let loweredDesign = try #require(loweredDesignArtifact)
         let loweringResultReference = try #require(reviewBundle.artifacts.first(where: {
             $0.stageID == "logic.lower" && $0.reference.artifactID == "logic-lowering-result"
         })?.reference)
@@ -347,12 +349,14 @@ struct EndToEndDesignFlowTests {
         )
         #expect(simulationResult.provenance.inputs.contains(loweredDesign.reference))
         #expect(reviewBundle.artifacts.first(where: { $0.stageID == "timing.sta" }) != nil)
-        let producedDRCLayout = try #require(reviewBundle.artifacts.first(where: {
+        let producedDRCLayoutArtifact = reviewBundle.artifacts.first(where: {
             $0.stageID == "physical.layout" && $0.reference.artifactID == "drc-layout"
-        }))
-        let producedGDSLayout = try #require(reviewBundle.artifacts.first(where: {
+        })
+        let producedDRCLayout = try #require(producedDRCLayoutArtifact)
+        let producedGDSLayoutArtifact = reviewBundle.artifacts.first(where: {
             $0.stageID == "physical.layout" && $0.reference.artifactID == "layout-gds"
-        }))
+        })
+        let producedGDSLayout = try #require(producedGDSLayoutArtifact)
         #expect(producedDRCLayout.integrity?.status == .verified)
         #expect(producedGDSLayout.integrity?.status == .verified)
         let physicalRequestReference = try #require(reviewBundle.artifacts.first(where: {
