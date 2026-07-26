@@ -174,6 +174,42 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertIn("--without-x", options)
             self.assertIn("--disable-readline", options)
 
+    def test_netgen_build_preincludes_its_declared_verilog_api(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            sources = {
+                name: root / name
+                for name in ("cudd", "fmt", "magic", "netgen", "opensta", "openroad", "ngspice")
+            }
+            for source in sources.values():
+                source.mkdir()
+            dependency_installer = sources["openroad"] / "etc" / "DependencyInstaller.sh"
+            dependency_installer.parent.mkdir()
+            dependency_installer.write_text("#!/bin/sh\n", encoding="utf-8")
+            (sources["ngspice"] / "autogen.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+            with (
+                patch.object(MATRIX, "run_command"),
+                patch.object(MATRIX, "build_autotools_tool") as autotools_build,
+                patch.object(MATRIX, "build_cmake_tool"),
+            ):
+                MATRIX.build_tools(
+                    sources,
+                    root / "installed",
+                    root / "logs",
+                    timeout=30,
+                )
+
+            netgen_build = next(
+                call
+                for call in autotools_build.call_args_list
+                if call.args[0] == "netgen"
+            )
+            self.assertIn(
+                f"CFLAGS=-include {sources['netgen'] / 'base' / 'tech.h'}",
+                netgen_build.args[3],
+            )
+
     def test_opensta_build_receives_pinned_dependency_roots(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -256,6 +292,10 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             )
             self.assertIn(
                 f"-Dfmt_DIR={root / 'installed' / 'lib' / 'cmake' / 'fmt'}",
+                openroad_options,
+            )
+            self.assertIn(
+                "-DCMAKE_CXX_FLAGS=-DBOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED",
                 openroad_options,
             )
             fmt_build = next(
