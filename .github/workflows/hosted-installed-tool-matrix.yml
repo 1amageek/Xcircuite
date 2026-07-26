@@ -26,6 +26,12 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Verify hosted matrix runner
+        run: >-
+          python3 -m unittest discover
+          -s scripts/ci/tests
+          -p 'test_*.py'
+
       - name: Acquire pinned tools and PDK
         run: >-
           python3 "$MATRIX_RUNNER" acquire

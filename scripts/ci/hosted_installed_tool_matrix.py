@@ -471,7 +471,10 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         "magic",
         sources["magic"],
         install_root,
-        ["--without-x"],
+        [
+            "--without-x",
+            "--disable-readline",
+        ],
         build_environment,
         log_root,
         timeout,
