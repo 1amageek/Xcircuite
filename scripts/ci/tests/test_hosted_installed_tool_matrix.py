@@ -45,6 +45,10 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
         fmt = lock["buildDependencies"]["fmt"]
         self.assertRegex(fmt["revision"], r"^[0-9a-f]{40}$")
         self.assertEqual(
+            fmt["revision"],
+            "40626af88bd7df9a5fb80be7b25ac85b122d6c21",
+        )
+        self.assertEqual(
             set(fmt["artifacts"]),
             {
                 "installed/include/fmt/format.h",
