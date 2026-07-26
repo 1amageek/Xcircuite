@@ -92,6 +92,7 @@ struct DFTFlowStageExecutorTests {
             "cell-timing",
             "dft-request",
             "dft-transformed-design",
+            "dft-scan-implementation",
             "dft-design-diff",
             "dft-result",
         ])
@@ -104,6 +105,169 @@ struct DFTFlowStageExecutorTests {
             FileManager.default.fileExists(
                 atPath: root.appending(path: transformed.path).path
             )
+        )
+    }
+
+    @Test("scan evidence feeds exact ATPG through the canonical flow context")
+    func executesRealizedScanATPGStage() async throws {
+        let root = try makeRoot()
+        defer { removeRoot(root) }
+        let runID = "dft-realized-scan-atpg-run"
+        let sourceSnapshot = try LogicDesignSnapshotCodec.finalized(
+            makeGateSnapshot()
+        )
+        let sourceArtifact = try writeArtifact(
+            root: root,
+            path: "design.json",
+            artifactID: "design",
+            data: try LogicDesignSnapshotCodec.encode(sourceSnapshot),
+            kind: .netlist,
+            role: .input
+        )
+        let pdkArtifact = try writeArtifact(
+            root: root,
+            path: "pdk.json",
+            artifactID: "pdk",
+            data: Data(Self.pdkManifest.utf8),
+            kind: .technology,
+            role: .input
+        )
+        let library = makeCellLibraryManifest(
+            pdkDigest: pdkArtifact.digest.hexadecimalValue
+        )
+        let libraryArtifact = try writeArtifact(
+            root: root,
+            path: "cell-library.json",
+            artifactID: "cell-library",
+            data: try DFTCellLibraryManifestCodec.encode(library),
+            kind: .technology,
+            role: .input
+        )
+        let timingArtifact = try writeArtifact(
+            root: root,
+            path: "cell-timing.lib",
+            artifactID: "cell-timing",
+            data: Data(Self.cellTimingLibrary.utf8),
+            kind: .technology,
+            format: .liberty,
+            role: .input
+        )
+        let libraryReference = DFTCellLibraryReference(
+            artifact: libraryArtifact,
+            processID: library.processID,
+            version: library.version,
+            manifestDigest: try DFTCellLibraryManifestCodec.digest(library),
+            timingLibraryArtifact: timingArtifact
+        )
+        let scanRequest = try makeRequest(
+            root: root,
+            runID: runID,
+            designArtifact: sourceArtifact,
+            designDigest: try LogicDesignSnapshotCodec.digest(sourceSnapshot),
+            cellLibraryReference: libraryReference,
+            pdkArtifact: pdkArtifact
+        )
+        try DFTArtifactJSONEncoder().encode(scanRequest).write(
+            to: root.appending(path: "dft-scan-request.json"),
+            options: .atomic
+        )
+        let context = try await makeContext(root: root, runID: runID)
+        let scanStage = try await DFTFlowStageExecutor(
+            stageID: "dft.scan",
+            requestInput: .path("dft-scan-request.json"),
+            expectedOperation: .scanInsertion
+        ).execute(
+            stage: FlowStageDefinition(
+                stageID: "dft.scan",
+                displayName: "DFT scan insertion"
+            ),
+            context: context
+        )
+        #expect(scanStage.status == .succeeded)
+        let transformedArtifact = try #require(
+            scanStage.artifacts.first {
+                $0.artifactID == "dft-transformed-design"
+            }
+        )
+        let implementationArtifact = try #require(
+            scanStage.artifacts.first {
+                $0.artifactID == "dft-scan-implementation"
+            }
+        )
+        let transformedSnapshot = try LogicDesignSnapshotCodec.decode(
+            Data(
+                contentsOf: root.appending(
+                    path: transformedArtifact.path
+                )
+            )
+        )
+        let transformedDigest = try #require(
+            transformedSnapshot.designDigest
+        )
+        let atpgRequest = DFTRequest(
+            runID: runID,
+            inputs: [transformedArtifact, implementationArtifact],
+            design: LogicDesignReference(
+                artifact: transformedArtifact,
+                topDesignName: "top",
+                designDigest: transformedDigest
+            ),
+            constraints: scanRequest.constraints,
+            pdk: scanRequest.pdk,
+            cellLibrary: libraryReference,
+            scanImplementation: DFTScanImplementationReference(
+                artifact: implementationArtifact,
+                transformedDesignDigest: transformedDigest
+            ),
+            operation: .atpg,
+            scanArchitecture: scanRequest.scanArchitecture,
+            atpgConfiguration: DFTATPGConfiguration(
+                patternLength: 16,
+                faultSource: .gateLevel,
+                maximumExhaustiveInputCount: 8
+            )
+        )
+        try DFTArtifactJSONEncoder().encode(atpgRequest).write(
+            to: root.appending(path: "dft-atpg-request.json"),
+            options: .atomic
+        )
+
+        let atpgStage = try await DFTFlowStageExecutor(
+            stageID: "dft.atpg",
+            requestInput: .path("dft-atpg-request.json"),
+            expectedOperation: .atpg
+        ).execute(
+            stage: FlowStageDefinition(
+                stageID: "dft.atpg",
+                displayName: "DFT ATPG"
+            ),
+            context: context
+        )
+
+        #expect(atpgStage.status == .succeeded)
+        #expect(atpgStage.gates.contains {
+            $0.gateID == "dft" && $0.status == .passed
+        })
+        #expect(atpgStage.artifacts.contains {
+            $0.artifactID == "dft-scan-pattern-execution-plan"
+                && $0.kind == .testPattern
+                && $0.format == .json
+        })
+        let resultArtifact = try #require(
+            atpgStage.artifacts.first { $0.artifactID == "dft-result" }
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let retainedResult = try decoder.decode(
+            DFTResult.self,
+            from: Data(
+                contentsOf: root.appending(path: resultArtifact.path)
+            )
+        )
+        #expect(retainedResult.status == .completed)
+        #expect(
+            retainedResult.payload.scanPatternExecutionPlan?.patterns.isEmpty
+                == false
         )
     }
 
@@ -629,6 +793,11 @@ struct DFTFlowStageExecutorTests {
                 ]
             )
         }
+        let ports = [
+            RTLPort(id: "port-clk", name: "clk", direction: .input),
+            RTLPort(id: "port-d0", name: "d0", direction: .input),
+            RTLPort(id: "port-d1", name: "d1", direction: .input),
+        ]
         return LogicDesignSnapshot(
             rtl: RTLDesign(topModuleName: "top"),
             gate: GateDesign(
@@ -637,9 +806,11 @@ struct DFTFlowStageExecutorTests {
                     GateModule(
                         id: "module-top",
                         name: "top",
-                        ports: [RTLPort(id: "port-clk", name: "clk", direction: .input)],
+                        ports: ports,
                         portBindings: [
                             GatePortBinding(portID: "port-clk", netID: "clk"),
+                            GatePortBinding(portID: "port-d0", netID: "d-0"),
+                            GatePortBinding(portID: "port-d1", netID: "d-1"),
                         ],
                         cells: cells,
                         nets: [
