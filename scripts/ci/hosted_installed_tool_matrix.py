@@ -829,6 +829,12 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
                 os.environ.get("CMAKE_PREFIX_PATH", ""),
             ]
         ),
+        "LDFLAGS": " ".join(
+            [
+                "-L/opt/homebrew/opt/zstd/lib",
+                os.environ.get("LDFLAGS", ""),
+            ]
+        ).strip(),
     }
     build_cmake_tool(
         "fmt",

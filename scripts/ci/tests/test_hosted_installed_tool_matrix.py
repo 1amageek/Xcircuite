@@ -650,6 +650,10 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 openroad_environment["CMAKE_PREFIX_PATH"],
             )
             self.assertIn(
+                "-L/opt/homebrew/opt/zstd/lib",
+                openroad_environment["LDFLAGS"],
+            )
+            self.assertIn(
                 f"-Dfmt_DIR={root / 'installed' / 'lib' / 'cmake' / 'fmt'}",
                 openroad_options,
             )
