@@ -4,10 +4,21 @@
   "title": "Hosted Installed Tool Matrix Lock",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "runner", "retentionDays", "corpus", "process", "buildDependencies", "tools", "lanes", "timeouts"],
+  "required": ["schemaVersion", "runner", "runnerEnvironment", "retentionDays", "corpus", "process", "buildDependencies", "tools", "lanes", "timeouts"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "runner": { "const": "macos-26" },
+    "runnerEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architecture", "developerDirectory"],
+      "properties": {
+        "architecture": { "const": "arm64" },
+        "developerDirectory": {
+          "const": "/Applications/Xcode_26.5.app/Contents/Developer"
+        }
+      }
+    },
     "retentionDays": { "type": "integer", "minimum": 1 },
     "corpus": {
       "type": "object",

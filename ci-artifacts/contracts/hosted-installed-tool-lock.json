@@ -1,6 +1,10 @@
 {
   "schemaVersion": 1,
   "runner": "macos-26",
+  "runnerEnvironment": {
+    "architecture": "arm64",
+    "developerDirectory": "/Applications/Xcode_26.5.app/Contents/Developer"
+  },
   "retentionDays": 90,
   "corpus": {
     "profileID": "sky130A-open-reference-v1",

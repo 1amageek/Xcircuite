@@ -90,6 +90,56 @@ def file_digest(path: Path) -> dict[str, Any]:
     return {"sha256": digest.hexdigest(), "byteCount": byte_count}
 
 
+def canonical_json_digest(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def profile_identity_sha256(lock: dict[str, Any]) -> str:
+    resolved = json.loads(json.dumps(lock))
+    github_sha = os.environ.get("GITHUB_SHA", "")
+    for lane in resolved["lanes"].values():
+        if lane["revision"] == "$GITHUB_SHA":
+            if FULL_REVISION.fullmatch(github_sha) is None:
+                raise MatrixFailure(
+                    "github_sha_missing",
+                    "The profile contains $GITHUB_SHA but no full triggering revision is available.",
+                    "Set GITHUB_SHA to the exact host repository revision.",
+                )
+            lane["revision"] = github_sha
+    return canonical_json_digest(resolved)
+
+
+def realization_identity_sha256(manifest: dict[str, Any]) -> str:
+    tools = {
+        name: {
+            key: value
+            for key, value in tool.items()
+            if key != "versionInvocation"
+        }
+        for name, tool in manifest["tools"].items()
+    }
+    process = {
+        key: value
+        for key, value in manifest["process"].items()
+        if key != "root"
+    }
+    projection = {
+        "schemaVersion": manifest["schemaVersion"],
+        "kind": manifest["kind"],
+        "profileIdentitySHA256": manifest["profileIdentitySHA256"],
+        "runner": manifest["runner"],
+        "process": process,
+        "buildDependencies": manifest["buildDependencies"],
+        "tools": tools,
+    }
+    return canonical_json_digest(projection)
+
+
 def contained_path(root: Path, relative_path: str, context: str) -> Path:
     relative = Path(relative_path)
     resolved_root = root.resolve()
@@ -138,6 +188,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
     process = lock.get("process")
     corpus = lock.get("corpus")
     timeouts = lock.get("timeouts")
+    runner_environment = lock.get("runnerEnvironment")
     if not isinstance(tools, dict) or not tools:
         raise MatrixFailure("invalid_lock", "tools must be non-empty.", "Declare pinned tools.")
     if not isinstance(build_dependencies, dict) or not build_dependencies:
@@ -158,7 +209,19 @@ def validate_lock(lock: dict[str, Any]) -> None:
         )
     if not isinstance(timeouts, dict):
         raise MatrixFailure("invalid_lock", "timeouts must be an object.", "Declare bounded timeouts.")
+    if not isinstance(runner_environment, dict):
+        raise MatrixFailure(
+            "invalid_lock",
+            "runnerEnvironment must be an object.",
+            "Lock the hosted architecture and developer directory.",
+        )
     require_string(lock, "runner", "lock")
+    require_string(runner_environment, "architecture", "runnerEnvironment")
+    require_string(
+        runner_environment,
+        "developerDirectory",
+        "runnerEnvironment",
+    )
     require_string(corpus, "profileID", "corpus")
     corpus_path = require_string(corpus, "repositoryPath", "corpus")
     contained_path(Path("/repository"), corpus_path, "corpus.repositoryPath")
@@ -426,6 +489,61 @@ def run_command(
     return record
 
 
+def validate_runner_environment(lock: dict[str, Any]) -> None:
+    expected = lock["runnerEnvironment"]
+    actual_architecture = platform.machine()
+    if actual_architecture != expected["architecture"]:
+        raise MatrixFailure(
+            "runner_architecture_mismatch",
+            f"Expected runner architecture {expected['architecture']}, got {actual_architecture}.",
+            "Use the locked hosted runner architecture.",
+        )
+    actual_developer_directory = os.environ.get("DEVELOPER_DIR", "")
+    if actual_developer_directory != expected["developerDirectory"]:
+        raise MatrixFailure(
+            "developer_directory_mismatch",
+            "DEVELOPER_DIR does not match the checked-in runner contract.",
+            "Select the exact locked Xcode developer directory.",
+        )
+    if not Path(actual_developer_directory).is_dir():
+        raise MatrixFailure(
+            "developer_directory_missing",
+            f"The locked developer directory is unavailable at {actual_developer_directory}.",
+            "Use a runner image that retains the locked Xcode installation.",
+        )
+
+
+def collect_runner_identity(
+    lock: dict[str, Any],
+    root: Path,
+    log_root: Path,
+) -> dict[str, Any]:
+    xcode_log = log_root / "xcode-version.log"
+    swift_log = log_root / "swift-version.log"
+    run_command(
+        ["xcodebuild", "-version"],
+        cwd=root,
+        timeout=120,
+        log_path=xcode_log,
+    )
+    run_command(
+        ["swift", "--version"],
+        cwd=root,
+        timeout=120,
+        log_path=swift_log,
+    )
+    return {
+        "lockImage": lock["runner"],
+        "imageOS": os.environ.get("ImageOS"),
+        "imageVersion": os.environ.get("ImageVersion"),
+        "platform": platform.platform(),
+        "architecture": platform.machine(),
+        "developerDirectory": os.environ["DEVELOPER_DIR"],
+        "xcodeVersion": xcode_log.read_text(encoding="utf-8").strip(),
+        "swiftVersion": swift_log.read_text(encoding="utf-8").strip(),
+    }
+
+
 def clone_revision(repository: str, revision: str, destination: Path, timeout: int, log: Path) -> None:
     if destination.exists():
         shutil.rmtree(destination)
@@ -599,7 +717,11 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         "openroad",
         sources["openroad"],
         install_root,
-        ["-DENABLE_TESTS=OFF"],
+        [
+            "-DENABLE_TESTS=OFF",
+            "-DBUILD_GUI=OFF",
+            "-DCMAKE_DISABLE_FIND_PACKAGE_Qt5=TRUE",
+        ],
         build_environment,
         log_root,
         timeout,
@@ -759,6 +881,7 @@ def acquire_pdk(lock: dict[str, Any], root: Path, log_root: Path, timeout: int) 
 
 
 def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path, log_root: Path) -> dict[str, Any]:
+    runner = collect_runner_identity(lock, root, log_root)
     tools: dict[str, Any] = {}
     version_timeout = min(120, lock["timeouts"]["oracleSeconds"])
     for tool_name, specification in lock["tools"].items():
@@ -864,16 +987,14 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
                 "assets": corner_assets,
             }
         )
-    return {
+    manifest = {
         "schemaVersion": SCHEMA_VERSION,
         "kind": "hosted-installed-toolchain",
         "status": "passed",
         "generatedAt": utc_now(),
-        "runner": {
-            "lockImage": lock["runner"],
-            "platform": platform.platform(),
-            "architecture": platform.machine(),
-        },
+        "profileIdentitySHA256": profile_identity_sha256(lock),
+        "realizationIdentitySHA256": None,
+        "runner": runner,
         "process": {
             "name": lock["process"]["name"],
             "revision": lock["process"]["revision"],
@@ -885,6 +1006,8 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
         "tools": tools,
         "diagnostics": [],
     }
+    manifest["realizationIdentitySHA256"] = realization_identity_sha256(manifest)
+    return manifest
 
 
 def create_toolchain_archive(root: Path, archive: Path) -> None:
@@ -907,6 +1030,7 @@ def acquire(args: argparse.Namespace) -> int:
     try:
         lock = load_json(lock_path)
         validate_lock(lock)
+        validate_runner_environment(lock)
         timeout = lock["timeouts"]["acquisitionSeconds"]
         install_build_dependencies(log_root, timeout)
         sources = acquire_tool_sources(lock, root, log_root, timeout)
@@ -930,6 +1054,8 @@ def acquire(args: argparse.Namespace) -> int:
             "kind": "hosted-installed-toolchain",
             "status": "blocked",
             "generatedAt": utc_now(),
+            "profileIdentitySHA256": None,
+            "realizationIdentitySHA256": None,
             "runner": {"lockImage": lock.get("runner") if lock is not None else None},
             "process": lock.get("process") if lock is not None else None,
             "buildDependencies": {},
@@ -956,6 +1082,7 @@ def extract_archive(archive: Path, destination: Path) -> None:
 
 
 def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], str]:
+    validate_runner_environment(lock)
     manifest_path = root / "toolchain-manifest.json"
     manifest = load_json(manifest_path)
     if manifest.get("status") != "passed":
@@ -963,6 +1090,37 @@ def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], 
             "toolchain_not_qualified",
             "The downloaded toolchain manifest is not passed.",
             "Repair acquisition before running package lanes.",
+        )
+    expected_profile_identity = profile_identity_sha256(lock)
+    if manifest.get("profileIdentitySHA256") != expected_profile_identity:
+        raise MatrixFailure(
+            "profile_identity_mismatch",
+            "The toolchain profile identity does not match the resolved lock.",
+            "Discard the artifact and reacquire it from the exact host revision.",
+        )
+    expected_realization_identity = realization_identity_sha256(manifest)
+    if manifest.get("realizationIdentitySHA256") != expected_realization_identity:
+        raise MatrixFailure(
+            "realization_identity_mismatch",
+            "The installed toolchain realization identity is invalid.",
+            "Discard the artifact and reacquire every executable and process asset.",
+        )
+    runner = manifest.get("runner")
+    expected_runner = lock["runnerEnvironment"]
+    if (
+        not isinstance(runner, dict)
+        or runner.get("lockImage") != lock["runner"]
+        or runner.get("architecture") != expected_runner["architecture"]
+        or runner.get("developerDirectory") != expected_runner["developerDirectory"]
+        or not isinstance(runner.get("xcodeVersion"), str)
+        or not runner["xcodeVersion"]
+        or not isinstance(runner.get("swiftVersion"), str)
+        or not runner["swiftVersion"]
+    ):
+        raise MatrixFailure(
+            "runner_identity_mismatch",
+            "The toolchain runner identity does not match the lock.",
+            "Discard the artifact and reacquire it on the exact locked host.",
         )
     process = manifest.get("process")
     if not isinstance(process, dict):
@@ -1114,7 +1272,7 @@ def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], 
                     f"Corner asset {corner.get('id')}/{asset.get('role')} failed integrity verification.",
                     "Discard the artifact and rerun acquisition.",
                 )
-    return manifest, file_digest(manifest_path)["sha256"]
+    return manifest, expected_realization_identity
 
 
 def manifest_asset(manifest: dict[str, Any], root: Path, role: str) -> Path:
@@ -1623,6 +1781,7 @@ def run_lane(args: argparse.Namespace) -> int:
         "generatedAt": utc_now(),
         "lane": lane_name,
         "package": {"repository": None, "revision": None},
+        "profileIdentitySHA256": None,
         "toolchainManifestSHA256": None,
         "process": None,
         "tools": None,
@@ -1645,6 +1804,7 @@ def run_lane(args: argparse.Namespace) -> int:
         archive = Path(args.archive).resolve()
         extract_archive(archive, toolchain_root)
         manifest, manifest_digest = verify_toolchain(lock, toolchain_root)
+        evidence["profileIdentitySHA256"] = manifest["profileIdentitySHA256"]
         evidence["toolchainManifestSHA256"] = manifest_digest
         evidence["process"] = manifest["process"]
         evidence["tools"] = manifest["tools"]
@@ -1916,6 +2076,7 @@ def finalize(args: argparse.Namespace) -> int:
     output = Path(args.output).resolve()
     lanes: list[dict[str, Any]] = []
     diagnostics: list[dict[str, str]] = []
+    profile_digests: set[str] = set()
     manifest_digests: set[str] = set()
     all_evidence_paths = list(input_root.glob("**/lane-evidence.json"))
     parsed_evidence: list[tuple[Path, dict[str, Any]]] = []
@@ -1943,6 +2104,7 @@ def finalize(args: argparse.Namespace) -> int:
         evidence_path, lane_evidence = candidates[0]
         raw_status = lane_evidence.get("status")
         status = "passed" if raw_status == "passed" else "blocked"
+        profile_digest = lane_evidence.get("profileIdentitySHA256")
         digest = lane_evidence.get("toolchainManifestSHA256")
         design_identity = lane_evidence.get("designInputIdentity")
         design_digest = design_identity.get("sha256") if isinstance(design_identity, dict) else None
@@ -2027,6 +2189,7 @@ def finalize(args: argparse.Namespace) -> int:
             "lane": lane_name,
             "status": status,
             "evidence": str(evidence_path.relative_to(input_root)),
+            "profileIdentitySHA256": profile_digest if isinstance(profile_digest, str) else None,
             "toolchainManifestSHA256": digest if isinstance(digest, str) else None,
         }
         if isinstance(lane_evidence.get("package"), dict):
@@ -2052,6 +2215,27 @@ def finalize(args: argparse.Namespace) -> int:
                     "Rerun the lane from the acquired toolchain artifact.",
                 ).diagnostic()
             )
+        if (
+            isinstance(profile_digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", profile_digest) is not None
+        ):
+            profile_digests.add(profile_digest)
+        else:
+            diagnostics.append(
+                MatrixFailure(
+                    "lane_profile_digest_invalid",
+                    f"Hosted lane {lane_name} has no valid profile identity.",
+                    "Rerun the lane from the exact resolved production lock.",
+                ).diagnostic()
+            )
+    if len(profile_digests) != 1:
+        diagnostics.append(
+            MatrixFailure(
+                "profile_identity_not_uniform",
+                f"Expected one profile identity across all lanes, found {len(profile_digests)}.",
+                "Run every lane from the same resolved production profile.",
+            ).diagnostic()
+        )
     if len(manifest_digests) != 1:
         diagnostics.append(
             MatrixFailure(
@@ -2065,6 +2249,7 @@ def finalize(args: argparse.Namespace) -> int:
         "kind": "hosted-installed-tool-publication-readiness",
         "status": "passed" if not diagnostics else "blocked",
         "generatedAt": utc_now(),
+        "profileIdentitySHA256": next(iter(profile_digests)) if len(profile_digests) == 1 else None,
         "toolchainManifestSHA256": next(iter(manifest_digests)) if len(manifest_digests) == 1 else None,
         "lanes": lanes,
         "diagnostics": diagnostics,

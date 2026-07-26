@@ -4,12 +4,13 @@
   "title": "Hosted Installed Tool Publication Readiness",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "kind", "status", "generatedAt", "toolchainManifestSHA256", "lanes", "diagnostics"],
+  "required": ["schemaVersion", "kind", "status", "generatedAt", "profileIdentitySHA256", "toolchainManifestSHA256", "lanes", "diagnostics"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "kind": { "const": "hosted-installed-tool-publication-readiness" },
     "status": { "enum": ["passed", "blocked"] },
     "generatedAt": { "type": "string", "format": "date-time" },
+    "profileIdentitySHA256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
     "toolchainManifestSHA256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
     "lanes": {
       "type": "array",
@@ -23,6 +24,7 @@
           "status": { "enum": ["passed", "blocked"] },
           "evidence": { "type": ["string", "null"] },
           "package": { "type": "object" },
+          "profileIdentitySHA256": { "type": ["string", "null"] },
           "toolchainManifestSHA256": { "type": ["string", "null"] },
           "designInputSHA256": { "type": ["string", "null"] },
           "qualifiedCornerIDs": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }

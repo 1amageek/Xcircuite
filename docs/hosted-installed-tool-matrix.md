@@ -41,8 +41,16 @@ Each successful toolchain manifest records:
 | Corners | TT, SS, and FF identifier, classification, voltage, and ngspice model section |
 | Per-corner assets | Liberty, OpenRCX rule deck, ngspice model library, byte count, SHA-256 digest |
 | Runner | Locked runner image, platform, architecture |
+| Compiler host | Locked `DEVELOPER_DIR`, exact Xcode build output, exact Swift version output, hosted image OS, and hosted image version |
 
-Every package lane extracts the same qualified archive and recomputes all executable and PDK asset digests. Publication readiness is blocked unless every lane reports the same toolchain manifest digest.
+Every package lane extracts the same qualified archive and recomputes all executable, source-built dependency, and PDK asset digests. Two identities remain deliberately separate:
+
+| Identity | Stability contract |
+|---|---|
+| Profile identity | Canonical digest of the resolved lock, including the triggering Xcircuite revision; equal across clean environments that execute the same profile |
+| Realization identity | Canonical digest of the exact host, executable, dependency, and process artifact identities; equal across lanes that consume one acquired archive |
+
+Timestamps, log paths, and temporary roots are excluded from both identities. Executable and process artifact digests remain part of the realization identity. Publication readiness is blocked unless every lane reports one profile identity and one realization identity.
 
 ## Real execution
 
@@ -101,7 +109,7 @@ The JSON contracts are defined under [`ci-artifacts/schemas`](../ci-artifacts/sc
 
 1. Update a tool, PDK, corner, deck, package revision, or filter only through the lock file.
 2. Keep all revisions as full Git commit identifiers. The Xcircuite lane alone resolves `$GITHUB_SHA` to the triggering checkout.
-3. Update the runner, lock, acquisition implementation, and schemas together when an installation contract changes.
+3. Update the runner, locked `DEVELOPER_DIR`, lock, acquisition implementation, and schemas together when an installation contract changes. A newer Xcode is a new qualification identity, not an implicit fallback.
 4. Preserve real oracle execution when package tests are reorganized. A test double is supplementary evidence only.
 5. Do not add repository secrets or machine-local paths. The workflow acquires public inputs into runner-temporary directories.
 6. Do not publish from this matrix unless `publication-readiness.json` is `passed`.

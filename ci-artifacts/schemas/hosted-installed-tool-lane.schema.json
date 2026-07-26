@@ -4,7 +4,7 @@
   "title": "Hosted Installed Tool Lane Evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "kind", "status", "generatedAt", "lane", "package", "toolchainManifestSHA256", "process", "tools", "designInputIdentity", "qualifiedCornerIDs", "releaseHandoffTestFilters", "releaseHandoffEvidence", "oracleInvocations", "xcodebuildInvocations", "diagnostics"],
+  "required": ["schemaVersion", "kind", "status", "generatedAt", "lane", "package", "profileIdentitySHA256", "toolchainManifestSHA256", "process", "tools", "designInputIdentity", "qualifiedCornerIDs", "releaseHandoffTestFilters", "releaseHandoffEvidence", "oracleInvocations", "xcodebuildInvocations", "diagnostics"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "kind": { "const": "hosted-installed-tool-lane" },
@@ -20,6 +20,7 @@
         "revision": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40}$" }
       }
     },
+    "profileIdentitySHA256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
     "toolchainManifestSHA256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
     "process": { "type": ["object", "null"] },
     "tools": { "type": ["object", "null"] },
@@ -32,7 +33,7 @@
           "properties": {
             "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
             "designDefinition": { "type": "object" },
-            "artifacts": { "type": "array", "minItems": 5, "items": { "$ref": "#/$defs/inputArtifact" } }
+            "artifacts": { "type": "array", "minItems": 6, "items": { "$ref": "#/$defs/inputArtifact" } }
           }
         }
       ]
@@ -47,7 +48,7 @@
           "required": ["designIdentitySHA256", "inputArtifacts", "testFilters", "status"],
           "properties": {
             "designIdentitySHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-            "inputArtifacts": { "type": "array", "minItems": 5, "items": { "$ref": "#/$defs/inputArtifact" } },
+            "inputArtifacts": { "type": "array", "minItems": 6, "items": { "$ref": "#/$defs/inputArtifact" } },
             "testFilters": { "type": "array", "minItems": 3, "items": { "type": "string" } },
             "status": { "const": "passed" }
           }

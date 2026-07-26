@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,6 +61,74 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 identity = MATRIX.file_digest(destination / artifact["path"])
                 self.assertEqual(identity["sha256"], artifact["sha256"])
                 self.assertEqual(identity["byteCount"], artifact["byteCount"])
+
+    def test_runner_environment_rejects_architecture_drift(self) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+
+        with (
+            patch.object(MATRIX.platform, "machine", return_value="x86_64"),
+            patch.dict(
+                os.environ,
+                {"DEVELOPER_DIR": lock["runnerEnvironment"]["developerDirectory"]},
+            ),
+        ):
+            with self.assertRaises(MATRIX.MatrixFailure) as failure:
+                MATRIX.validate_runner_environment(lock)
+
+        self.assertEqual(failure.exception.code, "runner_architecture_mismatch")
+
+    def test_profile_identity_resolves_the_host_revision(self) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        with patch.dict(os.environ, {"GITHUB_SHA": "a" * 40}):
+            first = MATRIX.profile_identity_sha256(lock)
+            repeated = MATRIX.profile_identity_sha256(lock)
+        with patch.dict(os.environ, {"GITHUB_SHA": "b" * 40}):
+            different_revision = MATRIX.profile_identity_sha256(lock)
+
+        self.assertEqual(first, repeated)
+        self.assertNotEqual(first, different_revision)
+
+    def test_realization_identity_ignores_volatile_invocation_timestamps(self) -> None:
+        manifest = {
+            "schemaVersion": 1,
+            "kind": "hosted-installed-toolchain",
+            "profileIdentitySHA256": "a" * 64,
+            "runner": {"lockImage": "macos-26"},
+            "process": {"root": "/volatile/root", "name": "sky130A"},
+            "buildDependencies": {},
+            "tools": {
+                "tool": {
+                    "sourceRevision": "b" * 40,
+                    "executableSHA256": "c" * 64,
+                    "versionInvocation": {"startedAt": "first"},
+                }
+            },
+        }
+        changed = {
+            **manifest,
+            "process": {**manifest["process"], "root": "/other/root"},
+            "tools": {
+                "tool": {
+                    **manifest["tools"]["tool"],
+                    "versionInvocation": {"startedAt": "second"},
+                }
+            },
+        }
+
+        self.assertEqual(
+            MATRIX.realization_identity_sha256(manifest),
+            MATRIX.realization_identity_sha256(changed),
+        )
 
     def test_magic_headless_build_disables_incompatible_bundled_readline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -144,6 +213,17 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertIn(
                 "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
                 options,
+            )
+            openroad_build = next(
+                call
+                for call in cmake_build.call_args_list
+                if call.args[0] == "openroad"
+            )
+            openroad_options = openroad_build.args[3]
+            self.assertIn("-DBUILD_GUI=OFF", openroad_options)
+            self.assertIn(
+                "-DCMAKE_DISABLE_FIND_PACKAGE_Qt5=TRUE",
+                openroad_options,
             )
 
     def test_acquisition_does_not_use_an_unpinned_cudd_formula(self) -> None:
