@@ -94,7 +94,7 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
         )
         self.assertEqual(
             lock["lanes"]["dft"]["revision"],
-            "3ea4baa2cb52a40cdf21bec8706486b6bf026974",
+            "5acd86d91b0827fceb02cab0931bcad546202dae",
         )
         self.assertEqual(
             MATRIX.process_verilog_definitions(

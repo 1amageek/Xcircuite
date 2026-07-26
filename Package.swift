@@ -75,7 +75,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "PDKKit",
-            revision: "7903ccd69a3aa24ebf8ab1076910fab88670ecc1"
+            revision: "3ab7e3b6094d2de672b582d90076cf58b6527766"
         ),
         workspaceDependency(
             named: "LogicDesign",
@@ -83,31 +83,31 @@ let package = Package(
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "92be84d192ca38daf41c655beb216d5edc5bd4dc"
+            revision: "7809651994017a932314b747b948ac14e32e779b"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "31a4247a2acc78dee5c476995d42cca3512b09a0"
+            revision: "f162f844b9e5f29da2307f3620a069cc37255fb6"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "a7b021bba2e3adb541195d8fa4cccd309d255776"
+            revision: "b03ccaa2b7c88e167c089ee5a28a67bd082108dc"
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "3ea4baa2cb52a40cdf21bec8706486b6bf026974"
+            revision: "5acd86d91b0827fceb02cab0931bcad546202dae"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "0c3ad36bdc6893d84a7b81bf8784ed4c8d0af18d"
+            revision: "a7bf05dc88da9daea37e256c32d73418484d2a28"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "27d2848242602b5a919ec33ec39fd4ac08591eb1"
+            revision: "219fc4b853b0a1deca43e18c6e4acab01e7262b1"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "441fd61aa49768c9452c82286ab5f1238307eef0"
+            revision: "6048a43350f589eb2505cc989029bf29024c3245"
         ),
     ],
     targets: [
