@@ -11,8 +11,6 @@ is concentrated in current evidence and real-tool breadth rather than adding an
 
 | ID | Priority | Owner | Task | Exit criteria |
 |---|---|---|---|---|
-| XCI-2 | P1 | Hosted installed-tool workflow | Extend the hosted real-tool matrix through the complete production flow. | The matrix retains exact tool/PDK acquisition evidence and passing lanes for logic, RTL verification, DFT, DRC, LVS, PEX, physical design, timing, electrical signoff, Xcircuite composition, and ReleaseEngine authorization using one pinned toolchain and immutable publication-readiness evidence. |
-| XCI-3 | P1 | Xcircuite integration | Retain real PDK-backed end-to-end repair-loop fixtures. | DRC/LVS/PEX/timing/electrical diagnostics create auditable planning problems, execute selected candidate mutations, re-run required gates, retain rejected feedback, support approval/resume, and never promote synthetic or same-backend evidence to production trust. |
 | XCI-4 | P2 | Xcircuite planning | Broaden symbolic-planner cost, replay, proof, installed-solver, DRC/LVS/PEX, and repair-formulation corpora. | The `XcircuiteSymbolicPlannerFeatureMatrixProvider.remainingWork` entries are closed by retained real solver/process cases, independent validation, calibrated costs, proof checking where available, and expanded process-family repair coverage. |
 
 ## Responsibility boundary
@@ -26,6 +24,11 @@ XCI-2 and XCI-3 require an installed production tool matrix, exact PDK views,
 independent oracle evidence, and release authorization. These inputs are not
 bundled in this repository and must not be replaced with native or synthetic
 success.
+
+| Former ID | Owner | Required evidence |
+|---|---|---|
+| XCI-2 | Hosted installed-tool workflow | Exact tool/PDK acquisition evidence and passing production lanes for logic, RTL verification, DFT, DRC, LVS, PEX, physical design, timing, electrical signoff, Xcircuite composition, and ReleaseEngine authorization under one pinned toolchain. |
+| XCI-3 | Production process workflow | Real PDK-backed repair-loop fixtures in which DRC/LVS/PEX/timing/electrical diagnostics drive auditable mutations, gate re-runs, rejected feedback, approval/resume, and independent production trust. |
 
 ## Completed P1
 
