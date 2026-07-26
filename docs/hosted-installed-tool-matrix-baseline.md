@@ -23,6 +23,7 @@ contract.
 | [30199139111](https://github.com/1amageek/Xcircuite/actions/runs/30199139111) | `db5382f5d924ea34345f3804713f8e55ac95dd86` | Dependency version drift | OpenROAD's pinned slang revision discovered hosted fmt 12.2, whose `fmt/core.h` no longer exposed the API expected by that source. | `f44efb40b74f5084d73010a84c78992c72851a34` |
 | [30199805781](https://github.com/1amageek/Xcircuite/actions/runs/30199805781) | `6fc16f0231e7afa73464c2b2bf266218e184ee02` | Tool build compatibility | Netgen omitted its existing `VerilogTop` declaration under C99-or-later compilation, while Homebrew Boost.Stacktrace required explicit Darwin `_Unwind_Backtrace` capability for OpenROAD. | `942d2828d16aa16e4014c94aebfc0e8ea64ea31f` |
 | [30200668102](https://github.com/1amageek/Xcircuite/actions/runs/30200668102) | `ebc19a812340731d61ed81dd3aa29846886f79b8` | Dependency API compatibility | Netgen completed installation and OpenROAD reached 70%, but the pinned fmt 12.1 compatibility header no longer re-exported `fmt::format` required by OpenROAD's pinned slang source. | `b99a5807e21e2cbbbf844516f4301b3b2b560b03` |
+| [30202503357](https://github.com/1amageek/Xcircuite/actions/runs/30202503357) | `5dd888a6785015dfd6a6f3476d84eaeab3cefd7b` | Dependency selection and API compatibility | Slang required fmt 12.1 or newer, rejected the pinned 11.2 CMake package, and selected an unpinned Homebrew fmt 12.2 whose lightweight `core.h` no longer declares `fmt::format`. | `844c6ea81b38ceee3897b7d4af8d49b1d878fb3f` |
 
 ## Invariants confirmed
 
@@ -30,7 +31,8 @@ contract.
 - No package lane ran after an unqualified acquisition.
 - The publication job treated all missing lane evidence as blocked.
 - Magic, Netgen, CUDD, fmt, and OpenSTA now advance through installation;
-  OpenROAD reached 70% source compilation on the Xcode 26 runner.
+  OpenROAD reached 54% source compilation before exposing Slang's real
+  minimum-version and compatibility-macro contract.
 - CUDD is source-built from a full revision and its installed bytes are part of
   the realization identity.
 - The checked-in corpus and profile identity are independent from volatile
@@ -38,6 +40,7 @@ contract.
 
 ## Active continuation
 
-The next dispatched run must prove fmt 11.2 compatibility with pinned slang and
-complete the remaining OpenROAD build before the package lanes can execute and
-M0 can close.
+The next dispatched run must prove the pinned fmt 12.2 CMake package is selected
+instead of Homebrew fmt and that `FMT_DEPRECATED_HEAVY_CORE` restores the API
+used by the pinned Slang source. OpenROAD must then complete before package
+lanes can execute and M0 can close.
