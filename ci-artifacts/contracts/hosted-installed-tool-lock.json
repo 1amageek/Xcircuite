@@ -177,21 +177,21 @@
   "lanes": {
     "logic": {
       "repository": "https://github.com/1amageek/LogicEngine.git",
-      "revision": "d0f58f21f5f918c33d3251146d0e7a4008e5a0b5",
+      "revision": "31a4247a2acc78dee5c476995d42cca3512b09a0",
       "scheme": "LogicEngine-Package",
       "tests": ["LogicEngineTests"],
       "oracles": ["yosys-synthesis-equivalence", "iverilog-simulation"]
     },
     "rtl-verification": {
       "repository": "https://github.com/1amageek/RTLVerificationEngine.git",
-      "revision": "a8a9e14f06bdcafa3f427295dd92011b3751d396",
+      "revision": "a7b021bba2e3adb541195d8fa4cccd309d255776",
       "scheme": "RTLVerificationEngine-Package",
       "tests": ["RTLVerificationEngineTests"],
       "oracles": ["verilator-lint", "yosys-synthesis-equivalence"]
     },
     "dft": {
       "repository": "https://github.com/1amageek/DFTEngine.git",
-      "revision": "5df7494371751b81d374f04adf9e74a82d62e34a",
+      "revision": "3ea4baa2cb52a40cdf21bec8706486b6bf026974",
       "scheme": "DFTEngine-Package",
       "tests": [
         "DFTEngineTests/OpenROADDFTScanImporterTests",
@@ -206,14 +206,14 @@
     },
     "drc": {
       "repository": "https://github.com/1amageek/DRCEngine.git",
-      "revision": "c86059c9cc6a3fdd3f3a12c64b3497571d1c7d54",
+      "revision": "aefe34029acc01c3dc600f6f826125479bfc3153",
       "scheme": "DRCEngine-Package",
       "tests": ["DRCAdaptersTests/MagicDRCAdapterTests"],
       "oracles": ["magic-drc"]
     },
     "lvs": {
       "repository": "https://github.com/1amageek/LVSEngine.git",
-      "revision": "0b8509cae85fe25a16759ca027259fbb65622d86",
+      "revision": "97d308443b131dc00611622da42a48e12e5eb398",
       "scheme": "LVSEngine-Package",
       "tests": [
         "LVSAdaptersTests/NetgenLVSAdapterTests",
@@ -223,7 +223,7 @@
     },
     "pex": {
       "repository": "https://github.com/1amageek/PEXEngine.git",
-      "revision": "9b363c1a967cb1cd511ea3bf998f7210803d56e1",
+      "revision": "c2dc912203790d862a2055bd6abd9a0a1dc86b6b",
       "scheme": "PEXEngine-Package",
       "tests": [
         "PEXAdaptersTests/MagicPEXAdapterTests",
@@ -234,21 +234,21 @@
     },
     "physical-design": {
       "repository": "https://github.com/1amageek/PhysicalDesignEngine.git",
-      "revision": "08b2de5dcf8458131a5eebaf7bfca4920dbc2c65",
+      "revision": "0c3ad36bdc6893d84a7b81bf8784ed4c8d0af18d",
       "scheme": "PhysicalDesignEngine-Package",
       "tests": ["PhysicalDesignEngineTests/OpenROADPhysicalDesignExecutorTests"],
       "oracles": ["openroad"]
     },
     "timing": {
       "repository": "https://github.com/1amageek/TimingEngine.git",
-      "revision": "3fae581575c7c1b844791156d3505482cf5ebfd7",
+      "revision": "92be84d192ca38daf41c655beb216d5edc5bd4dc",
       "scheme": "TimingEngine-Package",
       "tests": ["TimingEngineTests/TimingCLIProcessTests"],
       "oracles": ["opensta"]
     },
     "electrical-signoff": {
       "repository": "https://github.com/1amageek/ElectricalSignoffEngine.git",
-      "revision": "90627ac56b9c2411e7b0492e5c4ffeadada515bc",
+      "revision": "27d2848242602b5a919ec33ec39fd4ac08591eb1",
       "scheme": "ElectricalSignoffEngine-Package",
       "tests": [
         "ElectricalSignoffEngineTests",

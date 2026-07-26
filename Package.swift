@@ -39,75 +39,75 @@ let package = Package(
     dependencies: [
         workspaceDependency(
             named: "CircuiteFoundation",
-            revision: "7abcac83517935c9b9f7553d7016d62cffde259d"
+            revision: "dc792c88e189c822c9f83ea86cf139ee68560dca"
         ),
         workspaceDependency(
             named: "ToolQualification",
-            revision: "d572d950a9dccb699413cd5157d901812354444f"
+            revision: "c489783a5673bc2dd0b94c438c2f53a65d9a2d8b"
         ),
         workspaceDependency(
             named: "DesignFlowKernel",
-            revision: "6bbe1a24bc7e0a983da747844d8b2db1c80fefd4"
+            revision: "5d60047c1c322ed3f8fc741ebee1f35ce7a99533"
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "e6a0fa2c5b64de1b4ef81e651bd1bb77ecc77299"
+            revision: "aefe34029acc01c3dc600f6f826125479bfc3153"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "f79b52da83146c108e0a122f4581fe93fae59527"
+            revision: "97d308443b131dc00611622da42a48e12e5eb398"
         ),
         workspaceDependency(
             named: "PEXEngine",
-            revision: "ba10c1fe0b847d5816faef4eae67c64a19d61e1e"
+            revision: "c2dc912203790d862a2055bd6abd9a0a1dc86b6b"
         ),
         workspaceDependency(
             named: "CoreSpice",
-            revision: "dec08bf9dc955b0845800765be0b6172d64b1609"
+            revision: "d8161966cc53bf1f4deec81f4250ae08bb03fe0c"
         ),
         workspaceDependency(
             named: "semiconductor-layout",
-            revision: "692a056d21b6e292c29215f76c3ae225215d03c2"
+            revision: "d4dda0ce9dd60e5f5aeaf171c2e563bf0685ceb9"
         ),
         workspaceDependency(
             named: "SignoffToolSupport",
-            revision: "6bf675eecb27e3bd3440c5ce8a85c85c510fc3cb"
+            revision: "2c36104106bdfc8c279629c162c3ced9d7401328"
         ),
         workspaceDependency(
             named: "PDKKit",
-            revision: "b62c5ad7e5819a24977038c2133856caed52f481"
+            revision: "7903ccd69a3aa24ebf8ab1076910fab88670ecc1"
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "b0eff14c90faafb4e474ed629358c9f7c12d0ea6"
+            revision: "e8f8e1dace0445ddd816929c4ca0fe17cca12a7b"
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "709af87cf5c898d47605b0ab287786828ee2267c"
+            revision: "92be84d192ca38daf41c655beb216d5edc5bd4dc"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "d0f58f21f5f918c33d3251146d0e7a4008e5a0b5"
+            revision: "31a4247a2acc78dee5c476995d42cca3512b09a0"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "a8a9e14f06bdcafa3f427295dd92011b3751d396"
+            revision: "a7b021bba2e3adb541195d8fa4cccd309d255776"
         ),
         workspaceDependency(
             named: "DFTEngine",
-            revision: "5df7494371751b81d374f04adf9e74a82d62e34a"
+            revision: "3ea4baa2cb52a40cdf21bec8706486b6bf026974"
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "a2b64a3f9f1651be0601496a7423a211c1438c49"
+            revision: "0c3ad36bdc6893d84a7b81bf8784ed4c8d0af18d"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
-            revision: "6acb98640fcee52452e09b380b2e5bd239a14cc9"
+            revision: "27d2848242602b5a919ec33ec39fd4ac08591eb1"
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "e0f6aa2256950f2046eb834d1e7b9472bd2c97ae"
+            revision: "441fd61aa49768c9452c82286ab5f1238307eef0"
         ),
     ],
     targets: [
