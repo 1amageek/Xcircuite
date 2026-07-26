@@ -45,12 +45,13 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "classification", "ngspiceSection", "supplyVoltage", "assets"],
+            "required": ["id", "classification", "ngspiceSection", "supplyVoltage", "temperatureCelsius", "assets"],
             "properties": {
               "id": { "type": "string", "minLength": 1 },
               "classification": { "enum": ["typical", "slow", "fast"] },
               "ngspiceSection": { "enum": ["tt", "ss", "ff"] },
               "supplyVoltage": { "type": "number", "exclusiveMinimum": 0 },
+              "temperatureCelsius": { "type": "number" },
               "assets": {
                 "type": "array",
                 "minItems": 3,
@@ -67,8 +68,16 @@
       "minProperties": 1,
       "additionalProperties": { "$ref": "#/$defs/buildDependency" }
     },
-    "tools": { "type": "object", "minProperties": 6 },
-    "lanes": { "type": "object", "minProperties": 7 },
+    "tools": {
+      "type": "object",
+      "minProperties": 9,
+      "additionalProperties": { "$ref": "#/$defs/tool" }
+    },
+    "lanes": {
+      "type": "object",
+      "minProperties": 9,
+      "additionalProperties": { "$ref": "#/$defs/lane" }
+    },
     "timeouts": { "type": "object" }
   },
   "$defs": {
@@ -107,6 +116,66 @@
           }
         }
       ]
+    },
+    "toolCompanion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "executable", "versionArguments"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "executable": { "type": "string", "minLength": 1 },
+        "versionArguments": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "executable", "versionArguments"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "revision": { "$ref": "#/$defs/revision" },
+        "executable": { "type": "string", "minLength": 1 },
+        "versionArguments": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "companions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/toolCompanion" }
+        },
+        "aliasOf": { "type": "string", "minLength": 1 }
+      }
+    },
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "revision", "scheme", "tests", "oracles"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "revision": {
+          "anyOf": [
+            { "$ref": "#/$defs/revision" },
+            { "const": "$GITHUB_SHA" }
+          ]
+        },
+        "scheme": { "type": "string", "minLength": 1 },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "oracles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
     }
   }
 }

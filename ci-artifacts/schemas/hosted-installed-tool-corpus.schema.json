@@ -11,8 +11,8 @@
     "designID": { "const": "sky130-hd-buffer-1" },
     "artifacts": {
       "type": "array",
-      "minItems": 3,
-      "maxItems": 3,
+      "minItems": 4,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -22,6 +22,7 @@
             "enum": [
               "designContract",
               "logicalNetlist",
+              "logicTestbench",
               "electricalTemplate"
             ]
           },

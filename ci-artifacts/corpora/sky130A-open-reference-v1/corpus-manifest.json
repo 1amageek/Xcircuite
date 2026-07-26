@@ -16,6 +16,12 @@
       "byteCount": 106
     },
     {
+      "role": "logicTestbench",
+      "path": "logic-testbench.sv",
+      "sha256": "34a1e9b3de9d9398aaefeea0301d12b00df13b90a8d131735ecf682585a8e464",
+      "byteCount": 458
+    },
+    {
       "role": "electricalTemplate",
       "path": "electrical-template.cir",
       "sha256": "b61857492ec372d6423dac3479a5178aab0eda31e0a9abcdf035d12c6d7c1e9a",

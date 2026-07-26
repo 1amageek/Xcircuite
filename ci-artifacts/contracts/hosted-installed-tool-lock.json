@@ -9,8 +9,8 @@
   "corpus": {
     "profileID": "sky130A-open-reference-v1",
     "repositoryPath": "ci-artifacts/corpora/sky130A-open-reference-v1/corpus-manifest.json",
-    "sha256": "6c1a3813e7671497c3260919747f12380554700d09d0a9c37c82e9ea48d93a30",
-    "byteCount": 691
+    "sha256": "5951e6712827b4be28d19b178c17c915b28e3b06ae870841162a46847a7ca753",
+    "byteCount": 879
   },
   "process": {
     "name": "sky130A",
@@ -26,7 +26,9 @@
       { "role": "technologyLEF", "path": "sky130A/libs.ref/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__nom.tlef" },
       { "role": "libraryLEF", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef" },
       { "role": "standardCellGDS", "path": "sky130A/libs.ref/sky130_fd_sc_hd/gds/sky130_fd_sc_hd.gds" },
-      { "role": "standardCellSPICE", "path": "sky130A/libs.ref/sky130_fd_sc_hd/spice/sky130_fd_sc_hd.spice" }
+      { "role": "standardCellSPICE", "path": "sky130A/libs.ref/sky130_fd_sc_hd/spice/sky130_fd_sc_hd.spice" },
+      { "role": "standardCellVerilog", "path": "sky130A/libs.ref/sky130_fd_sc_hd/verilog/sky130_fd_sc_hd.v" },
+      { "role": "standardCellVerilogPrimitives", "path": "sky130A/libs.ref/sky130_fd_sc_hd/verilog/primitives.v" }
     ],
     "corners": [
       {
@@ -34,6 +36,7 @@
         "classification": "typical",
         "ngspiceSection": "tt",
         "supplyVoltage": 1.8,
+        "temperatureCelsius": 25,
         "assets": [
           { "role": "timingLibrary", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib" },
           { "role": "openRCXRules", "path": "sky130A/libs.tech/openlane/rules.openrcx.sky130A.nom.magic" },
@@ -45,6 +48,7 @@
         "classification": "slow",
         "ngspiceSection": "ss",
         "supplyVoltage": 1.6,
+        "temperatureCelsius": 100,
         "assets": [
           { "role": "timingLibrary", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__ss_100C_1v60.lib" },
           { "role": "openRCXRules", "path": "sky130A/libs.tech/openlane/rules.openrcx.sky130A.max.magic" },
@@ -56,6 +60,7 @@
         "classification": "fast",
         "ngspiceSection": "ff",
         "supplyVoltage": 1.95,
+        "temperatureCelsius": -40,
         "assets": [
           { "role": "timingLibrary", "path": "sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__ff_n40C_1v95.lib" },
           { "role": "openRCXRules", "path": "sky130A/libs.tech/openlane/rules.openrcx.sky130A.min.magic" },
@@ -119,9 +124,55 @@
       "revision": "032b1c32c4dbad45ff132bcfac1dbecadbd8abb0",
       "executable": "installed/bin/ngspice",
       "versionArguments": ["--version"]
+    },
+    "yosys": {
+      "repository": "https://github.com/YosysHQ/yosys.git",
+      "revision": "b85cad634782fafac275e5f540c056bfacb2b5d2",
+      "executable": "installed/bin/yosys",
+      "versionArguments": ["-V"],
+      "companions": [
+        {
+          "name": "yosys-abc",
+          "executable": "installed/bin/yosys-abc",
+          "versionArguments": ["-c", "version"]
+        }
+      ]
+    },
+    "iverilog": {
+      "repository": "https://github.com/steveicarus/iverilog.git",
+      "revision": "dfeee909ed9f20b4870dd93423156c0170c0e1ff",
+      "executable": "installed/bin/iverilog",
+      "versionArguments": ["-V"],
+      "companions": [
+        {
+          "name": "vvp",
+          "executable": "installed/bin/vvp",
+          "versionArguments": ["-V"]
+        }
+      ]
+    },
+    "verilator": {
+      "repository": "https://github.com/verilator/verilator.git",
+      "revision": "848d926ebd4addacacd294dc84e35d9d4ae8078c",
+      "executable": "installed/bin/verilator",
+      "versionArguments": ["--version"]
     }
   },
   "lanes": {
+    "logic": {
+      "repository": "https://github.com/1amageek/LogicEngine.git",
+      "revision": "d0f58f21f5f918c33d3251146d0e7a4008e5a0b5",
+      "scheme": "LogicEngine-Package",
+      "tests": ["LogicEngineTests"],
+      "oracles": ["yosys-synthesis-equivalence", "iverilog-simulation"]
+    },
+    "rtl-verification": {
+      "repository": "https://github.com/1amageek/RTLVerificationEngine.git",
+      "revision": "a8a9e14f06bdcafa3f427295dd92011b3751d396",
+      "scheme": "RTLVerificationEngine-Package",
+      "tests": ["RTLVerificationEngineTests"],
+      "oracles": ["verilator-lint", "yosys-synthesis-equivalence"]
+    },
     "drc": {
       "repository": "https://github.com/1amageek/DRCEngine.git",
       "revision": "c86059c9cc6a3fdd3f3a12c64b3497571d1c7d54",

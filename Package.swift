@@ -87,11 +87,11 @@ let package = Package(
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "f1ec9581cf3dea9f439ed244b0475e0493505c22"
+            revision: "d0f58f21f5f918c33d3251146d0e7a4008e5a0b5"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "345e81140439bda43c683aa47c1ecb1dfda83331"
+            revision: "a8a9e14f06bdcafa3f427295dd92011b3751d396"
         ),
         workspaceDependency(
             named: "DFTEngine",

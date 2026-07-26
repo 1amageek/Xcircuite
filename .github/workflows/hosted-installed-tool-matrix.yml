@@ -67,6 +67,8 @@ jobs:
       fail-fast: false
       matrix:
         lane:
+          - logic
+          - rtl-verification
           - drc
           - lvs
           - pex

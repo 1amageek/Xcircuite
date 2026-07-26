@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -117,7 +118,18 @@ def profile_identity_sha256(lock: dict[str, Any]) -> str:
 def realization_identity_sha256(manifest: dict[str, Any]) -> str:
     tools = {
         name: {
-            key: value
+            key: (
+                [
+                    {
+                        companion_key: companion_value
+                        for companion_key, companion_value in companion.items()
+                        if companion_key != "versionInvocation"
+                    }
+                    for companion in value
+                ]
+                if key == "companions"
+                else value
+            )
             for key, value in tool.items()
             if key != "versionInvocation"
         }
@@ -173,6 +185,25 @@ def require_integer(mapping: dict[str, Any], key: str, context: str) -> int:
             "Correct the checked-in lock file.",
         )
     return value
+
+
+def require_finite_number(
+    mapping: dict[str, Any],
+    key: str,
+    context: str,
+) -> float:
+    value = mapping.get(key)
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+    ):
+        raise MatrixFailure(
+            "invalid_lock_field",
+            f"{context}.{key} must be a finite number.",
+            "Correct the checked-in lock file.",
+        )
+    return float(value)
 
 
 def validate_lock(lock: dict[str, Any]) -> None:
@@ -258,6 +289,51 @@ def validate_lock(lock: dict[str, Any]) -> None:
                 f"tools.{tool_name}.versionArguments must be a string array.",
                 "Correct the checked-in lock file.",
             )
+        companions = tool.get("companions", [])
+        if (
+            not isinstance(companions, list)
+            or not all(isinstance(item, dict) for item in companions)
+        ):
+            raise MatrixFailure(
+                "invalid_lock_field",
+                f"tools.{tool_name}.companions must be an object array.",
+                "Declare every runtime executable emitted by the source build.",
+            )
+        companion_names: set[str] = set()
+        companion_paths: set[str] = set()
+        for companion_index, companion in enumerate(companions):
+            context = f"tools.{tool_name}.companions[{companion_index}]"
+            companion_name = require_string(companion, "name", context)
+            companion_path = require_string(companion, "executable", context)
+            contained_path(
+                Path("/hosted-toolchain"),
+                companion_path,
+                f"{context}.executable",
+            )
+            companion_arguments = companion.get("versionArguments")
+            if (
+                not isinstance(companion_arguments, list)
+                or not all(isinstance(item, str) for item in companion_arguments)
+            ):
+                raise MatrixFailure(
+                    "invalid_lock_field",
+                    f"{context}.versionArguments must be a string array.",
+                    "Correct the checked-in lock file.",
+                )
+            if companion_name in companion_names:
+                raise MatrixFailure(
+                    "duplicate_tool_companion",
+                    f"Tool {tool_name} declares duplicate companion {companion_name}.",
+                    "Use unique companion names within one source-built tool.",
+                )
+            if companion_path == executable_path or companion_path in companion_paths:
+                raise MatrixFailure(
+                    "duplicate_tool_executable",
+                    f"Tool {tool_name} reuses executable path {companion_path}.",
+                    "Record each emitted executable exactly once.",
+                )
+            companion_names.add(companion_name)
+            companion_paths.add(companion_path)
         alias = tool.get("aliasOf")
         if alias is not None and (not isinstance(alias, str) or alias not in tools or alias == tool_name):
             raise MatrixFailure(
@@ -326,6 +402,7 @@ def validate_lock(lock: dict[str, Any]) -> None:
     assets = process.get("assets")
     if not isinstance(assets, list) or not assets:
         raise MatrixFailure("invalid_lock", "process.assets must be non-empty.", "Declare required PDK assets.")
+    process_asset_roles: set[str] = set()
     for index, asset in enumerate(assets):
         if not isinstance(asset, dict):
             raise MatrixFailure(
@@ -333,7 +410,14 @@ def validate_lock(lock: dict[str, Any]) -> None:
                 f"process.assets[{index}] must be an object.",
                 "Correct the checked-in lock file.",
             )
-        require_string(asset, "role", f"process.assets[{index}]")
+        role = require_string(asset, "role", f"process.assets[{index}]")
+        if role in process_asset_roles:
+            raise MatrixFailure(
+                "duplicate_process_asset_role",
+                f"Process asset role {role} is duplicated.",
+                "Declare each canonical process asset role exactly once.",
+            )
+        process_asset_roles.add(role)
         asset_path = require_string(asset, "path", f"process.assets[{index}]")
         contained_path(Path("/hosted-pdk"), asset_path, f"process.assets[{index}].path")
     corners = process.get("corners")
@@ -351,9 +435,18 @@ def validate_lock(lock: dict[str, Any]) -> None:
         corner_id = require_string(corner, "id", f"process.corners[{corner_index}]")
         classification = require_string(corner, "classification", f"process.corners[{corner_index}]")
         require_string(corner, "ngspiceSection", f"process.corners[{corner_index}]")
-        supply_voltage = corner.get("supplyVoltage")
-        if not isinstance(supply_voltage, (int, float)) or isinstance(supply_voltage, bool) or supply_voltage <= 0:
+        supply_voltage = require_finite_number(
+            corner,
+            "supplyVoltage",
+            f"process.corners[{corner_index}]",
+        )
+        if supply_voltage <= 0:
             raise MatrixFailure("invalid_lock_field", f"Corner {corner_id} needs a positive supplyVoltage.", "Correct the lock.")
+        require_finite_number(
+            corner,
+            "temperatureCelsius",
+            f"process.corners[{corner_index}]",
+        )
         if corner_id in corner_ids:
             raise MatrixFailure("duplicate_process_corner", f"Duplicate corner {corner_id}.", "Use unique corner IDs.")
         corner_ids.add(corner_id)
@@ -608,7 +701,10 @@ def install_build_dependencies(log_root: Path, timeout: int) -> None:
         "cmake",
         "eigen",
         "flex",
+        "gawk",
         "gnu-sed",
+        "gperf",
+        "help2man",
         "libomp",
         "libtool",
         "libx11",
@@ -766,6 +862,117 @@ def build_tools(sources: dict[str, Path], install_root: Path, log_root: Path, ti
         install_root,
         ["--without-x", "--enable-xspice", "--disable-debug"],
         build_environment,
+        log_root,
+        timeout,
+        run_autogen=False,
+    )
+    if "yosys" in sources:
+        build_yosys(
+            sources["yosys"],
+            install_root,
+            build_environment,
+            log_root,
+            timeout,
+        )
+    if "iverilog" in sources:
+        build_iverilog(
+            sources["iverilog"],
+            install_root,
+            build_environment,
+            log_root,
+            timeout,
+        )
+    if "verilator" in sources:
+        build_verilator(
+            sources["verilator"],
+            install_root,
+            build_environment,
+            log_root,
+            timeout,
+        )
+
+
+def build_yosys(
+    source: Path,
+    install_root: Path,
+    environment: dict[str, str],
+    log_root: Path,
+    timeout: int,
+) -> None:
+    run_command(
+        ["make", "config-clang"],
+        cwd=source,
+        timeout=timeout,
+        log_path=log_root / "yosys-config.log",
+        environment=environment,
+    )
+    build_arguments = [
+        "make",
+        "-j2",
+        f"PREFIX={install_root}",
+    ]
+    run_command(
+        build_arguments,
+        cwd=source,
+        timeout=timeout,
+        log_path=log_root / "yosys-build.log",
+        environment=environment,
+    )
+    run_command(
+        ["make", "install", f"PREFIX={install_root}"],
+        cwd=source,
+        timeout=timeout,
+        log_path=log_root / "yosys-install.log",
+        environment=environment,
+    )
+
+
+def build_iverilog(
+    source: Path,
+    install_root: Path,
+    environment: dict[str, str],
+    log_root: Path,
+    timeout: int,
+) -> None:
+    run_command(
+        ["sh", "autoconf.sh"],
+        cwd=source,
+        timeout=timeout,
+        log_path=log_root / "iverilog-autoconf.log",
+        environment=environment,
+    )
+    build_autotools_tool(
+        "iverilog",
+        source,
+        install_root,
+        [],
+        environment,
+        log_root,
+        timeout,
+        run_autogen=False,
+    )
+
+
+def build_verilator(
+    source: Path,
+    install_root: Path,
+    environment: dict[str, str],
+    log_root: Path,
+    timeout: int,
+) -> None:
+    run_command(
+        ["autoconf"],
+        cwd=source,
+        timeout=timeout,
+        log_path=log_root / "verilator-autoconf.log",
+        environment=environment,
+    )
+    build_autotools_tool(
+        "verilator",
+        source,
+        install_root,
+        [],
+        environment,
         log_root,
         timeout,
         run_autogen=False,
@@ -951,6 +1158,52 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
             "versionInvocation": invocation,
             "versionOutput": version_output,
         }
+        companion_records: list[dict[str, Any]] = []
+        for companion in specification.get("companions", []):
+            companion_executable = root / companion["executable"]
+            if (
+                not companion_executable.is_file()
+                or not os.access(companion_executable, os.X_OK)
+            ):
+                raise MatrixFailure(
+                    "tool_companion_missing",
+                    f"The installed {tool_name} companion {companion['name']} is missing at {companion_executable}.",
+                    "Inspect the retained build and install logs.",
+                )
+            companion_log = (
+                log_root
+                / f"{tool_name}-{companion['name']}-version.log"
+            )
+            companion_invocation = run_command(
+                [
+                    str(companion_executable),
+                    *companion["versionArguments"],
+                ],
+                cwd=root,
+                timeout=version_timeout,
+                log_path=companion_log,
+            )
+            companion_identity = file_digest(companion_executable)
+            companion_version_output = companion_log.read_text(
+                encoding="utf-8"
+            ).strip()
+            if not companion_version_output:
+                raise MatrixFailure(
+                    "tool_companion_version_unverified",
+                    f"Tool {tool_name} companion {companion['name']} returned no version identity.",
+                    "Correct the version invocation before qualifying this tool.",
+                )
+            companion_records.append(
+                {
+                    "name": companion["name"],
+                    "executable": companion["executable"],
+                    "executableSHA256": companion_identity["sha256"],
+                    "executableByteCount": companion_identity["byteCount"],
+                    "versionInvocation": companion_invocation,
+                    "versionOutput": companion_version_output,
+                }
+            )
+        tools[tool_name]["companions"] = companion_records
         if specification.get("aliasOf") is not None:
             tools[tool_name]["aliasOf"] = specification["aliasOf"]
     build_dependencies: dict[str, Any] = {}
@@ -1019,6 +1272,7 @@ def collect_toolchain_manifest(lock: dict[str, Any], root: Path, pdk_root: Path,
                 "classification": corner["classification"],
                 "ngspiceSection": corner["ngspiceSection"],
                 "supplyVoltage": corner["supplyVoltage"],
+                "temperatureCelsius": corner["temperatureCelsius"],
                 "assets": corner_assets,
             }
         )
@@ -1186,6 +1440,49 @@ def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], 
                 f"Tool {tool_name} failed executable integrity verification.",
                 "Discard the artifact and rerun acquisition.",
             )
+        locked_companions = {
+            companion["name"]: companion
+            for companion in locked.get("companions", [])
+        }
+        recorded_companions = recorded.get("companions", [])
+        if (
+            not isinstance(recorded_companions, list)
+            or {
+                companion.get("name")
+                for companion in recorded_companions
+                if isinstance(companion, dict)
+            }
+            != set(locked_companions)
+            or len(recorded_companions) != len(locked_companions)
+        ):
+            raise MatrixFailure(
+                "tool_companion_identity_mismatch",
+                f"Tool {tool_name} companion set does not match the lock.",
+                "Discard the artifact and rerun acquisition.",
+            )
+        for companion in recorded_companions:
+            locked_companion = locked_companions[companion["name"]]
+            if companion.get("executable") != locked_companion["executable"]:
+                raise MatrixFailure(
+                    "tool_companion_path_mismatch",
+                    f"Tool {tool_name} companion {companion['name']} changed path.",
+                    "Discard the artifact and rerun acquisition.",
+                )
+            companion_path = contained_path(
+                root,
+                locked_companion["executable"],
+                f"tools.{tool_name}.companions.{companion['name']}",
+            )
+            companion_identity = file_digest(companion_path)
+            if (
+                companion_identity["sha256"] != companion.get("executableSHA256")
+                or companion_identity["byteCount"] != companion.get("executableByteCount")
+            ):
+                raise MatrixFailure(
+                    "tool_companion_digest_mismatch",
+                    f"Tool {tool_name} companion {companion['name']} failed integrity verification.",
+                    "Discard the artifact and rerun acquisition.",
+                )
     build_dependencies = manifest.get("buildDependencies")
     if (
         not isinstance(build_dependencies, dict)
@@ -1271,7 +1568,13 @@ def verify_toolchain(lock: dict[str, Any], root: Path) -> tuple[dict[str, Any], 
     for corner, locked_corner in zip(recorded_corners, lock["process"]["corners"], strict=True):
         if any(
             corner.get(field) != locked_corner.get(field)
-            for field in ("id", "classification", "ngspiceSection", "supplyVoltage")
+            for field in (
+                "id",
+                "classification",
+                "ngspiceSection",
+                "supplyVoltage",
+                "temperatureCelsius",
+            )
         ):
             raise MatrixFailure(
                 "corner_metadata_mismatch",
@@ -1349,9 +1652,29 @@ def tool_path(lock: dict[str, Any], root: Path, name: str) -> Path:
     return contained_path(root, lock["tools"][name]["executable"], f"tools.{name}.executable")
 
 
+def tool_companion_path(
+    lock: dict[str, Any],
+    root: Path,
+    tool_name: str,
+    companion_name: str,
+) -> Path:
+    for companion in lock["tools"][tool_name].get("companions", []):
+        if companion.get("name") == companion_name:
+            return contained_path(
+                root,
+                companion["executable"],
+                f"tools.{tool_name}.companions.{companion_name}",
+            )
+    raise MatrixFailure(
+        "tool_companion_missing",
+        f"Tool {tool_name} has no locked companion {companion_name}.",
+        "Declare and acquire the runtime executable before using it.",
+    )
+
+
 def package_environment(lock: dict[str, Any], manifest: dict[str, Any], root: Path) -> dict[str, str]:
     pdk_root = contained_path(root, manifest["process"]["root"], "process.root")
-    return {
+    environment = {
         "PATH": f"{root / 'installed' / 'bin'}:{os.environ.get('PATH', '')}",
         "PDK": "sky130A",
         "PDK_ROOT": str(pdk_root.parent),
@@ -1365,6 +1688,19 @@ def package_environment(lock: dict[str, Any], manifest: dict[str, Any], root: Pa
         "OPENSTA_BIN": str(tool_path(lock, root, "opensta")),
         "NGSPICE_BIN": str(tool_path(lock, root, "ngspice")),
     }
+    optional_tools = {
+        "yosys": "YOSYS_BIN",
+        "iverilog": "IVERILOG_BIN",
+        "verilator": "VERILATOR_BIN",
+    }
+    for tool_name, variable_name in optional_tools.items():
+        if tool_name in lock["tools"]:
+            environment[variable_name] = str(tool_path(lock, root, tool_name))
+    if "iverilog" in lock["tools"]:
+        environment["VVP_BIN"] = str(
+            tool_companion_path(lock, root, "iverilog", "vvp")
+        )
+    return environment
 
 
 def prepare_package(
@@ -1447,6 +1783,7 @@ def materialize_corpus(
     expected_paths = {
         "designContract": "design-contract.json",
         "logicalNetlist": "design.v",
+        "logicTestbench": "logic-testbench.sv",
         "electricalTemplate": "electrical-template.cir",
     }
     artifacts_by_role = {
@@ -1492,6 +1829,7 @@ def probe_input_identity(probe_root: Path, manifest: dict[str, Any], root: Path)
         artifact_input("corpusManifest", probe_root / "corpus-manifest.json"),
         artifact_input("designContract", probe_root / "design-contract.json"),
         artifact_input("logicalNetlist", probe_root / "design.v"),
+        artifact_input("logicTestbench", probe_root / "logic-testbench.sv"),
         artifact_input("electricalTemplate", probe_root / "electrical-template.cir"),
         artifact_input("physicalLayout", manifest_asset(manifest, root, "standardCellGDS")),
         artifact_input("schematicNetlist", manifest_asset(manifest, root, "standardCellSPICE")),
@@ -1662,6 +2000,147 @@ def run_oracle(
             artifact_input("schematicNetlist", manifest_asset(manifest, root, "standardCellSPICE")),
             artifact_input("ngspiceModelLibrary", model_library),
         ]
+    elif name == "yosys-synthesis-equivalence":
+        script = probe_root / "yosys-synthesis-equivalence.ys"
+        synthesized_netlist = probe_root / "yosys-synthesized.v"
+        mapped_netlist = probe_root / "yosys-mapped.v"
+        standard_cell_verilog = manifest_asset(
+            manifest,
+            root,
+            "standardCellVerilog",
+        )
+        standard_cell_primitives = manifest_asset(
+            manifest,
+            root,
+            "standardCellVerilogPrimitives",
+        )
+        timing_library = manifest_corner_asset(
+            manifest,
+            root,
+            selected_corner_id,
+            "timingLibrary",
+        )
+        script.write_text(
+            f"read_verilog -D FUNCTIONAL -D NO_PRIMITIVES {standard_cell_primitives}\n"
+            f"read_verilog -D FUNCTIONAL -D NO_PRIMITIVES {standard_cell_verilog}\n"
+            f"read_verilog {probe_root / 'design.v'}\n"
+            "hierarchy -check -top hosted_probe\n"
+            "proc\n"
+            "flatten\n"
+            "opt\n"
+            "design -save gold\n"
+            "synth -top hosted_probe\n"
+            f"write_verilog -noattr {synthesized_netlist}\n"
+            "design -load gold\n"
+            "rename hosted_probe gold\n"
+            f"read_verilog {synthesized_netlist}\n"
+            "rename hosted_probe gate\n"
+            "equiv_make gold gate equivalence\n"
+            "hierarchy -check -top equivalence\n"
+            "equiv_simple\n"
+            "equiv_status -assert\n"
+            "design -reset\n"
+            f"read_verilog {synthesized_netlist}\n"
+            "hierarchy -check -top hosted_probe\n"
+            f"dfflibmap -liberty {timing_library}\n"
+            f"abc -liberty {timing_library}\n"
+            "clean\n"
+            f"write_verilog -noattr {mapped_netlist}\n"
+            "tee -o yosys-statistics.txt stat\n",
+            encoding="utf-8",
+        )
+        command = [
+            str(tool_path(lock, root, "yosys")),
+            "-q",
+            "-s",
+            str(script),
+        ]
+        consumed_inputs = [
+            artifact_input("driver", script),
+            artifact_input("logicalNetlist", probe_root / "design.v"),
+            artifact_input("standardCellVerilog", standard_cell_verilog),
+            artifact_input(
+                "standardCellVerilogPrimitives",
+                standard_cell_primitives,
+            ),
+            artifact_input("timingLibrary", timing_library),
+        ]
+    elif name == "iverilog-simulation":
+        simulation_image = probe_root / "hosted-probe.vvp"
+        standard_cell_verilog = manifest_asset(
+            manifest,
+            root,
+            "standardCellVerilog",
+        )
+        standard_cell_primitives = manifest_asset(
+            manifest,
+            root,
+            "standardCellVerilogPrimitives",
+        )
+        compile_record = run_command(
+            [
+                str(tool_path(lock, root, "iverilog")),
+                "-g2012",
+                "-D",
+                "FUNCTIONAL",
+                "-s",
+                "hosted_probe_tb",
+                "-o",
+                str(simulation_image),
+                str(standard_cell_primitives),
+                str(standard_cell_verilog),
+                str(probe_root / "design.v"),
+                str(probe_root / "logic-testbench.sv"),
+            ],
+            cwd=probe_root,
+            timeout=timeout,
+            log_path=log_root / "iverilog-compile.log",
+        )
+        command = [
+            str(tool_companion_path(lock, root, "iverilog", "vvp")),
+            str(simulation_image),
+        ]
+        consumed_inputs = [
+            artifact_input("logicalNetlist", probe_root / "design.v"),
+            artifact_input("logicTestbench", probe_root / "logic-testbench.sv"),
+            artifact_input("standardCellVerilog", standard_cell_verilog),
+            artifact_input(
+                "standardCellVerilogPrimitives",
+                standard_cell_primitives,
+            ),
+        ]
+    elif name == "verilator-lint":
+        standard_cell_verilog = manifest_asset(
+            manifest,
+            root,
+            "standardCellVerilog",
+        )
+        standard_cell_primitives = manifest_asset(
+            manifest,
+            root,
+            "standardCellVerilogPrimitives",
+        )
+        command = [
+            str(tool_path(lock, root, "verilator")),
+            "--lint-only",
+            "--Wall",
+            "--Wno-fatal",
+            "-DFUNCTIONAL",
+            "-DNO_PRIMITIVES",
+            "--top-module",
+            "hosted_probe",
+            str(standard_cell_primitives),
+            str(standard_cell_verilog),
+            str(probe_root / "design.v"),
+        ]
+        consumed_inputs = [
+            artifact_input("logicalNetlist", probe_root / "design.v"),
+            artifact_input("standardCellVerilog", standard_cell_verilog),
+            artifact_input(
+                "standardCellVerilogPrimitives",
+                standard_cell_primitives,
+            ),
+        ]
     else:
         raise MatrixFailure(
             "unknown_oracle",
@@ -1671,8 +2150,14 @@ def run_oracle(
     record = run_command(command, cwd=probe_root, timeout=timeout, log_path=log_root / f"{invocation_id}.log")
     record["designIdentitySHA256"] = design_identity
     record["oracle"] = name
-    record["cornerID"] = corner_id
+    record["cornerID"] = (
+        selected_corner_id
+        if name == "yosys-synthesis-equivalence"
+        else corner_id
+    )
     record["consumedInputs"] = consumed_inputs
+    if name == "iverilog-simulation":
+        record["compileInvocation"] = compile_record
     oracle_output = (log_root / f"{invocation_id}.log").read_text(encoding="utf-8", errors="replace")
     required_markers = {
         "magic-drc": "HOSTED_MAGIC_DRC_COMPLETE",
@@ -1680,6 +2165,7 @@ def run_oracle(
         "openroad": "HOSTED_OPENROAD_COMPLETE",
         "openrcx": "HOSTED_OPENRCX_COMPLETE",
         "opensta": "HOSTED_OPENSTA_COMPLETE",
+        "iverilog-simulation": "HOSTED_IVERILOG_SIMULATION_COMPLETE",
     }
     required_marker = required_markers.get(name)
     if required_marker is not None and required_marker not in oracle_output:
@@ -1706,6 +2192,36 @@ def run_oracle(
                 "Inspect the retained OpenRCX script and process assets.",
             )
         record["outputArtifact"] = artifact_input("parasiticNetlist", spef)
+    if name == "yosys-synthesis-equivalence":
+        synthesized_netlist = probe_root / "yosys-synthesized.v"
+        mapped_netlist = probe_root / "yosys-mapped.v"
+        if (
+            not synthesized_netlist.is_file()
+            or synthesized_netlist.stat().st_size == 0
+            or not mapped_netlist.is_file()
+            or mapped_netlist.stat().st_size == 0
+        ):
+            raise MatrixFailure(
+                "yosys_output_missing",
+                "Yosys completed without both synthesized and mapped netlists.",
+                "Inspect the retained Yosys script and synthesis log.",
+            )
+        record["outputArtifacts"] = [
+            artifact_input("synthesizedNetlist", synthesized_netlist),
+            artifact_input("mappedNetlist", mapped_netlist),
+        ]
+    if name == "iverilog-simulation":
+        simulation_image = probe_root / "hosted-probe.vvp"
+        if not simulation_image.is_file() or simulation_image.stat().st_size == 0:
+            raise MatrixFailure(
+                "iverilog_image_missing",
+                "Icarus completed compilation without a simulation image.",
+                "Inspect the retained compiler log and input models.",
+            )
+        record["outputArtifact"] = artifact_input(
+            "simulationImage",
+            simulation_image,
+        )
     if name == "ngspice-dc":
         native_log = log_root / f"ngspice-native-{selected_corner_id}.log"
         output = native_log.read_text(encoding="utf-8", errors="replace") if native_log.is_file() else ""
@@ -1944,6 +2460,7 @@ def validate_consumed_input_contract(lane_name: str, lane: dict[str, Any], evide
         "corpusManifest",
         "designContract",
         "logicalNetlist",
+        "logicTestbench",
         "electricalTemplate",
         "physicalLayout",
         "schematicNetlist",
@@ -2011,6 +2528,24 @@ def validate_consumed_input_contract(lane_name: str, lane: dict[str, Any], evide
         "openrcx": {"driver", "logicalNetlist", "technologyLEF", "libraryLEF", "timingLibrary", "openRCXRules"},
         "opensta": {"driver", "logicalNetlist", "timingLibrary"},
         "ngspice-dc": {"electricalDeck", "schematicNetlist", "ngspiceModelLibrary"},
+        "yosys-synthesis-equivalence": {
+            "driver",
+            "logicalNetlist",
+            "standardCellVerilog",
+            "standardCellVerilogPrimitives",
+            "timingLibrary",
+        },
+        "iverilog-simulation": {
+            "logicalNetlist",
+            "logicTestbench",
+            "standardCellVerilog",
+            "standardCellVerilogPrimitives",
+        },
+        "verilator-lint": {
+            "logicalNetlist",
+            "standardCellVerilog",
+            "standardCellVerilogPrimitives",
+        },
     }
     invocations = evidence.get("oracleInvocations")
     if not isinstance(invocations, list):

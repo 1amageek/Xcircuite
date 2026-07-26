@@ -44,7 +44,7 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["repository", "sourceRevision", "executable", "executableSHA256", "executableByteCount", "versionInvocation", "versionOutput"],
+        "required": ["repository", "sourceRevision", "executable", "executableSHA256", "executableByteCount", "versionInvocation", "versionOutput", "companions"],
         "properties": {
           "repository": { "type": "string", "format": "uri" },
           "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -52,7 +52,24 @@
           "executableSHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "executableByteCount": { "type": "integer", "minimum": 1 },
           "versionInvocation": { "type": "object" },
-          "versionOutput": { "type": "string", "minLength": 1 }
+          "versionOutput": { "type": "string", "minLength": 1 },
+          "companions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "executable", "executableSHA256", "executableByteCount", "versionInvocation", "versionOutput"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "executable": { "type": "string", "minLength": 1 },
+                "executableSHA256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "executableByteCount": { "type": "integer", "minimum": 1 },
+                "versionInvocation": { "type": "object" },
+                "versionOutput": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "aliasOf": { "type": "string", "minLength": 1 }
         }
       }
     },

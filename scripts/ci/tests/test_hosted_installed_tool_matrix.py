@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 import os
 import tempfile
 import unittest
@@ -55,6 +56,51 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 "installed/lib/libfmt.a",
             },
         )
+        self.assertEqual(
+            lock["tools"]["yosys"]["revision"],
+            "b85cad634782fafac275e5f540c056bfacb2b5d2",
+        )
+        self.assertEqual(
+            lock["tools"]["iverilog"]["revision"],
+            "dfeee909ed9f20b4870dd93423156c0170c0e1ff",
+        )
+        self.assertEqual(
+            lock["tools"]["verilator"]["revision"],
+            "848d926ebd4addacacd294dc84e35d9d4ae8078c",
+        )
+        self.assertEqual(
+            lock["tools"]["yosys"]["companions"][0]["name"],
+            "yosys-abc",
+        )
+        self.assertEqual(
+            lock["tools"]["iverilog"]["companions"][0]["name"],
+            "vvp",
+        )
+        self.assertEqual(
+            set(lock["lanes"]["logic"]["oracles"]),
+            {"yosys-synthesis-equivalence", "iverilog-simulation"},
+        )
+        self.assertEqual(
+            set(lock["lanes"]["rtl-verification"]["oracles"]),
+            {"verilator-lint", "yosys-synthesis-equivalence"},
+        )
+
+    def test_workflow_executes_every_locked_lane(self) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        workflow = (
+            RUNNER_PATH.parents[2]
+            / ".github"
+            / "workflows"
+            / "hosted-installed-tool-matrix.yml"
+        ).read_text(encoding="utf-8")
+
+        for lane_name in lock["lanes"]:
+            self.assertIn(f"          - {lane_name}\n", workflow)
 
     def test_checked_in_corpus_materializes_exact_bytes(self) -> None:
         lock_path = (
@@ -124,6 +170,13 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                     "sourceRevision": "b" * 40,
                     "executableSHA256": "c" * 64,
                     "versionInvocation": {"startedAt": "first"},
+                    "companions": [
+                        {
+                            "name": "runtime",
+                            "executableSHA256": "d" * 64,
+                            "versionInvocation": {"startedAt": "first"},
+                        }
+                    ],
                 }
             },
         }
@@ -134,6 +187,12 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
                 "tool": {
                     **manifest["tools"]["tool"],
                     "versionInvocation": {"startedAt": "second"},
+                    "companions": [
+                        {
+                            **manifest["tools"]["tool"]["companions"][0],
+                            "versionInvocation": {"startedAt": "second"},
+                        }
+                    ],
                 }
             },
         }
@@ -379,6 +438,103 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertEqual(
                 commands[1],
                 ["./configure", f"--prefix={root / 'installed'}"],
+            )
+
+    def test_tool_companion_paths_are_unique_and_contained(self) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock["tools"]["ngspice"]["companions"] = [
+            {
+                "name": "runtime",
+                "executable": "installed/bin/ngspice-runtime",
+                "versionArguments": ["--version"],
+            }
+        ]
+
+        MATRIX.validate_lock(lock)
+
+        lock["tools"]["ngspice"]["companions"].append(
+            {
+                "name": "duplicate-path",
+                "executable": "installed/bin/ngspice-runtime",
+                "versionArguments": ["--version"],
+            }
+        )
+        with self.assertRaises(MATRIX.MatrixFailure) as failure:
+            MATRIX.validate_lock(lock)
+        self.assertEqual(failure.exception.code, "duplicate_tool_executable")
+
+    def test_process_corner_rejects_non_finite_temperature(self) -> None:
+        lock = MATRIX.load_json(
+            RUNNER_PATH.parents[2]
+            / "ci-artifacts"
+            / "contracts"
+            / "hosted-installed-tool-lock.json"
+        )
+        lock["process"]["corners"][0]["temperatureCelsius"] = math.nan
+
+        with self.assertRaises(MATRIX.MatrixFailure) as failure:
+            MATRIX.validate_lock(lock)
+
+        self.assertEqual(failure.exception.code, "invalid_lock_field")
+
+    def test_source_built_logic_tools_use_locked_install_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            install_root = root / "installed"
+            logs = root / "logs"
+            sources = {
+                name: root / name
+                for name in ("yosys", "iverilog", "verilator")
+            }
+            for source in sources.values():
+                source.mkdir()
+
+            with (
+                patch.object(MATRIX, "run_command") as command,
+                patch.object(MATRIX, "build_autotools_tool") as autotools_build,
+            ):
+                MATRIX.build_yosys(
+                    sources["yosys"],
+                    install_root,
+                    {},
+                    logs,
+                    timeout=30,
+                )
+                MATRIX.build_iverilog(
+                    sources["iverilog"],
+                    install_root,
+                    {},
+                    logs,
+                    timeout=30,
+                )
+                MATRIX.build_verilator(
+                    sources["verilator"],
+                    install_root,
+                    {},
+                    logs,
+                    timeout=30,
+                )
+
+            commands = [call.args[0] for call in command.call_args_list]
+            self.assertIn(["make", "config-clang"], commands)
+            self.assertIn(
+                ["make", "-j2", f"PREFIX={install_root}"],
+                commands,
+            )
+            self.assertIn(
+                ["make", "install", f"PREFIX={install_root}"],
+                commands,
+            )
+            self.assertIn(["sh", "autoconf.sh"], commands)
+            self.assertIn(["autoconf"], commands)
+            self.assertEqual(
+                [call.args[0] for call in autotools_build.call_args_list],
+                ["iverilog", "verilator"],
             )
 
 
