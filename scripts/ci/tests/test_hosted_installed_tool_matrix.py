@@ -57,6 +57,56 @@ class HostedInstalledToolMatrixBuildTests(unittest.TestCase):
             self.assertIn("--without-x", options)
             self.assertIn("--disable-readline", options)
 
+    def test_opensta_build_receives_pinned_dependency_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            sources = {
+                name: root / name
+                for name in ("magic", "netgen", "opensta", "openroad", "ngspice")
+            }
+            for source in sources.values():
+                source.mkdir()
+            dependency_installer = sources["openroad"] / "etc" / "DependencyInstaller.sh"
+            dependency_installer.parent.mkdir()
+            dependency_installer.write_text("#!/bin/sh\n", encoding="utf-8")
+            (sources["ngspice"] / "autogen.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+            with (
+                patch.object(MATRIX, "run_command"),
+                patch.object(MATRIX, "build_autotools_tool"),
+                patch.object(MATRIX, "build_cmake_tool") as cmake_build,
+            ):
+                MATRIX.build_tools(
+                    sources,
+                    root / "installed",
+                    root / "logs",
+                    timeout=30,
+                )
+
+            opensta_build = next(
+                call
+                for call in cmake_build.call_args_list
+                if call.args[0] == "opensta"
+            )
+            options = opensta_build.args[3]
+            self.assertIn("-DCUDD_DIR=/opt/homebrew/opt/cudd", options)
+            self.assertIn(
+                "-DFLEX_INCLUDE_DIR=/opt/homebrew/opt/flex/include",
+                options,
+            )
+
+    def test_acquisition_installs_opensta_cudd_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.object(MATRIX, "run_command") as command:
+                MATRIX.install_build_dependencies(
+                    Path(temporary_directory),
+                    timeout=30,
+                )
+
+            formulas = command.call_args.args[0]
+            self.assertEqual(formulas[:2], ["brew", "install"])
+            self.assertIn("cudd", formulas[2:])
+
 
 if __name__ == "__main__":
     unittest.main()
