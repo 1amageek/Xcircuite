@@ -27,6 +27,7 @@ contract.
 | [30203381430](https://github.com/1amageek/Xcircuite/actions/runs/30203381430) | `bc1564959f79ee27f4d4ea7839b7647656339c09` | Undeclared binding surface | OpenROAD built the unused Python/SWIG bindings, whose hosted Python 3.14 link introduced an undeclared `zstd` dependency and failed at 77%. | `2d64d9589beab581c56c5f858396083caa846a75` |
 | [30205109019](https://github.com/1amageek/Xcircuite/actions/runs/30205109019) | `88067bc63ceecf667cac4622f5ceed49eec107f3` | Dependency discovery | With Python disabled, OpenROAD reached 85%, but the OpenDB Tcl `odbtcl` target still linked `zstd` without a declared keg or CMake prefix. | `c39a9d436b2c48311981a9db6900f674f1d698eb` |
 | [30208241165](https://github.com/1amageek/Xcircuite/actions/runs/30208241165) | `dadd24a885fee72209861ba9773b3bb8d1c790d6` | Linker search contract | The `zstd` keg was installed and discoverable by CMake, but Boost exported a raw `-lzstd` dependency and the OpenDB Tcl executable had no `-L/opt/homebrew/opt/zstd/lib` linker search path. | `e761e489f15603a6ffe13a2e94770d66e25d46ab` |
+| [30210071256](https://github.com/1amageek/Xcircuite/actions/runs/30210071256) | `e4198ef0057c8ab09346433c0b20db591cc296cc` | Linker search contract | The explicit zstd search path allowed OpenROAD to reach the same OpenDB Tcl link at 85%, where Boost then exposed a second raw `-licudata` dependency without the keg-only ICU search path. | `51f400cfe2879d621a7550ed3cbf1db73c24d82f` |
 
 ## Invariants confirmed
 
@@ -35,8 +36,8 @@ contract.
 - The publication job treated all missing lane evidence as blocked.
 - Magic, Netgen, CUDD, fmt, and OpenSTA now advance through installation;
   OpenROAD reaches 85%. The declared headless realization excludes unused GUI,
-  Python, and upstream-test surfaces, while its consumed Tcl surface retains an
-  explicit `zstd` build dependency and linker search path.
+  Python, and upstream-test surfaces, while its consumed Tcl surface retains
+  explicit zstd and ICU build dependencies and linker search paths.
 - CUDD is source-built from a full revision and its installed bytes are part of
   the realization identity.
 - The checked-in corpus and profile identity are independent from volatile
@@ -45,8 +46,9 @@ contract.
 ## Active continuation
 
 The next dispatched run must prove that the headless OpenROAD executable
-completes with both the explicit `zstd` keg and linker search path. If
-acquisition succeeds, all package lanes must execute from that single archive.
-The added DFT lane then must retain real OpenROAD scan insertion, Yosys
-equivalence, DFTEngine ATPG/STIL artifacts, and Icarus fault correlation before
-M0 can close.
+completes with the explicit zstd and ICU kegs and linker search paths. The
+reviewed package graph is also aligned to one remotely resolvable revision set.
+If acquisition succeeds, all package lanes must execute from that single
+archive. The added DFT lane then must retain real OpenROAD scan insertion,
+Yosys equivalence, DFTEngine ATPG/STIL artifacts, and Icarus fault correlation
+before M0 can close.
