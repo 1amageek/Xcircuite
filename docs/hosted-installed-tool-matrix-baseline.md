@@ -19,6 +19,7 @@ contract.
 | [30198213181](https://github.com/1amageek/Xcircuite/actions/runs/30198213181) | `e987e561b438318e5c36fc5589709b1be49ce17c` | Tool build | OpenSTA used the system Flex generator with a different Homebrew `FlexLexer.h`. | `585632a94fb27aff01c3a4d05f1e5d079cd4f5e3` |
 | [30198431982](https://github.com/1amageek/Xcircuite/actions/runs/30198431982) | `585632a94fb27aff01c3a4d05f1e5d079cd4f5e3` | Tool configuration | Headless OpenROAD configuration still discovered a broken Qt5 GUI installation. | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` |
 | [30198691272](https://github.com/1amageek/Xcircuite/actions/runs/30198691272) | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` | Dependency discovery | OpenROAD's embedded OpenSTA scope did not inherit qualified Tcl, Flex, and CUDD paths. | `d60f4214acf7d0466088d66e73330ed73bf86fe0` |
+| [30198936671](https://github.com/1amageek/Xcircuite/actions/runs/30198936671) | `d60f4214acf7d0466088d66e73330ed73bf86fe0` | Build-system generation | CUDD's generated Autotools files retained an obsolete `aclocal-1.14` dependency and were rebuilt based on clone-time timestamp ordering. | `90decdb1b8b2323055924c2ddbdb854b511e4e0f` |
 
 ## Invariants confirmed
 
@@ -34,8 +35,5 @@ contract.
 
 ## Active continuation
 
-Run
-[30198936671](https://github.com/1amageek/Xcircuite/actions/runs/30198936671)
-contains the headless OpenROAD configuration, exact embedded OpenSTA dependency
-binding, exact Xcode host binding, stable profile identity, and stable
-realization identity. Its result must be appended here before M0 closes.
+The next dispatched run must prove that CUDD regeneration and the complete
+headless OpenROAD dependency binding remain reproducible before M0 closes.
