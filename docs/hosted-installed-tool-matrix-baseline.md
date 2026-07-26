@@ -20,6 +20,7 @@ contract.
 | [30198431982](https://github.com/1amageek/Xcircuite/actions/runs/30198431982) | `585632a94fb27aff01c3a4d05f1e5d079cd4f5e3` | Tool configuration | Headless OpenROAD configuration still discovered a broken Qt5 GUI installation. | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` |
 | [30198691272](https://github.com/1amageek/Xcircuite/actions/runs/30198691272) | `9b6d2a15dbaa2a7237d3496206e2e87c6fa86bd5` | Dependency discovery | OpenROAD's embedded OpenSTA scope did not inherit qualified Tcl, Flex, and CUDD paths. | `d60f4214acf7d0466088d66e73330ed73bf86fe0` |
 | [30198936671](https://github.com/1amageek/Xcircuite/actions/runs/30198936671) | `d60f4214acf7d0466088d66e73330ed73bf86fe0` | Build-system generation | CUDD's generated Autotools files retained an obsolete `aclocal-1.14` dependency and were rebuilt based on clone-time timestamp ordering. | `90decdb1b8b2323055924c2ddbdb854b511e4e0f` |
+| [30199139111](https://github.com/1amageek/Xcircuite/actions/runs/30199139111) | `db5382f5d924ea34345f3804713f8e55ac95dd86` | Dependency version drift | OpenROAD's pinned slang revision discovered hosted fmt 12.2, whose `fmt/core.h` no longer exposed the API expected by that source. | `f44efb40b74f5084d73010a84c78992c72851a34` |
 
 ## Invariants confirmed
 
@@ -35,5 +36,6 @@ contract.
 
 ## Active continuation
 
-The next dispatched run must prove that CUDD regeneration and the complete
-headless OpenROAD dependency binding remain reproducible before M0 closes.
+The next dispatched run must prove that source-built fmt, CUDD regeneration,
+and the complete headless OpenROAD dependency binding remain reproducible
+before M0 closes.
