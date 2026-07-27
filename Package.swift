@@ -39,7 +39,7 @@ let package = Package(
     dependencies: [
         workspaceDependency(
             named: "CircuiteFoundation",
-            revision: "dc792c88e189c822c9f83ea86cf139ee68560dca"
+            revision: "1dd75ecf2b8758c54c4e008ff5fd59e263cce0e6"
         ),
         workspaceDependency(
             named: "ToolQualification",
@@ -51,19 +51,19 @@ let package = Package(
         ),
         workspaceDependency(
             named: "DRCEngine",
-            revision: "aefe34029acc01c3dc600f6f826125479bfc3153"
+            revision: "e8feb43bb20932bd4991346ac8cae09b5dc07b2f"
         ),
         workspaceDependency(
             named: "LVSEngine",
-            revision: "97d308443b131dc00611622da42a48e12e5eb398"
+            revision: "6a0251534cf9a191fdfaa6ec469bec14a0a49cd9"
         ),
         workspaceDependency(
             named: "PEXEngine",
-            revision: "c2dc912203790d862a2055bd6abd9a0a1dc86b6b"
+            revision: "91ace83fa8031311b20352c4ee2038a203c5d6ec"
         ),
         workspaceDependency(
             named: "CoreSpice",
-            revision: "d8161966cc53bf1f4deec81f4250ae08bb03fe0c"
+            revision: "a59c6906d09b03f23ec8266f3a742d221734519e"
         ),
         workspaceDependency(
             named: "semiconductor-layout",
@@ -79,19 +79,19 @@ let package = Package(
         ),
         workspaceDependency(
             named: "LogicDesign",
-            revision: "e8f8e1dace0445ddd816929c4ca0fe17cca12a7b"
+            revision: "1ad3b929412e9d459be45a7cb3a426d99aa9417b"
         ),
         workspaceDependency(
             named: "TimingEngine",
-            revision: "7809651994017a932314b747b948ac14e32e779b"
+            revision: "9f58f40b03ab5098bd93658798ce410090f3d380"
         ),
         workspaceDependency(
             named: "LogicEngine",
-            revision: "f162f844b9e5f29da2307f3620a069cc37255fb6"
+            revision: "fc36a86a61e3e9e704bc9a7f6e4b70da5000cc25"
         ),
         workspaceDependency(
             named: "RTLVerificationEngine",
-            revision: "b03ccaa2b7c88e167c089ee5a28a67bd082108dc"
+            revision: "4bc264e4260790368e28eb558ec8d1dcd7c1c9c6"
         ),
         workspaceDependency(
             named: "DFTEngine",
@@ -99,7 +99,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "PhysicalDesignEngine",
-            revision: "a7bf05dc88da9daea37e256c32d73418484d2a28"
+            revision: "a3befb76dc3c5053a9636ccb8c0e8989a060dd98"
         ),
         workspaceDependency(
             named: "ElectricalSignoffEngine",
@@ -107,7 +107,7 @@ let package = Package(
         ),
         workspaceDependency(
             named: "ReleaseEngine",
-            revision: "6048a43350f589eb2505cc989029bf29024c3245"
+            revision: "fec08a135e4e67d894e0c6957890ed23477defc6"
         ),
     ],
     targets: [

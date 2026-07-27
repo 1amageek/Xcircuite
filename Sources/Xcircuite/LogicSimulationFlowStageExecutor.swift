@@ -188,7 +188,7 @@ public struct LogicSimulationFlowStageExecutor: FlowStageExecutor {
             design: LogicDesignReference(
                 artifact: designArtifact,
                 topDesignName: topDesignName,
-                designRevision: designArtifact.digest
+                canonicalDesignDigest: designArtifact.digest
             ),
             stimulus: stimulusArtifact,
             seed: seed,

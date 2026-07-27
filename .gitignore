@@ -1,6 +1,7 @@
 .build/
 .DS_Store
 .swiftpm/
+Package.resolved
 build/
 __pycache__/
 *.pyc

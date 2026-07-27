@@ -199,7 +199,7 @@ struct LogicEngineFlowStageExecutorTests {
         let design = LogicDesignReference(
             artifact: designReference,
             topDesignName: document.topDesignName,
-            designRevision: designReference.digest
+            canonicalDesignDigest: designReference.digest
         )
         let stimulus = LogicStimulusDocument(
             events: [LogicStimulusEvent(time: 0, assignments: [
@@ -380,7 +380,7 @@ struct LogicEngineFlowStageExecutorTests {
         return LogicDesignReference(
             artifact: reference,
             topDesignName: document.topDesignName,
-            designRevision: reference.digest
+            canonicalDesignDigest: reference.digest
         )
     }
 

@@ -165,8 +165,10 @@ struct PEXFlowStageExecutorTests {
                 && $0.format == .spice
         })
         #expect(artifacts.allSatisfy { !$0.path.hasPrefix("/") })
-        #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
-            $0.path.contains(".xcircuite/runs/run-pex/stages/009-pex/raw")
+        let managedStageDirectory = ".xcircuite/runs/run-pex/stages/009-pex/"
+        #expect(artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy { artifact in
+            artifact.path.hasPrefix(managedStageDirectory + "raw/")
+                || artifact.path.hasPrefix(managedStageDirectory + "canonical/")
         })
     }
 
@@ -516,8 +518,10 @@ struct PEXFlowStageExecutorTests {
         )
 
         #expect(result.status == .succeeded)
-        #expect(result.stages[0].artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy {
-            $0.path.contains(".xcircuite/runs/run-pex/stages/009-pex/raw")
+        let managedStageDirectory = ".xcircuite/runs/run-pex/stages/009-pex/"
+        #expect(result.stages[0].artifacts.filter { !$0.path.contains("/evidence/") }.allSatisfy { artifact in
+            artifact.path.hasPrefix(managedStageDirectory + "raw/")
+                || artifact.path.hasPrefix(managedStageDirectory + "canonical/")
         })
         #expect(result.stages[0].artifacts.contains {
             $0.path.hasSuffix("-pex-summary-envelope.json")

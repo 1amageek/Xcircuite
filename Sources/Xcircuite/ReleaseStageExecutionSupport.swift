@@ -85,7 +85,8 @@ struct ReleaseStageExecutionSupport: Sendable {
             invocation: provenance.invocation,
             environment: provenance.environment,
             configurationDigest: provenance.configurationDigest,
-            designRevision: provenance.designRevision,
+            inputDesignRevision: provenance.inputDesignRevision,
+            outputDesignRevision: provenance.outputDesignRevision,
             randomSeed: provenance.randomSeed,
             startedAt: provenance.startedAt,
             completedAt: provenance.completedAt
